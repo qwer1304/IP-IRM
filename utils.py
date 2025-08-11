@@ -156,7 +156,7 @@ class Imagenet_idx_pair(datasets.ImageFolder):
 
         return pos1, pos2, target, index
 
-Imagenet_pair(datasets.ImageFolder):
+class Imagenet_pair(datasets.ImageFolder):
     """Folder datasets which returns the index of the image as well
     """
 

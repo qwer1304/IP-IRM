@@ -336,9 +336,9 @@ if __name__ == '__main__':
         update_data = utils.Imagenet_idx_pair(root=args.data, train=True, transform=utils.train_transform, target_transform=target_transform)
         update_loader = DataLoader(update_data, batch_size=3096, shuffle=True, num_workers=4, pin_memory=True, drop_last=True)
         update_loader_offline = DataLoader(update_data, batch_size=3096, shuffle=False, num_workers=4, pin_memory=True)
-        memory_data = utils.ImageNetPair(root=args.data, train=True, transform=utils.test_transform, target_transform=target_transform)
+        memory_data = utils.Imagenet_pair(root=args.data, train=True, transform=utils.test_transform, target_transform=target_transform)
         memory_loader = DataLoader(memory_data, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
-        test_data = utils.ImageNetPair(root=args.data, train=False, transform=utils.test_transform, target_transform=target_transform)
+        test_data = utils.Imagenet_pair(root=args.data, train=False, transform=utils.test_transform, target_transform=target_transform)
         test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
 
     # model setup and optimizer config
