@@ -278,6 +278,7 @@ if __name__ == '__main__':
     # color in label
     parser.add_argument('--target_transform', type=str, default=None, help='a function definition to apply to target')
     parser.add_argument('--image_class', choices=['ImageNet', 'STL', 'CIFAR'], default='ImageNet', help='Image class, default=ImageNet')
+    parser.add_argument('--class_num', default=1000, type=int, help='num of classes')
 
     # args parse
     args = parser.parse_args()
@@ -358,7 +359,7 @@ if __name__ == '__main__':
 
 
     optimizer = optim.Adam(model.parameters(), lr=1e-3, weight_decay=1e-6)
-    c = len(memory_data.classes)
+    c = len(memory_data.classes) if args.dataset != "ImageNet" else args.class_num
     print('# Classes: {}'.format(c))
 
     # training loop
