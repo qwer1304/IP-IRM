@@ -296,49 +296,57 @@ if __name__ == '__main__':
 
     # data prepare
     if args.dataset == 'STL':
-        train_data = utils.STL10Pair_Index(root=args.data, split='train+unlabeled', transform=utils.train_transform)
+        train_transform = utils.make_train_transform()
+        train_data = utils.STL10Pair_Index(root=args.data, split='train+unlabeled', transform=train_transform)
         train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True,
                                   drop_last=True)
-        update_data = utils.STL10Pair_Index(root=args.data, split='train+unlabeled', transform=utils.train_transform, target_transform=target_transform)
+        update_data = utils.STL10Pair_Index(root=args.data, split='train+unlabeled', transform=train_transform, target_transform=target_transform)
         update_loader = DataLoader(update_data, batch_size=3096, shuffle=True, num_workers=4, pin_memory=True, drop_last=True)
         update_loader_offline = DataLoader(update_data, batch_size=3096, shuffle=False, num_workers=4, pin_memory=True)
-        memory_data = utils.STL10Pair(root=args.data, split='train', transform=utils.test_transform, target_transform=target_transform)
+        test_transform = utils.make_test_transform()
+        memory_data = utils.STL10Pair(root=args.data, split='train', transform=test_transform, target_transform=target_transform)
         memory_loader = DataLoader(memory_data, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
-        test_data = utils.STL10Pair(root=args.data, split='test', transform=utils.test_transform, target_transform=target_transform)
+        test_data = utils.STL10Pair(root=args.data, split='test', transform=test_transform, target_transform=target_transform)
         test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
     elif args.dataset == 'CIFAR10':
-        train_data = utils.CIFAR10Pair_Index(root=args.data, train=True, transform=utils.train_transform, target_transform=target_transform, download=True)
+        train_transform = utils.make_train_transform()
+        train_data = utils.CIFAR10Pair_Index(root=args.data, train=True, transform=train_transform, target_transform=target_transform, download=True)
         train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True,
                                   drop_last=True)
-        update_data = utils.CIFAR10Pair_Index(root=args.data, train=True, transform=utils.train_transform, target_transform=target_transform)
+        update_data = utils.CIFAR10Pair_Index(root=args.data, train=True, transform=train_transform, target_transform=target_transform)
         update_loader = DataLoader(update_data, batch_size=3096, shuffle=True, num_workers=4, pin_memory=True, drop_last=True)
         update_loader_offline = DataLoader(update_data, batch_size=3096, shuffle=False, num_workers=4, pin_memory=True)
-        memory_data = utils.CIFAR10Pair(root=args.data, train=True, transform=utils.test_transform, target_transform=target_transform)
+        test_transform = utils.make_test_transform()
+        memory_data = utils.CIFAR10Pair(root=args.data, train=True, transform=test_transform, target_transform=target_transform)
         memory_loader = DataLoader(memory_data, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
-        test_data = utils.CIFAR10Pair(root=args.data, train=False, transform=utils.test_transform, target_transform=target_transform)
+        test_data = utils.CIFAR10Pair(root=args.data, train=False, transform=test_transform, target_transform=target_transform)
         test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
     elif args.dataset == 'CIFAR100':
-        train_data = utils.CIFAR100Pair_Index(root=args.data, train=True, transform=utils.train_transform, target_transform=target_transform)
+        train_transform = utils.make_train_transform()
+        train_data = utils.CIFAR100Pair_Index(root=args.data, train=True, transform=train_transform, target_transform=target_transform)
         train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True,
                                   drop_last=True)
-        update_data = utils.CIFAR100Pair_Index(root=args.data, train=True, transform=utils.train_transform, target_transform=target_transform)
+        update_data = utils.CIFAR100Pair_Index(root=args.data, train=True, transform=train_transform, target_transform=target_transform)
         update_loader = DataLoader(update_data, batch_size=3096, shuffle=True, num_workers=4, pin_memory=True, drop_last=True)
         update_loader_offline = DataLoader(update_data, batch_size=3096, shuffle=False, num_workers=4, pin_memory=True)
-        memory_data = utils.CIFAR100Pair(root=args.data, train=True, transform=utils.test_transform, target_transform=target_transform)
+        test_transform = utils.make_test_transform()
+        memory_data = utils.CIFAR100Pair(root=args.data, train=True, transform=test_transform, target_transform=target_transform)
         memory_loader = DataLoader(memory_data, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
-        test_data = utils.CIFAR100Pair(root=args.data, train=False, transform=utils.test_transform, target_transform=target_transform)
+        test_data = utils.CIFAR100Pair(root=args.data, train=False, transform=test_transform, target_transform=target_transform)
         test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
 
     elif args.dataset == 'ImageNet':
-        train_data = utils.Imagenet_idx_pair(root=args.data, train=True, transform=utils.train_transform, target_transform=target_transform)
+        train_transform = utils.make_train_transform(image_size)
+        train_data = utils.Imagenet_idx_pair(root=args.data, train=True, transform=train_transform, target_transform=target_transform)
         train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True,
                                   drop_last=True)
-        update_data = utils.Imagenet_idx_pair(root=args.data, train=True, transform=utils.train_transform, target_transform=target_transform)
+        update_data = utils.Imagenet_idx_pair(root=args.data, train=True, transform=train_transform, target_transform=target_transform)
         update_loader = DataLoader(update_data, batch_size=3096, shuffle=True, num_workers=4, pin_memory=True, drop_last=True)
         update_loader_offline = DataLoader(update_data, batch_size=3096, shuffle=False, num_workers=4, pin_memory=True)
-        memory_data = utils.Imagenet_pair(root=args.data, train=True, transform=utils.test_transform, target_transform=target_transform)
+        test_transform = utils.make_test_transform()
+        memory_data = utils.Imagenet_pair(root=args.data, train=True, transform=test_transform, target_transform=target_transform)
         memory_loader = DataLoader(memory_data, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
-        test_data = utils.Imagenet_pair(root=args.data, train=False, transform=utils.test_transform, target_transform=target_transform)
+        test_data = utils.Imagenet_pair(root=args.data, train=False, transform=test_transform, target_transform=target_transform)
         test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
 
     # model setup and optimizer config
