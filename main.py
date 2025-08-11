@@ -211,31 +211,56 @@ def test(net, memory_data_loader, test_data_loader):
             feature_labels = torch.tensor(targets, device=feature_bank.device)
         # loop test data to predict the label by weighted knn search
         test_bar = tqdm(test_data_loader)
+        i = 0
         for data, _, target in test_bar:
+            j = 0
+            print(f"i:{i}, j:{j}")
             data, target = data.cuda(non_blocking=True), target.cuda(non_blocking=True)
+            j += 1
             feature, out = net(data)
+            print(f"i:{i}, j:{j}")
+            j += 1
 
             total_num += data.size(0)
             # compute cos similarity between each feature vector and feature bank ---> [B, N]
             sim_matrix = torch.mm(feature, feature_bank)
+            print(f"i:{i}, j:{j}")
+            j += 1
             # [B, K]
             sim_weight, sim_indices = sim_matrix.topk(k=k, dim=-1)
+            print(f"i:{i}, j:{j}")
+            j += 1
             # [B, K]
             sim_labels = torch.gather(feature_labels.expand(data.size(0), -1), dim=-1, index=sim_indices)
+            print(f"i:{i}, j:{j}")
+            j += 1
             sim_weight = (sim_weight / temperature).exp()
+            print(f"i:{i}, j:{j}")
+            j += 1
 
             # counts for each class
             one_hot_label = torch.zeros(data.size(0) * k, c, device=sim_labels.device)
             # [B*K, C]
             one_hot_label = one_hot_label.scatter(dim=-1, index=sim_labels.view(-1, 1).long(), value=1.0)
+            print(f"i:{i}, j:{j}")
+            j += 1
             # weighted score ---> [B, C]
             pred_scores = torch.sum(one_hot_label.view(data.size(0), -1, c) * sim_weight.unsqueeze(dim=-1), dim=1)
+            print(f"i:{i}, j:{j}")
+            j += 1
 
             pred_labels = pred_scores.argsort(dim=-1, descending=True)
+            print(f"i:{i}, j:{j}")
+            j += 1
             total_top1 += torch.sum((pred_labels[:, :1] == target.unsqueeze(dim=-1)).any(dim=-1).float()).item()
+            print(f"i:{i}, j:{j}")
+            j += 1
             total_top5 += torch.sum((pred_labels[:, :5] == target.unsqueeze(dim=-1)).any(dim=-1).float()).item()
+            print(f"i:{i}, j:{j}")
+            j += 1
             test_bar.set_description('KNN Test Epoch: [{}/{}] Acc@1:{:.2f}% Acc@5:{:.2f}%'
                                      .format(epoch, epochs, total_top1 / total_num * 100, total_top5 / total_num * 100))
+            i += 1
 
     return total_top1 / total_num * 100, total_top5 / total_num * 100
 
@@ -384,6 +409,8 @@ if __name__ == '__main__':
         if args.baseline:
             train_loss = train(model, train_loader, optimizer, temperature, debiased, tau_plus)
         else: # Minimize Step
+            if epoch >= 25:
+                print(epoch, updated_split_all)
             if args.retain_group: # retain the previous partitions
                 train_loss = train_env(model, train_loader, optimizer, temperature, updated_split_all)
             else:
