@@ -1,6 +1,6 @@
 from PIL import Image
 from torchvision import transforms
-from torchvision.datasets import STL10, CIFAR10, CIFAR100
+from torchvision.datasets import STL10, CIFAR10, CIFAR100, ImageFolder
 import cv2
 import numpy as np
 import torch
@@ -107,7 +107,7 @@ class CIFAR100Pair_Index(CIFAR100):
 
         return pos_1, pos_2, target, index
 
-class Imagenet_idx(datasets.ImageFolder):
+class Imagenet_idx(ImageFolder):
     """Folder datasets which returns the index of the image as well
     """
 
@@ -132,7 +132,7 @@ class Imagenet_idx(datasets.ImageFolder):
 
 
 
-class Imagenet_idx_pair(datasets.ImageFolder):
+class Imagenet_idx_pair(ImageFolder):
     """Folder datasets which returns the index of the image as well
     """
 
@@ -156,7 +156,7 @@ class Imagenet_idx_pair(datasets.ImageFolder):
 
         return pos1, pos2, target, index
 
-class Imagenet_pair(datasets.ImageFolder):
+class Imagenet_pair(ImageFolder):
     """Folder datasets which returns the index of the image as well
     """
 
@@ -181,7 +181,7 @@ class Imagenet_pair(datasets.ImageFolder):
         return pos1, pos2, target
 
 
-class Imagenet_idx_pair_transformone(datasets.ImageFolder):
+class Imagenet_idx_pair_transformone(ImageFolder):
     """Folder datasets which returns the index of the image as well
     """
 
