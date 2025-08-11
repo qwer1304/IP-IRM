@@ -351,7 +351,7 @@ if __name__ == '__main__':
         test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
 
     # model setup and optimizer config
-    model = Model(feature_dim, image_class='ImageNet').cuda()
+    model = Model(feature_dim, image_class=image_class).cuda()
     model = nn.DataParallel(model)
     # pretrain model
     if args.pretrain_model is not None:
