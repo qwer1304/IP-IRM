@@ -205,11 +205,13 @@ def test(net, memory_data_loader, test_data_loader):
         try:
             feature_labels = torch.tensor(memory_data_loader.dataset.labels, device=feature_bank.device)
         except:
-            targets = memory_data_loader.dataset.targets
-            if memory_data_loader.dataset.target_transform is not None:
-                targets = memory_data_loader.dataset.target_transform(targets)
+            dataset = memory_data_loader.dataset
+            if dataset.target_transform is not None:
+                targets = [dataset.target_transform(t) for t in dataset.targets]
+            else:
+                targets = dataset.targets        # loop test data to predict the label by weighted knn search
             feature_labels = torch.tensor(targets, device=feature_bank.device)
-        # loop test data to predict the label by weighted knn search
+
         test_bar = tqdm(test_data_loader)
         for data, _, target in test_bar:
             data, target = data.cuda(non_blocking=True), target.cuda(non_blocking=True)
@@ -393,7 +395,7 @@ if __name__ == '__main__':
                 updated_split = train_update_split(model, update_loader, updated_split, random_init=args.random_init)
                 updated_split_all.append(updated_split)
 
-        if epoch % 25 == 0: # eval knn every 25 epochs
+        if epoch % 25 == 1: # eval knn every 25 epochs
             test_acc_1, test_acc_5 = test(model, memory_loader, test_loader)
             txt_write = open("results/{}/{}/{}".format(args.dataset, args.name, 'knn_result.txt'), 'a')
             txt_write.write('\ntest_acc@1: {}, test_acc@5: {}'.format(test_acc_1, test_acc_5))
