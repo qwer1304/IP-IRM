@@ -213,7 +213,7 @@ def test(net, memory_data_loader, test_data_loader):
         feature_labels = torch.tensor(labels, device=feature_bank.device)
 
         # loop test data to predict the label by weighted knn search
-        test_bar = tqdm(test_data_loader)
+        test_bar = tqdm(test_data_loader, bar_format='{l_bar}{bar:30}{r_bar}')
         for data, _, target in test_bar:
             data, target = data.cuda(non_blocking=True), target.cuda(non_blocking=True)
             feature, out = net(data)
@@ -396,7 +396,7 @@ if __name__ == '__main__':
                 updated_split = train_update_split(model, update_loader, updated_split, random_init=args.random_init)
                 updated_split_all.append(updated_split)
 
-        if epoch % 25 == 1: # eval knn every 25 epochs
+        if epoch % 25 == 0: # eval knn every 25 epochs
             test_acc_1, test_acc_5 = test(model, memory_loader, test_loader)
             txt_write = open("results/{}/{}/{}".format(args.dataset, args.name, 'knn_result.txt'), 'a')
             txt_write.write('\ntest_acc@1: {}, test_acc@5: {}'.format(test_acc_1, test_acc_5))
