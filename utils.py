@@ -642,14 +642,14 @@ def write_log(print_str, log_file, print_=False):
 
 class GaussianBlur(object):
     # Implements Gaussian blur as described in the SimCLR paper
-    def __init__(self, kernel_size, min=0.1, max=2.0):
-        self.min = min
-        self.max = max
+    def __init__(self, kernel_size, mmin=0.1, mmax=2.0):
+        self.min = mmin
+        self.max = mmax
         # Ensure kernel size is odd and >= 1
         if kernel_size % 2 == 0:
             kernel_size += 1
         self.kernel_size = max(1, kernel_size)
-        
+    
     def __call__(self, sample):
         sample = np.array(sample)
 
