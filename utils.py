@@ -161,7 +161,7 @@ class Imagenet_pair(ImageFolder):
     """
 
     def __init__(self, root, transform=None, target_transform=None):
-        super(Imagenet_idx_pair, self).__init__(root, transform, target_transform)
+        super(Imagenet_pair, self).__init__(root, transform, target_transform)
 
     def __getitem__(self, index):
         """
