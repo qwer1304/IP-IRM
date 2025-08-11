@@ -337,7 +337,7 @@ if __name__ == '__main__':
 
     elif args.dataset == 'ImageNet':
         train_transform = utils.make_train_transform(image_size)
-        train_images = utils.Imagenet_idx_pair(root=args.data+'/train', transform=train_transform, target_transform=target_transform)
+        train_data = utils.Imagenet_idx_pair(root=args.data+'/train', transform=train_transform, target_transform=target_transform)
         train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True,
                                   drop_last=True)
         update_data = utils.Imagenet_idx_pair(root=args.data+'/train', transform=train_transform, target_transform=target_transform)
