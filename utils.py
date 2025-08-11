@@ -107,6 +107,108 @@ class CIFAR100Pair_Index(CIFAR100):
 
         return pos_1, pos_2, target, index
 
+class Imagenet_idx(datasets.ImageFolder):
+    """Folder datasets which returns the index of the image as well
+    """
+
+    def __init__(self, root, transform=None, target_transform=None):
+        super(Imagenet_idx, self).__init__(root, transform, target_transform)
+
+    def __getitem__(self, index):
+        """
+        Args:
+            index (int): Index
+        Returns:
+            tuple: (image, target, index) where target is class_index of the target class.
+        """
+        path, target = self.imgs[index]
+        image = self.loader(path)
+        if self.transform is not None:
+            pos = self.transform(image)
+        if self.target_transform is not None:
+            target = self.target_transform(target)
+
+        return pos, target, index
+
+
+
+class Imagenet_idx_pair(datasets.ImageFolder):
+    """Folder datasets which returns the index of the image as well
+    """
+
+    def __init__(self, root, transform=None, target_transform=None):
+        super(Imagenet_idx_pair, self).__init__(root, transform, target_transform)
+
+    def __getitem__(self, index):
+        """
+        Args:
+            index (int): Index
+        Returns:
+            tuple: (image, target, index) where target is class_index of the target class.
+        """
+        path, target = self.imgs[index]
+        image = self.loader(path)
+        if self.transform is not None:
+            pos1 = self.transform(image)
+            pos2 = self.transform(image)
+        if self.target_transform is not None:
+            target = self.target_transform(target)
+
+        return pos1, pos2, target, index
+
+Imagenet_pair(datasets.ImageFolder):
+    """Folder datasets which returns the index of the image as well
+    """
+
+    def __init__(self, root, transform=None, target_transform=None):
+        super(Imagenet_idx_pair, self).__init__(root, transform, target_transform)
+
+    def __getitem__(self, index):
+        """
+        Args:
+            index (int): Index
+        Returns:
+            tuple: (image, target, index) where target is class_index of the target class.
+        """
+        path, target = self.imgs[index]
+        image = self.loader(path)
+        if self.transform is not None:
+            pos1 = self.transform(image)
+            pos2 = self.transform(image)
+        if self.target_transform is not None:
+            target = self.target_transform(target)
+
+        return pos1, pos2, target
+
+
+class Imagenet_idx_pair_transformone(datasets.ImageFolder):
+    """Folder datasets which returns the index of the image as well
+    """
+
+    def __init__(self, root, transform_simple=None, transform_hard=None, target_transform=None):
+        super(Imagenet_idx_pair_transformone, self).__init__(root, transform_simple, target_transform)
+        self.transform_hard = transform_hard
+
+    def __getitem__(self, index):
+        """
+        Args:
+            index (int): Index
+        Returns:
+            tuple: (image, target, index) where target is class_index of the target class.
+        """
+        path, target = self.imgs[index]
+        image = self.loader(path)
+        if self.transform is not None:
+            pos1 = self.transform(image)
+            pos2 = self.transform(image)
+        if self.transform_hard is not None:
+            pos1_hard = self.transform_hard(image)
+            pos2_hard = self.transform_hard(image)
+        if self.target_transform is not None:
+            target = self.target_transform(target)
+
+        return pos1, pos2, pos1_hard, pos2_hard, target, index
+
 def group_crossentropy(logits, labels, batchsize):
     sample_dim, label_dim = logits.size(0), logits.size(1)
     logits_exp = logits.exp()
@@ -560,7 +662,7 @@ class GaussianBlur(object):
 
 # just follow the previous work -- DCL, NeurIPS2020
 train_transform = transforms.Compose([
-    transforms.RandomResizedCrop(32),
+    transforms.RandomResizedCrop(image_size),
     transforms.RandomHorizontalFlip(p=0.5),
     transforms.RandomApply([transforms.ColorJitter(0.4, 0.4, 0.4, 0.1)], p=0.8),
     transforms.RandomGrayscale(p=0.2),
