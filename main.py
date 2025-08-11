@@ -368,7 +368,10 @@ if __name__ == '__main__':
     epoch = 0
     # update partition for the first time
     if not args.baseline:
-        updated_split = torch.randn((len(update_data.data), args.env_num), requires_grad=True, device="cuda")
+        if args.dataset != "ImageNet":
+            updated_split = torch.randn((len(update_data.data), args.env_num), requires_grad=True, device="cuda")
+        else:
+            updated_split = torch.randn((len(update_data.imgs), args.env_num), requires_grad=True, device="cuda")
         updated_split = train_update_split(model, update_loader, updated_split, random_init=args.random_init)
         updated_split_all = [updated_split.clone().detach()]
 
