@@ -202,16 +202,17 @@ def test(net, memory_data_loader, test_data_loader):
         # [D, N]
         feature_bank = torch.cat(feature_bank, dim=0).t().contiguous()
         # [N]
-        try:
-            feature_labels = torch.tensor(memory_data_loader.dataset.labels, device=feature_bank.device)
-        except:
-            dataset = memory_data_loader.dataset
+        dataset = memory_data_loader.dataset
+        if hasattr(dataset, "labels"):
+            labels = dataset.labels
+        else:
             if dataset.target_transform is not None:
-                targets = [dataset.target_transform(t) for t in dataset.targets]
+                labels = [dataset.target_transform(t) for t in dataset.targets]
             else:
-                targets = dataset.targets        # loop test data to predict the label by weighted knn search
-            feature_labels = torch.tensor(targets, device=feature_bank.device)
+                labels = dataset.targets        
+        feature_labels = torch.tensor(labels, device=feature_bank.device)
 
+        # loop test data to predict the label by weighted knn search
         test_bar = tqdm(test_data_loader)
         for data, _, target in test_bar:
             data, target = data.cuda(non_blocking=True), target.cuda(non_blocking=True)
