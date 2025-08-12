@@ -33,7 +33,6 @@ def pretty_tensor_str(tensor, indent=0, level=0):
     s = s.strip()
 
     def recursive_format(s, indent, level):
-        # Remove outer brackets
         if s.startswith('[') and s.endswith(']'):
             s = s[1:-1].strip()
 
@@ -59,13 +58,19 @@ def pretty_tensor_str(tensor, indent=0, level=0):
         lines = []
         lines.append(' ' * indent + '[')
 
-        # Detect innermost level: all elements are non-bracketed
-        if level >= 1 and all(not e.startswith('[') for e in elems):
-            # print each innermost list element fully inline with brackets
+        # Innermost level detection: all elems do NOT start with '[' (flat) or all elems start with '[' (full inner lists)
+        # If all elements start with '[', print each fully inline
+        # Else print elements normally (recurse or print)
+        if level >= 1 and all(e.startswith('[') for e in elems):
+            # elements are full inner lists, print each inline (they already have brackets)
             for e in elems:
-                lines.append(' ' * (indent + 2) + '[' + e + ']')
+                lines.append(' ' * (indent + 2) + e)
+        elif level >= 1 and all(not e.startswith('[') for e in elems):
+            # elements are flat values separated by commas (like '0.6331, 1.6358'), print all in one line inside brackets
+            line = ' ' * (indent + 2) + '[' + ', '.join(elems) + ']'
+            lines.append(line)
         else:
-            # recurse normally
+            # mixed case or outer level: recurse or print scalar
             for e in elems:
                 if e.startswith('[') and e.endswith(']'):
                     lines.append(recursive_format(e, indent + 2, level + 1))
