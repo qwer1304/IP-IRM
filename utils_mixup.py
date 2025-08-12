@@ -16,6 +16,7 @@ from tqdm import tqdm
 np.random.seed(0)
 
 import torch
+import re
 
 def pretty_tensor_str(tensor, indent=0, level=0):
     """
