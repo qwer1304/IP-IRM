@@ -266,6 +266,7 @@ def train_update_split(net, update_loader, soft_split, random_init=False, args=N
         labels_aux_all, lam_all = [], []
         with torch.no_grad():
             # generate feature bank
+            bar_format = '{l_bar}{bar:' + str(args.bar) + '}{r_bar}' #{bar:-' + str(args.bar) + 'b}'
             feature_bar = tqdm(update_loader_offline,
                 total=len(update_loader_offline),
                 ncols=args.ncols,               # total width available
