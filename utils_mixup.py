@@ -18,47 +18,81 @@ np.random.seed(0)
 import torch
 import re
 
+import torch
+import re
+
 def pretty_tensor_str(tensor, indent=0):
     """
-    Recursively pretty-print a PyTorch tensor string representation
-    preserving truncation, ellipsis, brackets, and indentation.
+    Pretty-print PyTorch tensor string with:
+    - preserved truncation (ellipsis),
+    - no device or grad info,
+    - recursive indentation,
+    - innermost lists (vectors) printed inline with brackets,
+    - no extra brackets for 2D rows.
 
-    Innermost lists are printed fully inline with brackets on the same line.
-
-    Returns a formatted string.
+    Returns formatted string.
     """
-    # Detach to remove grad info, move to CPU, get string repr
     t = tensor.detach().cpu()
     s = str(t)
 
-    # Remove device info and grad_fn if any
+    # Remove device and grad_fn info
     s = re.sub(r", device='.*?'\)", ")", s)
     s = re.sub(r", grad_fn=<.*?>", "", s)
 
-    # Remove outer tensor(...) wrapper
+    # Remove tensor(...) wrapper
     if s.startswith("tensor(") and s.endswith(")"):
         s = s[len("tensor("):-1]
 
     s = s.strip()
+    shape = t.shape
 
-    def recursive_format(s, indent_level):
-        # Trim outer brackets if present
+    def recursive_format(s, indent_level, level):
+        # Trim outer brackets
         if s.startswith('[') and s.endswith(']'):
             s = s[1:-1].strip()
 
         if not s:
             return ' ' * indent_level + '[]'
 
-        # Split top-level elements by comma not inside brackets
+        # For 1D tensor, just print inline
+        if len(shape) == 1 or level == len(shape) - 1:
+            return ' ' * indent_level + '[' + s + ']'
+
+        # For 2D tensor at second-last level, print rows inline without extra brackets
+        if len(shape) >= 2 and level == len(shape) - 2:
+            # Split rows by commas outside brackets
+            elems = []
+            level_brackets = 0
+            current = []
+            for c in s:
+                if c == '[':
+                    level_brackets += 1
+                elif c == ']':
+                    level_brackets -= 1
+                if c == ',' and level_brackets == 0:
+                    elems.append(''.join(current).strip())
+                    current = []
+                else:
+                    current.append(c)
+            if current:
+                elems.append(''.join(current).strip())
+
+            lines = [' ' * indent_level + '[']
+            for e in elems:
+                lines.append(' ' * (indent_level + 2) + e)
+            lines.append(' ' * indent_level + ']')
+            return '\n'.join(lines)
+
+        # Otherwise, split top-level elements and recurse
         elems = []
-        level = 0
+        level_brackets = 0
         current = []
         for c in s:
             if c == '[':
-                level += 1
+                level_brackets += 1
             elif c == ']':
-                level -= 1
-            if c == ',' and level == 0:
+                level_brackets -= 1
+            if c == ',' and level_brackets == 0:
                 elems.append(''.join(current).strip())
                 current = []
             else:
@@ -66,30 +100,14 @@ def pretty_tensor_str(tensor, indent=0):
         if current:
             elems.append(''.join(current).strip())
 
-        # Detect if all elems are bracketed lists (nested) or all flat (innermost)
-        all_bracketed = all(e.startswith('[') and e.endswith(']') for e in elems)
-        all_flat = all(not (e.startswith('[') and e.endswith(']')) for e in elems)
-
-        lines = []
-        lines.append(' ' * indent_level + '[')
-
-        if all_flat:
-            # Innermost level: print full list inline with brackets on same line
-            inline_line = ' ' * (indent_level + 2) + '[' + ', '.join(elems) + ']'
-            lines.append(inline_line)
-        elif all_bracketed:
-            # Nested list: recurse on each element with increased indent
-            for e in elems:
-                lines.append(recursive_format(e, indent_level + 2))
-        else:
-            # Mixed or malformed: just print elements indented
-            for e in elems:
-                lines.append(' ' * (indent_level + 2) + e)
-
+        lines = [' ' * indent_level + '[']
+        for e in elems:
+            lines.append(recursive_format(e, indent_level + 2, level + 1))
         lines.append(' ' * indent_level + ']')
         return '\n'.join(lines)
 
-    return recursive_format(s, indent)
+    return recursive_format(s, indent, 0)
+
     
 def info_nce_loss_formixup(q, k, temperature):
     logits = q.mm(k.t()) / temperature
