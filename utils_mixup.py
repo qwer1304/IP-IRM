@@ -17,7 +17,7 @@ np.random.seed(0)
 
 import torch
 
-def pretty_tensor_str(tensor, indent=0):
+def pretty_tensor_str(tensor, indent=0, level=0):
     """
     Recursively format a tensor with PyTorch-style truncation and ellipsis,
     preserving nested brackets and indentation.
