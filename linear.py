@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
-from torchvision.datasets import STL10, CIFAR10, CIFAR100
+from torchvision.datasets import STL10, CIFAR10, CIFAR100, ImageFolder
 from tqdm import tqdm
 import os
 
@@ -12,10 +12,11 @@ import utils
 from model import Model
 
 class Net(nn.Module):
-    def __init__(self, num_class, pretrained_path):
+    def __init__(self, num_class, pretrained_path, image_class='ImageNet'):
         super(Net, self).__init__()
 
         # encoder
+        model = Model(image_class=image_class).cuda()
         model = Model().cuda()
         model = nn.DataParallel(model)
         model.load_state_dict(torch.load(pretrained_path))
@@ -67,10 +68,17 @@ if __name__ == '__main__':
                         help='The pretrained model path')
     parser.add_argument('--batch_size', type=int, default=512, help='Number of images in each mini-batch')
     parser.add_argument('--epochs', type=int, default=100, help='Number of sweeps over the dataset to train')
-    parser.add_argument('--dataset', type=str, default='STL', help='experiment dataset')
+    parser.add_argument('--dataset', type=str, default='STL', choices=['STL', 'CIFAR10', 'CIFAR100', 'ImageNet'], help='experiment dataset')
+    parser.add_argument('--data', metavar='DIR', help='path to dataset')
     parser.add_argument('--txt', action="store_true", default=False, help='save txt?')
     parser.add_argument('--name', type=str, default='None', help='exp name?')
 
+    # image
+    parser.add_argument('--image_size', type=int, default=224, help='image size')
+    # color in label
+    parser.add_argument('--target_transform', type=str, default=None, help='a function definition to apply to target')
+    parser.add_argument('--image_class', choices=['ImageNet', 'STL', 'CIFAR'], default='ImageNet', help='Image class, default=ImageNet')
+    parser.add_argument('--class_num', default=1000, type=int, help='num of classes')
     args = parser.parse_args()
 
     if not os.path.exists('downstream/{}/{}'.format(args.dataset, args.name)):
@@ -80,24 +88,40 @@ if __name__ == '__main__':
     utils.set_seed(1234)
 
     model_path, batch_size, epochs = args.model_path, args.batch_size, args.epochs
+    target_transform = eval(args.target_transform) if args.target_transform is not None else None
+    image_class, image_size = args.image_class, args.image_size
 
     if args.dataset == 'STL':
-        train_data = STL10(root='data', split='train', transform=utils.train_transform)
+        train_transform = utils.make_train_transform()
+        train_data = STL10(root=args.data, split='train', transform=train_transform, target_transform=target_transform)
         train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True, num_workers=2, pin_memory=True)
-        test_data = STL10(root='data', split='test', transform=utils.test_transform)
+        test_transform = utils.make_test_transform()
+        test_data = STL10(root=args.data, split='test', transform=test_transform, target_transform=target_transform)
         test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False, num_workers=2, pin_memory=True)
     elif args.dataset == 'CIFAR10':
-        train_data = utils.CIFAR10(root='data', train=True, transform=utils.train_transform)
+        train_transform = utils.make_train_transform()
+        train_data = utils.CIFAR10(root=args.data, train=True, transform=train_transform, target_transform=target_transform)
         train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True)
-        test_data = utils.CIFAR10(root='data', train=False, transform=utils.test_transform)
+        test_transform = utils.make_test_transform()
+        test_data = utils.CIFAR10(root=args.data, train=False, transform=train_transform, target_transform=target_transform)
         test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
     elif args.dataset == 'CIFAR100':
-        train_data = utils.CIFAR100(root='data', train=True, transform=utils.train_transform)
+        train_transform = utils.make_train_transform()
+        train_data = utils.CIFAR100(root=args.data, train=True, transform=train_transform, target_transform=target_transform)
         train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True)
-        test_data = utils.CIFAR100(root='data', train=False, transform=utils.test_transform)
+        test_transform = utils.make_test_transform()
+        test_data = utils.CIFAR100(root=args.data, train=False, transform=train_transform, target_transform=target_transform)
+        test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
+    elif args.dataset == 'ImageNet':
+        train_transform = utils.make_train_transform(image_size)
+        train_data = utils.Imagenet_idx_pair(root=args.data+'/train', transform=train_transform, target_transform=target_transform)
+        train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True)
+        test_transform = utils.make_test_transform()
+        test_data = utils.Imagenet_pair(root=args.data+'/testgt', transform=test_transform, target_transform=target_transform)
         test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
 
-    model = Net(num_class=len(train_data.classes), pretrained_path=model_path).cuda()
+    num_class = len(train_data.classes) if args.dataset != "ImageNet" else args.class_num
+    model = Net(num_class=num_class, pretrained_path=model_path, image_class=image_class).cuda()
     for param in model.f.parameters():
         param.requires_grad = False
     model = nn.DataParallel(model)
