@@ -23,15 +23,17 @@ def pretty_tensor_str(tensor, indent=0):
     preserving nested brackets and indentation.
     Returns a string instead of printing.
     """
-    s = str(tensor.cpu())
-    s = re.sub(r", device='.*?'\)", ")", s)  # remove device info if any
+
+    t = tensor.detach().cpu()
+    s = str(t)
+    s = re.sub(r", device='.*?'\)", ")", s)
 
     if s.startswith("tensor(") and s.endswith(")"):
         s = s[len("tensor("):-1]
 
     s = s.strip()
 
-    def recursive_format(s, indent):
+    def recursive_format(s, indent, level):
         if s.startswith('[') and s.endswith(']'):
             s = s[1:-1].strip()
 
@@ -39,14 +41,14 @@ def pretty_tensor_str(tensor, indent=0):
             return ' ' * indent + '[]'
 
         elems = []
-        level = 0
+        level_count = 0
         current = []
         for c in s:
             if c == '[':
-                level += 1
+                level_count += 1
             elif c == ']':
-                level -= 1
-            if c == ',' and level == 0:
+                level_count -= 1
+            if c == ',' and level_count == 0:
                 elems.append(''.join(current).strip())
                 current = []
             else:
@@ -56,16 +58,24 @@ def pretty_tensor_str(tensor, indent=0):
 
         lines = []
         lines.append(' ' * indent + '[')
-        for e in elems:
-            if e.startswith('[') and e.endswith(']'):
-                lines.append(recursive_format(e, indent + 2))
-            else:
-                lines.append(' ' * (indent + 2) + e)
-        lines.append(' ' * indent + ']')
 
+        # Innermost level means no more brackets inside elements
+        # We detect by checking if elements start with '['; if none do, it’s innermost
+        if level >= 1 and all(not e.startswith('[') for e in elems):
+            # Print all elements on one line separated by comma and space
+            inner_line = ' ' * (indent + 2) + ', '.join(elems)
+            lines.append(inner_line)
+        else:
+            # Recurse normally
+            for e in elems:
+                if e.startswith('[') and e.endswith(']'):
+                    lines.append(recursive_format(e, indent + 2, level + 1))
+                else:
+                    lines.append(' ' * (indent + 2) + e)
+        lines.append(' ' * indent + ']')
         return '\n'.join(lines)
 
-    return recursive_format(s, indent)
+    return recursive_format(s, indent, level)
 
 
 class STL10Pair(STL10):
