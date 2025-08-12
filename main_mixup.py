@@ -281,6 +281,7 @@ def train_update_split(net, update_loader, soft_split, random_init=False, args=N
                     pos_1_all_mixup, labels_aux, lam = utils_mixup.mixup(pos_1_all, args.alpha)
                     feature_1_all, out_1_all = net(pos_1_all_mixup)
                     feature_2_all, out_2_all = net(pos_2_all)
+                    Index = Index.to(device=labels_aux.device)
                     labels_aux_all.append(Index[labels_aux])
                     lam_all.append(lam)
                 else:
