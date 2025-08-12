@@ -155,6 +155,7 @@ def train_env_mixup_full_noretaingp(net, data_loader, train_optimizer, temperatu
 def train_env_mixup_full_retaingp(net, data_loader, train_optimizer, temperature, updated_split, args):
     net.train()
     total_loss, total_num = 0.0, 0
+    bar_format = '{l_bar}{bar:' + str(args.bar) + '}{r_bar}' #{bar:-' + str(args.bar) + 'b}'
     train_bar = tqdm(data_loader,
         total=len(data_loader),
         ncols=args.ncols,               # total width available
