@@ -255,7 +255,6 @@ def train_update_split(net, update_loader, soft_split, random_init=False, args=N
     if random_init:
         utils.write_log('Give a Random Split:', log_file, print_=True)
         soft_split = torch.randn(soft_split.size(), requires_grad=True, device="cuda")
-        print("size:",soft_split.size())
         utils.write_log('%s' %(utils.pretty_tensor_str(soft_split[:3])), log_file, print_=True)
     else:
         utils.write_log('Use Previous Split:', log_file, print_=True)

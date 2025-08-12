@@ -17,37 +17,47 @@ np.random.seed(0)
 import torch
 import re
 
-def pretty_tensor_str(tensor, indent=0, level=0):
+def pretty_tensor_str(tensor, indent=0):
     """
-    Recursively format a tensor with PyTorch-style truncation and ellipsis,
-    preserving nested brackets and indentation.
-    Returns a string instead of printing.
+    Recursively pretty-print a PyTorch tensor string representation
+    preserving truncation, ellipsis, brackets, and indentation.
+
+    Innermost lists are printed fully inline with brackets on the same line.
+
+    Returns a formatted string.
     """
+    # Detach to remove grad info, move to CPU, get string repr
     t = tensor.detach().cpu()
     s = str(t)
-    s = re.sub(r", device='.*?'\)", ")", s)
 
+    # Remove device info and grad_fn if any
+    s = re.sub(r", device='.*?'\)", ")", s)
+    s = re.sub(r", grad_fn=<.*?>", "", s)
+
+    # Remove outer tensor(...) wrapper
     if s.startswith("tensor(") and s.endswith(")"):
         s = s[len("tensor("):-1]
 
     s = s.strip()
 
-    def recursive_format(s, indent, level):
+    def recursive_format(s, indent_level):
+        # Trim outer brackets if present
         if s.startswith('[') and s.endswith(']'):
             s = s[1:-1].strip()
 
         if not s:
-            return ' ' * indent + '[]'
+            return ' ' * indent_level + '[]'
 
+        # Split top-level elements by comma not inside brackets
         elems = []
-        level_count = 0
+        level = 0
         current = []
         for c in s:
             if c == '[':
-                level_count += 1
+                level += 1
             elif c == ']':
-                level_count -= 1
-            if c == ',' and level_count == 0:
+                level -= 1
+            if c == ',' and level == 0:
                 elems.append(''.join(current).strip())
                 current = []
             else:
@@ -55,32 +65,30 @@ def pretty_tensor_str(tensor, indent=0, level=0):
         if current:
             elems.append(''.join(current).strip())
 
+        # Detect if all elems are bracketed lists (nested) or all flat (innermost)
+        all_bracketed = all(e.startswith('[') and e.endswith(']') for e in elems)
+        all_flat = all(not (e.startswith('[') and e.endswith(']')) for e in elems)
+
         lines = []
-        lines.append(' ' * indent + '[')
+        lines.append(' ' * indent_level + '[')
 
-        # Innermost level detection: all elems do NOT start with '[' (flat) or all elems start with '[' (full inner lists)
-        # If all elements start with '[', print each fully inline
-        # Else print elements normally (recurse or print)
-        if level >= 1 and all(e.startswith('[') for e in elems):
-            # elements are full inner lists, print each inline (they already have brackets)
+        if all_flat:
+            # Innermost level: print full list inline with brackets on same line
+            inline_line = ' ' * (indent_level + 2) + '[' + ', '.join(elems) + ']'
+            lines.append(inline_line)
+        elif all_bracketed:
+            # Nested list: recurse on each element with increased indent
             for e in elems:
-                lines.append(' ' * (indent + 2) + e)
-        elif level >= 1 and all(not e.startswith('[') for e in elems):
-            # elements are flat values separated by commas (like '0.6331, 1.6358'), print all in one line inside brackets
-            line = ' ' * (indent + 2) + '[' + ', '.join(elems) + ']'
-            lines.append(line)
+                lines.append(recursive_format(e, indent_level + 2))
         else:
-            # mixed case or outer level: recurse or print scalar
+            # Mixed or malformed: just print elements indented
             for e in elems:
-                if e.startswith('[') and e.endswith(']'):
-                    lines.append(recursive_format(e, indent + 2, level + 1))
-                else:
-                    lines.append(' ' * (indent + 2) + e)
+                lines.append(' ' * (indent_level + 2) + e)
 
-        lines.append(' ' * indent + ']')
+        lines.append(' ' * indent_level + ']')
         return '\n'.join(lines)
 
-    return recursive_format(s, indent, level)
+    return recursive_format(s, indent)
     
 class STL10Pair(STL10):
     def __getitem__(self, index):
