@@ -22,9 +22,16 @@ def get_negative_mask(batch_size):
     return negative_mask
 
 
-def train(net, data_loader, train_optimizer, temperature, debiased, tau_plus):
+def train(net, data_loader, train_optimizer, temperature, debiased, tau_plus, args):
     net.train()
-    total_loss, total_num, train_bar = 0.0, 0, tqdm(data_loader)
+    total_loss, total_num = 0.0, 0
+    bar_format = '{l_bar}{bar:' + str(args.bar) + '}{r_bar}' #{bar:-' + str(args.bar) + 'b}'
+    train_bar = tqdm(data_loader,
+        total=len(data_loader,
+        ncols=args.ncols,               # total width available
+        dynamic_ncols=False,            # disable autosizing
+        bar_format=bar_format,          # request bar width
+    )
     criterion = torch.nn.CrossEntropyLoss()
 
     for pos_1, pos_2, target, idx in train_bar:
@@ -53,9 +60,16 @@ def train(net, data_loader, train_optimizer, temperature, debiased, tau_plus):
 
 
 
-def train_env_mixup_full_noretaingp(net, data_loader, train_optimizer, temperature, updated_split):
+def train_env_mixup_full_noretaingp(net, data_loader, train_optimizer, temperature, updated_split, args):
     net.train()
-    total_loss, total_num, train_bar = 0.0, 0, tqdm(data_loader)
+    total_loss, total_num = 0.0, 0
+    bar_format = '{l_bar}{bar:' + str(args.bar) + '}{r_bar}' #{bar:-' + str(args.bar) + 'b}'
+    train_bar = tqdm(data_loader,
+        total=len(data_loader),
+        ncols=args.ncols,               # total width available
+        dynamic_ncols=False,            # disable autosizing
+        bar_format=bar_format,          # request bar width
+    )
 
     criterion = torch.nn.CrossEntropyLoss()
 
@@ -138,9 +152,15 @@ def train_env_mixup_full_noretaingp(net, data_loader, train_optimizer, temperatu
 
 
 
-def train_env_mixup_full_retaingp(net, data_loader, train_optimizer, temperature, updated_split):
+def train_env_mixup_full_retaingp(net, data_loader, train_optimizer, temperature, updated_split, args):
     net.train()
-    total_loss, total_num, train_bar = 0.0, 0, tqdm(data_loader)
+    total_loss, total_num = 0.0, 0
+    train_bar = tqdm(data_loader,
+        total=len(data_loader),
+        ncols=args.ncols,               # total width available
+        dynamic_ncols=False,            # disable autosizing
+        bar_format=bar_format,          # request bar width
+    )
 
     criterion = torch.nn.CrossEntropyLoss()
 
@@ -229,7 +249,7 @@ def train_env_mixup_full_retaingp(net, data_loader, train_optimizer, temperature
 
 
 # The entrance of the maximization step
-def train_update_split(net, update_loader, soft_split, random_init=False):
+def train_update_split(net, update_loader, soft_split, random_init=False, args=None):
     utils.write_log('Start Maximizing ...', log_file, print_=True)
     if random_init:
         utils.write_log('Give a Random Split:', log_file, print_=True)
@@ -246,7 +266,14 @@ def train_update_split(net, update_loader, soft_split, random_init=False):
         labels_aux_all, lam_all = [], []
         with torch.no_grad():
             # generate feature bank
-            for pos_1_all, pos_2_all, target, Index in tqdm(update_loader_offline, desc='Feature extracting'):
+            feature_bar = tqdm(update_loader_offline,
+                total=len(update_loader_offline),
+                ncols=args.ncols,               # total width available
+                dynamic_ncols=False,            # disable autosizing
+                bar_format=bar_format,          # request bar width
+                desc='Feature extracting'
+            )
+            for pos_1_all, pos_2_all, target, Index in feature_bar:
                 pos_1_all, pos_2_all = pos_1_all.cuda(non_blocking=True), pos_2_all.cuda(non_blocking=True)
                 if args.mixup_max:
                     # bsz = pos_1_all.shape[0]
@@ -288,12 +315,20 @@ def train_update_split(net, update_loader, soft_split, random_init=False):
 
 
 # test for one epoch, use weighted knn to find the most similar images' label to assign the test image
-def test(net, memory_data_loader, test_data_loader):
+def test(net, memory_data_loader, test_data_loader, args):
     net.eval()
     total_top1, total_top5, total_num, feature_bank = 0.0, 0.0, 0, []
     with torch.no_grad():
         # generate feature bank
-        for data, _, target in tqdm(memory_data_loader, desc='Feature extracting'):
+        bar_format = '{l_bar}{bar:' + str(args.bar) + '}{r_bar}' #{bar:-' + str(args.bar) + 'b}'
+        feature_bar = tqdm(memory_data_loader,
+            total=len(memory_data_loader),
+            ncols=args.ncols,               # total width available
+            dynamic_ncols=False,            # disable autosizing
+            bar_format=bar_format,          # request bar width
+            desc='Feature extracting'
+        )
+        for data, _, target in feature_bar:
             feature, out = net(data.cuda(non_blocking=True))
             feature_bank.append(feature)
         # [D, N]
@@ -310,7 +345,13 @@ def test(net, memory_data_loader, test_data_loader):
         feature_labels = torch.tensor(labels, device=feature_bank.device)
 
         # loop test data to predict the label by weighted knn search
-        test_bar = tqdm(test_data_loader)
+        bar_format = '{l_bar}{bar:' + str(args.bar) + '}{r_bar}' #{bar:-' + str(args.bar) + 'b}'
+        test_bar = tqdm(test_data_loader,
+            total=len(test_data_loader),
+            ncols=args.ncols,               # total width available
+            dynamic_ncols=False,            # disable autosizing
+            bar_format=bar_format,          # request bar width
+        )
         for data, _, target in test_bar:
             data, target = data.cuda(non_blocking=True), target.cuda(non_blocking=True)
             feature, out = net(data)
@@ -389,6 +430,8 @@ if __name__ == '__main__':
     parser.add_argument('--target_transform', type=str, default=None, help='a function definition to apply to target')
     parser.add_argument('--image_class', choices=['ImageNet', 'STL', 'CIFAR'], default='ImageNet', help='Image class, default=ImageNet')
     parser.add_argument('--class_num', default=1000, type=int, help='num of classes')
+    parser.add_argument('--ncols', default=80, type=int, help='number of columns in terminal')
+    parser.add_argument('--bar', default=50, type=int, help='length of progess bar')
 
     # args parse
     args = parser.parse_args()
@@ -481,25 +524,25 @@ if __name__ == '__main__':
             updated_split = torch.randn((len(update_data.data), args.env_num), requires_grad=True, device="cuda")
         else:
             updated_split = torch.randn((len(update_data.imgs), args.env_num), requires_grad=True, device="cuda")
-        updated_split = train_update_split(model, update_loader, updated_split, random_init=args.random_init)
+        updated_split = train_update_split(model, update_loader, updated_split, random_init=args.random_init, args=args)
         updated_split_all = [updated_split.clone().detach()]
 
 
     for epoch in range(1, epochs + 1):
         if args.baseline:
-            train_loss = train(model, train_loader, optimizer, temperature, debiased, tau_plus)
+            train_loss = train(model, train_loader, optimizer, temperature, debiased, tau_plus, args)
 
         else:
             if args.ours_mixup_mode == 'full':
                 if args.retain_group:
-                    train_loss = train_env_mixup_full_retaingp(model, train_loader, optimizer, temperature, updated_split_all)
+                    train_loss = train_env_mixup_full_retaingp(model, train_loader, optimizer, temperature, updated_split_all, args)
                 else:
-                    train_loss = train_env_mixup_full_noretaingp(model, train_loader, optimizer, temperature, updated_split)
+                    train_loss = train_env_mixup_full_noretaingp(model, train_loader, optimizer, temperature, updated_split, args)
             else:
                 raise NotImplementedError
 
             if epoch % args.maximize_iter == 0:
-                updated_split = train_update_split(model, update_loader, updated_split, random_init=args.random_init)
+                updated_split = train_update_split(model, update_loader, updated_split, random_init=args.random_init, args=args)
                 if args.retain_group: # add partition into the partition set
                     if args.retain_group_set == 0:
                         updated_split_all.append(updated_split)

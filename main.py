@@ -22,9 +22,16 @@ def get_negative_mask(batch_size):
     return negative_mask
 
 
-def train(net, data_loader, train_optimizer, temperature, debiased, tau_plus):
+def train(net, data_loader, train_optimizer, temperature, debiased, tau_plus, args):
     net.train()
-    total_loss, total_num, train_bar = 0.0, 0, tqdm(data_loader, bar_format='{l_bar}{bar:30}{r_bar}')
+    total_loss, total_num = 0.0, 0
+    bar_format = '{l_bar}{bar:' + str(args.bar) + '}{r_bar}' #{bar:-' + str(args.bar) + 'b}'
+    train_bar = tqdm(data_loader,
+            total=len(data_loader),
+            ncols=args.ncols,               # total width available
+            dynamic_ncols=False,            # disable autosizing
+            bar_format=bar_format,          # request bar width
+            )
     for pos_1, pos_2, target, idx in train_bar:
         pos_1, pos_2 = pos_1.cuda(non_blocking=True), pos_2.cuda(non_blocking=True)
         feature_1, out_1 = net(pos_1)
@@ -65,9 +72,16 @@ def train(net, data_loader, train_optimizer, temperature, debiased, tau_plus):
 
 
 # ssl training with IP-IRM
-def train_env(net, data_loader, train_optimizer, temperature, updated_split):
+def train_env(net, data_loader, train_optimizer, temperature, updated_split, args):
     net.train()
-    total_loss, total_num, train_bar = 0.0, 0, tqdm(data_loader)
+    total_loss, total_num = 0.0, 0
+    bar_format = '{l_bar}{bar:' + str(args.bar) + '}{r_bar}' #{bar:-' + str(args.bar) + 'b}'
+    train_bar = tqdm(data_loader,
+            total=len(data_loader),
+            ncols=args.ncols,               # total width available
+            dynamic_ncols=False,            # disable autosizing
+            bar_format=bar_format,          # request bar width
+            )
 
     for batch_index, data_env in enumerate(train_bar):
         # extract all feature
@@ -157,7 +171,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split):
 
 
 
-def train_update_split(net, update_loader, soft_split, random_init=False):
+def train_update_split(net, update_loader, soft_split, random_init=False, args=None):
     utils.write_log('Start Maximizing ...', log_file, print_=True)
     if random_init:
         utils.write_log('Give a Random Split:', log_file, print_=True)
@@ -173,7 +187,15 @@ def train_update_split(net, update_loader, soft_split, random_init=False):
         feature_bank_1, feature_bank_2 = [], []
         with torch.no_grad():
             # generate feature bank
-            for pos_1, pos_2, target, Index in tqdm(update_loader_offline, desc='Feature extracting'):
+            bar_format = '{l_bar}{bar:' + str(args.bar) + '}{r_bar}' #{bar:-' + str(args.bar) + 'b}'
+            train_bar = tqdm(update_loader_offline,
+                total=len(update_loader_offline),
+                ncols=args.ncols,               # total width available
+                dynamic_ncols=False,            # disable autosizing
+                bar_format=bar_format,          # request bar width
+                desc='Feature extracting'
+            )
+            for pos_1, pos_2, target, Index in train_bar:
                 feature_1, out_1 = net(pos_1.cuda(non_blocking=True))
                 feature_2, out_2 = net(pos_2.cuda(non_blocking=True))
                 feature_bank_1.append(out_1.cpu())
@@ -191,12 +213,20 @@ def train_update_split(net, update_loader, soft_split, random_init=False):
 
 
 # test for one epoch, use weighted knn to find the most similar images' label to assign the test image
-def test(net, memory_data_loader, test_data_loader):
+def test(net, memory_data_loader, test_data_loader, args):
     net.eval()
     total_top1, total_top5, total_num, feature_bank = 0.0, 0.0, 0, []
     with torch.no_grad():
         # generate feature bank
-        for data, _, target in tqdm(memory_data_loader, desc='Feature extracting'):
+        bar_format = '{l_bar}{bar:' + str(args.bar) + '}{r_bar}' #{bar:-' + str(args.bar) + 'b}'
+        feature_bar = tqdm(memory_data_loader,
+            total=len(memory_data_loader),
+            ncols=args.ncols,               # total width available
+            dynamic_ncols=False,            # disable autosizing
+            bar_format=bar_format,          # request bar width
+            desc='Feature extracting'
+        )
+        for data, _, target in feature_bar:
             feature, out = net(data.cuda(non_blocking=True))
             feature_bank.append(feature)
         # [D, N]
@@ -213,7 +243,13 @@ def test(net, memory_data_loader, test_data_loader):
         feature_labels = torch.tensor(labels, device=feature_bank.device)
 
         # loop test data to predict the label by weighted knn search
-        test_bar = tqdm(test_data_loader, bar_format='{l_bar}{bar:30}{r_bar}')
+        bar_format = '{l_bar}{bar:' + str(args.bar) + '}{r_bar}' #{bar:-' + str(args.bar) + 'b}'
+        test_bar = tqdm(test_data_loader,
+            total=len(test_data_loader),
+            ncols=args.ncols,               # total width available
+            dynamic_ncols=False,            # disable autosizing
+            bar_format=bar_format,          # request bar width
+        )
         for data, _, target in test_bar:
             data, target = data.cuda(non_blocking=True), target.cuda(non_blocking=True)
             feature, out = net(data)
@@ -285,6 +321,8 @@ if __name__ == '__main__':
     parser.add_argument('--target_transform', type=str, default=None, help='a function definition to apply to target')
     parser.add_argument('--image_class', choices=['ImageNet', 'STL', 'CIFAR'], default='ImageNet', help='Image class, default=ImageNet')
     parser.add_argument('--class_num', default=1000, type=int, help='num of classes')
+    parser.add_argument('--ncols', default=80, type=int, help='number of columns in terminal')
+    parser.add_argument('--bar', default=50, type=int, help='length of progess bar')
 
     # args parse
     args = parser.parse_args()
@@ -379,25 +417,25 @@ if __name__ == '__main__':
             updated_split = torch.randn((len(update_data.data), args.env_num), requires_grad=True, device="cuda")
         else:
             updated_split = torch.randn((len(update_data.imgs), args.env_num), requires_grad=True, device="cuda")
-        updated_split = train_update_split(model, update_loader, updated_split, random_init=args.random_init)
+        updated_split = train_update_split(model, update_loader, updated_split, random_init=args.random_init, args=args)
         updated_split_all = [updated_split.clone().detach()]
 
 
     for epoch in range(1, epochs + 1):
         if args.baseline:
-            train_loss = train(model, train_loader, optimizer, temperature, debiased, tau_plus)
+            train_loss = train(model, train_loader, optimizer, temperature, debiased, tau_plus, args)
         else: # Minimize Step
             if args.retain_group: # retain the previous partitions
-                train_loss = train_env(model, train_loader, optimizer, temperature, updated_split_all)
+                train_loss = train_env(model, train_loader, optimizer, temperature, updated_split_all, args)
             else:
-                train_loss = train_env(model, train_loader, optimizer, temperature, updated_split)
+                train_loss = train_env(model, train_loader, optimizer, temperature, updated_split, args)
 
             if epoch % args.maximize_iter == 0: # Maximize Step
-                updated_split = train_update_split(model, update_loader, updated_split, random_init=args.random_init)
+                updated_split = train_update_split(model, update_loader, updated_split, random_init=args.random_init, args=args)
                 updated_split_all.append(updated_split)
 
         if epoch % 25 == 0: # eval knn every 25 epochs
-            test_acc_1, test_acc_5 = test(model, memory_loader, test_loader)
+            test_acc_1, test_acc_5 = test(model, memory_loader, test_loader, args)
             txt_write = open("results/{}/{}/{}".format(args.dataset, args.name, 'knn_result.txt'), 'a')
             txt_write.write('\ntest_acc@1: {}, test_acc@5: {}'.format(test_acc_1, test_acc_5))
             torch.save(model.state_dict(), 'results/{}/{}/model_{}.pth'.format(args.dataset, args.name, epoch))
