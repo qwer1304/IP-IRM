@@ -24,7 +24,7 @@ def get_negative_mask(batch_size):
 
 def train(net, data_loader, train_optimizer, temperature, debiased, tau_plus):
     net.train()
-    total_loss, total_num, train_bar = 0.0, 0, tqdm(data_loader)
+    total_loss, total_num, train_bar = 0.0, 0, tqdm(data_loader, bar_format='{l_bar}{bar:30}{r_bar}')
     for pos_1, pos_2, target, idx in train_bar:
         pos_1, pos_2 = pos_1.cuda(non_blocking=True), pos_2.cuda(non_blocking=True)
         feature_1, out_1 = net(pos_1)
