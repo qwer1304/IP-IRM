@@ -255,11 +255,11 @@ def train_update_split(net, update_loader, soft_split, random_init=False, args=N
     if random_init:
         utils.write_log('Give a Random Split:', log_file, print_=True)
         soft_split = torch.randn(soft_split.size(), requires_grad=True, device="cuda")
-        utils.write_log('%s' %(soft_split[:3].tolist()), log_file, print_=True)
+        utils.write_log('%s' %(utils.pretty_tensor_str(soft_split[:3])), log_file, print_=True)
     else:
         utils.write_log('Use Previous Split:', log_file, print_=True)
         soft_split = soft_split.requires_grad_()
-        utils.write_log('%s' %(soft_split[:3].tolist()), log_file, print_=True)
+        utils.write_log('%s' %(utils.pretty_tensor_str(soft_split[:3])), log_file, print_=True)
 
     if args.offline:
         net.eval()
