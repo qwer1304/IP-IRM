@@ -27,7 +27,7 @@ def train(net, data_loader, train_optimizer, temperature, debiased, tau_plus, ar
     total_loss, total_num = 0.0, 0
     bar_format = '{l_bar}{bar:' + str(args.bar) + '}{r_bar}' #{bar:-' + str(args.bar) + 'b}'
     train_bar = tqdm(data_loader,
-        total=len(data_loader,
+        total=len(data_loader),
         ncols=args.ncols,               # total width available
         dynamic_ncols=False,            # disable autosizing
         bar_format=bar_format,          # request bar width
