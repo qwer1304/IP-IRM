@@ -255,11 +255,11 @@ def train_update_split(net, update_loader, soft_split, random_init=False, args=N
     if random_init:
         utils.write_log('Give a Random Split:', log_file, print_=True)
         soft_split = torch.randn(soft_split.size(), requires_grad=True, device="cuda")
-        utils.write_log('%s' %(soft_split[:3]), log_file, print_=True)
+        utils.write_log('%s' %(soft_split[:3].tolist()), log_file, print_=True)
     else:
         utils.write_log('Use Previous Split:', log_file, print_=True)
         soft_split = soft_split.requires_grad_()
-        utils.write_log('%s' %(soft_split[:3]), log_file, print_=True)
+        utils.write_log('%s' %(soft_split[:3].tolist()), log_file, print_=True)
 
     if args.offline:
         net.eval()
@@ -559,7 +559,7 @@ if __name__ == '__main__':
                     print('current group num: %d' % (len(updated_split_all)))
 
         if epoch % 25 == 0:
-            test_acc_1, test_acc_5 = test(model, memory_loader, test_loader)
+            test_acc_1, test_acc_5 = test(model, memory_loader, test_loader, args)
             txt_write = open("results/{}/{}/{}".format(args.dataset, args.name, 'knn_result.txt'), 'a')
             txt_write.write('\ntest_acc@1: {}, test_acc@5: {}'.format(test_acc_1, test_acc_5))
             torch.save(model.state_dict(), 'results/{}/{}/model_{}.pth'.format(args.dataset, args.name, epoch))

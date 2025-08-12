@@ -154,7 +154,7 @@ def auto_split_online_mixup(net, update_loader, soft_split_all, temperature, irm
                       %(epoch, 100, training_num, len(update_loader.dataset), sum(risk_all_list)/len(risk_all_list), sum(risk_cont_all_list)/len(risk_cont_all_list), sum(risk_penalty_all_list)/len(risk_penalty_all_list),
                         sum(risk_constrain_all_list)/len(risk_constrain_all_list), cnt, pre_optimizer.param_groups[0]['lr'], irm_mode), log_file=log_file)
             final_split_softmax = F.softmax(soft_split_best, dim=-1)
-            write_log('%s' %(final_split_softmax), log_file=log_file, print_=True)
+            write_log('%s' %(final_split_softmax.tolist()), log_file=log_file, print_=True)
             group_assign = final_split_softmax.argmax(dim=1)
             write_log('Debug:  group1 %d  group2 %d' %(group_assign.sum(), group_assign.size(0)-group_assign.sum()), log_file=log_file, print_=True)
             return soft_split_best
@@ -252,7 +252,7 @@ def auto_split_offline_mixuup(out_1, out_2, labels_aux_all, lam_all, soft_split_
                       %(epoch, 100, training_num, len(trainloader.dataset), sum(risk_all_list)/len(risk_all_list), sum(risk_cont_all_list)/len(risk_cont_all_list), sum(risk_penalty_all_list)/len(risk_penalty_all_list),
                         sum(risk_constrain_all_list)/len(risk_constrain_all_list), cnt, pre_optimizer.param_groups[0]['lr'], irm_mode), log_file=log_file)
             final_split_softmax = F.softmax(soft_split_best, dim=-1)
-            write_log('%s' %(final_split_softmax), log_file=log_file, print_=True)
+            write_log('%s' %(final_split_softmax.tolist()), log_file=log_file, print_=True)
             group_assign = final_split_softmax.argmax(dim=1)
             write_log('Debug:  group1 %d  group2 %d' %(group_assign.sum(), group_assign.size(0)-group_assign.sum()), log_file=log_file, print_=True)
             return soft_split_best
