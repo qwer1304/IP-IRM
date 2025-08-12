@@ -114,10 +114,10 @@ if __name__ == '__main__':
         test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
     elif args.dataset == 'ImageNet':
         train_transform = utils.make_train_transform(image_size)
-        train_data = utils.Imagenet_idx_pair(root=args.data+'/train', transform=train_transform, target_transform=target_transform)
+        train_data = utils.Imagenet(root=args.data+'/train', transform=train_transform, target_transform=target_transform)
         train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True)
         test_transform = utils.make_test_transform()
-        test_data = utils.Imagenet_pair(root=args.data+'/testgt', transform=test_transform, target_transform=target_transform)
+        test_data = utils.Imagenet(root=args.data+'/testgt', transform=test_transform, target_transform=target_transform)
         test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
 
     num_class = len(train_data.classes) if args.dataset != "ImageNet" else args.class_num
