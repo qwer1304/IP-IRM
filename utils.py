@@ -14,21 +14,59 @@ import random
 
 np.random.seed(0)
 
-def pretty_print_tensor(tensor):
-    """
-    Print a PyTorch tensor with the usual truncated ellipsis,
-    but without 'tensor(...)' and 'device=...' clutter.
-    """
-    # Move tensor to CPU for consistent string format and no device info
-    t_cpu = tensor.cpu()
-    s = str(t_cpu)  # e.g. "tensor([[0.1, 0.2, ..., 0.9]], device='cpu')"
+import torch
+import re
 
-    # Strip off the 'tensor(' prefix and trailing ')', ignoring optional device info
-    # This regex matches: tensor( ... ) optionally followed by ", device='...'"
-    import re
-    s_clean = re.sub(r"^tensor\((.*)\)(, device='.*')?$", r"\1", s)
+def pretty_tensor_str(tensor, indent=0):
+    """
+    Recursively format a tensor with PyTorch-style truncation and ellipsis,
+    preserving nested brackets and indentation.
+    Returns a string instead of printing.
+    """
+    s = str(tensor.cpu())
+    s = re.sub(r", device='.*?'\)", ")", s)  # remove device info if any
 
-    print(s_clean)
+    if s.startswith("tensor(") and s.endswith(")"):
+        s = s[len("tensor("):-1]
+
+    s = s.strip()
+
+    def recursive_format(s, indent):
+        if s.startswith('[') and s.endswith(']'):
+            s = s[1:-1].strip()
+
+        if not s:
+            return ' ' * indent + '[]'
+
+        elems = []
+        level = 0
+        current = []
+        for c in s:
+            if c == '[':
+                level += 1
+            elif c == ']':
+                level -= 1
+            if c == ',' and level == 0:
+                elems.append(''.join(current).strip())
+                current = []
+            else:
+                current.append(c)
+        if current:
+            elems.append(''.join(current).strip())
+
+        lines = []
+        lines.append(' ' * indent + '[')
+        for e in elems:
+            if e.startswith('[') and e.endswith(']'):
+                lines.append(recursive_format(e, indent + 2))
+            else:
+                lines.append(' ' * (indent + 2) + e)
+        lines.append(' ' * indent + ']')
+
+        return '\n'.join(lines)
+
+    return recursive_format(s, indent)
+
 
 class STL10Pair(STL10):
     def __getitem__(self, index):
@@ -474,7 +512,7 @@ def auto_split(net, update_loader, soft_split_all, temperature, irm_temp, loss_m
                       %(epoch, 100, training_num, len(update_loader.dataset), sum(risk_all_list)/len(risk_all_list), sum(risk_cont_all_list)/len(risk_cont_all_list), sum(risk_penalty_all_list)/len(risk_penalty_all_list),
                         sum(risk_constrain_all_list)/len(risk_constrain_all_list), cnt, pre_optimizer.param_groups[0]['lr'], irm_mode), log_file=log_file)
             final_split_softmax = F.softmax(soft_split_best, dim=-1)
-            write_log('%s' %(pretty_print_tensor(final_split_softmax)), log_file=log_file, print_=True)
+            write_log('%s' %(pretty_tensor_str(final_split_softmax)), log_file=log_file, print_=True)
             group_assign = final_split_softmax.argmax(dim=1)
             write_log('Debug:  group1 %d  group2 %d' %(group_assign.sum(), group_assign.size(0)-group_assign.sum()), log_file=log_file, print_=True)
             return soft_split_best
@@ -582,7 +620,7 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
                       %(epoch, 100, training_num, len(trainloader.dataset), sum(risk_all_list)/len(risk_all_list), sum(risk_cont_all_list)/len(risk_cont_all_list), sum(risk_penalty_all_list)/len(risk_penalty_all_list),
                         sum(risk_constrain_all_list)/len(risk_constrain_all_list), cnt, pre_optimizer.param_groups[0]['lr'], irm_mode), log_file=log_file)
             final_split_softmax = F.softmax(soft_split_best, dim=-1)
-            write_log('%s' %(pretty_print_tensor(final_split_softmax)), log_file=log_file, print_=True)
+            write_log('%s' %(pretty_tensor_str(final_split_softmax)), log_file=log_file, print_=True)
             group_assign = final_split_softmax.argmax(dim=1)
             write_log('Debug:  group1 %d  group2 %d' %(group_assign.sum(), group_assign.size(0)-group_assign.sum()), log_file=log_file, print_=True)
             return soft_split_best
