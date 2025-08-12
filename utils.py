@@ -14,6 +14,21 @@ import random
 
 np.random.seed(0)
 
+def pretty_print_tensor(tensor):
+    """
+    Print a PyTorch tensor with the usual truncated ellipsis,
+    but without 'tensor(...)' and 'device=...' clutter.
+    """
+    # Move tensor to CPU for consistent string format and no device info
+    t_cpu = tensor.cpu()
+    s = str(t_cpu)  # e.g. "tensor([[0.1, 0.2, ..., 0.9]], device='cpu')"
+
+    # Strip off the 'tensor(' prefix and trailing ')', ignoring optional device info
+    # This regex matches: tensor( ... ) optionally followed by ", device='...'"
+    import re
+    s_clean = re.sub(r"^tensor\((.*)\)(, device='.*')?$", r"\1", s)
+
+    print(s_clean)
 
 class STL10Pair(STL10):
     def __getitem__(self, index):
@@ -459,7 +474,7 @@ def auto_split(net, update_loader, soft_split_all, temperature, irm_temp, loss_m
                       %(epoch, 100, training_num, len(update_loader.dataset), sum(risk_all_list)/len(risk_all_list), sum(risk_cont_all_list)/len(risk_cont_all_list), sum(risk_penalty_all_list)/len(risk_penalty_all_list),
                         sum(risk_constrain_all_list)/len(risk_constrain_all_list), cnt, pre_optimizer.param_groups[0]['lr'], irm_mode), log_file=log_file)
             final_split_softmax = F.softmax(soft_split_best, dim=-1)
-            write_log('%s' %(final_split_softmax.tolist()), log_file=log_file, print_=True)
+            write_log('%s' %(pretty_print_tensor(final_split_softmax)), log_file=log_file, print_=True)
             group_assign = final_split_softmax.argmax(dim=1)
             write_log('Debug:  group1 %d  group2 %d' %(group_assign.sum(), group_assign.size(0)-group_assign.sum()), log_file=log_file, print_=True)
             return soft_split_best
@@ -567,7 +582,7 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
                       %(epoch, 100, training_num, len(trainloader.dataset), sum(risk_all_list)/len(risk_all_list), sum(risk_cont_all_list)/len(risk_cont_all_list), sum(risk_penalty_all_list)/len(risk_penalty_all_list),
                         sum(risk_constrain_all_list)/len(risk_constrain_all_list), cnt, pre_optimizer.param_groups[0]['lr'], irm_mode), log_file=log_file)
             final_split_softmax = F.softmax(soft_split_best, dim=-1)
-            write_log('%s' %(final_split_softmax.tolist()), log_file=log_file, print_=True)
+            write_log('%s' %(pretty_print_tensor(final_split_softmax)), log_file=log_file, print_=True)
             group_assign = final_split_softmax.argmax(dim=1)
             write_log('Debug:  group1 %d  group2 %d' %(group_assign.sum(), group_assign.size(0)-group_assign.sum()), log_file=log_file, print_=True)
             return soft_split_best
