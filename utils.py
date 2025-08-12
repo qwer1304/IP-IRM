@@ -130,6 +130,29 @@ class Imagenet_idx(ImageFolder):
 
         return pos, target, index
 
+class Imagenet(ImageFolder):
+    """Folder datasets which returns the index of the image as well
+    """
+
+    def __init__(self, root, transform=None, target_transform=None):
+        super(Imagenet, self).__init__(root, transform, target_transform)
+
+    def __getitem__(self, index):
+        """
+        Args:
+            index (int): Index
+        Returns:
+            tuple: (image, target, index) where target is class_index of the target class.
+        """
+        path, target = self.imgs[index]
+        image = self.loader(path)
+        if self.transform is not None:
+            pos = self.transform(image)
+        if self.target_transform is not None:
+            target = self.target_transform(target)
+
+        return pos, target
+
 
 
 class Imagenet_idx_pair(ImageFolder):
