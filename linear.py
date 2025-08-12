@@ -33,11 +33,18 @@ class Net(nn.Module):
 
 
 # train or test for one epoch
-def train_val(net, data_loader, train_optimizer):
+def train_val(net, data_loader, train_optimizer, args):
     is_train = train_optimizer is not None
     net.train() if is_train else net.eval()
 
-    total_loss, total_correct_1, total_correct_5, total_num, data_bar = 0.0, 0.0, 0.0, 0, tqdm(data_loader)
+    total_loss, total_correct_1, total_correct_5, total_num = 0.0, 0.0, 0.0, 0
+    bar_format = '{l_bar}{bar:' + str(args.bar) + '}{r_bar}' #{bar:-' + str(args.bar) + 'b}'
+    data_bar = tqdm(data_loader,
+            total=len(data_loader),
+            ncols=args.ncols,               # total width available
+            dynamic_ncols=False,            # disable autosizing
+            bar_format=bar_format,          # request bar width
+            )
     with (torch.enable_grad() if is_train else torch.no_grad()):
         for data, target in data_bar:
             data, target = data.cuda(non_blocking=True), target.cuda(non_blocking=True)
@@ -55,7 +62,7 @@ def train_val(net, data_loader, train_optimizer):
             total_correct_1 += torch.sum((prediction[:, 0:1] == target.unsqueeze(dim=-1)).any(dim=-1).float()).item()
             total_correct_5 += torch.sum((prediction[:, 0:5] == target.unsqueeze(dim=-1)).any(dim=-1).float()).item()
 
-            data_bar.set_description('{} Epoch: [{}/{}] Loss: {:.4f} ACC@1: {:.2f}% ACC@5: {:.2f}%'
+            data_bar.set_description('{} Epoch: [{}/{}] Loss: {:.4f} Acc@1: {:.2f}% Acc@5: {:.2f}%'
                                      .format('Train' if is_train else 'Test', epoch, epochs, total_loss / total_num,
                                              total_correct_1 / total_num * 100, total_correct_5 / total_num * 100))
 
@@ -79,6 +86,10 @@ if __name__ == '__main__':
     parser.add_argument('--target_transform', type=str, default=None, help='a function definition to apply to target')
     parser.add_argument('--image_class', choices=['ImageNet', 'STL', 'CIFAR'], default='ImageNet', help='Image class, default=ImageNet')
     parser.add_argument('--class_num', default=1000, type=int, help='num of classes')
+    parser.add_argument('--ncols', default=80, type=int, help='number of columns in terminal')
+    parser.add_argument('--bar', default=50, type=int, help='length of progess bar')
+
+
     args = parser.parse_args()
 
     if not os.path.exists('downstream/{}/{}'.format(args.dataset, args.name)):
@@ -132,8 +143,8 @@ if __name__ == '__main__':
                'test_loss': [], 'test_acc@1': [], 'test_acc@5': []}
 
     for epoch in range(1, epochs + 1):
-        train_loss, train_acc_1, train_acc_5 = train_val(model, train_loader, optimizer)
-        test_loss, test_acc_1, test_acc_5 = train_val(model, test_loader, None)
+        train_loss, train_acc_1, train_acc_5 = train_val(model, train_loader, optimizer, args)
+        test_loss, test_acc_1, test_acc_5 = train_val(model, test_loader, None, args)
 
         if args.txt:
             txt_write = open("downstream/{}/{}/{}".format(args.dataset, args.name, 'result.txt'), 'a')
