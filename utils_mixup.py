@@ -23,7 +23,6 @@ def pretty_tensor_str(tensor, indent=0, level=0):
     preserving nested brackets and indentation.
     Returns a string instead of printing.
     """
-
     t = tensor.detach().cpu()
     s = str(t)
     s = re.sub(r", device='.*?'\)", ")", s)
@@ -34,6 +33,7 @@ def pretty_tensor_str(tensor, indent=0, level=0):
     s = s.strip()
 
     def recursive_format(s, indent, level):
+        # Remove outer brackets
         if s.startswith('[') and s.endswith(']'):
             s = s[1:-1].strip()
 
@@ -59,24 +59,24 @@ def pretty_tensor_str(tensor, indent=0, level=0):
         lines = []
         lines.append(' ' * indent + '[')
 
-        # Innermost level means no more brackets inside elements
-        # We detect by checking if elements start with '['; if none do, it’s innermost
+        # Detect innermost level: all elements are non-bracketed
         if level >= 1 and all(not e.startswith('[') for e in elems):
-            # Print all elements on one line separated by comma and space
-            inner_line = ' ' * (indent + 2) + ', '.join(elems)
-            lines.append(inner_line)
+            # print each innermost list element fully inline with brackets
+            for e in elems:
+                lines.append(' ' * (indent + 2) + '[' + e + ']')
         else:
-            # Recurse normally
+            # recurse normally
             for e in elems:
                 if e.startswith('[') and e.endswith(']'):
                     lines.append(recursive_format(e, indent + 2, level + 1))
                 else:
                     lines.append(' ' * (indent + 2) + e)
+
         lines.append(' ' * indent + ']')
         return '\n'.join(lines)
 
     return recursive_format(s, indent, level)
-
+    
 def info_nce_loss_formixup(q, k, temperature):
     logits = q.mm(k.t()) / temperature
     return logits
