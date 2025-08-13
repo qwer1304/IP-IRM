@@ -1,0 +1,5 @@
+__pycache__
+data/*
+results/*
+downstream/*
+IP-IRM.tws

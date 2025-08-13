@@ -221,7 +221,8 @@ def auto_split_online_mixup(net, update_loader, soft_split_all, temperature, irm
             if epoch > 0:
                 print('\rUpdating Env [%d/%d] [%d/%d]  Loss: %.2f  Cont_Risk: %.2f  Inv_Risk: %.2e  Cons_Risk: %.2f  Cnt: %d  Lr: %.4f  Inv_Mode: %s  Soft Split: %s'
                       %(epoch, 30, training_num, len(update_loader.dataset), sum(risk_all_list)/len(risk_all_list), sum(risk_cont_all_list)/len(risk_cont_all_list), sum(risk_penalty_all_list)/len(risk_penalty_all_list),
-                        sum(risk_constrain_all_list)/len(risk_constrain_all_list), cnt, pre_optimizer.param_groups[0]['lr'], irm_mode, F.softmax(soft_split_print, dim=-1)), end='', flush=True)
+                        sum(risk_constrain_all_list)/len(risk_constrain_all_list), cnt, pre_optimizer.param_groups[0]['lr'], irm_mode, 
+                        F.softmax(soft_split_print, dim=-1).tolist()), end='', flush=True)
 
 
         pre_scheduler.step()
