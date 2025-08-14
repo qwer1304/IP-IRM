@@ -10,6 +10,7 @@ from tqdm import tqdm
 
 import utils
 from model import Model
+import random
 
 
 def get_negative_mask(batch_size):
