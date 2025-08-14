@@ -333,7 +333,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--resume', default='', type=str, metavar='PATH',
                     help='path to latest checkpoint (default: none)')
-    parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
+    parser.add_argument('--start-epoch', default=1, type=int, metavar='N',
                     help='manual epoch number (useful on restarts)')
     parser.add_argument('--save_root', type=str, default='save', help='root dir for saving')
     
@@ -417,7 +417,7 @@ if __name__ == '__main__':
     # pretrain model
     if args.pretrain_model is not None:
         print(f"Loading pretrained model {args.pretrain_model}")
-        model.load_state_dict(torch.load(args.pretrain_model))
+        model.load_state_dict(torch.load(args.pretrain_model), weights_only=False)
 
 
     optimizer = optim.Adam(model.parameters(), lr=1e-3, weight_decay=1e-6)
@@ -432,7 +432,7 @@ if __name__ == '__main__':
         if os.path.isfile(args.resume):
             print("=> loading checkpoint '{}'".format(args.resume))
             checkpoint = torch.load(args.resume)
-            args.start_epoch = checkpoint['epoch']
+            args.start_epoch = checkpoint['epoch'] + 1
             best_acc1 = checkpoint['best_acc1']
             best_epoch = checkpoint['best_epoch']
             model.load_state_dict(checkpoint['state_dict'])
@@ -456,7 +456,6 @@ if __name__ == '__main__':
     if not os.path.exists('results'):
         os.mkdir('results')
 
-    epoch = args.start_epoch
     # update partition for the first time
     if not args.baseline and not resumed:
         if args.dataset != "ImageNet":
@@ -467,7 +466,7 @@ if __name__ == '__main__':
         updated_split_all = [updated_split.clone().detach()]
 
 
-    for epoch in range(1, epochs + 1):
+    for epoch in range(args.start_epoch, epochs + 1):
         if args.baseline:
             train_loss = train(model, train_loader, optimizer, temperature, debiased, tau_plus, args)
         else: # Minimize Step
