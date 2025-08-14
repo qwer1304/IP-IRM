@@ -1,6 +1,8 @@
 import argparse
 import os
 # os.environ['CUDA_VISIBLE_DEVICES'] = '2,3'
+import random
+import shutil
 import numpy as np
 import torch
 import torch.optim as optim
@@ -10,7 +12,6 @@ from tqdm import tqdm
 
 import utils
 from model import Model
-import random
 
 
 def get_negative_mask(batch_size):
