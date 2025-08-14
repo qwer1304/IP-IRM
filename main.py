@@ -417,7 +417,7 @@ if __name__ == '__main__':
     # pretrain model
     if args.pretrain_model is not None:
         print(f"Loading pretrained model {args.pretrain_model}")
-        model.load_state_dict(torch.load(args.pretrain_model), weights_only=False)
+        model.load_state_dict(torch.load(args.pretrain_model))
 
 
     optimizer = optim.Adam(model.parameters(), lr=1e-3, weight_decay=1e-6)
@@ -431,7 +431,7 @@ if __name__ == '__main__':
     if args.resume:
         if os.path.isfile(args.resume):
             print("=> loading checkpoint '{}'".format(args.resume))
-            checkpoint = torch.load(args.resume)
+            checkpoint = torch.load(args.resume, weights_only=False)
             args.start_epoch = checkpoint['epoch'] + 1
             best_acc1 = checkpoint['best_acc1']
             best_epoch = checkpoint['best_epoch']
