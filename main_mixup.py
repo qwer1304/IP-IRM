@@ -510,6 +510,7 @@ if __name__ == '__main__':
     model = nn.DataParallel(model)
     # pretrain model
     if args.pretrain_model is not None:
+        print(f"Loading pretrained model {args.pretrain_model}")
         model.load_state_dict(torch.load(args.pretrain_model))
 
 
