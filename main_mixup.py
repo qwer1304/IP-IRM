@@ -320,7 +320,7 @@ def train_update_split(net, update_loader, soft_split, random_init=False, args=N
 
 
 # test for one epoch, use weighted knn to find the most similar images' label to assign the test image
-def test(net, memory_data_loader, test_data_loader, args, progress=True):
+def test(net, memory_data_loader, test_data_loader, args, progress=True, prefix="Test:"):
     net.eval()
     total_top1, total_top5, total_num, feature_bank = 0.0, 0.0, 0, []
     with torch.no_grad():
@@ -363,8 +363,24 @@ def test(net, memory_data_loader, test_data_loader, args, progress=True):
             )
         else:
             test_bar = test_data_loader
+
+        target_transform = val_loader.dataset.target_transform
+        if args.extract_features:
+            val_loader.dataset.target_transform = None
+
+        feature_list = []
+        pred_labels_list = []
+        pred_scores_list = []
+        target_list = []
+        target_raw_list = []
+
         for data, _, target in test_bar:
             data, target = data.cuda(non_blocking=True), target.cuda(non_blocking=True)
+
+            target_raw = target
+            if args.extract_features and target_transform is not None:
+                target = target_transform(target_raw).cuda(non_blocking=True)
+
             feature, out = net(data)
 
             total_num += data.size(0)
@@ -390,6 +406,40 @@ def test(net, memory_data_loader, test_data_loader, args, progress=True):
                 test_bar.set_description('KNN Test Epoch: [{}/{}] Acc@1:{:.2f}% Acc@5:{:.2f}%'
                                          .format(epoch, epochs, total_top1 / total_num * 100, total_top5 / total_num * 100))
 
+            # compute output
+            if args.extract_features:
+                feature_list.append(feature)
+                target_list.append(target)
+                target_raw_list.append(target_raw)
+                pred_labels_list.append(pred_labels_list)
+                pred_scores_list.append(pred_scores_list)
+
+        # end for data, _, target in test_bar
+
+        if feature_list:
+            feature = torch.cat(feature_list, dim=0)
+            target = torch.cat(target_list, dim=0)
+            target_raw = torch.cat(target_raw_list, dim=0)
+            pred_labels = torch.cat(pred_labels_list, dim=0)
+            pred_scores = torch.cat(pred_scores_list, dim=0)
+
+            # Save to file
+            prefix = "test" if "Test" in prefix else "val"
+            directory = f'results/{args.name}'
+            fp = os.path.join(directory, f"{prefix}_features_dump.pt")       
+            os.makedirs(os.path.dirname(fp), exist_ok=True)
+
+            torch.save({
+                'features':     feature,
+                'labels':       target,
+                'labels_raw':   target_raw,
+                'pred_labels':  pred_labels,
+                'pred_scores':  pred_scores,
+                'model_epoch':  epoch,
+                'n_classes':    args.class_num,
+            }, fp)
+            print(f"Dumped features into {fp}")
+            
     return total_top1 / total_num * 100, total_top5 / total_num * 100
 
 def save_checkpoint(state, is_best, args, filename='checkpoint.pth.tar'):
@@ -460,7 +510,9 @@ if __name__ == '__main__':
     parser.add_argument('--test_freq', default=25, type=int, metavar='N',
                     help='test epoch freqeuncy')
     parser.add_argument('--norandgray', action="store_true", default=False, help='skip rand gray transform')
-
+    parser.add_argument('--evaluate', action="store_true", default=False, help='only evaluate')
+    parser.add_argument('--extract_features', action="store_true", help="extract features for post processiin during evaluate")
+    
     # args parse
     args = parser.parse_args()
 
@@ -580,6 +632,15 @@ if __name__ == '__main__':
         os.mkdir('results')
 
     epoch = args.start_epoch
+
+    if args.evaluate:
+        print(f"Staring evaluation name: {args.name}")
+        print('eval on val data')
+        val_acc_1, val_acc_5 = test(model, memory_loader, val_loader, args, progress=True, prefix="Val:")
+        print('eval on test data')
+        test_acc_1, test_acc_5 = test(model, memory_loader, test_loader, args, progress=True, prefix="Test:")
+        return
+
     # update partition for the first time
     if not args.baseline and not resumed:
         if args.dataset != "ImageNet":
@@ -618,14 +679,14 @@ if __name__ == '__main__':
                     print('current group num: %d' % (len(updated_split_all)))
 
         if epoch % args.test_freq == 0:
-            test_acc_1, test_acc_5 = test(model, memory_loader, test_loader, args)
+            test_acc_1, test_acc_5 = test(model, memory_loader, test_loader, args, prefix="Test:")
             txt_write = open("results/{}/{}/{}".format(args.dataset, args.name, 'knn_result.txt'), 'a')
             txt_write.write('\ntest_acc@1: {}, test_acc@5: {}'.format(test_acc_1, test_acc_5))
             torch.save(model.state_dict(), 'results/{}/{}/model_{}.pth'.format(args.dataset, args.name, epoch))
 
         if epoch % args.val_freq == 0 and args.dataset == 'ImageNet':
             # evaluate on validation set
-            acc1, _ = test(model, memory_loader, val_loader, args, progress=False)
+            acc1, _ = test(model, memory_loader, val_loader, args, progress=False, prefix="Val")
 
             # remember best acc@1 & best epoch and save checkpoint
             is_best = acc1 > best_acc1
