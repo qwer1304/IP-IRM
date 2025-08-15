@@ -1,6 +1,8 @@
 import argparse
 import os
 # os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
+import random
+import shutil
 import numpy as np
 import torch
 from torch import nn, optim, autograd
@@ -383,6 +385,11 @@ def test(net, memory_data_loader, test_data_loader, args):
 
     return total_top1 / total_num * 100, total_top5 / total_num * 100
 
+def save_checkpoint(state, is_best, args, filename='checkpoint.pth.tar'):
+    torch.save(state, filename)
+    if is_best:
+        shutil.copyfile(filename, '{}/{}/model_best.pth.tar'.format(args.save_root, args.name))
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train SimCLR')
@@ -436,6 +443,12 @@ if __name__ == '__main__':
     parser.add_argument('--ncols', default=80, type=int, help='number of columns in terminal')
     parser.add_argument('--bar', default=50, type=int, help='length of progess bar')
 
+    parser.add_argument('--resume', default='', type=str, metavar='PATH',
+                    help='path to latest checkpoint (default: none)')
+    parser.add_argument('--start-epoch', default=1, type=int, metavar='N',
+                    help='manual epoch number (useful on restarts)')
+    parser.add_argument('--save_root', type=str, default='save', help='root dir for saving')
+
     # args parse
     args = parser.parse_args()
 
@@ -450,6 +463,8 @@ if __name__ == '__main__':
     if not os.path.exists('results/{}/{}'.format(args.dataset, args.name)):
         os.makedirs('results/{}/{}'.format(args.dataset, args.name))
     log_file = 'results/{}/{}/log.txt'.format(args.dataset, args.name)
+    if not os.path.exists('{}/{}'.format(args.save_root, args.name)):
+        os.makedirs('{}/{}'.format(args.save_root, args.name))
 
     # data prepare
     if args.dataset == 'STL':
@@ -504,6 +519,8 @@ if __name__ == '__main__':
         memory_loader = DataLoader(memory_data, batch_size=batch_size, shuffle=False, num_workers=args.workers, pin_memory=True)
         test_data = utils.Imagenet_pair(root=args.data+'/testgt', transform=test_transform, target_transform=target_transform)
         test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False, num_workers=args.workers, pin_memory=True)
+        val_data = utils.Imagenet_pair(root=args.data+'/val', transform=test_transform, target_transform=target_transform)
+        val_loader = DataLoader(val_data, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
 
     # model setup and optimizer config
     model = Model(feature_dim, image_class=image_class).cuda()
@@ -518,11 +535,38 @@ if __name__ == '__main__':
     c = len(memory_data.classes) if args.dataset != "ImageNet" else args.class_num
     print('# Classes: {}'.format(c))
 
+    # optionally resume from a checkpoint
+    best_acc1 = 0
+    best_epoch = 0
+    resumed = False
+    if args.resume:
+        if os.path.isfile(args.resume):
+            print("=> loading checkpoint '{}'".format(args.resume))
+            checkpoint = torch.load(args.resume, weights_only=False)
+            args.start_epoch = checkpoint['epoch'] + 1
+            best_acc1 = checkpoint['best_acc1']
+            best_epoch = checkpoint['best_epoch']
+            model.load_state_dict(checkpoint['state_dict'])
+            optimizer.load_state_dict(checkpoint['optimizer'])
+            updated_split = checkpoint['updated_split']
+            updated_split_all = checkpoint['updated_split_all']
+            # Restore RNG states
+            rng_dict = checkpoint['rng_dict']
+            torch.set_rng_state(rng_dict['rng_state'].cpu())
+            if torch.cuda.is_available():
+                torch.cuda.set_rng_state_all([t.cpu() for t in rng_dict['cuda_rng_state']])
+            np.random.set_state(rng_dict['numpy_rng_state'])
+            random.setstate(rng_dict['python_rng_state'])
+            print("=> loaded checkpoint '{}' (epoch {})"
+                  .format(args.resume, checkpoint['epoch']))
+            resumed = True
+        else:
+            print("=> no checkpoint found at '{}'".format(args.resume))
+
     # training loop
     if not os.path.exists('results'):
         os.mkdir('results')
 
-    epoch = 0
     if not args.baseline:
         if args.dataset != "ImageNet":
             updated_split = torch.randn((len(update_data.data), args.env_num), requires_grad=True, device="cuda")
@@ -532,7 +576,7 @@ if __name__ == '__main__':
         updated_split_all = [updated_split.clone().detach()]
 
 
-    for epoch in range(1, epochs + 1):
+    for epoch in range(args.start_epoch, epochs + 1):
         if args.baseline:
             train_loss = train(model, train_loader, optimizer, temperature, debiased, tau_plus, args)
 
@@ -564,3 +608,31 @@ if __name__ == '__main__':
             txt_write = open("results/{}/{}/{}".format(args.dataset, args.name, 'knn_result.txt'), 'a')
             txt_write.write('\ntest_acc@1: {}, test_acc@5: {}'.format(test_acc_1, test_acc_5))
             torch.save(model.state_dict(), 'results/{}/{}/model_{}.pth'.format(args.dataset, args.name, epoch))
+
+        if args.dataset == 'ImageNet':
+            # evaluate on validation set
+            acc1, _ = test(model, memory_loader, val_loader, args)
+
+            # remember best acc@1 & best epoch and save checkpoint
+            is_best = acc1 > best_acc1
+            if is_best:
+                best_acc1 = acc1
+                best_epoch = epoch
+
+            cuda_rng_state = torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None
+
+            save_checkpoint({
+                'epoch':                epoch,
+                'state_dict':           model.state_dict(),
+                'best_acc1':            best_acc1,
+                'best_epoch':           best_epoch,
+                'optimizer':            optimizer.state_dict(),
+                'updated_split':        updated_split,
+                'updated_split_all':    updated_split_all,
+                "rng_dict": {
+                    "rng_state": torch.get_rng_state(),
+                    "cuda_rng_state": cuda_rng_state,
+                    "numpy_rng_state": np.random.get_state(),
+                    "python_rng_state": random.getstate(),
+                },
+            }, is_best, args, filename='{}/{}/checkpoint.pth.tar'.format(args.save_root, args.name))
