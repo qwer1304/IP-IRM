@@ -780,12 +780,12 @@ class GaussianBlur(object):
         return sample
 
 # just follow the previous work -- DCL, NeurIPS2020
-def make_train_transform(image_size=32):
+def make_train_transform(image_size=32, randgray=True):
     return transforms.Compose([
         transforms.RandomResizedCrop(image_size),
         transforms.RandomHorizontalFlip(p=0.5),
         transforms.RandomApply([transforms.ColorJitter(0.4, 0.4, 0.4, 0.1)], p=0.8),
-        #transforms.RandomGrayscale(p=0.2),
+        transforms.RandomGrayscale(p=0.2) if randgray else transforms.Lambda(lambda x: x),
         GaussianBlur(kernel_size=int(0.1 * image_size)),
         transforms.ToTensor(),
         transforms.Normalize([0.4914, 0.4822, 0.4465], [0.2023, 0.1994, 0.2010])])

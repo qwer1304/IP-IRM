@@ -459,6 +459,7 @@ if __name__ == '__main__':
                     help='validation epoch freqeuncy')
     parser.add_argument('--test_freq', default=25, type=int, metavar='N',
                     help='test epoch freqeuncy')
+    parser.add_argument('--norandgray', action="store_true", default=False, help='skip rand gray transform')
 
     # args parse
     args = parser.parse_args()
@@ -518,7 +519,7 @@ if __name__ == '__main__':
         test_data = utils.CIFAR100Pair(root='data', train=False, transform=test_transform)
         test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False, num_workers=args.workers, pin_memory=True)
     elif args.dataset == 'ImageNet':
-        train_transform = utils.make_train_transform(image_size)
+        train_transform = utils.make_train_transform(image_size, randgray=not args.norandgray)
         train_data = utils.Imagenet_idx_pair(root=args.data+'/train', transform=train_transform, target_transform=target_transform)
         train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True, num_workers=args.workers, pin_memory=True,
                                   drop_last=True)
