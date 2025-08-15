@@ -307,8 +307,8 @@ def test(net, memory_data_loader, test_data_loader, args, progress=True, prefix=
                 feature_list.append(feature)
                 target_list.append(target)
                 target_raw_list.append(target_raw)
-                pred_labels_list.append(pred_labels_list)
-                pred_scores_list.append(pred_scores_list)
+                pred_labels_list.append(pred_labels)
+                pred_scores_list.append(pred_scores)
 
         # end for data, _, target in test_bar
 
@@ -321,7 +321,7 @@ def test(net, memory_data_loader, test_data_loader, args, progress=True, prefix=
 
             # Save to file
             prefix = "test" if "Test" in prefix else "val"
-            directory = f'results/{args.name}'
+            directory = f'results/{args.dataset}/{args.name}'
             fp = os.path.join(directory, f"{prefix}_features_dump.pt")       
             os.makedirs(os.path.dirname(fp), exist_ok=True)
 
