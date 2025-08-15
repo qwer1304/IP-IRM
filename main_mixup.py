@@ -320,19 +320,22 @@ def train_update_split(net, update_loader, soft_split, random_init=False, args=N
 
 
 # test for one epoch, use weighted knn to find the most similar images' label to assign the test image
-def test(net, memory_data_loader, test_data_loader, args):
+def test(net, memory_data_loader, test_data_loader, args, progress=True):
     net.eval()
     total_top1, total_top5, total_num, feature_bank = 0.0, 0.0, 0, []
     with torch.no_grad():
         # generate feature bank
         bar_format = '{l_bar}{bar:' + str(args.bar) + '}{r_bar}' #{bar:-' + str(args.bar) + 'b}'
-        feature_bar = tqdm(memory_data_loader,
-            total=len(memory_data_loader),
-            ncols=args.ncols,               # total width available
-            dynamic_ncols=False,            # disable autosizing
-            bar_format=bar_format,          # request bar width
-            desc='Feature extracting'
-        )
+        if progress:
+            feature_bar = tqdm(memory_data_loader,
+                total=len(memory_data_loader),
+                ncols=args.ncols,               # total width available
+                dynamic_ncols=False,            # disable autosizing
+                bar_format=bar_format,          # request bar width
+                desc='Feature extracting'
+            )
+        else:
+            feature_bar = memory_data_loader
         for data, _, target in feature_bar:
             feature, out = net(data.cuda(non_blocking=True))
             feature_bank.append(feature)
@@ -351,12 +354,15 @@ def test(net, memory_data_loader, test_data_loader, args):
 
         # loop test data to predict the label by weighted knn search
         bar_format = '{l_bar}{bar:' + str(args.bar) + '}{r_bar}' #{bar:-' + str(args.bar) + 'b}'
-        test_bar = tqdm(test_data_loader,
-            total=len(test_data_loader),
-            ncols=args.ncols,               # total width available
-            dynamic_ncols=False,            # disable autosizing
-            bar_format=bar_format,          # request bar width
-        )
+        if progress:
+            test_bar = tqdm(test_data_loader,
+                total=len(test_data_loader),
+                ncols=args.ncols,               # total width available
+                dynamic_ncols=False,            # disable autosizing
+                bar_format=bar_format,          # request bar width
+            )
+        else:
+            test_bar = test_data_loader
         for data, _, target in test_bar:
             data, target = data.cuda(non_blocking=True), target.cuda(non_blocking=True)
             feature, out = net(data)
@@ -380,8 +386,9 @@ def test(net, memory_data_loader, test_data_loader, args):
             pred_labels = pred_scores.argsort(dim=-1, descending=True)
             total_top1 += torch.sum((pred_labels[:, :1] == target.unsqueeze(dim=-1)).any(dim=-1).float()).item()
             total_top5 += torch.sum((pred_labels[:, :5] == target.unsqueeze(dim=-1)).any(dim=-1).float()).item()
-            test_bar.set_description('KNN Test Epoch: [{}/{}] Acc@1:{:.2f}% Acc@5:{:.2f}%'
-                                     .format(epoch, epochs, total_top1 / total_num * 100, total_top5 / total_num * 100))
+            if progress:
+                test_bar.set_description('KNN Test Epoch: [{}/{}] Acc@1:{:.2f}% Acc@5:{:.2f}%'
+                                         .format(epoch, epochs, total_top1 / total_num * 100, total_top5 / total_num * 100))
 
     return total_top1 / total_num * 100, total_top5 / total_num * 100
 
@@ -613,7 +620,7 @@ if __name__ == '__main__':
 
         if args.dataset == 'ImageNet':
             # evaluate on validation set
-            acc1, _ = test(model, memory_loader, val_loader, args)
+            acc1, _ = test(model, memory_loader, val_loader, args, progress=False)
 
             # remember best acc@1 & best epoch and save checkpoint
             is_best = acc1 > best_acc1
