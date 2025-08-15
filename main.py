@@ -88,8 +88,8 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, arg
     for batch_index, data_env in enumerate(train_bar):
         # extract all feature
         pos_1_all, pos_2_all, indexs = data_env[0], data_env[1], data_env[-1]
-        feature_1_all, out_1_all = net(pos_1_all)
-        feature_2_all, out_2_all = net(pos_2_all)
+        feature_1_all, out_1_all = net(pos_1_all.cuda(non_blocking=True))
+        feature_2_all, out_2_all = net(pos_2_all.cuda(non_blocking=True))
 
         if args.keep_cont: # global contrastive loss (1st partition)
             logits_all, labels_all = utils.info_nce_loss(torch.cat([out_1_all, out_2_all], dim=0), out_1_all.size(0), temperature=temperature)
