@@ -24,7 +24,7 @@ class Net(nn.Module):
         msg = []
         assert (pretrained_path is not None and os.path.isfile(pretrained_path))
         print("=> loading pretrained checkpoint '{}'".format(pretrained_path))
-        checkpoint = torch.load(pretrained_path, map_location=device)
+        checkpoint = torch.load(pretrained_path, map_location=device, weights_only=False)
         if 'state_dict' in checkpoint.keys():
             state_dict = checkpoint['state_dict']
         else:

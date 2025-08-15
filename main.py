@@ -484,7 +484,7 @@ if __name__ == '__main__':
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
         msg = []
         print("=> loading pretrained checkpoint '{}'".format(pretrained_path))
-        checkpoint = torch.load(pretrained_path, map_location=device)
+        checkpoint = torch.load(pretrained_path, map_location=device, weights_only=False)
         if 'state_dict' in checkpoint.keys():
             state_dict = checkpoint['state_dict']
         else:
