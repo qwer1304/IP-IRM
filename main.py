@@ -456,6 +456,7 @@ if __name__ == '__main__':
     if not os.path.exists('results'):
         os.mkdir('results')
 
+    epoch = args.start_epoch
     # update partition for the first time
     if not args.baseline and not resumed:
         if args.dataset != "ImageNet":

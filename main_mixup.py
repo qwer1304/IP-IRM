@@ -567,7 +567,9 @@ if __name__ == '__main__':
     if not os.path.exists('results'):
         os.mkdir('results')
 
-    if not args.baseline:
+    epoch = args.start_epoch
+    # update partition for the first time
+    if not args.baseline and not resumed:
         if args.dataset != "ImageNet":
             updated_split = torch.randn((len(update_data.data), args.env_num), requires_grad=True, device="cuda")
         else:
