@@ -455,6 +455,10 @@ if __name__ == '__main__':
     parser.add_argument('--start-epoch', default=1, type=int, metavar='N',
                     help='manual epoch number (useful on restarts)')
     parser.add_argument('--save_root', type=str, default='save', help='root dir for saving')
+    parser.add_argument('--val_freq', default=5, type=int, metavar='N',
+                    help='validation epoch freqeuncy')
+    parser.add_argument('--test_freq', default=25, type=int, metavar='N',
+                    help='test epoch freqeuncy')
 
     # args parse
     args = parser.parse_args()
@@ -612,13 +616,13 @@ if __name__ == '__main__':
                             updated_split_all.append(updated_split)
                     print('current group num: %d' % (len(updated_split_all)))
 
-        if epoch % 25 == 0:
+        if epoch % args.test_freq == 0:
             test_acc_1, test_acc_5 = test(model, memory_loader, test_loader, args)
             txt_write = open("results/{}/{}/{}".format(args.dataset, args.name, 'knn_result.txt'), 'a')
             txt_write.write('\ntest_acc@1: {}, test_acc@5: {}'.format(test_acc_1, test_acc_5))
             torch.save(model.state_dict(), 'results/{}/{}/model_{}.pth'.format(args.dataset, args.name, epoch))
 
-        if args.dataset == 'ImageNet':
+        if epoch % args.val_freq == 0 and args.dataset == 'ImageNet':
             # evaluate on validation set
             acc1, _ = test(model, memory_loader, val_loader, args, progress=False)
 
