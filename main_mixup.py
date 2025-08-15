@@ -639,7 +639,7 @@ if __name__ == '__main__':
         val_acc_1, val_acc_5 = test(model, memory_loader, val_loader, args, progress=True, prefix="Val:")
         print('eval on test data')
         test_acc_1, test_acc_5 = test(model, memory_loader, test_loader, args, progress=True, prefix="Test:")
-        return
+        exit()
 
     # update partition for the first time
     if not args.baseline and not resumed:
