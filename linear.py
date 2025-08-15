@@ -19,7 +19,18 @@ class Net(nn.Module):
         model = Model(image_class=image_class).cuda()
         model = Model().cuda()
         model = nn.DataParallel(model)
-        model.load_state_dict(torch.load(pretrained_path))
+
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        msg = []
+        assert (pretrained_path is not None and os.path.isfile(pretrained_path))
+        print("=> loading pretrained checkpoint '{}'".format(pretrained_path))
+        checkpoint = torch.load(pretrained_path, map_location=device)
+        if 'state_dict' in checkpoint.keys():
+            state_dict = checkpoint['state_dict']
+        else:
+            state_dict = checkpoint
+        msg = model.load_state_dict(state_dict, strict=False)
+        print(msg)
 
         self.f = model.module.f
         # classifier

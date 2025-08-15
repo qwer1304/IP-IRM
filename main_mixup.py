@@ -590,9 +590,19 @@ if __name__ == '__main__':
     model = Model(feature_dim, image_class=image_class).cuda()
     model = nn.DataParallel(model)
     # pretrain model
-    if args.pretrain_model is not None:
-        print(f"Loading pretrained model {args.pretrain_model}")
-        model.load_state_dict(torch.load(args.pretrain_model))
+    if args.pretrain_model is not None and os.path.isfile(pretrained_path):
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        msg = []
+        print("=> loading pretrained checkpoint '{}'".format(pretrained_path))
+        checkpoint = torch.load(pretrained_path, map_location=device)
+        if 'state_dict' in checkpoint.keys():
+            state_dict = checkpoint['state_dict']
+        else:
+            state_dict = checkpoint
+        msg = model.load_state_dict(state_dict, strict=False)
+        print(msg)
+    else:
+        print('Using default model')
 
 
     optimizer = optim.Adam(model.parameters(), lr=1e-3, weight_decay=1e-6)
