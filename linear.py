@@ -44,7 +44,7 @@ class Net(nn.Module):
 
 
 # train or test for one epoch
-def train_val(net, data_loader, train_optimizer, args):
+def train_val(net, data_loader, train_optimizer, args, dataset="test"):
     is_train = train_optimizer is not None
     net.train() if is_train else net.eval()
 
@@ -111,7 +111,7 @@ def train_val(net, data_loader, train_optimizer, args):
             # Save to file
             prefix = "test"
             directory = f'downstream/{args.dataset}/{args.name}'
-            fp = os.path.join(directory, f"{prefix}_features_dump.pt")       
+            fp = os.path.join(directory, f"{dataset}_features_dump.pt")       
             os.makedirs(os.path.dirname(fp), exist_ok=True)
 
             torch.save({
@@ -206,15 +206,16 @@ if __name__ == '__main__':
 
     if args.evaluate:
         epoch = epochs
-        test_loss, test_acc_1, test_acc_5 = train_val(model, test_loader, None, args)
+        train_loss, train_acc_1, train_acc_5 = train_val(model, train_loader, None, args, dataset="train")
+        test_loss, test_acc_1, test_acc_5 = train_val(model, test_loader, None, args, dataset="test")
         if args.txt:
             txt_write = open("downstream/{}/{}/{}".format(args.dataset, args.name, 'result.txt'), 'a')
             txt_write.write('\ntest_loss: {}, test_acc@1: {}, test_acc@5: {}'.format(test_loss, test_acc_1, test_acc_5))
     
     else:
         for epoch in range(1, epochs + 1):
-            train_loss, train_acc_1, train_acc_5 = train_val(model, train_loader, optimizer, args)
-            test_loss, test_acc_1, test_acc_5 = train_val(model, test_loader, None, args)
+            train_loss, train_acc_1, train_acc_5 = train_val(model, train_loader, optimizer, args, dataset="train")
+            test_loss, test_acc_1, test_acc_5 = train_val(model, test_loader, None, args, dataset="test")
 
             if args.txt:
                 txt_write = open("downstream/{}/{}/{}".format(args.dataset, args.name, 'result.txt'), 'a')
