@@ -205,6 +205,7 @@ if __name__ == '__main__':
                'test_loss': [], 'test_acc@1': [], 'test_acc@5': []}
 
     if args.evaluate:
+        epoch = epochs
         test_loss, test_acc_1, test_acc_5 = train_val(model, test_loader, None, args)
         if args.txt:
             txt_write = open("downstream/{}/{}/{}".format(args.dataset, args.name, 'result.txt'), 'a')
