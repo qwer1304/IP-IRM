@@ -505,9 +505,11 @@ if __name__ == '__main__':
     parser.add_argument('--start-epoch', default=1, type=int, metavar='N',
                     help='manual epoch number (useful on restarts)')
     parser.add_argument('--save_root', type=str, default='save', help='root dir for saving')
-    parser.add_argument('--val_freq', default=5, type=int, metavar='N',
+    parser.add_argument('--checkpoint_freq', default=3, type=int, metavar='N',
+                    help='checkpoint epoch freqeuncy')
+    parser.add_argument('--val_freq', default=3*3, type=int, metavar='N',
                     help='validation epoch freqeuncy')
-    parser.add_argument('--test_freq', default=25, type=int, metavar='N',
+    parser.add_argument('--test_freq', default=5*5, type=int, metavar='N',
                     help='test epoch freqeuncy')
     parser.add_argument('--norandgray', action="store_true", default=False, help='skip rand gray transform')
     parser.add_argument('--evaluate', action="store_true", default=False, help='only evaluate')
@@ -593,12 +595,14 @@ if __name__ == '__main__':
     if args.pretrain_model is not None and os.path.isfile(pretrained_path):
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
         msg = []
-        print("=> loading pretrained checkpoint '{}'".format(pretrained_path))
+        print("=> loading pretrained checkpoint '{}'".format(pretrained_path), end="")
         checkpoint = torch.load(pretrained_path, map_location=device, weights_only=False)
         if 'state_dict' in checkpoint.keys():
             state_dict = checkpoint['state_dict']
+            print(f"Epoch: {checkpoint['epoch']}")
         else:
             state_dict = checkpoint
+            print("Epoch: N/A")
         msg = model.load_state_dict(state_dict, strict=False)
         print(msg)
     else:
@@ -688,22 +692,25 @@ if __name__ == '__main__':
                             updated_split_all.append(updated_split)
                     print('current group num: %d' % (len(updated_split_all)))
 
-        if epoch % args.test_freq == 0:
+        if (epoch % args.test_freq == 0) or (epoch == epochs): # eval knn every test_freq epochs
             test_acc_1, test_acc_5 = test(model, memory_loader, test_loader, args, prefix="Test:")
             txt_write = open("results/{}/{}/{}".format(args.dataset, args.name, 'knn_result.txt'), 'a')
             txt_write.write('\ntest_acc@1: {}, test_acc@5: {}'.format(test_acc_1, test_acc_5))
             torch.save(model.state_dict(), 'results/{}/{}/model_{}.pth'.format(args.dataset, args.name, epoch))
 
-        if epoch % args.val_freq == 0 and args.dataset == 'ImageNet':
+        if ((epoch % args.val_freq == 0) or (epoch == epochs)) and args.dataset == 'ImageNet':
             # evaluate on validation set
-            acc1, _ = test(model, memory_loader, val_loader, args, progress=False, prefix="Val")
+            acc1, _ = test(model, memory_loader, val_loader, args, progress=True, prefix="Val:")
 
             # remember best acc@1 & best epoch and save checkpoint
             is_best = acc1 > best_acc1
             if is_best:
                 best_acc1 = acc1
                 best_epoch = epoch
+        else:
+            is_best = False
 
+        if (epoch % args.checkpoint_freq == 0) or (epoch == epochs):
             cuda_rng_state = torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None
 
             save_checkpoint({
