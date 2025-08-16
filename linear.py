@@ -40,7 +40,7 @@ class Net(nn.Module):
         x = self.f(x)
         feature = torch.flatten(x, start_dim=1)
         out = self.fc(feature)
-        return out
+        return out, feature
 
 
 # train or test for one epoch
@@ -74,7 +74,7 @@ def train_val(net, data_loader, train_optimizer, args):
             if args.extract_features and target_transform is not None:
                 target = target_transform(target_raw).cuda(non_blocking=True)
 
-            out = net(data)
+            out, feature = net(data)
             loss = loss_criterion(out, target)
 
             if is_train:
