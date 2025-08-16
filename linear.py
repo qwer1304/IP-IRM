@@ -57,8 +57,23 @@ def train_val(net, data_loader, train_optimizer, args):
             bar_format=bar_format,          # request bar width
             )
     with (torch.enable_grad() if is_train else torch.no_grad()):
+        target_transform = data_loader.dataset.target_transform
+        if args.extract_features:
+            data_loader.dataset.target_transform = None
+
+        feature_list = []
+        pred_labels_list = []
+        pred_scores_list = []
+        target_list = []
+        target_raw_list = []
+
         for data, target in data_bar:
             data, target = data.cuda(non_blocking=True), target.cuda(non_blocking=True)
+
+            target_raw = target
+            if args.extract_features and target_transform is not None:
+                target = target_transform(target_raw).cuda(non_blocking=True)
+
             out = net(data)
             loss = loss_criterion(out, target)
 
@@ -76,7 +91,40 @@ def train_val(net, data_loader, train_optimizer, args):
             data_bar.set_description('{} Epoch: [{}/{}] Loss: {:.4f} Acc@1: {:.2f}% Acc@5: {:.2f}%'
                                      .format('Train' if is_train else 'Test', epoch, epochs, total_loss / total_num,
                                              total_correct_1 / total_num * 100, total_correct_5 / total_num * 100))
+            # compute output
+            if args.extract_features:
+                feature_list.append(feature)
+                target_list.append(target)
+                target_raw_list.append(target_raw)
+                pred_labels_list.append(prediction)
+                pred_scores_list.append(out)
 
+        # end for data, target in data_bar:
+
+        if feature_list:
+            feature = torch.cat(feature_list, dim=0)
+            target = torch.cat(target_list, dim=0)
+            target_raw = torch.cat(target_raw_list, dim=0)
+            pred_labels = torch.cat(pred_labels_list, dim=0)
+            pred_scores = torch.cat(pred_scores_list, dim=0)
+
+            # Save to file
+            prefix = "test"
+            directory = f'downstream/{args.dataset}/{args.name}'
+            fp = os.path.join(directory, f"{prefix}_features_dump.pt")       
+            os.makedirs(os.path.dirname(fp), exist_ok=True)
+
+            torch.save({
+                'features':     feature,
+                'labels':       target,
+                'labels_raw':   target_raw,
+                'pred_labels':  pred_labels,
+                'pred_scores':  pred_scores,
+                'model_epoch':  epoch,
+                'n_classes':    args.class_num,
+            }, fp)
+            print(f"Dumped features into {fp}")
+        
     return total_loss / total_num, total_correct_1 / total_num * 100, total_correct_5 / total_num * 100
 
 
@@ -100,6 +148,9 @@ if __name__ == '__main__':
     parser.add_argument('--ncols', default=80, type=int, help='number of columns in terminal')
     parser.add_argument('--bar', default=50, type=int, help='length of progess bar')
 
+    parser.add_argument('--norandgray', action="store_true", default=False, help='skip rand gray transform')
+    parser.add_argument('--evaluate', action="store_true", default=False, help='only evaluate')
+    parser.add_argument('--extract_features', action="store_true", help="extract features for post processiin during evaluate")
 
     args = parser.parse_args()
 
@@ -135,7 +186,7 @@ if __name__ == '__main__':
         test_data = utils.CIFAR100(root=args.data, train=False, transform=train_transform, target_transform=target_transform)
         test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
     elif args.dataset == 'ImageNet':
-        train_transform = utils.make_train_transform(image_size)
+        train_transform = utils.make_train_transform(image_size, randgray=not args.norandgray)
         train_data = utils.Imagenet(root=args.data+'/train', transform=train_transform, target_transform=target_transform)
         train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True)
         test_transform = utils.make_test_transform()
@@ -153,10 +204,19 @@ if __name__ == '__main__':
     results = {'train_loss': [], 'train_acc@1': [], 'train_acc@5': [],
                'test_loss': [], 'test_acc@1': [], 'test_acc@5': []}
 
-    for epoch in range(1, epochs + 1):
-        train_loss, train_acc_1, train_acc_5 = train_val(model, train_loader, optimizer, args)
+    if args.evaluate:
         test_loss, test_acc_1, test_acc_5 = train_val(model, test_loader, None, args)
-
         if args.txt:
             txt_write = open("downstream/{}/{}/{}".format(args.dataset, args.name, 'result.txt'), 'a')
             txt_write.write('\ntest_loss: {}, test_acc@1: {}, test_acc@5: {}'.format(test_loss, test_acc_1, test_acc_5))
+    
+    else:
+        for epoch in range(1, epochs + 1):
+            train_loss, train_acc_1, train_acc_5 = train_val(model, train_loader, optimizer, args)
+            test_loss, test_acc_1, test_acc_5 = train_val(model, test_loader, None, args)
+
+            if args.txt:
+                txt_write = open("downstream/{}/{}/{}".format(args.dataset, args.name, 'result.txt'), 'a')
+                txt_write.write('\ntest_loss: {}, test_acc@1: {}, test_acc@5: {}'.format(test_loss, test_acc_1, test_acc_5))
+
+        torch.save(model.state_dict(), 'downstream/{}/{}/model_{}.pth'.format(args.dataset, args.name, epoch))
