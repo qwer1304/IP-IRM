@@ -12,7 +12,7 @@ import utils
 from model import Model
 
 class Net(nn.Module):
-    def __init__(self, num_class, pretrained_path, image_class='ImageNet'):
+    def __init__(self, num_class, pretrained_path, image_class='ImageNet', args):
         super(Net, self).__init__()
 
         # encoder
@@ -33,8 +33,11 @@ class Net(nn.Module):
         print(msg)
 
         self.f = model.module.f
-        # classifier
-        self.fc = nn.Linear(2048, num_class, bias=True)
+        if args.evalute is None or args.evaluate == 'knn':
+            # classifier
+            self.fc = nn.Linear(2048, num_class, bias=True)
+        else:
+            self.fc = model.module.fc
 
     def forward(self, x):
         x = self.f(x)
@@ -150,7 +153,7 @@ if __name__ == '__main__':
     parser.add_argument('--bar', default=50, type=int, help='length of progess bar')
 
     parser.add_argument('--norandgray', action="store_true", default=False, help='skip rand gray transform')
-    parser.add_argument('--evaluate', action="store_true", default=False, help='only evaluate')
+    parser.add_argument('--evaluate', type=str, default=None, choices=['knn', 'linear'], help='only evaluate')
     parser.add_argument('--extract_features', action="store_true", help="extract features for post processiin during evaluate")
 
     args = parser.parse_args()
@@ -196,7 +199,7 @@ if __name__ == '__main__':
         test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
 
     num_class = len(train_data.classes) if args.dataset != "ImageNet" else args.class_num
-    model = Net(num_class=num_class, pretrained_path=model_path, image_class=image_class).cuda()
+    model = Net(num_class=num_class, pretrained_path=model_path, image_class=image_class, args).cuda()
     for param in model.f.parameters():
         param.requires_grad = False
     model = nn.DataParallel(model)
