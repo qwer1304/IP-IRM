@@ -199,7 +199,7 @@ if __name__ == '__main__':
         test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
 
     num_class = len(train_data.classes) if args.dataset != "ImageNet" else args.class_num
-    model = Net(num_class=num_class, pretrained_path=model_path, image_class=image_class, args).cuda()
+    model = Net(num_class=num_class, pretrained_path=model_path, image_class=image_class, args=args).cuda()
     for param in model.f.parameters():
         param.requires_grad = False
     model = nn.DataParallel(model)
