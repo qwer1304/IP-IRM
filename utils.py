@@ -200,7 +200,7 @@ class CIFAR100Pair_Index(CIFAR100):
 
         return pos_1, pos_2, target, index
 
-class Imagenet_idx(datasets.ImageFolder):
+class Imagenet_idx(ImageFolder):
     """Folder datasets which returns the index of the image as well
     """
 
