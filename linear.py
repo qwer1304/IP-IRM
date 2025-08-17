@@ -40,7 +40,7 @@ class Net(nn.Module):
             model.module.fc = nn.Linear(2048, num_class, bias=True)
             msg = model.load_state_dict(state_dict, strict=False)
             missing_keys = [k for k in msg.missing_keys if 'g.' not in k]
-            if msg.msg.unexpected_keys or missing_keys:
+            if msg.unexpected_keys or missing_keys:
                 print(msg.unexpected_keys, missing_keys)
             self.fc = model.module.fc
 
