@@ -29,14 +29,17 @@ class Net(nn.Module):
             state_dict = checkpoint['state_dict']
         else:
             state_dict = checkpoint
-        msg = model.load_state_dict(state_dict, strict=False)
-        print(msg)
 
         self.f = model.module.f
         if args.evaluate is None or args.evaluate == 'knn':
+            msg = model.load_state_dict(state_dict, strict=False)
+            print(msg)
             # classifier
             self.fc = nn.Linear(2048, num_class, bias=True)
         else:
+            model.module.fc = nn.Linear(2048, num_class, bias=True)
+            msg = model.load_state_dict(state_dict, strict=False)
+            print(msg)
             self.fc = model.module.fc
 
     def forward(self, x):
