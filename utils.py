@@ -11,6 +11,7 @@ from torch.optim.lr_scheduler import _LRScheduler, MultiStepLR
 from torch.utils.data import DataLoader
 from torch.utils import data
 import random
+import os
 
 np.random.seed(0)
 
@@ -199,12 +200,13 @@ class CIFAR100Pair_Index(CIFAR100):
 
         return pos_1, pos_2, target, index
 
-class Imagenet_idx(ImageFolder):
+class Imagenet_idx(datasets.ImageFolder):
     """Folder datasets which returns the index of the image as well
     """
 
-    def __init__(self, root, transform=None, target_transform=None):
+    def __init__(self, root, transform=None, target_transform=None, class_to_idx=None):
         super(Imagenet_idx, self).__init__(root, transform, target_transform)
+        self.class_to_idx = class_to_idx
 
     def __getitem__(self, index):
         """
@@ -217,6 +219,11 @@ class Imagenet_idx(ImageFolder):
         image = self.loader(path)
         if self.transform is not None:
             pos = self.transform(image)
+
+        if self.class_to_idx is not None:
+            folder_name = os.path.basename(os.path.dirname(path))
+            target = self.class_to_idx(folder_name)
+
         if self.target_transform is not None:
             target = self.target_transform(target)
 
@@ -226,8 +233,9 @@ class Imagenet(ImageFolder):
     """Folder datasets which returns the index of the image as well
     """
 
-    def __init__(self, root, transform=None, target_transform=None):
+    def __init__(self, root, transform=None, target_transform=None, class_to_idx=None):
         super(Imagenet, self).__init__(root, transform, target_transform)
+        self.class_to_idx = class_to_idx
 
     def __getitem__(self, index):
         """
@@ -240,6 +248,11 @@ class Imagenet(ImageFolder):
         image = self.loader(path)
         if self.transform is not None:
             pos = self.transform(image)
+
+        if self.class_to_idx is not None:
+            folder_name = os.path.basename(os.path.dirname(path))
+            target = self.class_to_idx(folder_name)
+
         if self.target_transform is not None:
             target = self.target_transform(target)
 
@@ -251,9 +264,9 @@ class Imagenet_idx_pair(ImageFolder):
     """Folder datasets which returns the index of the image as well
     """
 
-    def __init__(self, root, transform=None, target_transform=None):
+    def __init__(self, root, transform=None, target_transform=None, class_to_idx=None):
         super(Imagenet_idx_pair, self).__init__(root, transform, target_transform)
-
+        self.class_to_idx = class_to_idx
     def __getitem__(self, index):
         """
         Args:
@@ -266,6 +279,11 @@ class Imagenet_idx_pair(ImageFolder):
         if self.transform is not None:
             pos1 = self.transform(image)
             pos2 = self.transform(image)
+
+        if self.class_to_idx is not None:
+            folder_name = os.path.basename(os.path.dirname(path))
+            target = self.class_to_idx(folder_name)
+
         if self.target_transform is not None:
             target = self.target_transform(target)
 
@@ -275,8 +293,9 @@ class Imagenet_pair(ImageFolder):
     """Folder datasets which returns the index of the image as well
     """
 
-    def __init__(self, root, transform=None, target_transform=None):
+    def __init__(self, root, transform=None, target_transform=None, class_to_idx=None):
         super(Imagenet_pair, self).__init__(root, transform, target_transform)
+        self.class_to_idx = class_to_idx
 
     def __getitem__(self, index):
         """
@@ -287,9 +306,15 @@ class Imagenet_pair(ImageFolder):
         """
         path, target = self.imgs[index]
         image = self.loader(path)
+
         if self.transform is not None:
             pos1 = self.transform(image)
             pos2 = self.transform(image)
+
+        if self.class_to_idx is not None:
+            folder_name = os.path.basename(os.path.dirname(path))
+            target = self.class_to_idx(folder_name)
+
         if self.target_transform is not None:
             target = self.target_transform(target)
 
@@ -300,7 +325,7 @@ class Imagenet_idx_pair_transformone(ImageFolder):
     """Folder datasets which returns the index of the image as well
     """
 
-    def __init__(self, root, transform_simple=None, transform_hard=None, target_transform=None):
+    def __init__(self, root, transform_simple=None, transform_hard=None, target_transform=None, class_to_idx=None):
         super(Imagenet_idx_pair_transformone, self).__init__(root, transform_simple, target_transform)
         self.transform_hard = transform_hard
 
@@ -319,6 +344,11 @@ class Imagenet_idx_pair_transformone(ImageFolder):
         if self.transform_hard is not None:
             pos1_hard = self.transform_hard(image)
             pos2_hard = self.transform_hard(image)
+
+        if self.class_to_idx is not None:
+            folder_name = os.path.basename(os.path.dirname(path))
+            target = self.class_to_idx(folder_name)
+
         if self.target_transform is not None:
             target = self.target_transform(target)
 

@@ -63,12 +63,18 @@ class ColoredMNIST(MultipleEnvironmentMNIST):
     def __init__(self, root, args):
         # must come before calling super
         self.include_color = args.include_color
+        self.include_digit = args.include_digit
         self.label_noise = args.label_noise
         #                                 (root, environments,  dataset_transform,  input_shape,  num_classes)
         super(ColoredMNIST, self).__init__(root, args.env_corr, self.color_dataset, (3, 28, 28,), 2)
 
         self.input_shape = (3, 28, 28,)
-        self.num_classes = 4 if self.include_color else 2
+        if self.include_digit:
+            self.num_classes = 2 * 2 * 10
+        elif self.include_color:
+            self.num_classes = 4 
+        else:
+            self.num_classes = 2
         self.N_WORKERS = 1
         self.environments = args.env_names
 
@@ -89,7 +95,9 @@ class ColoredMNIST(MultipleEnvironmentMNIST):
         images[torch.tensor(range(len(images))), (1 - colors).long(), :, :] *= 0
 
         x = images.float().div_(255.0)
-        if self.include_color:
+        if self.include_digit:
+            y = digits.view(-1).long() * 2 * 2 + colors.view(-1).long() * 2 + labels.view(-1).long()
+        elif self.include_color:
             y = colors.view(-1).long() * 2 + labels.view(-1).long()
         else:
             y = labels.view(-1).long()
@@ -205,6 +213,7 @@ if __name__ == "__main__":
     parser.add_argument('--test_domain', type=int, required=True)
     parser.add_argument('--seed', type=int, default=0)
     parser.add_argument('--include_color', action='store_true')
+    parser.add_argument('--include_digit', action='store_true')
     parser.add_argument('--env_names', type=str, nargs='+', required=True, help='Cannot be last before selection method')
     parser.add_argument('--env_corr', type=partial(bounded_type, min_val=0.0, max_val=1.0, cast_type=float), nargs='+', required=True, help='Cannot be last before selection method')
     parser.add_argument('--label_noise', type=float, default=0.25)
@@ -218,6 +227,8 @@ if __name__ == "__main__":
     loo_parser.add_argument('--val_domain', type=int, required=True)
 
     args = parser.parse_args()
+    
+    assert not (args.include_digit and not args.include_color), "include_digit requires include_color" 
     
     assert len(args.env_names) == len(args.env_corr), 'Number of environment names must match that of correlations'
     assert [x > 1. or x < 0 for x in args.env_corr], 'Correlations out of range'

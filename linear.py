@@ -143,6 +143,7 @@ if __name__ == '__main__':
     parser.add_argument('--image_size', type=int, default=224, help='image size')
     # color in label
     parser.add_argument('--target_transform', type=str, default=None, help='a function definition to apply to target')
+    parser.add_argument('--class_to_idx', type=str, default=None, help='a function definition to apply to class to obtain it index')
     parser.add_argument('--image_class', choices=['ImageNet', 'STL', 'CIFAR'], default='ImageNet', help='Image class, default=ImageNet')
     parser.add_argument('--class_num', default=1000, type=int, help='num of classes')
     parser.add_argument('--ncols', default=80, type=int, help='number of columns in terminal')
@@ -162,6 +163,7 @@ if __name__ == '__main__':
 
     model_path, batch_size, epochs = args.model_path, args.batch_size, args.epochs
     target_transform = eval(args.target_transform) if args.target_transform is not None else None
+    class_to_idx = eval(args.class_to_idx) if args.class_to_idx is not None else None
     image_class, image_size = args.image_class, args.image_size
 
     if args.dataset == 'STL':
@@ -187,10 +189,10 @@ if __name__ == '__main__':
         test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
     elif args.dataset == 'ImageNet':
         train_transform = utils.make_train_transform(image_size, randgray=not args.norandgray)
-        train_data = utils.Imagenet(root=args.data+'/train', transform=train_transform, target_transform=target_transform)
+        train_data = utils.Imagenet(root=args.data+'/train', transform=train_transform, target_transform=target_transform, class_to_idx=class_to_idx)
         train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True)
         test_transform = utils.make_test_transform()
-        test_data = utils.Imagenet(root=args.data+'/testgt', transform=test_transform, target_transform=target_transform)
+        test_data = utils.Imagenet(root=args.data+'/testgt', transform=test_transform, target_transform=target_transform, class_to_idx=class_to_idx)
         test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
 
     num_class = len(train_data.classes) if args.dataset != "ImageNet" else args.class_num

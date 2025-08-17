@@ -495,6 +495,7 @@ if __name__ == '__main__':
     parser.add_argument('--image_size', type=int, default=224, help='image size')
     # color in label
     parser.add_argument('--target_transform', type=str, default=None, help='a function definition to apply to target')
+    parser.add_argument('--class_to_idx', type=str, default=None, help='a function definition to apply to class to obtain it index')
     parser.add_argument('--image_class', choices=['ImageNet', 'STL', 'CIFAR'], default='ImageNet', help='Image class, default=ImageNet')
     parser.add_argument('--class_num', default=1000, type=int, help='num of classes')
     parser.add_argument('--ncols', default=80, type=int, help='number of columns in terminal')
@@ -524,6 +525,7 @@ if __name__ == '__main__':
     feature_dim, temperature, tau_plus, k = args.feature_dim, args.temperature, args.tau_plus, args.k
     batch_size, epochs, debiased = args.batch_size, args.epochs,  args.debiased
     target_transform = eval(args.target_transform) if args.target_transform is not None else None
+    class_to_idx = eval(args.class_to_idx) if args.class_to_idx is not None else None
     image_class, image_size = args.image_class, args.image_size
 
     if not os.path.exists('results/{}/{}'.format(args.dataset, args.name)):
@@ -574,18 +576,18 @@ if __name__ == '__main__':
         test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False, num_workers=args.workers, pin_memory=True)
     elif args.dataset == 'ImageNet':
         train_transform = utils.make_train_transform(image_size, randgray=not args.norandgray)
-        train_data = utils.Imagenet_idx_pair(root=args.data+'/train', transform=train_transform, target_transform=target_transform)
+        train_data = utils.Imagenet_idx_pair(root=args.data+'/train', transform=train_transform, target_transform=target_transform, class_to_idx=class_to_idx)
         train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True, num_workers=args.workers, pin_memory=True,
                                   drop_last=True)
-        update_data = utils.Imagenet_idx_pair(root=args.data+'/train', transform=train_transform, target_transform=target_transform)
+        update_data = utils.Imagenet_idx_pair(root=args.data+'/train', transform=train_transform, target_transform=target_transform, class_to_idx=class_to_idx)
         update_loader = DataLoader(update_data, batch_size=2048, shuffle=True, num_workers=args.workers, pin_memory=True, drop_last=True)
         update_loader_offline = DataLoader(update_data, batch_size=2048, shuffle=False, num_workers=args.workers, pin_memory=True)
         test_transform = utils.make_test_transform()
-        memory_data = utils.Imagenet_pair(root=args.data+'/train', transform=test_transform, target_transform=target_transform)
+        memory_data = utils.Imagenet_pair(root=args.data+'/train', transform=test_transform, target_transform=target_transform, class_to_idx=class_to_idx)
         memory_loader = DataLoader(memory_data, batch_size=batch_size, shuffle=False, num_workers=args.workers, pin_memory=True)
-        test_data = utils.Imagenet_pair(root=args.data+'/testgt', transform=test_transform, target_transform=target_transform)
+        test_data = utils.Imagenet_pair(root=args.data+'/testgt', transform=test_transform, target_transform=target_transform, class_to_idx=class_to_idx)
         test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False, num_workers=args.workers, pin_memory=True)
-        val_data = utils.Imagenet_pair(root=args.data+'/val', transform=test_transform, target_transform=target_transform)
+        val_data = utils.Imagenet_pair(root=args.data+'/val', transform=test_transform, target_transform=target_transform, class_to_idx=class_to_idx)
         val_loader = DataLoader(val_data, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
 
     # model setup and optimizer config
