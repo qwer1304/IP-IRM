@@ -12,7 +12,7 @@ import utils
 from model import Model
 
 class Net(nn.Module):
-    def __init__(self, num_class, pretrained_path, image_class='ImageNet', args):
+    def __init__(self, num_class, pretrained_path, image_class='ImageNet', args=None):
         super(Net, self).__init__()
 
         # encoder
