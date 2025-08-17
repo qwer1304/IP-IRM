@@ -39,7 +39,8 @@ class Net(nn.Module):
         else:
             model.module.fc = nn.Linear(2048, num_class, bias=True)
             msg = model.load_state_dict(state_dict, strict=False)
-            print([k for k in msg.unexpected_keys if 'g.' not in k], msg.missing_keys)
+            print(msg.unexpected_keys, msg.missing_keys)
+            #print([k for k in msg.unexpected_keys if 'g.' not in k], msg.missing_keys)
             self.fc = model.module.fc
 
     def forward(self, x):
