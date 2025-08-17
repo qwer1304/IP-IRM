@@ -33,7 +33,7 @@ class Net(nn.Module):
         print(msg)
 
         self.f = model.module.f
-        if args.evalute is None or args.evaluate == 'knn':
+        if args.evaluate is None or args.evaluate == 'knn':
             # classifier
             self.fc = nn.Linear(2048, num_class, bias=True)
         else:
