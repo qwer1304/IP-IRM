@@ -236,7 +236,7 @@ class Imagenet_idx(ImageFolder):
 
         return pos, target, index
 
-    def find_classes(self, directory: Union[str, Path]) -> tuple[list[str], dict[str, int]]:
+    def find_classes(self, directory):
         if self.class_to_idx:
             return find_classes(directory, self.class_to_idx)
         else:
@@ -266,7 +266,7 @@ class Imagenet(ImageFolder):
 
         return pos, target
 
-    def find_classes(self, directory: Union[str, Path]) -> tuple[list[str], dict[str, int]]:
+    def find_classes(self, directory):
         if self.class_to_idx:
             return find_classes(directory, self.class_to_idx)
         else:
@@ -296,7 +296,7 @@ class Imagenet_idx_pair(ImageFolder):
 
         return pos1, pos2, target, index
 
-    def find_classes(self, directory: Union[str, Path]) -> tuple[list[str], dict[str, int]]:
+    def find_classes(self, directory):
         if self.class_to_idx:
             return find_classes(directory, self.class_to_idx)
         else:
@@ -328,7 +328,7 @@ class Imagenet_pair(ImageFolder):
 
         return pos1, pos2, target
 
-    def find_classes(self, directory: Union[str, Path]) -> tuple[list[str], dict[str, int]]:
+    def find_classes(self, directory):
         if self.class_to_idx:
             return find_classes(directory, self.class_to_idx)
         else:
@@ -363,7 +363,7 @@ class Imagenet_idx_pair_transformone(ImageFolder):
 
         return pos1, pos2, pos1_hard, pos2_hard, target, index
 
-    def find_classes(self, directory: Union[str, Path]) -> tuple[list[str], dict[str, int]]:
+    def find_classes(self, directory):
         if self.class_to_idx:
             return find_classes(directory, self.class_to_idx)
         else:
