@@ -247,8 +247,8 @@ class Imagenet(ImageFolder):
     """
 
     def __init__(self, root, transform=None, target_transform=None, class_to_idx=None):
-        super(Imagenet, self).__init__(root, transform, target_transform)
         self.class_to_idx = class_to_idx
+        super(Imagenet, self).__init__(root, transform, target_transform)
 
     def __getitem__(self, index):
         """
