@@ -200,13 +200,25 @@ class CIFAR100Pair_Index(CIFAR100):
 
         return pos_1, pos_2, target, index
 
+def find_classes(directory, class_to_idx_fun):
+    """Finds the class folders in a dataset.
+
+    See :class:`DatasetFolder` for details.
+    """
+    classes = [entry.name for entry in os.scandir(directory) if entry.is_dir()]
+    if not classes:
+        raise FileNotFoundError(f"Couldn't find any class folder in {directory}.")
+
+    class_to_idx = {cls_name: class_to_idx_fun(cls_name) for cls_name in classes}
+    return classes, class_to_idx
+
 class Imagenet_idx(ImageFolder):
     """Folder datasets which returns the index of the image as well
     """
 
     def __init__(self, root, transform=None, target_transform=None, class_to_idx=None):
-        super(Imagenet_idx, self).__init__(root, transform, target_transform)
         self.class_to_idx = class_to_idx
+        super(Imagenet_idx, self).__init__(root, transform, target_transform)
 
     def __getitem__(self, index):
         """
@@ -219,15 +231,16 @@ class Imagenet_idx(ImageFolder):
         image = self.loader(path)
         if self.transform is not None:
             pos = self.transform(image)
-
-        if self.class_to_idx is not None:
-            folder_name = os.path.basename(os.path.dirname(path))
-            target = self.class_to_idx(folder_name)
-
         if self.target_transform is not None:
             target = self.target_transform(target)
 
         return pos, target, index
+
+    def find_classes(self, directory: Union[str, Path]) -> tuple[list[str], dict[str, int]]:
+        if self.class_to_idx:
+            return find_classes(directory, self.class_to_idx)
+        else:
+           return super(Imagenet_idx, self).find_classes(directory) 
 
 class Imagenet(ImageFolder):
     """Folder datasets which returns the index of the image as well
@@ -248,25 +261,24 @@ class Imagenet(ImageFolder):
         image = self.loader(path)
         if self.transform is not None:
             pos = self.transform(image)
-
-        if self.class_to_idx is not None:
-            folder_name = os.path.basename(os.path.dirname(path))
-            target = self.class_to_idx(folder_name)
-
         if self.target_transform is not None:
             target = self.target_transform(target)
 
         return pos, target
 
-
+    def find_classes(self, directory: Union[str, Path]) -> tuple[list[str], dict[str, int]]:
+        if self.class_to_idx:
+            return find_classes(directory, self.class_to_idx)
+        else:
+           return super(Imagenet, self).find_classes(directory) 
 
 class Imagenet_idx_pair(ImageFolder):
     """Folder datasets which returns the index of the image as well
     """
 
     def __init__(self, root, transform=None, target_transform=None, class_to_idx=None):
-        super(Imagenet_idx_pair, self).__init__(root, transform, target_transform)
         self.class_to_idx = class_to_idx
+        super(Imagenet_idx_pair, self).__init__(root, transform, target_transform)
     def __getitem__(self, index):
         """
         Args:
@@ -279,23 +291,24 @@ class Imagenet_idx_pair(ImageFolder):
         if self.transform is not None:
             pos1 = self.transform(image)
             pos2 = self.transform(image)
-
-        if self.class_to_idx is not None:
-            folder_name = os.path.basename(os.path.dirname(path))
-            target = self.class_to_idx(folder_name)
-
         if self.target_transform is not None:
             target = self.target_transform(target)
 
         return pos1, pos2, target, index
+
+    def find_classes(self, directory: Union[str, Path]) -> tuple[list[str], dict[str, int]]:
+        if self.class_to_idx:
+            return find_classes(directory, self.class_to_idx)
+        else:
+           return super(Imagenet_idx_pair, self).find_classes(directory) 
 
 class Imagenet_pair(ImageFolder):
     """Folder datasets which returns the index of the image as well
     """
 
     def __init__(self, root, transform=None, target_transform=None, class_to_idx=None):
-        super(Imagenet_pair, self).__init__(root, transform, target_transform)
         self.class_to_idx = class_to_idx
+        super(Imagenet_pair, self).__init__(root, transform, target_transform)
 
     def __getitem__(self, index):
         """
@@ -310,22 +323,23 @@ class Imagenet_pair(ImageFolder):
         if self.transform is not None:
             pos1 = self.transform(image)
             pos2 = self.transform(image)
-
-        if self.class_to_idx is not None:
-            folder_name = os.path.basename(os.path.dirname(path))
-            target = self.class_to_idx(folder_name)
-
         if self.target_transform is not None:
             target = self.target_transform(target)
 
         return pos1, pos2, target
 
+    def find_classes(self, directory: Union[str, Path]) -> tuple[list[str], dict[str, int]]:
+        if self.class_to_idx:
+            return find_classes(directory, self.class_to_idx)
+        else:
+           return super(Imagenet_pair, self).find_classes(directory) 
 
 class Imagenet_idx_pair_transformone(ImageFolder):
     """Folder datasets which returns the index of the image as well
     """
 
     def __init__(self, root, transform_simple=None, transform_hard=None, target_transform=None, class_to_idx=None):
+        self.class_to_idx = class_to_idx
         super(Imagenet_idx_pair_transformone, self).__init__(root, transform_simple, target_transform)
         self.transform_hard = transform_hard
 
@@ -344,15 +358,16 @@ class Imagenet_idx_pair_transformone(ImageFolder):
         if self.transform_hard is not None:
             pos1_hard = self.transform_hard(image)
             pos2_hard = self.transform_hard(image)
-
-        if self.class_to_idx is not None:
-            folder_name = os.path.basename(os.path.dirname(path))
-            target = self.class_to_idx(folder_name)
-
         if self.target_transform is not None:
             target = self.target_transform(target)
 
         return pos1, pos2, pos1_hard, pos2_hard, target, index
+
+    def find_classes(self, directory: Union[str, Path]) -> tuple[list[str], dict[str, int]]:
+        if self.class_to_idx:
+            return find_classes(directory, self.class_to_idx)
+        else:
+           return super(Imagenet_idx_pair_transformone, self).find_classes(directory) 
 
 def group_crossentropy(logits, labels, batchsize):
     sample_dim, label_dim = logits.size(0), logits.size(1)
