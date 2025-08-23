@@ -220,7 +220,7 @@ def download_terra_incognita(data_dir):
             continue
 
         loc_folder = os.path.join(destination_folder,
-                                  'location_' + str(image_location) + '/')
+                                  'L' + str(image_location) + '/')
         os.makedirs(loc_folder, exist_ok=True)
 
         image_id = image['id']

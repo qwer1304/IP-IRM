@@ -351,6 +351,7 @@ if __name__ == '__main__':
     parser.add_argument('--tau_plus', default=0.1, type=float, help='Positive class priorx')
     parser.add_argument('--k', default=200, type=int, help='Top k most similar images used to predict the label')
     parser.add_argument('--batch_size', default=256, type=int, help='Number of images in each mini-batch')
+    parser.add_argument('--ubatch_size', default=3096, type=int, help='Number of images in each mini-batch for max')
     parser.add_argument('--epochs', default=200, type=int, help='Number of sweeps over the dataset to train')
     parser.add_argument('--debiased', default=False, type=bool, help='Debiased contrastive loss or standard loss')
     parser.add_argument('--dataset', type=str, default='STL', choices=['STL', 'CIFAR10', 'CIFAR100', 'ImageNet'], help='experiment dataset')
@@ -416,7 +417,7 @@ if __name__ == '__main__':
     utils.set_seed(args.seed)
 
     feature_dim, temperature, tau_plus, k = args.feature_dim, args.temperature, args.tau_plus, args.k
-    batch_size, epochs, debiased = args.batch_size, args.epochs,  args.debiased
+    batch_size, epochs, debiased, ubatach_size = args.batch_size, args.epochs,  args.debiased, args.ubatch_size
     target_transform = eval(args.target_transform) if args.target_transform is not None else None
     class_to_idx = eval(args.class_to_idx) if args.class_to_idx is not None else None
     image_class, image_size = args.image_class, args.image_size
@@ -434,8 +435,8 @@ if __name__ == '__main__':
         train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True,
                                   drop_last=True)
         update_data = utils.STL10Pair_Index(root=args.data, split='train+unlabeled', transform=train_transform, target_transform=target_transform)
-        update_loader = DataLoader(update_data, batch_size=3096, shuffle=True, num_workers=4, pin_memory=True, drop_last=True)
-        update_loader_offline = DataLoader(update_data, batch_size=3096, shuffle=False, num_workers=4, pin_memory=True)
+        update_loader = DataLoader(update_data, batch_size=ubatch_size, shuffle=True, num_workers=4, pin_memory=True, drop_last=True)
+        update_loader_offline = DataLoader(update_data, batch_size=ubatch_size, shuffle=False, num_workers=4, pin_memory=True)
         test_transform = utils.make_test_transform()
         memory_data = utils.STL10Pair(root=args.data, split='train', transform=test_transform, target_transform=target_transform)
         memory_loader = DataLoader(memory_data, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
@@ -447,8 +448,8 @@ if __name__ == '__main__':
         train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True,
                                   drop_last=True)
         update_data = utils.CIFAR10Pair_Index(root=args.data, train=True, transform=train_transform, target_transform=target_transform)
-        update_loader = DataLoader(update_data, batch_size=3096, shuffle=True, num_workers=4, pin_memory=True, drop_last=True)
-        update_loader_offline = DataLoader(update_data, batch_size=3096, shuffle=False, num_workers=4, pin_memory=True)
+        update_loader = DataLoader(update_data, batch_size=ubatch_size, shuffle=True, num_workers=4, pin_memory=True, drop_last=True)
+        update_loader_offline = DataLoader(update_data, batch_size=ubatch_size, shuffle=False, num_workers=4, pin_memory=True)
         test_transform = utils.make_test_transform()
         memory_data = utils.CIFAR10Pair(root=args.data, train=True, transform=test_transform, target_transform=target_transform)
         memory_loader = DataLoader(memory_data, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
@@ -460,8 +461,8 @@ if __name__ == '__main__':
         train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True,
                                   drop_last=True)
         update_data = utils.CIFAR100Pair_Index(root=args.data, train=True, transform=train_transform, target_transform=target_transform)
-        update_loader = DataLoader(update_data, batch_size=3096, shuffle=True, num_workers=4, pin_memory=True, drop_last=True)
-        update_loader_offline = DataLoader(update_data, batch_size=3096, shuffle=False, num_workers=4, pin_memory=True)
+        update_loader = DataLoader(update_data, batch_size=ubatch_size, shuffle=True, num_workers=4, pin_memory=True, drop_last=True)
+        update_loader_offline = DataLoader(update_data, batch_size=ubatch_size, shuffle=False, num_workers=4, pin_memory=True)
         test_transform = utils.make_test_transform()
         memory_data = utils.CIFAR100Pair(root=args.data, train=True, transform=test_transform, target_transform=target_transform)
         memory_loader = DataLoader(memory_data, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
@@ -526,8 +527,8 @@ if __name__ == '__main__':
         #exit()
         train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True,
                                   drop_last=True)
-        update_loader = DataLoader(update_data, batch_size=3096, shuffle=True, num_workers=4, pin_memory=True, drop_last=True)
-        update_loader_offline = DataLoader(update_data, batch_size=3096, shuffle=False, num_workers=4, pin_memory=True)
+        update_loader = DataLoader(update_data, batch_size=ubatch_size, shuffle=True, num_workers=4, pin_memory=True, drop_last=True)
+        update_loader_offline = DataLoader(update_data, batch_size=ubatch_size, shuffle=False, num_workers=4, pin_memory=True)
         memory_loader = DataLoader(memory_data, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
         test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
         val_loader = DataLoader(val_data, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
