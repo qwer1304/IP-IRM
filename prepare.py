@@ -36,8 +36,24 @@ class _SplitDataset(torch.utils.data.Dataset):
         super(_SplitDataset, self).__init__()
         self.underlying_dataset = underlying_dataset
         self.keys = keys
+        # stitch targets if available
+        self.targets = self.underlying_dataset.targets[self.keys] if hasattr(self.underlying_dataset, "targets") else []
+
+        # optionally stitch other ImageFolder attributes
+        if hasattr(self.underlying_dataset, "classes"):
+            # keep global classes consistent
+            self.classes = self.underlying_dataset.classes
+            self.class_to_idx = self.underlying_dataset.class_to_idx
+        if hasattr(self.underlying_dataset, "transform"):
+            # keep global classes consistent
+            self.transform = self.underlying_dataset.transform
+        if hasattr(self.underlying_dataset, "target_tranform"):
+            # keep global classes consistent
+            self.target_transform = self.underlying_dataset.target_transform
+    
     def __getitem__(self, key):
         return self.underlying_dataset[self.keys[key]]
+    
     def __len__(self):
         return len(self.keys)
 
