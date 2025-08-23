@@ -215,7 +215,7 @@ def train_update_split(net, update_loader, soft_split, random_init=False, args=N
 
 
 # test for one epoch, use weighted knn to find the most similar images' label to assign the test image
-def test(net, memory_data_loader, test_data_loader, args, progress=True, prefix="Test:"):
+def test(net, memory_data_loader, test_data_loader, args, progress=False, prefix="Test:"):
     net.eval()
     total_top1, total_top5, total_num, feature_bank = 0.0, 0.0, 0, []
     with torch.no_grad():
@@ -299,8 +299,8 @@ def test(net, memory_data_loader, test_data_loader, args, progress=True, prefix=
             total_top1 += torch.sum((pred_labels[:, :1] == target.unsqueeze(dim=-1)).any(dim=-1).float()).item()
             total_top5 += torch.sum((pred_labels[:, :5] == target.unsqueeze(dim=-1)).any(dim=-1).float()).item()
             if progress:
-                test_bar.set_description('KNN Test Epoch: [{}/{}] Acc@1:{:.2f}% Acc@5:{:.2f}%'
-                                         .format(epoch, epochs, total_top1 / total_num * 100, total_top5 / total_num * 100))
+                test_bar.set_description('KNN {} Epoch: [{}/{}] Acc@1:{:.2f}% Acc@5:{:.2f}%'
+                                         .format(prefix, epoch, epochs, total_top1 / total_num * 100, total_top5 / total_num * 100))
 
             # compute output
             if args.extract_features:
@@ -597,6 +597,7 @@ if __name__ == '__main__':
         val_acc_1, val_acc_5 = test(model, memory_loader, val_loader, args, progress=True, prefix="Val:")
         print('eval on test data')
         test_acc_1, test_acc_5 = test(model, memory_loader, test_loader, args, progress=True, prefix="Test:")
+        exit()
 
     # update partition for the first time
     if not args.baseline and not resumed:
@@ -622,12 +623,12 @@ if __name__ == '__main__':
                 updated_split_all.append(updated_split)
 
         if (epoch % args.test_freq == 0) or (epoch == epochs): # eval knn every test_freq epochs
-            test_acc_1, test_acc_5 = test(model, memory_loader, test_loader, args, prefix="Test:")
+            test_acc_1, test_acc_5 = test(model, memory_loader, test_loader, args, progress=True, prefix="Test:")
             txt_write = open("results/{}/{}/{}".format(args.dataset, args.name, 'knn_result.txt'), 'a')
             txt_write.write('\ntest_acc@1: {}, test_acc@5: {}'.format(test_acc_1, test_acc_5))
             torch.save(model.state_dict(), 'results/{}/{}/model_{}.pth'.format(args.dataset, args.name, epoch))
 
-        if ((epoch % args.val_freq == 0) or (epoch == epochs)) and args.dataset == 'ImageNet':
+        if ((epoch % args.val_freq == 0) or (epoch == epochs)) and (args.dataset == 'ImageNet'):
             # evaluate on validation set
             acc1, _ = test(model, memory_loader, val_loader, args, progress=True, prefix="Val:")
 

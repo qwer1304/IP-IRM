@@ -11,6 +11,8 @@ import os
 import utils
 from model import Model
 
+from prepare import prepare_datasets, traverse_objects
+
 class Net(nn.Module):
     def __init__(self, num_class, pretrained_path, image_class='ImageNet', args=None):
         super(Net, self).__init__()
@@ -154,6 +156,11 @@ if __name__ == '__main__':
     parser.add_argument('--class_to_idx', type=str, default=None, help='a function definition to apply to class to obtain it index')
     parser.add_argument('--image_class', choices=['ImageNet', 'STL', 'CIFAR'], default='ImageNet', help='Image class, default=ImageNet')
     parser.add_argument('--class_num', default=1000, type=int, help='num of classes')
+    parser.add_argument('--train_envs', type=str, nargs='+', default=None, required=True)
+    parser.add_argument('--test_envs', type=str, nargs='+', default=None)
+    parser.add_argument('--holdout_fraction', type=float, default=0.8)
+
+    parser.add_argument('--seed', type=int, default=1234)
     parser.add_argument('--ncols', default=80, type=int, help='number of columns in terminal')
     parser.add_argument('--bar', default=50, type=int, help='length of progess bar')
 
@@ -167,7 +174,7 @@ if __name__ == '__main__':
         os.makedirs('downstream/{}/{}'.format(args.dataset, args.name))
 
     # seed
-    utils.set_seed(1234)
+    utils.set_seed(args.seed)
 
     model_path, batch_size, epochs = args.model_path, args.batch_size, args.epochs
     target_transform = eval(args.target_transform) if args.target_transform is not None else None
@@ -197,10 +204,33 @@ if __name__ == '__main__':
         test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
     elif args.dataset == 'ImageNet':
         train_transform = utils.make_train_transform(image_size, randgray=not args.norandgray)
-        train_data = utils.Imagenet(root=args.data+'/train', transform=train_transform, target_transform=target_transform, class_to_idx=class_to_idx)
-        train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True)
         test_transform = utils.make_test_transform()
-        test_data = utils.Imagenet(root=args.data+'/testgt', transform=test_transform, target_transform=target_transform, class_to_idx=class_to_idx)
+        wrap = args.extract_features
+
+        # descriptors of train data
+        train_desc  =   {'dataset': utils.Imagenet,
+                          'transform': train_transform,
+                          'target_transform': target_transform,
+                          'class_to_index': class_to_idx,
+                          'wrap': False, # for changeable target transform
+                          'target_pos': 2,
+                          'required_split': "in",
+        # descriptors of test data
+        test_desc   =   {'dataset': utils.Imagenet,
+                          'transform': test_transform,
+                          'target_transform': target_transform,
+                          'class_to_index': class_to_idx,
+                          'wrap': wrap, # for changeable target transform
+                          'target_pos': 2,
+                          'required_split': "in",
+                        }
+        datas = prepare_datasets(args.data, args.train_envs, [train_desc], args.holdout_fraction, args.seed)
+        train_data = datas[0][0]
+
+        datas = prepare_datasets(args.data, args.test_envs, [test_desc], 1.0, args.seed)
+        test_data = datas[0][0]
+
+        train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True)
         test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
 
     num_class = len(train_data.classes) if args.dataset != "ImageNet" else args.class_num
