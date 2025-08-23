@@ -215,6 +215,7 @@ if __name__ == '__main__':
                           'wrap': False, # for changeable target transform
                           'target_pos': 2,
                           'required_split': "in",
+                        }
         # descriptors of test data
         test_desc   =   {'dataset': utils.Imagenet,
                           'transform': test_transform,
