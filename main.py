@@ -594,7 +594,7 @@ if __name__ == '__main__':
     if args.evaluate:
         print(f"Staring evaluation name: {args.name}")
         print('eval on val data')
-        traverse_objects(memory_loader.dataset)
+        print(hasattr(memory_loader.dataset, "target_transform"))
         val_acc_1, val_acc_5 = test(model, memory_loader, val_loader, args, progress=True, prefix="Val:")
         print('eval on test data')
         test_acc_1, test_acc_5 = test(model, memory_loader, test_loader, args, progress=True, prefix="Test:")
