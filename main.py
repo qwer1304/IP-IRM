@@ -520,8 +520,7 @@ if __name__ == '__main__':
         train_data, update_data, memory_data, val_data = tuple(data[0] for data in datas)
 
         datas = prepare_datasets(args.data, args.test_envs, [test_desc], 1.0, args.seed)
-        print(datas)
-        test_data = datas[0]
+        test_data = datas[0][0]
 
         #traverse_objects(update_data)
         #exit()
