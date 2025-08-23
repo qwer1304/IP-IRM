@@ -358,7 +358,7 @@ if __name__ == '__main__':
     parser.add_argument('--name', type=str, default='None', help='experiment name')
     parser.add_argument('--pretrain_model', default=None, type=str, help='pretrain model used?')
     parser.add_argument('--baseline', action="store_true", default=False, help='SSL baseline?')
-    parser.add_argument('--train_envs', type=str, nargs='+', default=None)
+    parser.add_argument('--train_envs', type=str, nargs='+', default=None, required=True)
     parser.add_argument('--test_envs', type=str, nargs='+', default=None)
     parser.add_argument('--holdout_fraction', type=float, default=0.8)
     parser.add_argument('--seed', type=int, default=0)
@@ -473,47 +473,47 @@ if __name__ == '__main__':
         test_transform = utils.make_test_transform()
         wrap = args.extract_features
         # descriptors of train data
-        train_desc  =   [{'dataset': utils.Imagenet_idx_pair,
+        train_desc  =   {'dataset': utils.Imagenet_idx_pair,
                           'transform': train_transform,
                           'target_transform': target_transform,
                           'class_to_index': class_to_idx,
                           'wrap': False, # for changeable target transform
                           'target_pos': 2,
                           'required_split': "in",
-                        }]
-        update_desc =   [{'dataset': utils.Imagenet_idx_pair,
+                        }
+        update_desc =   {'dataset': utils.Imagenet_idx_pair,
                           'transform': train_transform,
                           'target_transform': target_transform,
                           'class_to_index': class_to_idx,
                           'wrap': False, # for changeable target transform
                           'target_pos': 2,
                           'required_split': "in",
-                        }]
-        memory_desc =   [{'dataset': utils.Imagenet_pair,
+                        }
+        memory_desc =   {'dataset': utils.Imagenet_pair,
                           'transform': test_transform,
                           'target_transform': target_transform,
                           'class_to_index': class_to_idx,
                           'wrap': False, # for changeable target transform
                           'target_pos': 2,
                           'required_split': "in",
-                        }]
-        val_desc    =   [{'dataset': utils.Imagenet_pair,
+                        }
+        val_desc    =   {'dataset': utils.Imagenet_pair,
                           'transform': test_transform,
                           'target_transform': target_transform,
                           'class_to_index': class_to_idx,
                           'wrap': wrap, # for changeable target transform
                           'target_pos': 2,
                           'required_split': "out",
-                        }]
+                        }
         # descriptors of test data
-        test_desc   =   [{'dataset': utils.Imagenet_pair,
+        test_desc   =   {'dataset': utils.Imagenet_pair,
                           'transform': test_transform,
                           'target_transform': target_transform,
                           'class_to_index': class_to_idx,
                           'wrap': wrap, # for changeable target transform
                           'target_pos': 2,
                           'required_split': "in",
-                        }]
+                        }
 
 
         train_data, update_data, memory_data, val_data = \
