@@ -12,7 +12,7 @@ from tqdm import tqdm
 
 import utils
 from model import Model
-
+import prepare
 
 def get_negative_mask(batch_size):
     negative_mask = torch.ones((batch_size, 2 * batch_size), dtype=bool)
@@ -358,6 +358,9 @@ if __name__ == '__main__':
     parser.add_argument('--name', type=str, default='None', help='experiment name')
     parser.add_argument('--pretrain_model', default=None, type=str, help='pretrain model used?')
     parser.add_argument('--baseline', action="store_true", default=False, help='SSL baseline?')
+    parser.add_argument('--train_envs', type=str, nargs='+', default=None)
+    parser.add_argument('--test_envs', type=str, nargs='+', default=None)
+    parser.add_argument('--holdout_fraction', type=float, default=0.8)
 
     #### ours model param ####
     parser.add_argument('--ours_mode', default='w', type=str, help='what mode to use')
@@ -466,18 +469,64 @@ if __name__ == '__main__':
 
     elif args.dataset == 'ImageNet':
         train_transform = utils.make_train_transform(image_size, randgray=not args.norandgray)
-        train_data = utils.Imagenet_idx_pair(root=args.data+'/train', transform=train_transform, target_transform=target_transform, class_to_idx=class_to_idx)
+        test_transform = utils.make_test_transform()
+        wrap = args.extract_features
+        # descriptors of train data
+        train_desc  =   [{'dataset': utils.Imagenet_idx_pair,
+                          'transform': train_transform,
+                          'target_transform': target_transform,
+                          'class_to_index': class_to_idx,
+                          'wrap': False, # for changeable target transform
+                          'target_pos': 2,
+                          'required_split': "in",
+                        }]
+        update_desc =   [{'dataset': utils.Imagenet_idx_pair,
+                          'transform': train_transform,
+                          'target_transform': target_transform,
+                          'class_to_index': class_to_idx,
+                          'wrap': False, # for changeable target transform
+                          'target_pos': 2,
+                          'required_split': "in",
+                        }]
+        memory_desc =   [{'dataset': utils.Imagenet_pair,
+                          'transform': test_transform,
+                          'target_transform': target_transform,
+                          'class_to_index': class_to_idx,
+                          'wrap': False, # for changeable target transform
+                          'target_pos': 2,
+                          'required_split': "in",
+                        }]
+        val_desc    =   [{'dataset': utils.Imagenet_pair,
+                          'transform': test_transform,
+                          'target_transform': target_transform,
+                          'class_to_index': class_to_idx,
+                          'wrap': wrap, # for changeable target transform
+                          'target_pos': 2,
+                          'required_split': "out",
+                        }]
+        # descriptors of test data
+        test_desc   =   [{'dataset': utils.Imagenet_pair,
+                          'transform': test_transform,
+                          'target_transform': target_transform,
+                          'class_to_index': class_to_idx,
+                          'wrap': wrap, # for changeable target transform
+                          'target_pos': 2,
+                          'required_split': "in",
+                        }]
+
+
+        train_data, update_data, memory_data, val_data = \
+            prepare_datasets(args.output_dir, args.train_envs, [train_desc, update_desc, memory_desc, val_desc], args.holdout_fraction, args.seed)
+
+        test_data = \
+            prepare_datasets(args.output_dir, args.test_envs, [test_desc], 1.0, args.seed)
+
         train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True,
                                   drop_last=True)
-        update_data = utils.Imagenet_idx_pair(root=args.data+'/train', transform=train_transform, target_transform=target_transform, class_to_idx=class_to_idx)
         update_loader = DataLoader(update_data, batch_size=3096, shuffle=True, num_workers=4, pin_memory=True, drop_last=True)
         update_loader_offline = DataLoader(update_data, batch_size=3096, shuffle=False, num_workers=4, pin_memory=True)
-        test_transform = utils.make_test_transform()
-        memory_data = utils.Imagenet_pair(root=args.data+'/train', transform=test_transform, target_transform=target_transform, class_to_idx=class_to_idx)
         memory_loader = DataLoader(memory_data, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
-        test_data = utils.Imagenet_pair(root=args.data+'/testgt', transform=test_transform, target_transform=target_transform, class_to_idx=class_to_idx)
         test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
-        val_data = utils.Imagenet_pair(root=args.data+'/val', transform=test_transform, target_transform=target_transform, class_to_idx=class_to_idx)
         val_loader = DataLoader(val_data, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
 
     # model setup and optimizer config

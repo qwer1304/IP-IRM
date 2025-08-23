@@ -231,6 +231,8 @@ class Imagenet_idx(ImageFolder):
         image = self.loader(path)
         if self.transform is not None:
             pos = self.transform(image)
+        else:
+            pos = image
         if self.target_transform is not None:
             target = self.target_transform(target)
 
@@ -261,6 +263,8 @@ class Imagenet(ImageFolder):
         image = self.loader(path)
         if self.transform is not None:
             pos = self.transform(image)
+        else:
+            pos = image
         if self.target_transform is not None:
             target = self.target_transform(target)
 
@@ -291,6 +295,9 @@ class Imagenet_idx_pair(ImageFolder):
         if self.transform is not None:
             pos1 = self.transform(image)
             pos2 = self.transform(image)
+        else:
+            pos1 = image
+            pos2 = image
         if self.target_transform is not None:
             target = self.target_transform(target)
 
@@ -323,6 +330,9 @@ class Imagenet_pair(ImageFolder):
         if self.transform is not None:
             pos1 = self.transform(image)
             pos2 = self.transform(image)
+        else:
+            pos1 = image
+            pos2 = image
         if self.target_transform is not None:
             target = self.target_transform(target)
 
@@ -355,9 +365,15 @@ class Imagenet_idx_pair_transformone(ImageFolder):
         if self.transform is not None:
             pos1 = self.transform(image)
             pos2 = self.transform(image)
+        else:
+            pos1 = image
+            pos2 = image
         if self.transform_hard is not None:
             pos1_hard = self.transform_hard(image)
             pos2_hard = self.transform_hard(image)
+        else:
+            pos1_hard = image
+            pos2_hard = image
         if self.target_transform is not None:
             target = self.target_transform(target)
 
@@ -825,6 +841,23 @@ class GaussianBlur(object):
         return sample
 
 # just follow the previous work -- DCL, NeurIPS2020
+
+def make_train_transform(image_size=64, randgray=True):
+    kernel_size = int(0.1 * image_size)
+    if (kernel_size % 2) == 0:
+        kernel_size += 1
+    return transforms.Compose([
+        transforms.RandomResizedCrop(image_size),
+        transforms.RandomHorizontalFlip(p=0.5),
+        transforms.ToTensor(),  # <-- important: switch to tensor here
+        transforms.ColorJitter(0.4, 0.4, 0.4, 0.1),
+        transforms.RandomGrayscale(p=0.2) if randgray else transforms.Lambda(lambda x: x),
+        transforms.GaussianBlur(kernel_size=kernel_size),
+        transforms.Normalize([0.4914, 0.4822, 0.4465],
+                             [0.2023, 0.1994, 0.2010]),
+    ])
+
+"""
 def make_train_transform(image_size=32, randgray=True):
     return transforms.Compose([
         transforms.RandomResizedCrop(image_size),
@@ -834,6 +867,7 @@ def make_train_transform(image_size=32, randgray=True):
         GaussianBlur(kernel_size=int(0.1 * image_size)),
         transforms.ToTensor(),
         transforms.Normalize([0.4914, 0.4822, 0.4465], [0.2023, 0.1994, 0.2010])])
+"""
 
 def make_test_transform():
     return transforms.Compose([
