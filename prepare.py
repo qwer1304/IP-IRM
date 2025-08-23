@@ -91,6 +91,21 @@ class ConcatDataset(torch.utils.data.Dataset):
         self.datasets = list(datasets)
         self.cumulative_sizes = self.cumsum(self.datasets)
 
+        # stitch targets if available
+        self.targets = [t for d in self.datasets if hasattr(d, "targets") for t in d.targets]
+
+        # optionally stitch other ImageFolder attributes
+        if all(hasattr(d, "classes") for d in self.datasets):
+            # keep global classes consistent
+            self.classes = self.datasets[0].classes
+            self.class_to_idx = self.datasets[0].class_to_idx
+        if all(hasattr(d, "transform") for d in self.datasets):
+            # keep global classes consistent
+            self.transform = self.datasets[0].transform
+        if all(hasattr(d, "target_tranform") for d in self.datasets):
+            # keep global classes consistent
+            self.target_transform = self.datasets[0].target_transform
+
     def __len__(self):
         return self.cumulative_sizes[-1]
 
@@ -111,6 +126,17 @@ class ConcatDataset(torch.utils.data.Dataset):
 class TargetTransformWrapper(torch.utils.data.Dataset):
     def __init__(self, dataset, target_transform=None, target_pos=None):
         self.dataset = dataset
+        # stitch targets if available
+        self.targets = self.dataset.targets if hasattr(self.dataset, "targets")
+
+        # optionally stitch other ImageFolder attributes
+        if hasattr(self.dataset, "classes"):
+            # keep global classes consistent
+            self.classes = self.dataset.classes
+            self.class_to_idx = self.dataset.class_to_idx
+        if hasattr(self.dataset, "transform"):
+            # keep global classes consistent
+            self.transform = self.dataset.transform
         self.target_transform = target_transform
         self.target_pos = target_pos
 
