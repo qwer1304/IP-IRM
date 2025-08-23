@@ -600,9 +600,9 @@ if __name__ == '__main__':
     # update partition for the first time
     if not args.baseline and not resumed:
         if args.dataset != "ImageNet":
-            updated_split = torch.randn((len(update_data.data), args.env_num), requires_grad=True, device="cuda")
+            updated_split = torch.randn((len(update_data), args.env_num), requires_grad=True, device="cuda")
         else:
-            updated_split = torch.randn((len(update_data.imgs), args.env_num), requires_grad=True, device="cuda")
+            updated_split = torch.randn((len(update_data), args.env_num), requires_grad=True, device="cuda")
         updated_split = train_update_split(model, update_loader, updated_split, random_init=args.random_init, args=args)
         updated_split_all = [updated_split.clone().detach()]
 
