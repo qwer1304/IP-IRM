@@ -241,6 +241,7 @@ def test(net, memory_data_loader, test_data_loader, args, progress=True, prefix=
         if hasattr(dataset, "labels"):
             labels = dataset.labels
         else:
+            print(dataset)
             if dataset.target_transform is not None:
                 labels = [dataset.target_transform(t) for t in dataset.targets]
             else:
