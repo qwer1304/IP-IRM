@@ -37,6 +37,7 @@ class _SplitDataset(torch.utils.data.Dataset):
         self.underlying_dataset = underlying_dataset
         self.keys = keys
         # stitch targets if available
+        print('has targets=',hasattr(self.underlying_dataset, "targets"),self.underlying_dataset)
         if hasattr(self.underlying_dataset, "targets"):
             self.targets = [self.underlying_dataset.targets[k] for k in self.keys]
 
