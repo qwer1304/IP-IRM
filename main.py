@@ -204,6 +204,7 @@ def train_update_split(net, update_loader, soft_split, random_init=False, args=N
                 feature_bank_2.append(out_2.cpu())
         feature1 = torch.cat(feature_bank_1, 0)
         feature2 = torch.cat(feature_bank_2, 0)
+        print(feature1.size(), feature2.size())
         updated_split = utils.auto_split_offline(feature1, feature2, soft_split, temperature, args.irm_temp, loss_mode='v2', irm_mode=args.irm_mode,
                                          irm_weight=args.irm_weight_maxim, constrain=args.constrain, cons_relax=args.constrain_relax, nonorm=args.nonorm, log_file=log_file)
     else:
