@@ -172,7 +172,6 @@ def prepare_datasets(root, environments, descriptors, holdout_fraction, seed):
         else:
             splits = out_splits
         
-        print('splits',len(splits))
         dataset = [ConcatDataset(splits)] if len(splits)>1 else splits
         
         if descriptor['wrap']:

@@ -12,7 +12,7 @@ from tqdm import tqdm
 
 import utils
 from model import Model
-from prepare import prepare_datasets
+from prepare import prepare_datasets, traverse_objects
 
 def get_negative_mask(batch_size):
     negative_mask = torch.ones((batch_size, 2 * batch_size), dtype=bool)
@@ -522,7 +522,7 @@ if __name__ == '__main__':
         test_data = \
             prepare_datasets(args.data, args.test_envs, [test_desc], 1.0, args.seed)
 
-        print(update_data)
+        traverse_objects(update_data)
         exit()
         train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True,
                                   drop_last=True)
