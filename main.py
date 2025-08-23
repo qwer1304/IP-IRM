@@ -361,6 +361,7 @@ if __name__ == '__main__':
     parser.add_argument('--train_envs', type=str, nargs='+', default=None)
     parser.add_argument('--test_envs', type=str, nargs='+', default=None)
     parser.add_argument('--holdout_fraction', type=float, default=0.8)
+    parser.add_argument('--seed', type=int, default=0)
 
     #### ours model param ####
     parser.add_argument('--ours_mode', default='w', type=str, help='what mode to use')
@@ -412,7 +413,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # seed
-    utils.set_seed(1234)
+    utils.set_seed(args.seed)
 
     feature_dim, temperature, tau_plus, k = args.feature_dim, args.temperature, args.tau_plus, args.k
     batch_size, epochs, debiased = args.batch_size, args.epochs,  args.debiased
