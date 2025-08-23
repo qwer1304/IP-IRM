@@ -111,7 +111,7 @@ class ConcatDataset(torch.utils.data.Dataset):
         # stitch targets if available
         print(datasets)
         print([d for d in datasets])
-        print(hasattr(d, "targets") for d in datasets])
+        print([hasattr(d, "targets") for d in datasets])
 
         self.targets = [t for d in self.datasets if hasattr(d, "targets") for t in d.targets]
 
