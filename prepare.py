@@ -37,7 +37,6 @@ class _SplitDataset(torch.utils.data.Dataset):
         self.underlying_dataset = underlying_dataset
         self.keys = keys
         # stitch targets if available
-        print('has targets=',hasattr(self.underlying_dataset, "targets"),self.underlying_dataset)
         if hasattr(self.underlying_dataset, "targets"):
             self.targets = [self.underlying_dataset.targets[k] for k in self.keys]
 
@@ -110,6 +109,10 @@ class ConcatDataset(torch.utils.data.Dataset):
         self.cumulative_sizes = self.cumsum(self.datasets)
 
         # stitch targets if available
+        print(datasets)
+        print([d for d in datasets])
+        print(hasattr(d, "targets") for d in datasets])
+
         self.targets = [t for d in self.datasets if hasattr(d, "targets") for t in d.targets]
 
         # optionally stitch other ImageFolder attributes
