@@ -522,15 +522,15 @@ if __name__ == '__main__':
         test_data = \
             prepare_datasets(args.data, args.test_envs, [test_desc], 1.0, args.seed)
 
-        traverse_objects(update_data)
-        exit()
-        train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True,
+        #traverse_objects(update_data)
+        #exit()
+        train_loader = DataLoader(train_data[0], batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True,
                                   drop_last=True)
-        update_loader = DataLoader(update_data, batch_size=3096, shuffle=True, num_workers=4, pin_memory=True, drop_last=True)
-        update_loader_offline = DataLoader(update_data, batch_size=3096, shuffle=False, num_workers=4, pin_memory=True)
-        memory_loader = DataLoader(memory_data, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
-        test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
-        val_loader = DataLoader(val_data, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
+        update_loader = DataLoader(update_data[0], batch_size=3096, shuffle=True, num_workers=4, pin_memory=True, drop_last=True)
+        update_loader_offline = DataLoader(update_data[0], batch_size=3096, shuffle=False, num_workers=4, pin_memory=True)
+        memory_loader = DataLoader(memory_data[0], batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
+        test_loader = DataLoader(test_data[0], batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
+        val_loader = DataLoader(val_data[0], batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
 
     # model setup and optimizer config
     model = Model(feature_dim, image_class=image_class).cuda()
