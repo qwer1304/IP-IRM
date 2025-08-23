@@ -123,6 +123,7 @@ class ConcatDataset(torch.utils.data.Dataset):
         if all(hasattr(d, "transform") for d in self.datasets):
             # keep global classes consistent
             self.transform = self.datasets[0].transform
+        print([hasattr(d, "target_tranform") for d in self.datasets])
         if all(hasattr(d, "target_tranform") for d in self.datasets):
             # keep global classes consistent
             self.target_transform = self.datasets[0].target_transform
