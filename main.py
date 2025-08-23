@@ -516,10 +516,10 @@ if __name__ == '__main__':
 
 
         train_data, update_data, memory_data, val_data = \
-            prepare_datasets(args.output_dir, args.train_envs, [train_desc, update_desc, memory_desc, val_desc], args.holdout_fraction, args.seed)
+            prepare_datasets(args.data, args.train_envs, [train_desc, update_desc, memory_desc, val_desc], args.holdout_fraction, args.seed)
 
         test_data = \
-            prepare_datasets(args.output_dir, args.test_envs, [test_desc], 1.0, args.seed)
+            prepare_datasets(args.data, args.test_envs, [test_desc], 1.0, args.seed)
 
         train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True,
                                   drop_last=True)
