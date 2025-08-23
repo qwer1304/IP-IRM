@@ -13,8 +13,8 @@ import json
 import os
 import urllib
 
-from wilds.datasets.camelyon17_dataset import Camelyon17Dataset
-from wilds.datasets.fmow_dataset import FMoWDataset
+#from wilds.datasets.camelyon17_dataset import Camelyon17Dataset
+#from wilds.datasets.fmow_dataset import FMoWDataset
 
 
 # utils #######################################################################
