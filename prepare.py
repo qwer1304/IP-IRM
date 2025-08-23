@@ -48,7 +48,7 @@ class _SplitDataset(torch.utils.data.Dataset):
         if hasattr(self.underlying_dataset, "transform"):
             # keep global classes consistent
             self.transform = self.underlying_dataset.transform
-        if hasattr(self.underlying_dataset, "target_tranform"):
+        if hasattr(self.underlying_dataset, "target_transform"):
             # keep global classes consistent
             self.target_transform = self.underlying_dataset.target_transform
     
@@ -109,10 +109,6 @@ class ConcatDataset(torch.utils.data.Dataset):
         self.cumulative_sizes = self.cumsum(self.datasets)
 
         # stitch targets if available
-        print(datasets)
-        print([d for d in datasets])
-        print([hasattr(d, "targets") for d in datasets])
-
         self.targets = [t for d in self.datasets if hasattr(d, "targets") for t in d.targets]
 
         # optionally stitch other ImageFolder attributes
@@ -123,7 +119,6 @@ class ConcatDataset(torch.utils.data.Dataset):
         if all(hasattr(d, "transform") for d in self.datasets):
             # keep global classes consistent
             self.transform = self.datasets[0].transform
-        print([hasattr(d, "target_tranform") for d in self.datasets])
         if all(hasattr(d, "target_tranform") for d in self.datasets):
             # keep global classes consistent
             self.target_transform = self.datasets[0].target_transform

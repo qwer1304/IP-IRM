@@ -518,7 +518,6 @@ if __name__ == '__main__':
 
         datas = prepare_datasets(args.data, args.train_envs, [train_desc, update_desc, memory_desc, val_desc], args.holdout_fraction, args.seed)
         train_data, update_data, memory_data, val_data = tuple(data[0] for data in datas)
-        print(hasattr(memory_data, "target_transform"))
 
         datas = prepare_datasets(args.data, args.test_envs, [test_desc], 1.0, args.seed)
         test_data = tuple(data[0] for data in datas)
@@ -598,7 +597,6 @@ if __name__ == '__main__':
         val_acc_1, val_acc_5 = test(model, memory_loader, val_loader, args, progress=True, prefix="Val:")
         print('eval on test data')
         test_acc_1, test_acc_5 = test(model, memory_loader, test_loader, args, progress=True, prefix="Test:")
-        exit()
 
     # update partition for the first time
     if not args.baseline and not resumed:
