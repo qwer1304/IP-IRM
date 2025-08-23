@@ -522,8 +522,8 @@ if __name__ == '__main__':
         datas = prepare_datasets(args.data, args.test_envs, [test_desc], 1.0, args.seed)
         test_data = tuple(data[0] for data in datas)
 
-        traverse_objects(update_data)
-        exit()
+        #traverse_objects(update_data)
+        #exit()
         train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True,
                                   drop_last=True)
         update_loader = DataLoader(update_data, batch_size=3096, shuffle=True, num_workers=4, pin_memory=True, drop_last=True)
