@@ -417,7 +417,7 @@ if __name__ == '__main__':
     utils.set_seed(args.seed)
 
     feature_dim, temperature, tau_plus, k = args.feature_dim, args.temperature, args.tau_plus, args.k
-    batch_size, epochs, debiased, ubatach_size = args.batch_size, args.epochs,  args.debiased, args.ubatch_size
+    batch_size, epochs, debiased, ubatch_size = args.batch_size, args.epochs,  args.debiased, args.ubatch_size
     target_transform = eval(args.target_transform) if args.target_transform is not None else None
     class_to_idx = eval(args.class_to_idx) if args.class_to_idx is not None else None
     image_class, image_size = args.image_class, args.image_size
