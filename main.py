@@ -12,7 +12,7 @@ from tqdm import tqdm
 
 import utils
 from model import Model
-import prepare
+from import prepare import prepare_datasets
 
 def get_negative_mask(batch_size):
     negative_mask = torch.ones((batch_size, 2 * batch_size), dtype=bool)
