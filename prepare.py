@@ -127,7 +127,7 @@ class TargetTransformWrapper(torch.utils.data.Dataset):
     def __init__(self, dataset, target_transform=None, target_pos=None):
         self.dataset = dataset
         # stitch targets if available
-        self.targets = self.dataset.targets if hasattr(self.dataset, "targets")
+        self.targets = self.dataset.targets if hasattr(self.dataset, "targets") else []
 
         # optionally stitch other ImageFolder attributes
         if hasattr(self.dataset, "classes"):
