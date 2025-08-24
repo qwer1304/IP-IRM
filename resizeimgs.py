@@ -30,14 +30,14 @@ def main(args):
       
         if (infile != outfile):
             try:
-                im = Image.open(infile)
+                im = Image.open(infile.path)
                 im.thumbnail(size, Image.Resampling.LANCZOS)
                 enc = fext[1:]
                 if enc.upper() == 'JPG':
                     enc = 'JPEG'
                 im.save(outfile, enc) # use fext as encoding type
             except IOError:
-                print("cannot create thumbnail for '%s'" % infile)
+                print("cannot create thumbnail for '%s'" % infile.path)
     print("Done")  
 
 if __name__ == '__main__':
