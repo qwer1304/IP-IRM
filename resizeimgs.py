@@ -7,7 +7,7 @@ def scantree(path):
     for entry in scandir(path):
         if entry.is_dir(follow_symlinks=False):
             yield from scantree(entry.path)
-        elsif entry.is_file():
+        elif entry.is_file():
             yield entry
 
 def main(args):
