@@ -18,7 +18,7 @@ def main(args):
     for infile in scantree(args.in_dir):
 
         fnext = infile.name # with file type
-        fn, fext = os.path.splitext(fnt) # fext has the '.'
+        fn, fext = os.path.splitext(fnext) # fext has the '.'
         outfile = os.path.join(args.out_dir, fnext)
       
         if infile != outfile:
