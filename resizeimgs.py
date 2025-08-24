@@ -2,11 +2,15 @@ import os
 from PIL import Image
 import argparse
 
-def scantree(path):
+def scantree(path, progress=False, level=0):
     """Recursively yield DirEntry objects for given directory."""
     for entry in os.scandir(path):
         if entry.is_dir(follow_symlinks=False):
-            yield from scantree(entry.path)
+            if progress:
+                print('\t'*level + f'Entering {entry.path} ...')
+            if progress:
+                print('\t'*level + f'Done.')
+            yield from scantree(entry.path, progress=progress, level=level+1)
         elif entry.is_file():
             yield entry
 def path_from_depth(path, depth):
@@ -17,7 +21,7 @@ def main(args):
 
     size = args.target_image_size
     print("Begin conversion...")
-    for infile in scantree(args.in_dir):
+    for infile in scantree(args.in_dir, progress=args.progress, level=0):
 
         fnext = infile.name # with file ext
         fn, fext = os.path.splitext(fnext) # fext has the '.'
@@ -57,6 +61,7 @@ if __name__ == '__main__':
     parser.add_argument('--out_dir', type=str, default="./data/DataSets/")
     parser.add_argument('--depth', type=int, default=2)
     parser.add_argument('--target_image_size', type=int, default=224)
+    parser.add_argument('--progress', action='store_true')
     
     args = parser.parse_args()
     
