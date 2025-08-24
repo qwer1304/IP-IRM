@@ -195,7 +195,7 @@ def train_update_split(net, update_loader, soft_split, random_init=False, args=N
                 ncols=args.ncols,               # total width available
                 dynamic_ncols=False,            # disable autosizing
                 bar_format=bar_format,          # request bar width
-                desc='Feature extracting'
+                desc='train_update_split(): Feature extracting'
             )
             for pos_1, pos_2, target, Index in train_bar:
                 feature_1, out_1 = net(pos_1.cuda(non_blocking=True))
@@ -228,7 +228,7 @@ def test(net, memory_data_loader, test_data_loader, args, progress=False, prefix
                 ncols=args.ncols,               # total width available
                 dynamic_ncols=False,            # disable autosizing
                 bar_format=bar_format,          # request bar width
-                desc='Feature extracting'
+                desc='test(): Feature extracting'
             )
         else:
             feature_bar = memory_data_loader

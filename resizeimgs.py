@@ -8,9 +8,9 @@ def scantree(path, progress=False, level=0):
         if entry.is_dir(follow_symlinks=False):
             if progress:
                 print('\t'*level + f'Entering {entry.path} ...')
+            yield from scantree(entry.path, progress=progress, level=level+1)
             if progress:
                 print('\t'*level + f'Done.')
-            yield from scantree(entry.path, progress=progress, level=level+1)
         elif entry.is_file():
             yield entry
 def path_from_depth(path, depth):
@@ -48,7 +48,7 @@ def main(args):
                 enc = fext[1:]
                 if enc.upper() == 'JPG':
                     enc = 'JPEG'
-                im.save(outfile, format=enc, quality=95, subsampling=0, optimize=True) # use fext as encoding type
+                im.save(outfile, format=enc, quality=95, subsampling=0, optimize=True) # use fext as encoding type, overwrites file if it exists
             except IOError:
                 print(f"cannot save thumbnail for {infile.path} into {outfile}")
     print("Done!")  

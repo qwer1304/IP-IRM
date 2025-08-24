@@ -856,7 +856,7 @@ def make_train_transform(image_size=64, randgray=True, normalize='CIFAR'):
         norm_std=[0.229, 0.224, 0.225]
 
     return transforms.Compose([
-        transforms.RandomResizedCrop(image_size),
+        transforms.RandomResizedCrop(image_size, scale=(0.7, 1.0)), # ratio=(0.75, 1.3333333333333333)
         transforms.RandomHorizontalFlip(p=0.5),
         transforms.ToTensor(),  # <-- important: switch to tensor here
         transforms.ColorJitter(0.4, 0.4, 0.4, 0.1),
