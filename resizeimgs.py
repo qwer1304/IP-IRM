@@ -45,6 +45,7 @@ def main(args):
                 im.save(outfile, enc) # use fext as encoding type
             except IOError:
                 print(f"cannot save thumbnail for {infile.path} into {outfile}")
+    print()
     print("Done")  
 
 if __name__ == '__main__':
