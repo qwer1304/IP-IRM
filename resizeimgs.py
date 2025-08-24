@@ -14,7 +14,7 @@ def main(args):
 
     os.makedirs(args.out_dir, exist_ok=True) # better safe than sorry
 
-    size = args.target_size, args.target_size
+    size = args.target_image_size, args.target_image_size
     for infile in scantree(args.in_dir):
 
         fnext = infile.name # with file type
