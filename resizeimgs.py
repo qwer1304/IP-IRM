@@ -15,8 +15,6 @@ def path_from_depth(path, depth):
     
 def main(args):
 
-    os.makedirs(args.out_dir, exist_ok=True) # better safe than sorry
-
     size = args.target_image_size, args.target_image_size
     print("Begin conversion")
     for infile in scantree(args.in_dir):
@@ -26,9 +24,12 @@ def main(args):
         fn, fext = os.path.splitext(fnext) # fext has the '.'
         relfnext = path_from_depth(infile.path, args.depth)
         outfile = os.path.join(args.out_dir, relfnext)
+        outpath = os.path.dirname(outfile)
+        os.makedirs(outpath, exist_ok=True) # better safe than sorry
+
         #print(fnext, outfile)
       
-        if (infile != outfile):
+        if (infile.path != outfile):
             try:
                 im = Image.open(infile.path)
             except IOError:
@@ -43,7 +44,7 @@ def main(args):
                     enc = 'JPEG'
                 im.save(outfile, enc) # use fext as encoding type
             except IOError:
-                print("cannot save thumbnail for '%s'" % infile.path)
+                print(f"cannot save thumbnail for {infile.path} into {outfile}")
     print("Done")  
 
 if __name__ == '__main__':
