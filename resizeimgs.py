@@ -9,7 +9,10 @@ def scantree(path):
             yield from scantree(entry.path)
         elif entry.is_file():
             yield entry
-
+def path_from_depth(path, depth):
+    parts = path.strip(os.sep).split(os.sep)
+    return os.sep.join(parts[-(depth+1):])
+    
 def main(args):
 
     os.makedirs(args.out_dir, exist_ok=True) # better safe than sorry
@@ -17,10 +20,12 @@ def main(args):
     size = args.target_image_size, args.target_image_size
     for infile in scantree(args.in_dir):
 
-        fnext = infile.name # with file type
+        fnext = infile.name # with file ext
         fn, fext = os.path.splitext(fnext) # fext has the '.'
-        outfile = os.path.join(args.out_dir, fnext)
-        #print(fnext, outfile)
+        relfnext = path_from_depth(infile.path, args.depth)
+        outfile = os.path.join(args.out_dir, relfnext)
+        print(fnext, outfile)
+        exit()
       
         if (infile != outfile):
             try:
@@ -39,6 +44,7 @@ if __name__ == '__main__':
     # Global args
     parser.add_argument('--in_dir', type=str, default="./data/DataSets/")
     parser.add_argument('--out_dir', type=str, default="./data/DataSets/")
+    parser.add_argument('--depth', type=int, default=2)
     parser.add_argument('--target_image_size', type=int, default=224)
     
     args = parser.parse_args()
