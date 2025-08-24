@@ -25,7 +25,10 @@ def main(args):
             try:
                 im = Image.open(infile)
                 im.thumbnail(size, Image.Resampling.LANCZOS)
-                im.save(outfile, fext[1:]) # use fext as encoding type
+                enc = fext[1:]
+                if enc.upper() == 'JPG':
+                    enc = 'JPEG'
+                im.save(outfile, enc) # use fext as encoding type
             except IOError:
                 print("cannot create thumbnail for '%s'" % infile)
 
