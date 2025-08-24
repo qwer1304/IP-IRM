@@ -18,14 +18,15 @@ def main(args):
     os.makedirs(args.out_dir, exist_ok=True) # better safe than sorry
 
     size = args.target_image_size, args.target_image_size
+    print("Begin conversion")
     for infile in scantree(args.in_dir):
+        print('.', end="")
 
         fnext = infile.name # with file ext
         fn, fext = os.path.splitext(fnext) # fext has the '.'
         relfnext = path_from_depth(infile.path, args.depth)
         outfile = os.path.join(args.out_dir, relfnext)
-        print(fnext, outfile)
-        exit()
+        #print(fnext, outfile)
       
         if (infile != outfile):
             try:
@@ -37,6 +38,7 @@ def main(args):
                 im.save(outfile, enc) # use fext as encoding type
             except IOError:
                 print("cannot create thumbnail for '%s'" % infile)
+    print("Done")  
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
