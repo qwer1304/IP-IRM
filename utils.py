@@ -853,7 +853,7 @@ def make_train_transform(image_size=64, randgray=True, normalize='CIFAR'):
         norm_std = [0.2023, 0.1994, 0.2010]
     elif normalize == 'ImageNet':
         norm_mean=[0.485, 0.456, 0.406]
-        norm_std=[0.229, 0.224, 0.225])
+        norm_std=[0.229, 0.224, 0.225]
 
     return transforms.Compose([
         transforms.RandomResizedCrop(image_size),
