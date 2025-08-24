@@ -878,7 +878,7 @@ def make_train_transform(image_size=32, randgray=True):
 """
 
 def make_test_transform(normalize='CIFAR'):
-    if (normalize == 'CIFAR') or (nrmalize == 'STL'):
+    if (normalize == 'CIFAR') or (normalize == 'STL'):
         norm_mean = [0.4914, 0.4822, 0.4465]
         norm_std = [0.2023, 0.1994, 0.2010]
     elif normalize == 'ImageNet':
