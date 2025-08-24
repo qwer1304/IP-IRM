@@ -27,7 +27,7 @@ def main(args):
                 im.thumbnail(size, Image.Resampling.LANCZOS)
                 im.save(outfile, fext[1:]) # use fext as encoding type
             except IOError:
-                print "cannot create thumbnail for '%s'" % infile
+                print("cannot create thumbnail for '%s'" % infile)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
