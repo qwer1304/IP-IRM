@@ -20,8 +20,9 @@ def main(args):
         fnext = infile.name # with file type
         fn, fext = os.path.splitext(fnext) # fext has the '.'
         outfile = os.path.join(args.out_dir, fnext)
+        print(infile, outfile)
       
-        if infile != outfile:
+        if False and (infile != outfile):
             try:
                 im = Image.open(infile)
                 im.thumbnail(size, Image.Resampling.LANCZOS)
