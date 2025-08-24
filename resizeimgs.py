@@ -15,10 +15,9 @@ def path_from_depth(path, depth):
     
 def main(args):
 
-    size = args.target_image_size, args.target_image_size
-    print("Begin conversion")
+    size = args.target_image_size
+    print("Begin conversion...")
     for infile in scantree(args.in_dir):
-        print('.', end="")
 
         fnext = infile.name # with file ext
         fn, fext = os.path.splitext(fnext) # fext has the '.'
@@ -35,18 +34,20 @@ def main(args):
             except IOError:
                 print("cannot open '%s'" % infile.path)
             try:
-                im.thumbnail(size, Image.Resampling.LANCZOS)
+                w, h = im.size
+                scale = size / max(w, h)
+                new_size = (int(round(w * scale)), int(round(h * scale)))
+                im.resize(new_size, Image.Resampling.LANCZOS)
             except IOError:
-                print("cannot create thumbnail '%s'" % infile.path)
+                print(f"cannot resize {infile.path} to ({w},{h})")
             try:
                 enc = fext[1:]
                 if enc.upper() == 'JPG':
                     enc = 'JPEG'
-                im.save(outfile, enc) # use fext as encoding type
+                im.save(outfile, format=enc, quality=95, subsampling=0, optimize=True) # use fext as encoding type
             except IOError:
                 print(f"cannot save thumbnail for {infile.path} into {outfile}")
-    print()
-    print("Done")  
+    print("Done!")  
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

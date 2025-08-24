@@ -843,10 +843,18 @@ class GaussianBlur(object):
 
 # just follow the previous work -- DCL, NeurIPS2020
 
-def make_train_transform(image_size=64, randgray=True):
+def make_train_transform(image_size=64, randgray=True, normalize='CIFAR'):
     kernel_size = int(0.1 * image_size)
     if (kernel_size % 2) == 0:
         kernel_size += 1
+        
+    if (normalize == 'CIFAR') or (nrmalize == 'STL'):
+        norm_mean = [0.4914, 0.4822, 0.4465]
+        norm_std = [0.2023, 0.1994, 0.2010]
+    elif normalize == 'ImageNet':
+        norm_mean=[0.485, 0.456, 0.406]
+        norm_std=[0.229, 0.224, 0.225])
+
     return transforms.Compose([
         transforms.RandomResizedCrop(image_size),
         transforms.RandomHorizontalFlip(p=0.5),
@@ -854,8 +862,7 @@ def make_train_transform(image_size=64, randgray=True):
         transforms.ColorJitter(0.4, 0.4, 0.4, 0.1),
         transforms.RandomGrayscale(p=0.2) if randgray else transforms.Lambda(lambda x: x),
         transforms.GaussianBlur(kernel_size=kernel_size),
-        transforms.Normalize([0.4914, 0.4822, 0.4465],
-                             [0.2023, 0.1994, 0.2010]),
+        transforms.Normalize(mean=norm_mean, std=norm_std),
     ])
 
 """
@@ -870,7 +877,13 @@ def make_train_transform(image_size=32, randgray=True):
         transforms.Normalize([0.4914, 0.4822, 0.4465], [0.2023, 0.1994, 0.2010])])
 """
 
-def make_test_transform():
+def make_test_transform(normalize='CIFAR'):
+    if (normalize == 'CIFAR') or (nrmalize == 'STL'):
+        norm_mean = [0.4914, 0.4822, 0.4465]
+        norm_std = [0.2023, 0.1994, 0.2010]
+    elif normalize == 'ImageNet':
+        norm_mean=[0.485, 0.456, 0.406]
+        norm_std=[0.229, 0.224, 0.225])
     return transforms.Compose([
         transforms.ToTensor(),
-        transforms.Normalize([0.4914, 0.4822, 0.4465], [0.2023, 0.1994, 0.2010])])
+        transforms.Normalize(mean=norm_mean, std=norm_std)])
