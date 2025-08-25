@@ -64,14 +64,11 @@ def main(args):
                 im.resize(new_size, Image.Resampling.LANCZOS)
             except IOError:
                 print(f"cannot resize {infile.path} to ({w},{h})")
-            try:
-                if args.out_enc == "WEBP":
-                    im.save(outpath, "WEBP", lossless=True, optimize=True)
-                else:
-                    im.save(outfile, "JPEG", quality=95, subsampling=0, optimize=True) # overwrites file if it exists
+            if args.out_enc == "WEBP":
+                im.save(outpath, "WEBP", lossless=True, optimize=True)
+            else:
+                im.save(outfile, "JPEG", quality=95, subsampling=0, optimize=True) # overwrites file if it exists
 
-            except IOError:
-                print(f"cannot save thumbnail for {infile.path} into {outfile}")
     print("Done!")  
 
 if __name__ == '__main__':
