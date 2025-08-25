@@ -142,7 +142,10 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Linear Evaluation')
     parser.add_argument('--model_path', type=str, default='results/model_400.pth',
                         help='The pretrained model path')
-    parser.add_argument('--batch_size', type=int, default=512, help='Number of images in each mini-batch')
+    parser.add_argument('--dl_tr', default=[256, 4, 2], type=int, nargs=3, 
+                        metavar='DataLoader pars [batch_size, number_workers, prefetch_factor]', help='Training minimization DataLoader pars')
+    parser.add_argument('--dl_te', default=[3096, 4, 2], type=int, nargs=3, 
+                        metavar='DataLoader pars [batch_size, number_workers, prefetch_factor]', help='Testing/Validation/Memory DataLoader pars')
     parser.add_argument('--epochs', type=int, default=100, help='Number of sweeps over the dataset to train')
     parser.add_argument('--dataset', type=str, default='STL', choices=['STL', 'CIFAR10', 'CIFAR100', 'ImageNet'], help='experiment dataset')
     parser.add_argument('--data', metavar='DIR', help='path to dataset')
@@ -176,32 +179,35 @@ if __name__ == '__main__':
     # seed
     utils.set_seed(args.seed)
 
-    model_path, batch_size, epochs = args.model_path, args.batch_size, args.epochs
+    model_path, epochs = args.model_path, args.epochs
+    dl_tr, dl_te = args.dl_tr, args.dl_te
     target_transform = eval(args.target_transform) if args.target_transform is not None else None
     class_to_idx = eval(args.class_to_idx) if args.class_to_idx is not None else None
     image_class, image_size = args.image_class, args.image_size
 
+    # data prepare
+    tr_bs, tr_nw, tr_pf = dl_tr
+    te_bs, te_nw, te_pf = dl_te
     if args.dataset == 'STL':
-        train_transform = utils.make_train_transform()
-        train_data = STL10(root=args.data, split='train', transform=train_transform, target_transform=target_transform)
-        train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True, num_workers=2, pin_memory=True)
-        test_transform = utils.make_test_transform()
-        test_data = STL10(root=args.data, split='test', transform=test_transform, target_transform=target_transform)
-        test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False, num_workers=2, pin_memory=True)
+        train_transform = utils.make_train_transform(normalize=args.image_class)
+        test_transform = utils.make_test_transform(normalize=args.image_class)
+        train_data = utils.STL10Pair_Index(root=args.data, split='train+unlabeled', transform=train_transform)
+        test_data = utils.STL10Pair(root=args.data, split='test', transform=test_transform, target_transform=target_transform)
+        train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, shuffle=True, pin_memory=True, drop_last=True)
+        test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, pin_memory=True)
     elif args.dataset == 'CIFAR10':
-        train_transform = utils.make_train_transform()
-        train_data = utils.CIFAR10(root=args.data, train=True, transform=train_transform, target_transform=target_transform)
-        train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True)
-        test_transform = utils.make_test_transform()
-        test_data = utils.CIFAR10(root=args.data, train=False, transform=train_transform, target_transform=target_transform)
-        test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
+        train_transform = utils.make_train_transform(normalize=args.image_class)
+        test_transform = utils.make_test_transform(normalize=args.image_class)
+        train_data = utils.CIFAR10Pair_Index(root=args.data, train=True, transform=train_transform, target_transform=target_transform, download=True)
+        train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, shuffle=True, pin_memory=True, drop_last=True)
+        test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, pin_memory=True)
     elif args.dataset == 'CIFAR100':
-        train_transform = utils.make_train_transform()
-        train_data = utils.CIFAR100(root=args.data, train=True, transform=train_transform, target_transform=target_transform)
-        train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True)
-        test_transform = utils.make_test_transform()
-        test_data = utils.CIFAR100(root=args.data, train=False, transform=train_transform, target_transform=target_transform)
-        test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
+        train_transform = utils.make_train_transform(normalize=args.image_class)
+        test_transform = utils.make_test_transform(normalize=args.image_class)
+        train_data = utils.CIFAR100Pair_Index(root=args.data, train=True, transform=train_transform, target_transform=target_transform)
+        test_data = utils.CIFAR100Pair(root=args.data, train=False, transform=test_transform, target_transform=target_transform)
+        train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, shuffle=True, pin_memory=True, drop_last=True)
+        test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, pin_memory=True)
     elif args.dataset == 'ImageNet':
         train_transform = utils.make_train_transform(image_size, randgray=not args.norandgray)
         test_transform = utils.make_test_transform()
@@ -231,8 +237,8 @@ if __name__ == '__main__':
         datas = prepare_datasets(args.data, args.test_envs, [test_desc], 1.0, args.seed)
         test_data = datas[0][0]
 
-        train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True)
-        test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
+        train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, shuffle=True, pin_memory=True, drop_last=True)
+        test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, pin_memory=True)
 
     num_class = len(train_data.classes) if args.dataset != "ImageNet" else args.class_num
     model = Net(num_class=num_class, pretrained_path=model_path, image_class=image_class, args=args).cuda()
