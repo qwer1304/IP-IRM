@@ -213,35 +213,6 @@ def find_classes(directory, class_to_idx_fun):
     class_to_idx = {cls_name: class_to_idx_fun(cls_name) for cls_name in classes}
     return classes, class_to_idx
 
-"""===============
-def __getitem__(self, index):
-    """
-    Args:
-        index (int): Index
-    Returns:
-        tuple: (image, target, index) where target is class_index of the target class.
-    """
-    path, target = self.imgs[index]
-    image = self.loader(path)  # loads PIL image
-
-    # Apply transform on GPU
-    if self.transform is not None:
-        # Move transform to GPU if not already done
-        if not hasattr(self.transform, "_is_on_device"):
-            self.transform = self.transform.to("cuda")
-            self.transform._is_on_device = True  # avoid repeating .to()
-        pos = self.transform(image)
-    else:
-        pos = transforms.ToDtype(torch.float32, scale=True)(image).to("cuda")  # ensure tensor on GPU
-
-    if self.target_transform is not None:
-        target = self.target_transform(target)
-
-    return pos, target
-
-================"""
-
-
 class Imagenet_idx(ImageFolder):
     """Folder datasets which returns the index of the image as well
     """
