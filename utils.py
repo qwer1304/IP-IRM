@@ -213,7 +213,7 @@ def find_classes(directory, class_to_idx_fun):
     class_to_idx = {cls_name: class_to_idx_fun(cls_name) for cls_name in classes}
     return classes, class_to_idx
 
-===============
+"""===============
 def __getitem__(self, index):
     """
     Args:
@@ -239,7 +239,7 @@ def __getitem__(self, index):
 
     return pos, target
 
-================
+================"""
 
 
 class Imagenet_idx(ImageFolder):
