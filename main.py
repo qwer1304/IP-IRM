@@ -24,7 +24,7 @@ def get_negative_mask(batch_size):
     return negative_mask
 
 
-def train(net, data_loader, train_optimizer, temperature, debiased, tau_plus, args):
+def train(net, data_loader, train_optimizer, temperature, debiased, tau_plus, batch_size, args):
     net.train()
     total_loss, total_num = 0.0, 0
     bar_format = '{l_bar}{bar:' + str(args.bar) + '}{r_bar}' #{bar:-' + str(args.bar) + 'b}'
@@ -74,7 +74,7 @@ def train(net, data_loader, train_optimizer, temperature, debiased, tau_plus, ar
 
 
 # ssl training with IP-IRM
-def train_env(net, data_loader, train_optimizer, temperature, updated_split, args):
+def train_env(net, data_loader, train_optimizer, temperature, updated_split, batch_size, args):
     net.train()
     total_loss, total_num = 0.0, 0
     bar_format = '{l_bar}{bar:' + str(args.bar) + '}{r_bar}' #{bar:-' + str(args.bar) + 'b}'
@@ -206,10 +206,11 @@ def train_update_split(net, update_loader, soft_split, random_init=False, args=N
         feature2 = torch.cat(feature_bank_2, 0)
         updated_split = utils.auto_split_offline(feature1, feature2, soft_split, temperature, args.irm_temp, loss_mode='v2', irm_mode=args.irm_mode,
                                          irm_weight=args.irm_weight_maxim, constrain=args.constrain, cons_relax=args.constrain_relax, nonorm=args.nonorm, 
-                                         log_file=log_file, batch_size=ubatch_size, num_workers=args.num_workers)
+                                         log_file=log_file, batch_size=u_bs, num_workers=u_nw, preload_factor=u_pf)
     else:
         updated_split = utils.auto_split(net, update_loader, soft_split, temperature, args.irm_temp, loss_mode='v2', irm_mode=args.irm_mode,
-                                     irm_weight=args.irm_weight_maxim, constrain=args.constrain, cons_relax=args.constrain_relax, nonorm=args.nonorm, log_file=log_file)
+                                     irm_weight=args.irm_weight_maxim, constrain=args.constrain, cons_relax=args.constrain_relax, 
+                                     nonorm=args.nonorm, log_file=log_file)
     np.save("results/{}/{}/{}_{}{}".format(args.dataset, args.name, 'GroupResults', epoch, ".txt"), updated_split.cpu().numpy())
     return updated_split
 
@@ -351,11 +352,12 @@ if __name__ == '__main__':
     parser.add_argument('--temperature', default=0.5, type=float, help='Temperature used in softmax')
     parser.add_argument('--tau_plus', default=0.1, type=float, help='Positive class priorx')
     parser.add_argument('--k', default=200, type=int, help='Top k most similar images used to predict the label')
-    parser.add_argument('--batch_size', default=256, type=int, help='Number of images in each mini-batch')
-    parser.add_argument('--ubatch_size', default=3096, type=int, help='Number of images in each mini-batch for max')
-    parser.add_argument('--mbatch_size', default=3096, type=int, help='Number of images in each mini-batch for memory')
-    parser.add_argument('--tbatch_size', default=256, type=int, help='Number of images in each mini-batch for test/val')
-    parser.add_argument('--num_workers', default=4, type=int, help='Number of workers')
+    parser.add_argument('--dl_tr', default=[256, 4, 2], type=int, nargs=3, 
+                        metavar='DataLoader pars [batch_size, number_workers, preload_factor]', help='Training minimization DataLoader pars')
+    parser.add_argument('--dl_u', default=[3096, 4, 2], type=int, nargs=3, 
+                        metavar='DataLoader pars [batch_size, number_workers, preload_factor]', help='Training Maximization DataLoader pars')
+    parser.add_argument('--dl_te', default=[3096, 4, 2], type=int, nargs=3, 
+                        metavar='DataLoader pars [batch_size, number_workers, preload_factor]', help='Testing/Validation/Memory DataLoader pars')
     parser.add_argument('--epochs', default=200, type=int, help='Number of sweeps over the dataset to train')
     parser.add_argument('--debiased', default=False, type=bool, help='Debiased contrastive loss or standard loss')
     parser.add_argument('--dataset', type=str, default='STL', choices=['STL', 'CIFAR10', 'CIFAR100', 'ImageNet'], help='experiment dataset')
@@ -422,7 +424,7 @@ if __name__ == '__main__':
 
     feature_dim, temperature, tau_plus, k = args.feature_dim, args.temperature, args.tau_plus, args.k
     epochs, debiased,  = args.epochs,  args.debiased
-    batch_size, mbatch_size, tbatch_size, ubatch_size = args.batch_size, args.mbatch_size, args.tbatch_size, args.ubatch_size
+    dl_tr, dl_te, dl_u = args.dl_tr, args.dl_te, args.dl_u
     target_transform = eval(args.target_transform) if args.target_transform is not None else None
     class_to_idx = eval(args.class_to_idx) if args.class_to_idx is not None else None
     image_class, image_size = args.image_class, args.image_size
@@ -434,46 +436,45 @@ if __name__ == '__main__':
         os.makedirs('{}/{}'.format(args.save_root, args.name))
 
     # data prepare
+    tr_bs, tr_nw, tr_pf = dl_tr
+    te_bs, te_nw, te_pf = dl_te
+    u_bs, u_nw, u_pf = dl_u
     if args.dataset == 'STL':
         train_transform = utils.make_train_transform(normalize=args.image_class)
-        train_data = utils.STL10Pair_Index(root=args.data, split='train+unlabeled', transform=train_transform)
-        train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=True,
-                                  drop_last=True)
-        update_data = utils.STL10Pair_Index(root=args.data, split='train+unlabeled', transform=train_transform, target_transform=target_transform)
-        update_loader = DataLoader(update_data, batch_size=ubatch_size, shuffle=True, num_workers=args.num_workers, pin_memory=True, drop_last=True)
-        update_loader_offline = DataLoader(update_data, batch_size=ubatch_size, shuffle=False, num_workers=args.num_workers, pin_memory=True)
         test_transform = utils.make_test_transform(normalize=args.image_class)
+        train_data = utils.STL10Pair_Index(root=args.data, split='train+unlabeled', transform=train_transform)
+        update_data = utils.STL10Pair_Index(root=args.data, split='train+unlabeled', transform=train_transform, target_transform=target_transform)
         memory_data = utils.STL10Pair(root=args.data, split='train', transform=test_transform, target_transform=target_transform)
-        memory_loader = DataLoader(memory_data, batch_size=mbatch_size, shuffle=False, num_workers=args.num_workers, pin_memory=True)
         test_data = utils.STL10Pair(root=args.data, split='test', transform=test_transform, target_transform=target_transform)
-        test_loader = DataLoader(test_data, batch_size=tbatch_size, shuffle=False, num_workers=args.num_workers, pin_memory=True)
+        train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, preload_factor=tr_pf, shuffle=True, pin_memory=True, drop_last=True)
+        update_loader = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, preload_factor=u_pf, shuffle=True, pin_memory=True, drop_last=True)
+        update_loader_offline = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, preload_factor=u_pf, shuffle=False, pin_memory=True)
+        memory_loader = DataLoader(memory_data, batch_size=te_bs, num_workers=te_nw, preload_factor=te_pf, shuffle=False, pin_memory=True)
+        test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, preload_factor=te_pf, shuffle=False, pin_memory=True)
     elif args.dataset == 'CIFAR10':
         train_transform = utils.make_train_transform(normalize=args.image_class)
-        train_data = utils.CIFAR10Pair_Index(root=args.data, train=True, transform=train_transform, target_transform=target_transform, download=True)
-        train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=True,
-                                  drop_last=True)
-        update_data = utils.CIFAR10Pair_Index(root=args.data, train=True, transform=train_transform, target_transform=target_transform)
-        update_loader = DataLoader(update_data, batch_size=ubatch_size, shuffle=True, num_workers=args.num_workers, pin_memory=True, drop_last=True)
-        update_loader_offline = DataLoader(update_data, batch_size=ubatch_size, shuffle=False, num_workers=args.num_workers, pin_memory=True)
         test_transform = utils.make_test_transform(normalize=args.image_class)
+        train_data = utils.CIFAR10Pair_Index(root=args.data, train=True, transform=train_transform, target_transform=target_transform, download=True)
+        update_data = utils.CIFAR10Pair_Index(root=args.data, train=True, transform=train_transform, target_transform=target_transform)
         memory_data = utils.CIFAR10Pair(root=args.data, train=True, transform=test_transform, target_transform=target_transform)
-        memory_loader = DataLoader(memory_data, batch_size=mbatch_size, shuffle=False, num_workers=args.num_workers, pin_memory=True)
         test_data = utils.CIFAR10Pair(root=args.data, train=False, transform=test_transform, target_transform=target_transform)
-        test_loader = DataLoader(test_data, batch_size=tbatch_size, shuffle=False, num_workers=args.num_workers, pin_memory=True)
+        train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, preload_factor=tr_pf, shuffle=True, pin_memory=True, drop_last=True)
+        update_loader = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, preload_factor=u_pf, shuffle=True, pin_memory=True, drop_last=True)
+        update_loader_offline = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, preload_factor=u_pf, shuffle=False, pin_memory=True)
+        memory_loader = DataLoader(memory_data, batch_size=te_bs, num_workers=te_nw, preload_factor=te_pf, shuffle=False, pin_memory=True)
+        test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, preload_factor=te_pf, shuffle=False, pin_memory=True)
     elif args.dataset == 'CIFAR100':
         train_transform = utils.make_train_transform(normalize=args.image_class)
-        train_data = utils.CIFAR100Pair_Index(root=args.data, train=True, transform=train_transform, target_transform=target_transform)
-        train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=True,
-                                  drop_last=True)
-        update_data = utils.CIFAR100Pair_Index(root=args.data, train=True, transform=train_transform, target_transform=target_transform)
-        update_loader = DataLoader(update_data, batch_size=ubatch_size, shuffle=True, num_workers=args.num_workers, pin_memory=True, drop_last=True)
-        update_loader_offline = DataLoader(update_data, batch_size=ubatch_size, shuffle=False, num_workers=args.num_workers, pin_memory=True)
         test_transform = utils.make_test_transform(normalize=args.image_class)
+        train_data = utils.CIFAR100Pair_Index(root=args.data, train=True, transform=train_transform, target_transform=target_transform)
+        update_data = utils.CIFAR100Pair_Index(root=args.data, train=True, transform=train_transform, target_transform=target_transform)
         memory_data = utils.CIFAR100Pair(root=args.data, train=True, transform=test_transform, target_transform=target_transform)
-        memory_loader = DataLoader(memory_data, batch_size=mbatch_size, shuffle=False, num_workers=args.num_workers, pin_memory=True)
         test_data = utils.CIFAR100Pair(root=args.data, train=False, transform=test_transform, target_transform=target_transform)
-        test_loader = DataLoader(test_data, batch_size=tbatch_size, shuffle=False, num_workers=args.num_workers, pin_memory=True)
-
+        train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, preload_factor=tr_pf, shuffle=True, pin_memory=True, drop_last=True)
+        update_loader = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, preload_factor=u_pf, shuffle=True, pin_memory=True, drop_last=True)
+        update_loader_offline = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, preload_factor=u_pf, shuffle=False, pin_memory=True)
+        memory_loader = DataLoader(memory_data, batch_size=te_bs, num_workers=te_nw, preload_factor=te_pf, shuffle=False, pin_memory=True)
+        test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, preload_factor=te_pf, shuffle=False, pin_memory=True)
     elif args.dataset == 'ImageNet':
         train_transform = utils.make_train_transform(image_size, randgray=not args.norandgray, normalize=args.image_class)
         test_transform = utils.make_test_transform(normalize=args.image_class)
@@ -530,13 +531,12 @@ if __name__ == '__main__':
 
         #traverse_objects(update_data)
         #exit()
-        train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=True,
-                                  drop_last=True)
-        update_loader = DataLoader(update_data, batch_size=ubatch_size, shuffle=True, num_workers=args.num_workers, pin_memory=True, drop_last=True)
-        update_loader_offline = DataLoader(update_data, batch_size=ubatch_size, shuffle=False, num_workers=args.num_workers, pin_memory=True)
-        memory_loader = DataLoader(memory_data, batch_size=mbatch_size, shuffle=False, num_workers=args.num_workers, pin_memory=True)
-        test_loader = DataLoader(test_data, batch_size=tbatch_size, shuffle=False, num_workers=args.num_workers, pin_memory=True)
-        val_loader = DataLoader(val_data, batch_size=tbatch_size, shuffle=False, num_workers=args.num_workers, pin_memory=True)
+        train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, preload_factor=tr_pf, shuffle=True, pin_memory=True, drop_last=True)
+        update_loader = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, preload_factor=u_pf, shuffle=True, pin_memory=True, drop_last=True)
+        update_loader_offline = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, preload_factor=u_pf, shuffle=False, pin_memory=True)
+        memory_loader = DataLoader(memory_data, batch_size=te_bs, num_workers=te_nw, preload_factor=te_pf, shuffle=False, pin_memory=True)
+        test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, preload_factor=te_pf, shuffle=False, pin_memory=True)
+        val_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, preload_factor=te_pf, shuffle=False, pin_memory=True)
 
     # model setup and optimizer config
     model = Model(feature_dim, image_class=image_class).cuda()
@@ -617,12 +617,12 @@ if __name__ == '__main__':
 
     for epoch in range(args.start_epoch, epochs + 1):
         if args.baseline:
-            train_loss = train(model, train_loader, optimizer, temperature, debiased, tau_plus, args)
+            train_loss = train(model, train_loader, optimizer, temperature, debiased, tau_plus, tr_bs, args)
         else: # Minimize Step
             if args.retain_group: # retain the previous partitions
-                train_loss = train_env(model, train_loader, optimizer, temperature, updated_split_all, args)
+                train_loss = train_env(model, train_loader, optimizer, temperature, updated_split_all, tr_bs, args)
             else:
-                train_loss = train_env(model, train_loader, optimizer, temperature, updated_split, args)
+                train_loss = train_env(model, train_loader, optimizer, temperature, updated_split, tr_bs, args)
 
             if epoch % args.maximize_iter == 0: # Maximize Step
                 updated_split = train_update_split(model, update_loader, updated_split, random_init=args.random_init, args=args)
