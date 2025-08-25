@@ -65,7 +65,7 @@ def main(args):
             except IOError:
                 print(f"cannot resize {infile.path} to ({w},{h})")
             if args.out_enc == "WEBP":
-                im.save(outpath, "WEBP", lossless=True, optimize=True)
+                im.save(outfile, "WEBP", lossless=True, subsampling=0, optimize=True)
             else:
                 im.save(outfile, "JPEG", quality=95, subsampling=0, optimize=True) # overwrites file if it exists
 
