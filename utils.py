@@ -1,5 +1,6 @@
 from PIL import Image
-from torchvision import transforms
+#from torchvision import transforms
+from torchvision.transforms import v2 as transforms
 from torchvision.datasets import STL10, CIFAR10, CIFAR100, ImageFolder
 import cv2
 import numpy as np
