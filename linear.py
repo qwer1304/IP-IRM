@@ -209,8 +209,8 @@ if __name__ == '__main__':
         train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, shuffle=True, pin_memory=True, drop_last=True)
         test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, pin_memory=True)
     elif args.dataset == 'ImageNet':
-        train_transform = utils.make_train_transform(image_size, randgray=not args.norandgray)
-        test_transform = utils.make_test_transform()
+        train_transform = utils.make_train_transform(image_size, randgray=not args.norandgray, normalize=args.image_class)
+        test_transform = utils.make_test_transform(normalize=args.image_class)
         wrap = args.extract_features
 
         # descriptors of train data
