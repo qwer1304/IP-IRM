@@ -353,7 +353,8 @@ if __name__ == '__main__':
     parser.add_argument('--k', default=200, type=int, help='Top k most similar images used to predict the label')
     parser.add_argument('--batch_size', default=256, type=int, help='Number of images in each mini-batch')
     parser.add_argument('--ubatch_size', default=3096, type=int, help='Number of images in each mini-batch for max')
-    parser.add_argument('--mbatch_size', default=3096, type=int, help='Number of images in each mini-batch for test/val')
+    parser.add_argument('--mbatch_size', default=3096, type=int, help='Number of images in each mini-batch for memory')
+    parser.add_argument('--tbatch_size', default=256, type=int, help='Number of images in each mini-batch for test/val')
     parser.add_argument('--num_workers', default=4, type=int, help='Number of workers')
     parser.add_argument('--epochs', default=200, type=int, help='Number of sweeps over the dataset to train')
     parser.add_argument('--debiased', default=False, type=bool, help='Debiased contrastive loss or standard loss')
@@ -444,7 +445,7 @@ if __name__ == '__main__':
         memory_data = utils.STL10Pair(root=args.data, split='train', transform=test_transform, target_transform=target_transform)
         memory_loader = DataLoader(memory_data, batch_size=mbatch_size, shuffle=False, num_workers=args.num_workers, pin_memory=True)
         test_data = utils.STL10Pair(root=args.data, split='test', transform=test_transform, target_transform=target_transform)
-        test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False, num_workers=args.num_workers, pin_memory=True)
+        test_loader = DataLoader(test_data, batch_size=tbatch_size, shuffle=False, num_workers=args.num_workers, pin_memory=True)
     elif args.dataset == 'CIFAR10':
         train_transform = utils.make_train_transform(normalize=args.image_class)
         train_data = utils.CIFAR10Pair_Index(root=args.data, train=True, transform=train_transform, target_transform=target_transform, download=True)
@@ -457,7 +458,7 @@ if __name__ == '__main__':
         memory_data = utils.CIFAR10Pair(root=args.data, train=True, transform=test_transform, target_transform=target_transform)
         memory_loader = DataLoader(memory_data, batch_size=mbatch_size, shuffle=False, num_workers=args.num_workers, pin_memory=True)
         test_data = utils.CIFAR10Pair(root=args.data, train=False, transform=test_transform, target_transform=target_transform)
-        test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False, num_workers=args.num_workers, pin_memory=True)
+        test_loader = DataLoader(test_data, batch_size=tbatch_size, shuffle=False, num_workers=args.num_workers, pin_memory=True)
     elif args.dataset == 'CIFAR100':
         train_transform = utils.make_train_transform(normalize=args.image_class)
         train_data = utils.CIFAR100Pair_Index(root=args.data, train=True, transform=train_transform, target_transform=target_transform)
@@ -470,7 +471,7 @@ if __name__ == '__main__':
         memory_data = utils.CIFAR100Pair(root=args.data, train=True, transform=test_transform, target_transform=target_transform)
         memory_loader = DataLoader(memory_data, batch_size=mbatch_size, shuffle=False, num_workers=args.num_workers, pin_memory=True)
         test_data = utils.CIFAR100Pair(root=args.data, train=False, transform=test_transform, target_transform=target_transform)
-        test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False, num_workers=args.num_workers, pin_memory=True)
+        test_loader = DataLoader(test_data, batch_size=tbatch_size, shuffle=False, num_workers=args.num_workers, pin_memory=True)
 
     elif args.dataset == 'ImageNet':
         train_transform = utils.make_train_transform(image_size, randgray=not args.norandgray, normalize=args.image_class)
@@ -533,8 +534,8 @@ if __name__ == '__main__':
         update_loader = DataLoader(update_data, batch_size=ubatch_size, shuffle=True, num_workers=args.num_workers, pin_memory=True, drop_last=True)
         update_loader_offline = DataLoader(update_data, batch_size=ubatch_size, shuffle=False, num_workers=args.num_workers, pin_memory=True)
         memory_loader = DataLoader(memory_data, batch_size=mbatch_size, shuffle=False, num_workers=args.num_workers, pin_memory=True)
-        test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False, num_workers=args.num_workers, pin_memory=True)
-        val_loader = DataLoader(val_data, batch_size=batch_size, shuffle=False, num_workers=args.num_workers, pin_memory=True)
+        test_loader = DataLoader(test_data, batch_size=tbatch_size, shuffle=False, num_workers=args.num_workers, pin_memory=True)
+        val_loader = DataLoader(val_data, batch_size=tbatch_size, shuffle=False, num_workers=args.num_workers, pin_memory=True)
 
     # model setup and optimizer config
     model = Model(feature_dim, image_class=image_class).cuda()
