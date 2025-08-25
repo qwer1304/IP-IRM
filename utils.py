@@ -859,7 +859,7 @@ def make_train_transform(image_size=64, randgray=True, normalize='CIFAR'):
     return transforms.Compose([
         transforms.RandomResizedCrop(image_size, scale=(0.7, 1.0)), # ratio=(0.75, 1.3333333333333333)
         transforms.RandomHorizontalFlip(p=0.5),
-        #transforms.ToTensor(),  # <-- important: switch to tensor here
+        transforms.ToTensor(),  # <-- important: switch to tensor here
         transforms.ToDtype(torch.float32, scale=True),
         transforms.ColorJitter(0.4, 0.4, 0.4, 0.1),
         transforms.RandomGrayscale(p=0.2) if randgray else transforms.Lambda(lambda x: x),
@@ -887,6 +887,6 @@ def make_test_transform(normalize='CIFAR'):
         norm_mean=[0.485, 0.456, 0.406]
         norm_std=[0.229, 0.224, 0.225]
     return transforms.Compose([
-        #transforms.ToTensor(),
+        transforms.ToTensor(),
         transforms.ToDtype(torch.float32, scale=True),
         transforms.Normalize(mean=norm_mean, std=norm_std)]).to("cuda")
