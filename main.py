@@ -206,7 +206,7 @@ def train_update_split(net, update_loader, soft_split, random_init=False, args=N
         feature2 = torch.cat(feature_bank_2, 0)
         updated_split = utils.auto_split_offline(feature1, feature2, soft_split, temperature, args.irm_temp, loss_mode='v2', irm_mode=args.irm_mode,
                                          irm_weight=args.irm_weight_maxim, constrain=args.constrain, cons_relax=args.constrain_relax, nonorm=args.nonorm, 
-                                         log_file=log_file, batch_size=u_bs, num_workers=u_nw, preload_factor=u_pf)
+                                         log_file=log_file, batch_size=u_bs, num_workers=u_nw, prefetch_factor=u_pf)
     else:
         updated_split = utils.auto_split(net, update_loader, soft_split, temperature, args.irm_temp, loss_mode='v2', irm_mode=args.irm_mode,
                                      irm_weight=args.irm_weight_maxim, constrain=args.constrain, cons_relax=args.constrain_relax, 
@@ -353,11 +353,11 @@ if __name__ == '__main__':
     parser.add_argument('--tau_plus', default=0.1, type=float, help='Positive class priorx')
     parser.add_argument('--k', default=200, type=int, help='Top k most similar images used to predict the label')
     parser.add_argument('--dl_tr', default=[256, 4, 2], type=int, nargs=3, 
-                        metavar='DataLoader pars [batch_size, number_workers, preload_factor]', help='Training minimization DataLoader pars')
+                        metavar='DataLoader pars [batch_size, number_workers, prefetch_factor]', help='Training minimization DataLoader pars')
     parser.add_argument('--dl_u', default=[3096, 4, 2], type=int, nargs=3, 
-                        metavar='DataLoader pars [batch_size, number_workers, preload_factor]', help='Training Maximization DataLoader pars')
+                        metavar='DataLoader pars [batch_size, number_workers, prefetch_factor]', help='Training Maximization DataLoader pars')
     parser.add_argument('--dl_te', default=[3096, 4, 2], type=int, nargs=3, 
-                        metavar='DataLoader pars [batch_size, number_workers, preload_factor]', help='Testing/Validation/Memory DataLoader pars')
+                        metavar='DataLoader pars [batch_size, number_workers, prefetch_factor]', help='Testing/Validation/Memory DataLoader pars')
     parser.add_argument('--epochs', default=200, type=int, help='Number of sweeps over the dataset to train')
     parser.add_argument('--debiased', default=False, type=bool, help='Debiased contrastive loss or standard loss')
     parser.add_argument('--dataset', type=str, default='STL', choices=['STL', 'CIFAR10', 'CIFAR100', 'ImageNet'], help='experiment dataset')
@@ -446,11 +446,11 @@ if __name__ == '__main__':
         update_data = utils.STL10Pair_Index(root=args.data, split='train+unlabeled', transform=train_transform, target_transform=target_transform)
         memory_data = utils.STL10Pair(root=args.data, split='train', transform=test_transform, target_transform=target_transform)
         test_data = utils.STL10Pair(root=args.data, split='test', transform=test_transform, target_transform=target_transform)
-        train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, preload_factor=tr_pf, shuffle=True, pin_memory=True, drop_last=True)
-        update_loader = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, preload_factor=u_pf, shuffle=True, pin_memory=True, drop_last=True)
-        update_loader_offline = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, preload_factor=u_pf, shuffle=False, pin_memory=True)
-        memory_loader = DataLoader(memory_data, batch_size=te_bs, num_workers=te_nw, preload_factor=te_pf, shuffle=False, pin_memory=True)
-        test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, preload_factor=te_pf, shuffle=False, pin_memory=True)
+        train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, shuffle=True, pin_memory=True, drop_last=True)
+        update_loader = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, prefetch_factor=u_pf, shuffle=True, pin_memory=True, drop_last=True)
+        update_loader_offline = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, prefetch_factor=u_pf, shuffle=False, pin_memory=True)
+        memory_loader = DataLoader(memory_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, pin_memory=True)
+        test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, pin_memory=True)
     elif args.dataset == 'CIFAR10':
         train_transform = utils.make_train_transform(normalize=args.image_class)
         test_transform = utils.make_test_transform(normalize=args.image_class)
@@ -458,11 +458,11 @@ if __name__ == '__main__':
         update_data = utils.CIFAR10Pair_Index(root=args.data, train=True, transform=train_transform, target_transform=target_transform)
         memory_data = utils.CIFAR10Pair(root=args.data, train=True, transform=test_transform, target_transform=target_transform)
         test_data = utils.CIFAR10Pair(root=args.data, train=False, transform=test_transform, target_transform=target_transform)
-        train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, preload_factor=tr_pf, shuffle=True, pin_memory=True, drop_last=True)
-        update_loader = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, preload_factor=u_pf, shuffle=True, pin_memory=True, drop_last=True)
-        update_loader_offline = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, preload_factor=u_pf, shuffle=False, pin_memory=True)
-        memory_loader = DataLoader(memory_data, batch_size=te_bs, num_workers=te_nw, preload_factor=te_pf, shuffle=False, pin_memory=True)
-        test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, preload_factor=te_pf, shuffle=False, pin_memory=True)
+        train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, shuffle=True, pin_memory=True, drop_last=True)
+        update_loader = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, prefetch_factor=u_pf, shuffle=True, pin_memory=True, drop_last=True)
+        update_loader_offline = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, prefetch_factor=u_pf, shuffle=False, pin_memory=True)
+        memory_loader = DataLoader(memory_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, pin_memory=True)
+        test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, pin_memory=True)
     elif args.dataset == 'CIFAR100':
         train_transform = utils.make_train_transform(normalize=args.image_class)
         test_transform = utils.make_test_transform(normalize=args.image_class)
@@ -470,11 +470,11 @@ if __name__ == '__main__':
         update_data = utils.CIFAR100Pair_Index(root=args.data, train=True, transform=train_transform, target_transform=target_transform)
         memory_data = utils.CIFAR100Pair(root=args.data, train=True, transform=test_transform, target_transform=target_transform)
         test_data = utils.CIFAR100Pair(root=args.data, train=False, transform=test_transform, target_transform=target_transform)
-        train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, preload_factor=tr_pf, shuffle=True, pin_memory=True, drop_last=True)
-        update_loader = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, preload_factor=u_pf, shuffle=True, pin_memory=True, drop_last=True)
-        update_loader_offline = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, preload_factor=u_pf, shuffle=False, pin_memory=True)
-        memory_loader = DataLoader(memory_data, batch_size=te_bs, num_workers=te_nw, preload_factor=te_pf, shuffle=False, pin_memory=True)
-        test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, preload_factor=te_pf, shuffle=False, pin_memory=True)
+        train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, shuffle=True, pin_memory=True, drop_last=True)
+        update_loader = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, prefetch_factor=u_pf, shuffle=True, pin_memory=True, drop_last=True)
+        update_loader_offline = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, prefetch_factor=u_pf, shuffle=False, pin_memory=True)
+        memory_loader = DataLoader(memory_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, pin_memory=True)
+        test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, pin_memory=True)
     elif args.dataset == 'ImageNet':
         train_transform = utils.make_train_transform(image_size, randgray=not args.norandgray, normalize=args.image_class)
         test_transform = utils.make_test_transform(normalize=args.image_class)
@@ -531,12 +531,12 @@ if __name__ == '__main__':
 
         #traverse_objects(update_data)
         #exit()
-        train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, preload_factor=tr_pf, shuffle=True, pin_memory=True, drop_last=True)
-        update_loader = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, preload_factor=u_pf, shuffle=True, pin_memory=True, drop_last=True)
-        update_loader_offline = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, preload_factor=u_pf, shuffle=False, pin_memory=True)
-        memory_loader = DataLoader(memory_data, batch_size=te_bs, num_workers=te_nw, preload_factor=te_pf, shuffle=False, pin_memory=True)
-        test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, preload_factor=te_pf, shuffle=False, pin_memory=True)
-        val_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, preload_factor=te_pf, shuffle=False, pin_memory=True)
+        train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, shuffle=True, pin_memory=True, drop_last=True)
+        update_loader = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, prefetch_factor=u_pf, shuffle=True, pin_memory=True, drop_last=True)
+        update_loader_offline = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, prefetch_factor=u_pf, shuffle=False, pin_memory=True)
+        memory_loader = DataLoader(memory_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, pin_memory=True)
+        test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, pin_memory=True)
+        val_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, pin_memory=True)
 
     # model setup and optimizer config
     model = Model(feature_dim, image_class=image_class).cuda()
