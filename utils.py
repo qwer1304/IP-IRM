@@ -621,7 +621,7 @@ def auto_split(net, update_loader, soft_split_all, temperature, irm_temp, loss_m
 
 # update split offline
 def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss_mode='v2', irm_mode='v1', irm_weight=10, constrain=False, 
-            cons_relax=False, nonorm=False, log_file=None, batch_size=3096, num_workers=4, preload_factor=2):
+            cons_relax=False, nonorm=False, log_file=None, batch_size=3096, num_workers=4, prefetch_factor=2):
     # irm mode: v1 is original irm; v2 is variance
     low_loss, constrain_loss = 1e5, torch.Tensor([0.])
     cnt, best_epoch, training_num = 0, 0, 0
@@ -632,7 +632,7 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
 
     # dataset and dataloader
     traindataset = update_split_dataset(out_1, out_2)
-    trainloader = DataLoader(traindataset, batch_size=batch_size, shuffle=True, num_workers=num_workers, preload_factor=preload_factor)
+    trainloader = DataLoader(traindataset, batch_size=batch_size, shuffle=True, num_workers=num_workers, prefetch_factor=prefetch_factor)
 
     for epoch in range(100):
         risk_all_list, risk_cont_all_list, risk_penalty_all_list, risk_constrain_all_list, training_num = [],[],[],[], 0
