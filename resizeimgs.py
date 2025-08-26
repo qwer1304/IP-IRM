@@ -53,7 +53,7 @@ def main(args):
                     print("cannot open '%s'" % infile.path)
                 try:
                     w, h = im.size
-                    scale = size / max(w, h)
+                    scale = size / min(w, h)
                     new_size = (int(round(w * scale)), int(round(h * scale)))
                     im.resize(new_size, Image.Resampling.LANCZOS)
                 except IOError:
