@@ -145,7 +145,9 @@ def pyvips_loader(path):
     arr = np.ndarray(buffer=image.write_to_memory(),
                      shape=[image.height, image.width, image.bands],
                      dtype=np.uint8)
-    return Image.fromarray(arr)
+    tensor = torch.from_numpy(arr).permute(2,0,1).float() / 255.0  # CHW float
+    return tensor
+    #return Image.fromarray(arr)
 
 class STL10Pair(STL10):
     def __getitem__(self, index):
