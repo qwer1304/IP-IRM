@@ -904,7 +904,7 @@ def make_train_transform(image_size=64, randgray=True, normalize='CIFAR'):
         transforms.RandomGrayscale(p=0.2) if randgray else transforms.Lambda(lambda x: x),
         transforms.GaussianBlur(kernel_size=kernel_size),
         transforms.Normalize(mean=norm_mean, std=norm_std),
-    ]).to("cuda")
+    ]) #.to("cuda")
 
 """
 def make_train_transform(image_size=32, randgray=True):
@@ -929,4 +929,4 @@ def make_test_transform(normalize='CIFAR'):
         #transforms.ToTensor(),  # <-- important: switch to tensor here
         transforms.ToImage(),
         transforms.ToDtype(torch.float32, scale=True),
-        transforms.Normalize(mean=norm_mean, std=norm_std)]).to("cuda")
+        transforms.Normalize(mean=norm_mean, std=norm_std)]) #.to("cuda")
