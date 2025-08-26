@@ -353,10 +353,13 @@ if __name__ == '__main__':
     parser.add_argument('--tau_plus', default=0.1, type=float, help='Positive class priorx')
     parser.add_argument('--k', default=200, type=int, help='Top k most similar images used to predict the label')
     parser.add_argument('--dl_tr', default=[256, 4, 2, True], type=int, nargs=4, 
+                        type=lambda vals: utils.parse_mixed(vals, [int, int, int, bool]),
                         metavar='DataLoader pars [batch_size, number_workers, prefetch_factor, persistent_workers]', help='Training minimization DataLoader pars')
     parser.add_argument('--dl_u', default=[3096, 4, 2, True], type=int, nargs=4, 
+                        type=lambda vals: utils.parse_mixed(vals, [int, int, int, bool]),
                         metavar='DataLoader pars [batch_size, number_workers, prefetch_factor, persistent_workers]', help='Training Maximization DataLoader pars')
     parser.add_argument('--dl_te', default=[3096, 4, 2, True], type=int, nargs=4, 
+                        type=lambda vals: utils.parse_mixed(vals, [int, int, int, bool]),
                         metavar='DataLoader pars [batch_size, number_workers, prefetch_factor, persistent_workers]', help='Testing/Validation/Memory DataLoader pars')
     parser.add_argument('--epochs', default=200, type=int, help='Number of sweeps over the dataset to train')
     parser.add_argument('--debiased', default=False, type=bool, help='Debiased contrastive loss or standard loss')

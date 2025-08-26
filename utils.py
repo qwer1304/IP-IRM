@@ -23,6 +23,33 @@ import re
 import torch
 import re
 
+import argparse
+
+def parse_mixed(values, types):
+    """
+    Convert a list of strings to corresponding types.
+    
+    values: list of str (from argparse)
+    types: list of callables (e.g., [int, float, str, bool])
+    
+    Returns a list with converted values.
+    """
+    if len(values) != len(types):
+        raise argparse.ArgumentTypeError(
+            f"Expected {len(types)} values, got {len(values)}"
+        )
+    converted = []
+    for v, t in zip(values, types):
+        # special handling for bool
+        if t == bool:
+            converted.append(v.lower() in ["true", "1", "yes"])
+        else:
+            try:
+                converted.append(t(v))
+            except Exception as e:
+                raise argparse.ArgumentTypeError(f"Cannot convert '{v}' to {t}: {e}")
+    return converted
+
 def pretty_tensor_str(tensor, indent=0):
     """
     Pretty-print PyTorch tensor string with:
