@@ -172,10 +172,12 @@ def download_terra_incognita(data_dir):
 
     full_path = stage_path(data_dir, "terra_incognita")
 
+    print('Downloading & extracting images')
     download_and_extract(
         "https://storage.googleapis.com/public-datasets-lila/caltechcameratraps/eccv_18_all_images_sm.tar.gz",
         os.path.join(full_path, "terra_incognita_images.tar.gz"))
 
+    print('Downloading and extracting annotations')
     download_and_extract(
         "https://storage.googleapis.com/public-datasets-lila/caltechcameratraps/eccv_18_annotations.tar.gz",
         os.path.join(full_path, "eccv_18_annotations.tar.gz"))
