@@ -13,6 +13,7 @@ from torch.utils.data import DataLoader
 from torch.utils import data
 import random
 import os
+import pyvips
 
 np.random.seed(0)
 
@@ -108,7 +109,14 @@ def pretty_tensor_str(tensor, indent=0):
         return '\n'.join(lines)
 
     return recursive_format(s, indent, 0)
-    
+
+def pyvips_loader(path):
+    image = pyvips.Image.new_from_file(path, access="sequential")
+    arr = np.ndarray(buffer=image.write_to_memory(),
+                     shape=[image.height, image.width, image.bands],
+                     dtype=np.uint8)
+    return Image.fromarray(arr)
+
 class STL10Pair(STL10):
     def __getitem__(self, index):
         img, target = self.data[index], self.labels[index]
@@ -219,8 +227,7 @@ class Imagenet_idx(ImageFolder):
 
     def __init__(self, root, transform=None, target_transform=None, class_to_idx=None):
         self.class_to_idx = class_to_idx
-        super(Imagenet_idx, self).__init__(root, transform, target_transform)
-
+        super(Imagenet_idx, self).__init__(root, transform, target_transform, loader=pyvips_loader)
     def __getitem__(self, index):
         """
         Args:
@@ -251,7 +258,7 @@ class Imagenet(ImageFolder):
 
     def __init__(self, root, transform=None, target_transform=None, class_to_idx=None):
         self.class_to_idx = class_to_idx
-        super(Imagenet, self).__init__(root, transform, target_transform)
+        super(Imagenet, self).__init__(root, transform, target_transform, loader=pyvips_loader)
 
     def __getitem__(self, index):
         """
@@ -283,7 +290,7 @@ class Imagenet_idx_pair(ImageFolder):
 
     def __init__(self, root, transform=None, target_transform=None, class_to_idx=None):
         self.class_to_idx = class_to_idx
-        super(Imagenet_idx_pair, self).__init__(root, transform, target_transform)
+        super(Imagenet_idx_pair, self).__init__(root, transform, target_transform, loader=pyvips_loader)
     def __getitem__(self, index):
         """
         Args:
@@ -316,7 +323,7 @@ class Imagenet_pair(ImageFolder):
 
     def __init__(self, root, transform=None, target_transform=None, class_to_idx=None):
         self.class_to_idx = class_to_idx
-        super(Imagenet_pair, self).__init__(root, transform, target_transform)
+        super(Imagenet_pair, self).__init__(root, transform, target_transform, loader=pyvips_loader)
 
     def __getitem__(self, index):
         """
@@ -351,7 +358,7 @@ class Imagenet_idx_pair_transformone(ImageFolder):
 
     def __init__(self, root, transform_simple=None, transform_hard=None, target_transform=None, class_to_idx=None):
         self.class_to_idx = class_to_idx
-        super(Imagenet_idx_pair_transformone, self).__init__(root, transform_simple, target_transform)
+        super(Imagenet_idx_pair_transformone, self).__init__(root, transform_simple, target_transform, loader=pyvips_loader)
         self.transform_hard = transform_hard
 
     def __getitem__(self, index):
