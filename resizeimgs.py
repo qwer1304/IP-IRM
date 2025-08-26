@@ -1,7 +1,7 @@
 import os
 from PIL import Image
 import argparse
-import tqdm
+from tqdm import tqdm
 
 def count_files(path):
     total = 0
