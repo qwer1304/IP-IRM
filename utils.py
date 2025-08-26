@@ -25,30 +25,33 @@ import re
 
 import argparse
 
-def parse_mixed(values, types):
-    """
-    Convert a list of strings to corresponding types.
-    
-    values: list of str (from argparse)
-    types: list of callables (e.g., [int, float, str, bool])
-    
-    Returns a list with converted values.
-    """
-    if len(values) != len(types):
-        raise argparse.ArgumentTypeError(
-            f"Expected {len(types)} values, got {len(values)}"
-        )
-    converted = []
-    for v, t in zip(values, types):
-        # special handling for bool
-        if t == bool:
-            converted.append(v.lower() in ["true", "1", "yes"])
-        else:
-            try:
+import argparse
+
+class ParseMixed(argparse.Action):
+    def __init__(self, option_strings, dest, types=None, **kwargs):
+        if types is None:
+            raise ValueError("You must provide a list of types")
+        self.types = types
+        super().__init__(option_strings, dest, **kwargs)
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        if len(values) != len(self.types):
+            raise argparse.ArgumentError(
+                self, f"Expected {len(self.types)} values, got {len(values)}"
+            )
+        converted = []
+        for v, t in zip(values, self.types):
+            if t is bool:
+                v = str(v).lower()
+                if v in ("true", "1", "yes", "y"):
+                    converted.append(True)
+                elif v in ("false", "0", "no", "n"):
+                    converted.append(False)
+                else:
+                    raise argparse.ArgumentError(self, f"Invalid bool: {v}")
+            else:
                 converted.append(t(v))
-            except Exception as e:
-                raise argparse.ArgumentTypeError(f"Cannot convert '{v}' to {t}: {e}")
-    return converted
+        setattr(namespace, self.dest, converted)
 
 def pretty_tensor_str(tensor, indent=0):
     """
