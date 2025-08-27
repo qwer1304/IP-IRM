@@ -930,7 +930,7 @@ def make_train_transform(image_size=64, randgray=True, normalize='CIFAR', gpu=Tr
         K.RandomHorizontalFlip(p=0.5),
         K.ColorJitter(0.4,0.4,0.4,0.1),
         K.RandomGrayscale(p=0.2) if randgray else nn.Identity(),
-        K.GaussianBlur((kernel_size,kernel_size), sigma=(0.1,2.0)),
+        K.RandomGaussianBlur((kernel_size,kernel_size), sigma=(0.1,2.0)),
         K.Normalize(mean=norm_mean, std=norm_std),
         data_format="CHW"
     )
