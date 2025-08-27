@@ -776,7 +776,7 @@ if __name__ == '__main__':
         if (epoch % args.test_freq == 0) or \
            ((epoch % args.val_freq == 0) and (args.dataset == 'ImageNet')) or \
            (epoch == epochs): # eval knn every test_freq/val_freq and last epochs
-                feauture_bank, feature_labels = get_feature_bank(net, memory_data_loader, args, progress=True, prefix="Evaluate:"):
+                feauture_bank, feature_labels = get_feature_bank(net, memory_data_loader, args, progress=True, prefix="Evaluate:")
 
         if (epoch % args.test_freq == 0) or (epoch == epochs): # eval knn every test_freq epochs
             test_acc_1, test_acc_5 = test(model, feauture_bank, feature_labels, test_loader, args, progress=True, prefix="Test:")
