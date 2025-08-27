@@ -314,7 +314,10 @@ def train_update_split(net, update_loader, soft_split, random_init=False, args=N
 
 def get_feature_bank(net, memory_data_loader, args, progress=False, prefix="Test:"):
     net.eval()
+    
+    transform = memory_data_loader.dataset.transform
     feature_bank = []
+    
     with torch.no_grad():
         # generate feature bank
         bar_format = '{l_bar}{bar:' + str(args.bar) + '}{r_bar}' #{bar:-' + str(args.bar) + 'b}'
@@ -354,12 +357,9 @@ def get_feature_bank(net, memory_data_loader, args, progress=False, prefix="Test
     return feature_bank, feature_labels
     
 # test for one epoch, use weighted knn to find the most similar images' label to assign the test image
-def test(net, memory_data_loader, feature_bank, feature_kabels, args, progress=False, prefix="Test:"):
+def test(net, feature_bank, feature_labels, test_data_loader, args, progress=False, prefix="Test:"):
     net.eval()
-    transform = memory_data_loader.dataset.transform
-    
-    transform = memory_data_loader.dataset.transform
-    
+       
     total_top1, total_top5, total_num = 0.0, 0.0, 0
     with torch.no_grad():
         # loop test data to predict the label by weighted knn search
