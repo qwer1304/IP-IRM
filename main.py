@@ -312,15 +312,9 @@ def train_update_split(net, update_loader, soft_split, random_init=False, args=N
     np.save("results/{}/{}/{}_{}{}".format(args.dataset, args.name, 'GroupResults', epoch, ".txt"), updated_split.cpu().numpy())
     return updated_split
 
-
-
-# test for one epoch, use weighted knn to find the most similar images' label to assign the test image
-def test(net, memory_data_loader, test_data_loader, args, progress=False, prefix="Test:"):
+def get_feature_bank(net, memory_data_loader, args, progress=False, prefix="Test:"):
     net.eval()
-    
-    transform = memory_data_loader.dataset.transform
-    
-    total_top1, total_top5, total_num, feature_bank = 0.0, 0.0, 0, []
+    feature_bank = []
     with torch.no_grad():
         # generate feature bank
         bar_format = '{l_bar}{bar:' + str(args.bar) + '}{r_bar}' #{bar:-' + str(args.bar) + 'b}'
@@ -357,6 +351,17 @@ def test(net, memory_data_loader, test_data_loader, args, progress=False, prefix
                 labels = dataset.targets        
         feature_labels = torch.tensor(labels, device=feature_bank.device)
 
+    return feature_bank, feature_labels
+    
+# test for one epoch, use weighted knn to find the most similar images' label to assign the test image
+def test(net, memory_data_loader, feature_bank, feature_kabels, args, progress=False, prefix="Test:"):
+    net.eval()
+    transform = memory_data_loader.dataset.transform
+    
+    transform = memory_data_loader.dataset.transform
+    
+    total_top1, total_top5, total_num = 0.0, 0.0, 0
+    with torch.no_grad():
         # loop test data to predict the label by weighted knn search
         bar_format = '{l_bar}{bar:' + str(args.bar) + '}{r_bar}' #{bar:-' + str(args.bar) + 'b}'
         
@@ -739,9 +744,10 @@ if __name__ == '__main__':
     if args.evaluate:
         print(f"Staring evaluation name: {args.name}")
         print('eval on val data')
-        val_acc_1, val_acc_5 = test(model, memory_loader, val_loader, args, progress=True, prefix="Val:")
+        feauture_bank, feature_labels = get_feature_bank(net, memory_data_loader, args, progress=True, prefix="Evaluate:"):
+        val_acc_1, val_acc_5 = test(model, feauture_bank, feature_labels, val_loader, args, progress=True, prefix="Val:")
         print('eval on test data')
-        test_acc_1, test_acc_5 = test(model, memory_loader, test_loader, args, progress=True, prefix="Test:")
+        test_acc_1, test_acc_5 = test(model, feauture_bank, feature_labels, test_loader, args, progress=True, prefix="Test:")
         exit()
 
     # update partition for the first time
@@ -766,16 +772,21 @@ if __name__ == '__main__':
             if epoch % args.maximize_iter == 0: # Maximize Step
                 updated_split = train_update_split(model, update_loader, updated_split, random_init=args.random_init, args=args)
                 updated_split_all.append(updated_split)
+       
+        if (epoch % args.test_freq == 0) or \
+           ((epoch % args.val_freq == 0) and (args.dataset == 'ImageNet')) or \
+           (epoch == epochs): # eval knn every test_freq/val_freq and last epochs
+                feauture_bank, feature_labels = get_feature_bank(net, memory_data_loader, args, progress=True, prefix="Evaluate:"):
 
         if (epoch % args.test_freq == 0) or (epoch == epochs): # eval knn every test_freq epochs
-            test_acc_1, test_acc_5 = test(model, memory_loader, test_loader, args, progress=True, prefix="Test:")
+            test_acc_1, test_acc_5 = test(model, feauture_bank, feature_labels, test_loader, args, progress=True, prefix="Test:")
             txt_write = open("results/{}/{}/{}".format(args.dataset, args.name, 'knn_result.txt'), 'a')
             txt_write.write('\ntest_acc@1: {}, test_acc@5: {}'.format(test_acc_1, test_acc_5))
             torch.save(model.state_dict(), 'results/{}/{}/model_{}.pth'.format(args.dataset, args.name, epoch))
 
         if ((epoch % args.val_freq == 0) or (epoch == epochs)) and (args.dataset == 'ImageNet'):
             # evaluate on validation set
-            acc1, _ = test(model, memory_loader, val_loader, args, progress=True, prefix="Val:")
+            acc1, _ = test(model, feauture_bank, feature_labels, val_loader, args, progress=True, prefix="Val:")
 
             # remember best acc@1 & best epoch and save checkpoint
             is_best = acc1 > best_acc1
