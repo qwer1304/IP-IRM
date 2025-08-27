@@ -54,10 +54,23 @@ class Net(nn.Module):
 
 
 # train or test for one epoch
-def train_val(net, data_loader, train_optimizer, args, dataset="test"):
+def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test"):
     is_train = train_optimizer is not None
     net.train() if is_train else net.eval()
-
+    
+    transform = data_loader.dataset.transform
+    target_transform = data_loader.dataset.target_transform
+    
+    gradients_batch_size = args.gradients_batch_size
+    loader_batch_size = batch_size
+    gpu_batch_size = args.micro_batch_size
+    
+    loader_accum_steps = gradients_batch_size // loader_batch_size 
+    gpu_accum_steps = loader_batch_size // gpu_batch_size 
+    
+    loader_step = 0
+    total_samples = len(data_loader.dataset)
+    
     total_loss, total_correct_1, total_correct_5, total_num = 0.0, 0.0, 0.0, 0
     bar_format = '{l_bar}{bar:' + str(args.bar) + '}{r_bar}' #{bar:-' + str(args.bar) + 'b}'
     data_bar = tqdm(data_loader,
@@ -67,7 +80,6 @@ def train_val(net, data_loader, train_optimizer, args, dataset="test"):
             bar_format=bar_format,          # request bar width
             )
     with (torch.enable_grad() if is_train else torch.no_grad()):
-        target_transform = data_loader.dataset.target_transform
         if args.extract_features:
             data_loader.dataset.target_transform = None
 
@@ -77,38 +89,62 @@ def train_val(net, data_loader, train_optimizer, args, dataset="test"):
         target_list = []
         target_raw_list = []
 
+        if is_train:
+            train_optimizer.zero_grad()  # clear gradients at the beginning
+
         for data, target in data_bar:
-            data, target = data.cuda(non_blocking=True), target.cuda(non_blocking=True)
+            # Split into micro-batches
+            data_chunks = data.chunk(gpu_accum_steps)
+            target_chunks = target.chunk(gpu_accum_steps)
 
-            target_raw = target
-            if args.extract_features and target_transform is not None:
-                target = target_transform(target_raw).cuda(non_blocking=True)
+            for data_chunk, target_chunk in zip(data_chunks, target_chunks):
+                data, target = data_chunk.cuda(non_blocking=True), target_chunk.cuda(non_blocking=True)
 
-            out, feature = net(data)
-            loss = loss_criterion(out, target)
+                target_raw = target
+                if args.extract_features and target_transform is not None:
+                    target = target_transform(target_raw).cuda(non_blocking=True)
 
-            if is_train:
-                train_optimizer.zero_grad()
-                loss.backward()
-                train_optimizer.step()
+                if transform is not None:
+                    data = transform(data)
 
-            total_num += data.size(0)
-            total_loss += loss.item() * data.size(0)
-            prediction = torch.argsort(out, dim=-1, descending=True)
-            total_correct_1 += torch.sum((prediction[:, 0:1] == target.unsqueeze(dim=-1)).any(dim=-1).float()).item()
-            total_correct_5 += torch.sum((prediction[:, 0:5] == target.unsqueeze(dim=-1)).any(dim=-1).float()).item()
+                out, feature = net(data)
+                loss = loss_criterion(out, target)
+
+                loss = loss / gpu_accum_steps / loader_accum_steps  # scale loss to account for accumulation
+
+                if is_train:
+                    loss.backward() # adds gradients to accumulated ones
+            
+                total_num += data.size(0)
+                total_loss += loss.item() * data.size(0)
+                prediction = torch.argsort(out, dim=-1, descending=True)
+                total_correct_1 += torch.sum((prediction[:, 0:1] == target.unsqueeze(dim=-1)).any(dim=-1).float()).item()
+                total_correct_5 += torch.sum((prediction[:, 0:5] == target.unsqueeze(dim=-1)).any(dim=-1).float()).item()
+
+                # compute output
+                if args.extract_features:
+                    feature_list.append(feature)
+                    target_list.append(target)
+                    target_raw_list.append(target_raw)
+                    pred_labels_list.append(prediction)
+                    pred_scores_list.append(out)
+
+                # free memory of micro-batch
+                del data, target, loss
+                torch.cuda.empty_cache()
+
+            # end for data_chunk, target_chunk in zip(data_chunks, target_chunks):
+    
+            loader_step += 1
+            if (loader_step * loader_batch_size) == gradients_batch_size:
+                loader_step = 0
+                if is_train:
+                    train_optimizer.step()
+                    train_optimizer.zero_grad()  # clear gradients at beginning of next gradients batch
 
             data_bar.set_description('{} Epoch: [{}/{}] Loss: {:.4f} Acc@1: {:.2f}% Acc@5: {:.2f}%'
                                      .format('Train' if is_train else 'Test', epoch, epochs, total_loss / total_num,
                                              total_correct_1 / total_num * 100, total_correct_5 / total_num * 100))
-            # compute output
-            if args.extract_features:
-                feature_list.append(feature)
-                target_list.append(target)
-                target_raw_list.append(target_raw)
-                pred_labels_list.append(prediction)
-                pred_scores_list.append(out)
-
         # end for data, target in data_bar:
 
         if feature_list:
@@ -142,10 +178,14 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Linear Evaluation')
     parser.add_argument('--model_path', type=str, default='results/model_400.pth',
                         help='The pretrained model path')
-    parser.add_argument('--dl_tr', default=[256, 4, 2, True], type=int, nargs=4, 
-                        metavar='DataLoader pars [batch_size, number_workers, prefetch_factor, persitent_workers]', help='Training minimization DataLoader pars')
-    parser.add_argument('--dl_te', default=[3096, 4, 2, True], type=int, nargs=4, 
+    parser.add_argument('--dl_tr', default=[256, 4, 2, True], nargs=4, type=str,
+                        action=utils.ParseMixed, types=[int, int, int, bool],
+                        metavar='DataLoader pars [batch_size, number_workers, prefetch_factor, persistent_workers]', help='Training minimization DataLoader pars')
+    parser.add_argument('--dl_te', default=[3096, 4, 2, 1], nargs=4, type=str,
+                        action=utils.ParseMixed, types=[int, int, int, bool],
                         metavar='DataLoader pars [batch_size, number_workers, prefetch_factor, persistent_workers]', help='Testing/Validation/Memory DataLoader pars')
+    parser.add_argument('--micro_batch_size', default=32, type=int, help='batch size on gpu')
+    parser.add_argument('--gradients_batch_size', default=256, type=int, help='batch size of gradients accumulation')
     parser.add_argument('--epochs', type=int, default=100, help='Number of sweeps over the dataset to train')
     parser.add_argument('--dataset', type=str, default='STL', choices=['STL', 'CIFAR10', 'CIFAR100', 'ImageNet'], help='experiment dataset')
     parser.add_argument('--data', metavar='DIR', help='path to dataset')
@@ -262,16 +302,16 @@ if __name__ == '__main__':
 
     if args.evaluate:
         epoch = epochs
-        train_loss, train_acc_1, train_acc_5 = train_val(model, train_loader, None, args, dataset="train")
-        test_loss, test_acc_1, test_acc_5 = train_val(model, test_loader, None, args, dataset="test")
+        train_loss, train_acc_1, train_acc_5 = train_val(model, train_loader, None, tr_bs, args, dataset="train")
+        test_loss, test_acc_1, test_acc_5 = train_val(model, test_loader, None, te_bs, args, dataset="test")
         if args.txt:
             txt_write = open("downstream/{}/{}/{}".format(args.dataset, args.name, 'result.txt'), 'a')
             txt_write.write('\ntest_loss: {}, test_acc@1: {}, test_acc@5: {}'.format(test_loss, test_acc_1, test_acc_5))
     
     else:
         for epoch in range(1, epochs + 1):
-            train_loss, train_acc_1, train_acc_5 = train_val(model, train_loader, optimizer, args, dataset="train")
-            test_loss, test_acc_1, test_acc_5 = train_val(model, test_loader, None, args, dataset="test")
+            train_loss, train_acc_1, train_acc_5 = train_val(model, train_loader, optimizer, tr_bs, args, dataset="train")
+            test_loss, test_acc_1, test_acc_5 = train_val(model, test_loader, None, te_bs, args, dataset="test")
 
             if args.txt:
                 txt_write = open("downstream/{}/{}/{}".format(args.dataset, args.name, 'result.txt'), 'a')

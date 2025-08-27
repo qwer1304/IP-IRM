@@ -30,8 +30,17 @@ def train(net, data_loader, train_optimizer, temperature, debiased, tau_plus, ba
     transform = data_loader.dataset.transform
     target_transform = data_loader.dataset.target_transform
     
+    gradients_batch_size = args.gradients_batch_size
+    loader_batch_size = batch_size
+    gpu_batch_size = args.micro_batch_size
+    
+    loader_accum_steps = gradients_batch_size // loader_batch_size 
+    gpu_accum_steps = loader_batch_size // gpu_batch_size 
+    
+    loader_step = 0
+    total_samples = len(data_loader.dataset)
+    
     total_loss, total_num = 0.0, 0
-    accum_steps = batch_size // args.micro_batch_size  # number of micro-batches per weight update
     bar_format = '{l_bar}{bar:' + str(args.bar) + '}{r_bar}' #{bar:-' + str(args.bar) + 'b}'
     train_bar = tqdm(data_loader,
             total=len(data_loader),
@@ -39,15 +48,16 @@ def train(net, data_loader, train_optimizer, temperature, debiased, tau_plus, ba
             dynamic_ncols=False,            # disable autosizing
             bar_format=bar_format,          # request bar width
             )
-    for pos_1, pos_2, target, idx in train_bar:
+    
+    train_optimizer.zero_grad()
 
-        train_optimizer.zero_grad()
+    for pos_1, pos_2, target, idx in train_bar:
         
         # Split into micro-batches
-        pos_1_chunks = pos_1.chunk(accum_steps)
-        pos_2_chunks = pos_2.chunk(accum_steps)
-        target_chunks = target.chunk(accum_steps)
-        idx_chunks = idx.chunk(accum_steps)
+        pos_1_chunks = pos_1.chunk(gpu_accum_steps)
+        pos_2_chunks = pos_2.chunk(gpu_accum_steps)
+        target_chunks = target.chunk(gpu_accum_steps)
+        idx_chunks = idx.chunk(gpu_accum_steps)
 
         for pos_1_chunk, pos_2_chunk, target_chunk, ids_chunk in zip(pos_1_chunks, pos_2_chunks, target_chunks, idx_chunks):
             pos_1, pos_2, target = pos_1_chunk.cuda(non_blocking=True), pos_2_chunk.cuda(non_blocking=True), target_chunk
@@ -64,7 +74,7 @@ def train(net, data_loader, train_optimizer, temperature, debiased, tau_plus, ba
             # neg score
             out = torch.cat([out_1, out_2], dim=0)
             neg = torch.exp(torch.mm(out, out.t().contiguous()) / temperature)
-            mask = get_negative_mask(args.micro_batch_size).cuda()
+            mask = get_negative_mask(args.micro_batch_size).cuda(non_blocking=True)
             neg = neg.masked_select(mask).view(2 * args.micro_batch_size, -1)
 
             # pos score
@@ -82,7 +92,7 @@ def train(net, data_loader, train_optimizer, temperature, debiased, tau_plus, ba
 
             # contrastive loss
             loss = (- torch.log(pos / (pos + Ng) )).mean()
-            loss = loss / accum_steps  # scale loss to account for accumulation
+            loss = loss / gpu_accum_steps / loader_accum_steps  # scale loss to account for accumulation
 
             loss.backward()
 
@@ -93,7 +103,11 @@ def train(net, data_loader, train_optimizer, temperature, debiased, tau_plus, ba
             del pos_1_chunk, pos_2_chunk, target_chunk, idx_chunk, loss
             torch.cuda.empty_cache()
 
-        train_optimizer.step()
+        loader_step += 1
+        if (loader_step * loader_batch_size) == gradients_batch_size:
+            train_optimizer.step()
+            loader_step = 0
+            train_optimizer.zero_grad()  # clear gradients at beginning of next gradients batch
 
         train_bar.set_description('Train Epoch: [{}/{}] Loss: {:.4f}'.format(epoch, epochs, total_loss / total_num))
 
@@ -126,7 +140,6 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
             bar_format=bar_format,          # request bar width
             )
 
-        
     train_optimizer.zero_grad()  # clear gradients at the beginning
         
     for batch_index, data_env in enumerate(train_bar):
@@ -222,7 +235,8 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
             del pos_1_all_chunk, pos_2_all_chunk, indexs_chunk, loss
             torch.cuda.empty_cache()
         
-        # end 
+        # end for pos_1_all_chunk, pos_2_all_chunk, indexs_chunk in zip(pos_1_all_chunks, pos_2_all_chunks, indexs_chunks):
+
         loader_step += 1
         if (loader_step * loader_batch_size) == gradients_batch_size:
             train_optimizer.step()
@@ -238,6 +252,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
             utils.write_log('Train Epoch: [{:d}/{:d}] [{:d}/{:d}]  Loss: {:.4f}  LR: {:.4f}  PW {:.4f}'
                             .format(epoch, epochs, batch_index * batch_size + len(pos_1_all), len(data_loader.dataset), total_loss/total_num,
                                     train_optimizer.param_groups[0]['lr'], penalty_weight), log_file=log_file)
+    # end for batch_index, data_env in enumerate(train_bar):
 
     return total_loss / total_num
 
@@ -304,7 +319,6 @@ def test(net, memory_data_loader, test_data_loader, args, progress=False, prefix
     net.eval()
     
     transform = memory_data_loader.dataset.transform
-    target_transform = memory_data_loader.dataset.target_transform
     
     total_top1, total_top5, total_num, feature_bank = 0.0, 0.0, 0, []
     with torch.no_grad():
@@ -316,22 +330,22 @@ def test(net, memory_data_loader, test_data_loader, args, progress=False, prefix
                 ncols=args.ncols,               # total width available
                 dynamic_ncols=False,            # disable autosizing
                 bar_format=bar_format,          # request bar width
-                desc='test(): Feature extracting'
+                desc='test(), memory: Feature extracting'
             )
         else:
             feature_bar = memory_data_loader
-        for data, _, target in feature_bar:
+        for data, _, _ in feature_bar:
             data = data.cuda(non_blocking=True)
 
             if transform is not None:
                 data = transform(data)
-            if target_transform is not None:
-                target = target_transform(target)
                 
             feature, out = net(data)
             feature_bank.append(feature)
+        #end for data, _, _ in feature_bar:
+
         # [D, N]
-        feature_bank = torch.cat(feature_bank, dim=0).t().contiguous()
+        feature_bank = torch.cat(feature_bank, dim=0).t().contiguous() # places feature_bank on cuda
         # [N]
         dataset = memory_data_loader.dataset
         if hasattr(dataset, "labels"):
@@ -352,10 +366,10 @@ def test(net, memory_data_loader, test_data_loader, args, progress=False, prefix
                 ncols=args.ncols,               # total width available
                 dynamic_ncols=False,            # disable autosizing
                 bar_format=bar_format,          # request bar width
+                desc='test(), test: Feature extracting'
             )
         else:
            test_bar = test_data_loader
-
     
         transform = test_data_loader.dataset.transform
         target_transform = test_data_loader.dataset.target_transform
@@ -383,7 +397,7 @@ def test(net, memory_data_loader, test_data_loader, args, progress=False, prefix
 
             total_num += data.size(0)
             # compute cos similarity between each feature vector and feature bank ---> [B, N]
-            sim_matrix = torch.mm(feature, feature_bank)
+            sim_matrix = torch.mm(feature, feature_bank) # places sim_matrix on cuda
             # [B, K]
             sim_weight, sim_indices = sim_matrix.topk(k=k, dim=-1)
             # [B, K]

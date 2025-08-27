@@ -504,7 +504,7 @@ def info_nce_loss_update(features, batch_size, temperature):
 
 def penalty(logits, y, loss_function, mode='w', batchsize=None):
     if mode == 'w':
-        scale = torch.ones((1, logits.size(-1))).cuda().requires_grad_()
+        scale = torch.ones((1, logits.size(-1))).cuda(non_blocking=True).requires_grad_()
         try:
             loss = loss_function(logits * scale, y)
         except:
@@ -596,7 +596,7 @@ def auto_split(net, update_loader, soft_split_all, temperature, irm_temp, loss_m
                     # here we change the contrastive loss to the soft version to enable the sample weight
                     cont_loss_env = soft_contrastive_loss(logits_cont, labels, loss_weight, mode=loss_mode, nonorm=nonorm)
 
-                    scale = torch.ones((1, logits.size(-1))).cuda().requires_grad_()
+                    scale = torch.ones((1, logits.size(-1))).cuda(non_blocking=True).requires_grad_()
                     logits_pen = logits / irm_temp
                     cont_loss_env_scale = soft_contrastive_loss(logits_pen*scale, labels, loss_weight, mode=loss_mode, nonorm=nonorm)
                     penalty_irm = torch.autograd.grad(cont_loss_env_scale, [scale], create_graph=True)[0]
@@ -696,7 +696,7 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
         risk_all_list, risk_cont_all_list, risk_penalty_all_list, risk_constrain_all_list, training_num = [],[],[],[], 0
 
         for feature_1, feature_2, idx in trainloader:
-            feature_1, feature_2 = feature_1.cuda(), feature_2.cuda()
+            feature_1, feature_2 = feature_1.cuda(non_blocking=True), feature_2.cuda(non_blocking=True)
             loss_cont_list, loss_penalty_list = [], []
             training_num += len(feature_1)
 
@@ -709,7 +709,7 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
                     logits_cont = logits / temperature
                     cont_loss_env = soft_contrastive_loss(logits_cont, labels, loss_weight, mode=loss_mode, nonorm=nonorm)
 
-                    scale = torch.ones((1, logits.size(-1))).cuda().requires_grad_()
+                    scale = torch.ones((1, logits.size(-1))).cuda(non_blocking=True).requires_grad_()
                     logits_pen = logits / irm_temp
                     cont_loss_env_scale = soft_contrastive_loss(logits_pen*scale, labels, loss_weight, mode=loss_mode, nonorm=nonorm)
                     penalty_irm = torch.autograd.grad(cont_loss_env_scale, [scale], create_graph=True)[0]
