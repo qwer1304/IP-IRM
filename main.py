@@ -106,9 +106,18 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
 
     transform = data_loader.dataset.transform
     target_transform = data_loader.dataset.target_transform
+
+    gradients_batch_size = args.gradients_batch_size
+    loader_batch_size = batch_size
+    gpu_batch_size = args.micro_batch_size
+    
+    loader_accum_steps = gradients_batch_size // loader_batch_size 
+    gpu_accum_steps = loader_batch_size // gpu_batch_size 
+    
+    loader_step = 0
+    total_samples = len(data_loader.dataset)
     
     total_loss, total_num = 0.0, 0
-    accum_steps = batch_size // args.micro_batch_size  # number of micro-batches per weight update
     bar_format = '{l_bar}{bar:' + str(args.bar) + '}{r_bar}' #{bar:-' + str(args.bar) + 'b}'
     train_bar = tqdm(data_loader,
             total=len(data_loader),
@@ -117,16 +126,17 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
             bar_format=bar_format,          # request bar width
             )
 
+        
+    train_optimizer.zero_grad()  # clear gradients at the beginning
+        
     for batch_index, data_env in enumerate(train_bar):
         # extract all feature
         pos_1_all, pos_2_all, indexs = data_env[0], data_env[1], data_env[-1]
-        
-        train_optimizer.zero_grad()  # clear gradients at start of each batch
-        
+
         # Split into micro-batches
-        pos_1_all_chunks = pos_1_all.chunk(accum_steps)
-        pos_2_all_chunks = pos_2_all.chunk(accum_steps)
-        indexs_chunks = indexs.chunk(accum_steps)
+        pos_1_all_chunks = pos_1_all.chunk(gpu_accum_steps)
+        pos_2_all_chunks = pos_2_all.chunk(gpu_accum_steps)
+        indexs_chunks = indexs.chunk(gpu_accum_steps)
         
         for pos_1_all_chunk, pos_2_all_chunk, indexs_chunk in zip(pos_1_all_chunks, pos_2_all_chunks, indexs_chunks):
         
@@ -201,9 +211,9 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
                 # Rescale the entire loss to keep gradients in a reasonable range
                 loss /= penalty_weight
                 
-            loss = loss / accum_steps  # scale loss to account for accumulation
+            loss = loss / gpu_accum_steps / loader_accum_steps  # scale loss to account for accumulation
 
-            loss.backward()
+            loss.backward() # adds gradients to accumulated ones
             
             total_num += pos_1_all_chunk.size(0)
             total_loss += loss.item() * pos_1_all_chunk.size(0)
@@ -213,7 +223,11 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
             torch.cuda.empty_cache()
         
         # end 
-        train_optimizer.step()
+        loader_step += 1
+        if (loader_step * loader_batch_size) == gradients_batch_size:
+            train_optimizer.step()
+            loader_step = 0
+            train_optimizer.zero_grad()  # clear gradients at beginning of next gradients batch
 
         train_bar.set_description('Train Epoch: [{}/{}] [{trained_samples}/{total_samples}]  Loss: {:.4f}  LR: {:.4f}  PW {:.4f}'
             .format(epoch, epochs, total_loss/total_num, train_optimizer.param_groups[0]['lr'], penalty_weight,
@@ -447,6 +461,7 @@ if __name__ == '__main__':
                         action=utils.ParseMixed, types=[int, int, int, bool],
                         metavar='DataLoader pars [batch_size, number_workers, prefetch_factor, persistent_workers]', help='Testing/Validation/Memory DataLoader pars')
     parser.add_argument('--micro_batch_size', default=32, type=int, help='batch size on gpu')
+    parser.add_argument('--gradients_batch_size', default=256, type=int, help='batch size of gradients accumulation')
     parser.add_argument('--epochs', default=200, type=int, help='Number of sweeps over the dataset to train')
     parser.add_argument('--debiased', default=False, type=bool, help='Debiased contrastive loss or standard loss')
     parser.add_argument('--dataset', type=str, default='STL', choices=['STL', 'CIFAR10', 'CIFAR100', 'ImageNet'], help='experiment dataset')
