@@ -674,7 +674,7 @@ if __name__ == '__main__':
             pin_memory=True, persistent_workers=te_pw)
         test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
             pin_memory=True, persistent_workers=te_pw)
-        val_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
+        val_loader = DataLoader(val_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
             pin_memory=True, persistent_workers=te_pw)
 
     # model setup and optimizer config
