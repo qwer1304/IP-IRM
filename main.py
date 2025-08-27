@@ -744,7 +744,7 @@ if __name__ == '__main__':
     if args.evaluate:
         print(f"Staring evaluation name: {args.name}")
         print('eval on val data')
-        feauture_bank, feature_labels = get_feature_bank(net, memory_data_loader, args, progress=True, prefix="Evaluate:"):
+        feauture_bank, feature_labels = get_feature_bank(net, memory_data_loader, args, progress=True, prefix="Evaluate:")
         val_acc_1, val_acc_5 = test(model, feauture_bank, feature_labels, val_loader, args, progress=True, prefix="Val:")
         print('eval on test data')
         test_acc_1, test_acc_5 = test(model, feauture_bank, feature_labels, test_loader, args, progress=True, prefix="Test:")
