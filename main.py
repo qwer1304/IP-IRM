@@ -27,6 +27,7 @@ def get_negative_mask(batch_size):
 def train(net, data_loader, train_optimizer, temperature, debiased, tau_plus, batch_size, args):
     net.train()
     total_loss, total_num = 0.0, 0
+    accum_steps = batch_size // args.micro_batch_size  # number of micro-batches per weight update
     bar_format = '{l_bar}{bar:' + str(args.bar) + '}{r_bar}' #{bar:-' + str(args.bar) + 'b}'
     train_bar = tqdm(data_loader,
             total=len(data_loader),
@@ -35,38 +36,53 @@ def train(net, data_loader, train_optimizer, temperature, debiased, tau_plus, ba
             bar_format=bar_format,          # request bar width
             )
     for pos_1, pos_2, target, idx in train_bar:
-        pos_1, pos_2 = pos_1.cuda(non_blocking=True), pos_2.cuda(non_blocking=True)
-        feature_1, out_1 = net(pos_1)
-        feature_2, out_2 = net(pos_2)
-
-        # neg score
-        out = torch.cat([out_1, out_2], dim=0)
-        neg = torch.exp(torch.mm(out, out.t().contiguous()) / temperature)
-        mask = get_negative_mask(batch_size).cuda()
-        neg = neg.masked_select(mask).view(2 * batch_size, -1)
-
-        # pos score
-        pos = torch.exp(torch.sum(out_1 * out_2, dim=-1) / temperature)
-        pos = torch.cat([pos, pos], dim=0)
-
-        # estimator g()
-        if debiased:
-            N = batch_size * 2 - 2
-            Ng = (-tau_plus * N * pos + neg.sum(dim = -1)) / (1 - tau_plus)
-            # constrain (optional)
-            Ng = torch.clamp(Ng, min = N * np.e**(-1 / temperature))
-        else:
-            Ng = neg.sum(dim=-1)
-
-        # contrastive loss
-        loss = (- torch.log(pos / (pos + Ng) )).mean()
 
         train_optimizer.zero_grad()
-        loss.backward()
-        train_optimizer.step()
+        
+        # Split into micro-batches
+        pos_1_chunks = pos_1.chunk(accum_steps)
+        pos_2_chunks = pos_2.chunk(accum_steps)
+        target_chunks = target.chunk(accum_steps)
+        idx_chunks = idx.chunk(accum_steps)
 
-        total_num += batch_size
-        total_loss += loss.item() * batch_size
+        for pos_1_chunk, pos_2_chunk, target_chunk, ids_chunk in zip(pos_1_chunks, pos_2_chunks, target_chunks, idx_chunks):
+            pos_1, pos_2 = pos_1_chunk.cuda(non_blocking=True), pos_2_chunk.cuda(non_blocking=True)
+            feature_1, out_1 = net(pos_1)
+            feature_2, out_2 = net(pos_2)
+
+            # neg score
+            out = torch.cat([out_1, out_2], dim=0)
+            neg = torch.exp(torch.mm(out, out.t().contiguous()) / temperature)
+            mask = get_negative_mask(args.micro_batch_size).cuda()
+            neg = neg.masked_select(mask).view(2 * args.micro_batch_size, -1)
+
+            # pos score
+            pos = torch.exp(torch.sum(out_1 * out_2, dim=-1) / temperature)
+            pos = torch.cat([pos, pos], dim=0)
+
+            # estimator g()
+            if debiased:
+                N = batch_size * 2 - 2
+                Ng = (-tau_plus * N * pos + neg.sum(dim = -1)) / (1 - tau_plus)
+                # constrain (optional)
+                Ng = torch.clamp(Ng, min = N * np.e**(-1 / temperature))
+            else:
+                Ng = neg.sum(dim=-1)
+
+            # contrastive loss
+            loss = (- torch.log(pos / (pos + Ng) )).mean()
+            loss = loss / accum_steps  # scale loss to account for accumulation
+
+            loss.backward()
+
+            total_num += args.micro_batch_size
+            total_loss += loss.item() * args.micro_batch_size
+
+            # free memory of micro-batch
+            del pos_1_chunk, pos_2_chunk, target_chunk, idx_chunk, loss
+            torch.cuda.empty_cache()
+
+        train_optimizer.step()
 
         train_bar.set_description('Train Epoch: [{}/{}] Loss: {:.4f}'.format(epoch, epochs, total_loss / total_num))
 
@@ -77,6 +93,7 @@ def train(net, data_loader, train_optimizer, temperature, debiased, tau_plus, ba
 def train_env(net, data_loader, train_optimizer, temperature, updated_split, batch_size, args):
     net.train()
     total_loss, total_num = 0.0, 0
+    accum_steps = batch_size // args.micro_batch_size  # number of micro-batches per weight update
     bar_format = '{l_bar}{bar:' + str(args.bar) + '}{r_bar}' #{bar:-' + str(args.bar) + 'b}'
     train_bar = tqdm(data_loader,
             total=len(data_loader),
@@ -88,76 +105,92 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
     for batch_index, data_env in enumerate(train_bar):
         # extract all feature
         pos_1_all, pos_2_all, indexs = data_env[0], data_env[1], data_env[-1]
-        feature_1_all, out_1_all = net(pos_1_all.cuda(non_blocking=True))
-        feature_2_all, out_2_all = net(pos_2_all.cuda(non_blocking=True))
+        
+        train_optimizer.zero_grad()  # clear gradients at start of each batch
+        
+        # Split into micro-batches
+        pos_1_all_chunks = pos_1_all.chunk(accum_steps)
+        pos_2_all_chunks = pos_2_all.chunk(accum_steps)
+        indexs_chunks = indexs.chunk(accum_steps)
+        
+        for pos_1_all_chunk, pos_2_all_chunk, indexs_chunk in zip(pos_1_all_chunks, pos_2_all_chunks, indexs_chunks):
+            feature_1_all, out_1_all = net(pos_1_all_chunk.cuda(non_blocking=True))
+            feature_2_all, out_2_all = net(pos_2_all_chunk.cuda(non_blocking=True))
 
-        if args.keep_cont: # global contrastive loss (1st partition)
-            logits_all, labels_all = utils.info_nce_loss(torch.cat([out_1_all, out_2_all], dim=0), out_1_all.size(0), temperature=temperature)
-            loss_original = torch.nn.CrossEntropyLoss()(logits_all, labels_all)
+            if args.keep_cont: # global contrastive loss (1st partition)
+                logits_all, labels_all = utils.info_nce_loss(torch.cat([out_1_all, out_2_all], dim=0), out_1_all.size(0), temperature=temperature)
+                loss_original = torch.nn.CrossEntropyLoss()(logits_all, labels_all)
 
-        env_contrastive, env_penalty = [], []
+            env_contrastive, env_penalty = [], []
 
-        if isinstance(updated_split, list): # if retain previous partitions
-            assert args.retain_group
-            for updated_split_each in updated_split:
+            if isinstance(updated_split, list): # if retain previous partitions
+                assert args.retain_group
+                for updated_split_each in updated_split:
+                    for env in range(args.env_num):
+
+                        out_1, out_2 = utils.assign_features(out_1_all, out_2_all, indexs_chunk, updated_split_each, env)
+                        # contrastive loss
+                        logits, labels = utils.info_nce_loss(torch.cat([out_1, out_2], dim=0), out_1.size(0), temperature=1.0)
+                        logits_cont = logits / temperature
+
+                        loss = torch.nn.CrossEntropyLoss()(logits_cont, labels)
+                        # penalty
+                        logits_pen = logits / args.irm_temp
+                        penalty_score = utils.penalty(logits_pen, labels, torch.nn.CrossEntropyLoss(), mode=args.ours_mode)
+
+                        # collect it into env dict
+                        env_contrastive.append(loss)
+                        env_penalty.append(penalty_score)
+
+            else:
                 for env in range(args.env_num):
 
-                    out_1, out_2 = utils.assign_features(out_1_all, out_2_all, indexs, updated_split_each, env)
+                    out_1, out_2 = utils.assign_features(out_1_all, out_2_all, indexs_chunk, updated_split, env)
+
                     # contrastive loss
                     logits, labels = utils.info_nce_loss(torch.cat([out_1, out_2], dim=0), out_1.size(0), temperature=1.0)
                     logits_cont = logits / temperature
+                    logits_pen = logits / args.irm_temp
 
                     loss = torch.nn.CrossEntropyLoss()(logits_cont, labels)
                     # penalty
-                    logits_pen = logits / args.irm_temp
                     penalty_score = utils.penalty(logits_pen, labels, torch.nn.CrossEntropyLoss(), mode=args.ours_mode)
 
                     # collect it into env dict
                     env_contrastive.append(loss)
                     env_penalty.append(penalty_score)
 
-        else:
-            for env in range(args.env_num):
+            loss_cont = torch.stack(env_contrastive).mean()
+            if args.keep_cont:
+                loss_cont += loss_original
 
-                out_1, out_2 = utils.assign_features(out_1_all, out_2_all, indexs, updated_split, env)
+            if args.increasing_weight:
+                penalty_weight = utils.increasing_weight(0, args.penalty_weight, epoch, args.epochs)
+            elif args.penalty_iters < 200:
+                penalty_weight = args.penalty_weight if epoch >= args.penalty_iters else 0.
+            else:
+                penalty_weight = args.penalty_weight
+            irm_penalty = torch.stack(env_penalty).mean()
+            loss_penalty = irm_penalty
+            loss = loss_cont + penalty_weight * loss_penalty
 
-                # contrastive loss
-                logits, labels = utils.info_nce_loss(torch.cat([out_1, out_2], dim=0), out_1.size(0), temperature=1.0)
-                logits_cont = logits / temperature
-                logits_pen = logits / args.irm_temp
+            if penalty_weight > 1.0:
+                # Rescale the entire loss to keep gradients in a reasonable range
+                loss /= penalty_weight
+                
+            loss = loss / accum_steps  # scale loss to account for accumulation
 
-                loss = torch.nn.CrossEntropyLoss()(logits_cont, labels)
-                # penalty
-                penalty_score = utils.penalty(logits_pen, labels, torch.nn.CrossEntropyLoss(), mode=args.ours_mode)
+            loss.backward()
+            
+            total_num += args.micro_batch_size
+            total_loss += loss.item() * args.micro_batch_size
 
-                # collect it into env dict
-                env_contrastive.append(loss)
-                env_penalty.append(penalty_score)
-
-        loss_cont = torch.stack(env_contrastive).mean()
-        if args.keep_cont:
-            loss_cont += loss_original
-
-        if args.increasing_weight:
-            penalty_weight = utils.increasing_weight(0, args.penalty_weight, epoch, args.epochs)
-        elif args.penalty_iters < 200:
-            penalty_weight = args.penalty_weight if epoch >= args.penalty_iters else 0.
-        else:
-            penalty_weight = args.penalty_weight
-        irm_penalty = torch.stack(env_penalty).mean()
-        loss_penalty = irm_penalty
-        loss = loss_cont + penalty_weight * loss_penalty
-
-        if penalty_weight > 1.0:
-            # Rescale the entire loss to keep gradients in a reasonable range
-            loss /= penalty_weight
-
-        train_optimizer.zero_grad()
-        loss.backward()
+            # free memory of micro-batch
+            del pos_1_all_chunk, pos_2_all_chunk, indexs_chunk, loss
+            torch.cuda.empty_cache()
+        
+        # end 
         train_optimizer.step()
-
-        total_num += batch_size
-        total_loss += loss.item() * batch_size
 
         train_bar.set_description('Train Epoch: [{}/{}] [{trained_samples}/{total_samples}]  Loss: {:.4f}  LR: {:.4f}  PW {:.4f}'
             .format(epoch, epochs, total_loss/total_num, train_optimizer.param_groups[0]['lr'], penalty_weight,
@@ -360,6 +393,7 @@ if __name__ == '__main__':
     parser.add_argument('--dl_te', default=[3096, 4, 2, 1], nargs=4, type=str,
                         action=utils.ParseMixed, types=[int, int, int, bool],
                         metavar='DataLoader pars [batch_size, number_workers, prefetch_factor, persistent_workers]', help='Testing/Validation/Memory DataLoader pars')
+    parser.add_argument('--micro_batch_size', default=32, type=int, help='batch size on gpu')
     parser.add_argument('--epochs', default=200, type=int, help='Number of sweeps over the dataset to train')
     parser.add_argument('--debiased', default=False, type=bool, help='Debiased contrastive loss or standard loss')
     parser.add_argument('--dataset', type=str, default='STL', choices=['STL', 'CIFAR10', 'CIFAR100', 'ImageNet'], help='experiment dataset')
