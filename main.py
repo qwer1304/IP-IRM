@@ -75,8 +75,8 @@ def train(net, data_loader, train_optimizer, temperature, debiased, tau_plus, ba
 
             loss.backward()
 
-            total_num += args.micro_batch_size
-            total_loss += loss.item() * args.micro_batch_size
+            total_num += pos_1_chunk.size(0)
+            total_loss += loss.item() * pos_1_chunk.size(0)
 
             # free memory of micro-batch
             del pos_1_chunk, pos_2_chunk, target_chunk, idx_chunk, loss
@@ -182,8 +182,8 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
 
             loss.backward()
             
-            total_num += args.micro_batch_size
-            total_loss += loss.item() * args.micro_batch_size
+            total_num += pos_1_all_chunk.size(0)
+            total_loss += loss.item() * pos_1_all_chunk.size(0)
 
             # free memory of micro-batch
             del pos_1_all_chunk, pos_2_all_chunk, indexs_chunk, loss
