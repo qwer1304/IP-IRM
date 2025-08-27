@@ -966,8 +966,7 @@ def make_test_transform(normalize='CIFAR'):
         transforms.Normalize(mean=norm_mean, std=norm_std)])
 
     gpu_transform = K.AugmentationSequential(
-        K.Normalize(mean=norm_mean, std=norm_std),
-        data_format="CHW"
+        K.Normalize(mean=norm_mean, std=norm_std)
     )
 
 
