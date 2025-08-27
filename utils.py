@@ -7,6 +7,7 @@ import kornia.augmentation as K
 import numpy as np
 import torch
 import math
+import torch.nn as nn
 import torch.nn.functional as F
 from torch import nn, optim, autograd
 from torch.optim.lr_scheduler import _LRScheduler, MultiStepLR
@@ -928,7 +929,7 @@ def make_train_transform(image_size=64, randgray=True, normalize='CIFAR', gpu=Tr
         K.RandomResizedCrop((image_size, image_size), scale=(0.7,1.0)),
         K.RandomHorizontalFlip(p=0.5),
         K.ColorJitter(0.4,0.4,0.4,0.1),
-        K.RandomGrayscale(p=0.2) if randgray else K.Identity(),
+        K.RandomGrayscale(p=0.2) if randgray else nn.Identity(),
         K.GaussianBlur((kernel_size,kernel_size), sigma=(0.1,2.0)),
         K.Normalize(mean=norm_mean, std=norm_std),
         data_format="CHW"
