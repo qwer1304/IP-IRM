@@ -26,6 +26,10 @@ def get_negative_mask(batch_size):
 
 def train(net, data_loader, train_optimizer, temperature, debiased, tau_plus, batch_size, args):
     net.train()
+    
+    transform = data_loader.dataset.transform
+    target_transform = data_loader.dataset.target_transform
+    
     total_loss, total_num = 0.0, 0
     accum_steps = batch_size // args.micro_batch_size  # number of micro-batches per weight update
     bar_format = '{l_bar}{bar:' + str(args.bar) + '}{r_bar}' #{bar:-' + str(args.bar) + 'b}'
@@ -46,7 +50,14 @@ def train(net, data_loader, train_optimizer, temperature, debiased, tau_plus, ba
         idx_chunks = idx.chunk(accum_steps)
 
         for pos_1_chunk, pos_2_chunk, target_chunk, ids_chunk in zip(pos_1_chunks, pos_2_chunks, target_chunks, idx_chunks):
-            pos_1, pos_2 = pos_1_chunk.cuda(non_blocking=True), pos_2_chunk.cuda(non_blocking=True)
+            pos_1, pos_2, target = pos_1_chunk.cuda(non_blocking=True), pos_2_chunk.cuda(non_blocking=True), target_chunk
+            
+            if transform is not None:
+                pos_1 = transform(pos_1)
+                pos_2 = transform(pos_2)
+            if target_transform is not None:
+                target = target_transform(target)
+                
             feature_1, out_1 = net(pos_1)
             feature_2, out_2 = net(pos_2)
 
@@ -92,6 +103,10 @@ def train(net, data_loader, train_optimizer, temperature, debiased, tau_plus, ba
 # ssl training with IP-IRM
 def train_env(net, data_loader, train_optimizer, temperature, updated_split, batch_size, args):
     net.train()
+
+    transform = data_loader.dataset.transform
+    target_transform = data_loader.dataset.target_transform
+    
     total_loss, total_num = 0.0, 0
     accum_steps = batch_size // args.micro_batch_size  # number of micro-batches per weight update
     bar_format = '{l_bar}{bar:' + str(args.bar) + '}{r_bar}' #{bar:-' + str(args.bar) + 'b}'
@@ -114,8 +129,16 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
         indexs_chunks = indexs.chunk(accum_steps)
         
         for pos_1_all_chunk, pos_2_all_chunk, indexs_chunk in zip(pos_1_all_chunks, pos_2_all_chunks, indexs_chunks):
-            feature_1_all, out_1_all = net(pos_1_all_chunk.cuda(non_blocking=True))
-            feature_2_all, out_2_all = net(pos_2_all_chunk.cuda(non_blocking=True))
+        
+            pos_1_all_chunk = pos_1_all_chunk.cuda(non_blocking=True)
+            pos_2_all_chunk = pos_2_all_chunk.cuda(non_blocking=True)
+
+            if transform is not None:
+                pos_1_all_chunk = transform(pos_1_all_chunk)
+                pos_2_all_chunk = transform(pos_2_all_chunk)
+                
+            feature_1_all, out_1_all = net(pos_1_all_chunk)
+            feature_2_all, out_2_all = net(pos_2_all_chunk)
 
             if args.keep_cont: # global contrastive loss (1st partition)
                 logits_all, labels_all = utils.info_nce_loss(torch.cat([out_1_all, out_2_all], dim=0), out_1_all.size(0), temperature=temperature)
@@ -208,6 +231,10 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
 
 def train_update_split(net, update_loader, soft_split, random_init=False, args=None):
     utils.write_log('Start Maximizing ...', log_file, print_=True)
+    
+    transform = update_loader.dataset.transform
+    target_transform = update_loader.dataset.target_transform
+    
     if random_init:
         utils.write_log('Give a Random Split:', log_file, print_=True)
         soft_split = torch.randn(soft_split.size(), requires_grad=True, device="cuda")
@@ -231,8 +258,17 @@ def train_update_split(net, update_loader, soft_split, random_init=False, args=N
                 desc='train_update_split(): Feature extracting'
             )
             for pos_1, pos_2, target, Index in train_bar:
-                feature_1, out_1 = net(pos_1.cuda(non_blocking=True))
-                feature_2, out_2 = net(pos_2.cuda(non_blocking=True))
+                pos_1 = pos_1.cuda(non_blocking=True)
+                pos_2 = pos_2.cuda(non_blocking=True)
+      
+                if transform is not None:
+                    pos_1 = transform(pos_1)
+                    pos_2 = transform(pos_2)
+                if target_transform is not None:
+                    target = target_transform(target)
+                
+                feature_1, out_1 = net(pos_1)
+                feature_2, out_2 = net(pos_2)
                 feature_bank_1.append(out_1.cpu())
                 feature_bank_2.append(out_2.cpu())
         feature1 = torch.cat(feature_bank_1, 0)
@@ -252,6 +288,10 @@ def train_update_split(net, update_loader, soft_split, random_init=False, args=N
 # test for one epoch, use weighted knn to find the most similar images' label to assign the test image
 def test(net, memory_data_loader, test_data_loader, args, progress=False, prefix="Test:"):
     net.eval()
+    
+    transform = memory_data_loader.dataset.transform
+    target_transform = memory_data_loader.dataset.target_transform
+    
     total_top1, total_top5, total_num, feature_bank = 0.0, 0.0, 0, []
     with torch.no_grad():
         # generate feature bank
@@ -267,7 +307,14 @@ def test(net, memory_data_loader, test_data_loader, args, progress=False, prefix
         else:
             feature_bar = memory_data_loader
         for data, _, target in feature_bar:
-            feature, out = net(data.cuda(non_blocking=True))
+            data = data.cuda(non_blocking=True)
+
+            if transform is not None:
+                data = transform(data)
+            if target_transform is not None:
+                target = target_transform(target)
+                
+            feature, out = net(data)
             feature_bank.append(feature)
         # [D, N]
         feature_bank = torch.cat(feature_bank, dim=0).t().contiguous()
@@ -295,7 +342,10 @@ def test(net, memory_data_loader, test_data_loader, args, progress=False, prefix
         else:
            test_bar = test_data_loader
 
+    
+        transform = test_data_loader.dataset.transform
         target_transform = test_data_loader.dataset.target_transform
+    
         if args.extract_features:
             test_data_loader.dataset.target_transform = None
 
@@ -307,6 +357,9 @@ def test(net, memory_data_loader, test_data_loader, args, progress=False, prefix
 
         for data, _, target in test_bar:
             data, target = data.cuda(non_blocking=True), target.cuda(non_blocking=True)
+            
+            if transform is not None:
+                data = transform(data)
 
             target_raw = target
             if args.extract_features and target_transform is not None:

@@ -2,7 +2,8 @@ from PIL import Image
 #from torchvision import transforms
 from torchvision.transforms import v2 as transforms
 from torchvision.datasets import STL10, CIFAR10, CIFAR100, ImageFolder
-import cv2
+import kornia.augmentation as K
+#import cv2
 import numpy as np
 import torch
 import math
@@ -269,11 +270,12 @@ class Imagenet_idx(ImageFolder):
         """
         path, target = self.imgs[index]
         image = self.loader(path)
-        if self.transform is not None:
+        
+        if False and self.transform is not None:
             pos = self.transform(image)
         else:
             pos = image
-        if self.target_transform is not None:
+        if False and self.target_transform is not None:
             target = self.target_transform(target)
 
         return pos, target, index
@@ -301,11 +303,11 @@ class Imagenet(ImageFolder):
         """
         path, target = self.imgs[index]
         image = self.loader(path)
-        if self.transform is not None:
+        if False and self.transform is not None:
             pos = self.transform(image)
         else:
             pos = image
-        if self.target_transform is not None:
+        if False and self.target_transform is not None:
             target = self.target_transform(target)
 
         return pos, target
@@ -332,13 +334,13 @@ class Imagenet_idx_pair(ImageFolder):
         """
         path, target = self.imgs[index]
         image = self.loader(path)
-        if self.transform is not None:
+        if False and self.transform is not None:
             pos1 = self.transform(image)
             pos2 = self.transform(image)
         else:
             pos1 = image
             pos2 = image
-        if self.target_transform is not None:
+        if False and self.target_transform is not None:
             target = self.target_transform(target)
 
         return pos1, pos2, target, index
@@ -367,13 +369,13 @@ class Imagenet_pair(ImageFolder):
         path, target = self.imgs[index]
         image = self.loader(path)
 
-        if self.transform is not None:
+        if False and self.transform is not None:
             pos1 = self.transform(image)
             pos2 = self.transform(image)
         else:
             pos1 = image
             pos2 = image
-        if self.target_transform is not None:
+        if False and self.target_transform is not None:
             target = self.target_transform(target)
 
         return pos1, pos2, target
@@ -402,19 +404,19 @@ class Imagenet_idx_pair_transformone(ImageFolder):
         """
         path, target = self.imgs[index]
         image = self.loader(path)
-        if self.transform is not None:
+        if False and self.transform is not None:
             pos1 = self.transform(image)
             pos2 = self.transform(image)
         else:
             pos1 = image
             pos2 = image
-        if self.transform_hard is not None:
+        if False and self.transform_hard is not None:
             pos1_hard = self.transform_hard(image)
             pos2_hard = self.transform_hard(image)
         else:
             pos1_hard = image
             pos2_hard = image
-        if self.target_transform is not None:
+        if False and self.target_transform is not None:
             target = self.target_transform(target)
 
         return pos1, pos2, pos1_hard, pos2_hard, target, index
@@ -535,6 +537,9 @@ class update_split_dataset(data.Dataset):
 # Update split online
 def auto_split(net, update_loader, soft_split_all, temperature, irm_temp, loss_mode='v2', irm_mode='v1', irm_weight=10, constrain=False, cons_relax=False, nonorm=False, log_file=None):
     # irm mode: v1 is original irm; v2 is variance (not use)
+    
+    transform = update_loader.dataset.transform
+    target_transform = update_loader.dataset.target_transform
 
     low_loss, constrain_loss = 1e5, torch.Tensor([0.])
     cnt, best_epoch, training_num = 0, 0, 0
@@ -550,12 +555,22 @@ def auto_split(net, update_loader, soft_split_all, temperature, irm_temp, loss_m
         for batch_idx, (pos_1, pos_2, target, idx) in enumerate(update_loader):
             training_num += len(pos_1)
             with torch.no_grad():
-                _, feature_1 = net(pos_1.cuda(non_blocking=True))
-                _, feature_2 = net(pos_2.cuda(non_blocking=True))
+                
+                pos_1 = pos_1.cuda(non_blocking=True)
+                pos_2 = pos_2.cuda(non_blocking=True)
+
+                if transform is not None:
+                    pos_1 = transform(pos_1)
+                    pos_2 = transform(pos_2)
+                if target_transform is not None:
+                    target = target_transform(target)
+                
+                _, feature_1 = net(pos_1)
+                _, feature_2 = net(pos_2)
 
             loss_cont_list, loss_penalty_list = [], []
 
-            '''
+            """
             # Option 1. use probability directly
             soft_split = F.softmax(soft_split_all, dim=-1)
             for env_idx in range(num_env):
@@ -566,7 +581,7 @@ def auto_split(net, update_loader, soft_split_all, temperature, irm_temp, loss_m
                 penalty_irm = torch.autograd.grad(cont_loss_env, [scale], create_graph=True)[0]
                 loss_penalty_list.append(penalty_irm)
             risk_final = - (loss_cont_list.sum() + loss_penalty_list.sum())
-            '''
+            """
 
             # Option 2. use soft split
             param_split = F.softmax(soft_split_all[idx], dim=-1)
@@ -660,6 +675,7 @@ def auto_split(net, update_loader, soft_split_all, temperature, irm_temp, loss_m
 
 
 # update split offline
+# out_1, out_2 are already post transform() and are in cuda
 def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss_mode='v2', irm_mode='v1', irm_weight=10, constrain=False, 
             cons_relax=False, nonorm=False, log_file=None, batch_size=3096, num_workers=4, prefetch_factor=2, persistent_workers=True):
     # irm mode: v1 is original irm; v2 is variance
@@ -884,7 +900,7 @@ class GaussianBlur(object):
 
 # just follow the previous work -- DCL, NeurIPS2020
 
-def make_train_transform(image_size=64, randgray=True, normalize='CIFAR'):
+def make_train_transform(image_size=64, randgray=True, normalize='CIFAR', gpu=True):
     kernel_size = int(0.1 * image_size)
     if (kernel_size % 2) == 0:
         kernel_size += 1
@@ -896,18 +912,33 @@ def make_train_transform(image_size=64, randgray=True, normalize='CIFAR'):
         norm_mean=[0.485, 0.456, 0.406]
         norm_std=[0.229, 0.224, 0.225]
 
-    return transforms.Compose([
-        #transforms.ToTensor(),  # <-- important: switch to tensor here
-        transforms.ToImage(),
-        transforms.ToDtype(torch.float32, scale=True),
-        transforms.RandomResizedCrop(image_size, scale=(0.7, 1.0)), # ratio=(0.75, 1.3333333333333333)
-        transforms.RandomHorizontalFlip(p=0.5),
-        transforms.ColorJitter(0.4, 0.4, 0.4, 0.1),
-        transforms.RandomGrayscale(p=0.2) if randgray else transforms.Lambda(lambda x: x),
-        transforms.GaussianBlur(kernel_size=kernel_size),
-        transforms.Normalize(mean=norm_mean, std=norm_std),
-    ]) #.to("cuda")
+    cpu_transform = transforms.Compose([
+            #transforms.ToTensor(),  # <-- important: switch to tensor here
+            transforms.ToImage(),
+            transforms.ToDtype(torch.float32, scale=True),
+            transforms.RandomResizedCrop(image_size, scale=(0.7, 1.0)), # ratio=(0.75, 1.3333333333333333)
+            transforms.RandomHorizontalFlip(p=0.5),
+            transforms.ColorJitter(0.4, 0.4, 0.4, 0.1),
+            transforms.RandomGrayscale(p=0.2) if randgray else transforms.Lambda(lambda x: x),
+            transforms.GaussianBlur(kernel_size=kernel_size),
+            transforms.Normalize(mean=norm_mean, std=norm_std),
+        ])
 
+    gpu_transform = K.AugmentationSequential(
+        K.RandomResizedCrop((image_size, image_size), scale=(0.7,1.0)),
+        K.RandomHorizontalFlip(p=0.5),
+        K.ColorJitter(0.4,0.4,0.4,0.1),
+        K.RandomGrayscale(p=0.2) if randgray else K.Identity(),
+        K.GaussianBlur((kernel_size,kernel_size), sigma=(0.1,2.0)),
+        K.Normalize(mean=norm_mean, std=norm_std),
+        data_format="CHW"
+    )
+
+    if gpu:
+        return gpu_transform
+    else:
+        return cpu_transform
+        
 """
 def make_train_transform(image_size=32, randgray=True):
     return transforms.Compose([
@@ -927,6 +958,20 @@ def make_test_transform(normalize='CIFAR'):
     elif normalize == 'ImageNet':
         norm_mean=[0.485, 0.456, 0.406]
         norm_std=[0.229, 0.224, 0.225]
+
+    cpu_transform = transforms.Compose([
+        #transforms.ToTensor(),  # <-- important: switch to tensor here
+        transforms.ToImage(),
+        transforms.ToDtype(torch.float32, scale=True),
+        transforms.Normalize(mean=norm_mean, std=norm_std)])
+
+    gpu_transform = K.AugmentationSequential(
+        K.Normalize(mean=norm_mean, std=norm_std),
+        data_format="CHW"
+    )
+
+
+
     return transforms.Compose([
         #transforms.ToTensor(),  # <-- important: switch to tensor here
         transforms.ToImage(),
