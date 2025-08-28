@@ -768,6 +768,7 @@ if __name__ == '__main__':
                 updated_split = train_update_split(model, update_loader, updated_split, random_init=args.random_init, args=args)
                 updated_split_all.append(updated_split)
        
+        feature_bank, feature_labels = None, None
         if (epoch % args.test_freq == 0) or \
            ((epoch % args.val_freq == 0) and (args.dataset == 'ImageNet')) or \
            (epoch == epochs): # eval knn every test_freq/val_freq and last epochs
@@ -790,6 +791,8 @@ if __name__ == '__main__':
                 best_epoch = epoch
         else:
             is_best = False
+        if feature_bank is not None:
+            del feauture_bank, feature_labels
 
         if (epoch % args.checkpoint_freq == 0) or (epoch == epochs):
             cuda_rng_state = torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None
