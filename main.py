@@ -687,11 +687,11 @@ if __name__ == '__main__':
     model = Model(feature_dim, image_class=image_class).cuda()
     model = nn.DataParallel(model)
     # pretrain model
-    if args.pretrain_path is not None and os.path.isfile(pretrain_path):
+    if args.pretrain_path is not None and os.path.isfile(args.pretrain_path):
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
         msg = []
-        print("=> loading pretrained checkpoint '{}'".format(pretrained_path), end="")
-        checkpoint = torch.load(pretrained_path, map_location=device, weights_only=False)
+        print("=> loading pretrained checkpoint '{}'".format(args.pretrain_path), end="")
+        checkpoint = torch.load(args.pretrain_path, map_location=device, weights_only=False)
         if 'state_dict' in checkpoint.keys():
             state_dict = checkpoint['state_dict']
             print(f"Epoch: {checkpoint['epoch']}")
