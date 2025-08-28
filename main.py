@@ -794,7 +794,7 @@ if __name__ == '__main__':
             is_best = False
         if feature_bank is not None:
             del feauture_bank, feature_labels
-            gc.collect()              # run Python’s garbage collector
+            gc.collect()              # run Python's garbage collector
             torch.cuda.empty_cache()  # (this only clears GPU but safe to call)
 
         if (epoch % args.checkpoint_freq == 0) or (epoch == epochs):
