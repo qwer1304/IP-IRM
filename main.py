@@ -327,7 +327,7 @@ def get_feature_bank(net, memory_data_loader, args, progress=False, prefix="Test
             )
         else:
             feature_bar = memory_data_loader
-        for data, _, _ in feature_bar:
+        for data, _ in feature_bar:
             data = data.cuda(non_blocking=True)
 
             if transform is not None:
