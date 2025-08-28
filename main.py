@@ -513,6 +513,7 @@ if __name__ == '__main__':
     parser.add_argument('--groupnorm', action="store_true", default=False, help='use group contrastive loss?')
     parser.add_argument('--offline', action="store_true", default=False, help='save feature at the beginning of the maximize?')
     parser.add_argument('--keep_cont', action="store_true", default=False, help='keep original contrastive?')
+    parser.add_argument('--pretrain_path', type=str, default=None, help='the path of pretrain model')
 
     # image
     parser.add_argument('--image_size', type=int, default=224, help='image size')
@@ -686,7 +687,7 @@ if __name__ == '__main__':
     model = Model(feature_dim, image_class=image_class).cuda()
     model = nn.DataParallel(model)
     # pretrain model
-    if args.pretrain_model is not None and os.path.isfile(pretrained_path):
+    if args.pretrained_path is not None and os.path.isfile(pretrained_path):
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
         msg = []
         print("=> loading pretrained checkpoint '{}'".format(pretrained_path), end="")
