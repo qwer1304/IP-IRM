@@ -687,7 +687,7 @@ if __name__ == '__main__':
     model = Model(feature_dim, image_class=image_class).cuda()
     model = nn.DataParallel(model)
     # pretrain model
-    if args.pretrained_path is not None and os.path.isfile(pretrained_path):
+    if args.pretrain_path is not None and os.path.isfile(pretrain_path):
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
         msg = []
         print("=> loading pretrained checkpoint '{}'".format(pretrained_path), end="")
