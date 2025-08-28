@@ -551,16 +551,15 @@ def auto_split(net, update_loader, soft_split_all, temperature, irm_temp, loss_m
     for epoch in range(100):
         risk_all_list, risk_cont_all_list, risk_penalty_all_list, risk_constrain_all_list, training_num = [],[],[],[], 0
         net.eval()
-        for batch_idx, (pos_1, pos_2, target, idx) in enumerate(update_loader):
-            training_num += len(pos_1)
+        for batch_idx, (pos_, target, idx) in enumerate(update_loader):
+            training_num += len(pos_)
             with torch.no_grad():
                 
-                pos_1 = pos_1.cuda(non_blocking=True)
-                pos_2 = pos_2.cuda(non_blocking=True)
+                pos_ = pos_.cuda(non_blocking=True)
 
                 if transform is not None:
-                    pos_1 = transform(pos_1)
-                    pos_2 = transform(pos_2)
+                    pos_1 = transform(pos_)
+                    pos_2 = transform(pos_)
                 if target_transform is not None:
                     target = target_transform(target)
                 

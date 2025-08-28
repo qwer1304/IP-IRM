@@ -51,20 +51,19 @@ def train(net, data_loader, train_optimizer, temperature, debiased, tau_plus, ba
     
     train_optimizer.zero_grad()
 
-    for pos_1, pos_2, target, idx in train_bar:
+    for pos_, target, idx in train_bar:
         
         # Split into micro-batches
-        pos_1_chunks = pos_1.chunk(gpu_accum_steps)
-        pos_2_chunks = pos_2.chunk(gpu_accum_steps)
+        pos_chunks = pos_.chunk(gpu_accum_steps)
         target_chunks = target.chunk(gpu_accum_steps)
         idx_chunks = idx.chunk(gpu_accum_steps)
 
-        for pos_1_chunk, pos_2_chunk, target_chunk, ids_chunk in zip(pos_1_chunks, pos_2_chunks, target_chunks, idx_chunks):
-            pos_1, pos_2, target = pos_1_chunk.cuda(non_blocking=True), pos_2_chunk.cuda(non_blocking=True), target_chunk
+        for pos_chunk, target_chunk, ids_chunk in zip(pos_chunks, target_chunks, idx_chunks):
+            pos_, target = pos_chunk.cuda(non_blocking=True), target_chunk
             
             if transform is not None:
-                pos_1 = transform(pos_1)
-                pos_2 = transform(pos_2)
+                pos_1 = transform(pos_)
+                pos_2 = transform(pos_)
             if target_transform is not None:
                 target = target_transform(target)
                 
@@ -100,7 +99,7 @@ def train(net, data_loader, train_optimizer, temperature, debiased, tau_plus, ba
             total_loss += loss.item() * pos_1_chunk.size(0)
 
             # free memory of micro-batch
-            del pos_1_chunk, pos_2_chunk, target_chunk, idx_chunk, loss
+            del pos_chunk, target_chunk, idx_chunk, loss
             torch.cuda.empty_cache()
 
         loader_step += 1
@@ -144,21 +143,19 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
         
     for batch_index, data_env in enumerate(train_bar):
         # extract all feature
-        pos_1_all, pos_2_all, indexs = data_env[0], data_env[1], data_env[-1]
+        pos_all, indexs = data_env[0], data_env[-1]
 
         # Split into micro-batches
-        pos_1_all_chunks = pos_1_all.chunk(gpu_accum_steps)
-        pos_2_all_chunks = pos_2_all.chunk(gpu_accum_steps)
+        pos_all_chunks = pos_all.chunk(gpu_accum_steps)
         indexs_chunks = indexs.chunk(gpu_accum_steps)
         
-        for pos_1_all_chunk, pos_2_all_chunk, indexs_chunk in zip(pos_1_all_chunks, pos_2_all_chunks, indexs_chunks):
+        for pos_all_chunk, indexs_chunk in zip(pos_all_chunks, indexs_chunks):
         
-            pos_1_all_chunk = pos_1_all_chunk.cuda(non_blocking=True)
-            pos_2_all_chunk = pos_2_all_chunk.cuda(non_blocking=True)
+            pos_all_chunk = pos_1_all_chunk.cuda(non_blocking=True)
 
             if transform is not None:
-                pos_1_all_chunk = transform(pos_1_all_chunk)
-                pos_2_all_chunk = transform(pos_2_all_chunk)
+                pos_1_all_chunk = transform(pos_all_chunk)
+                pos_2_all_chunk = transform(pos_all_chunk)
                 
             feature_1_all, out_1_all = net(pos_1_all_chunk)
             feature_2_all, out_2_all = net(pos_2_all_chunk)
@@ -232,10 +229,10 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
             total_loss += loss.item() * pos_1_all_chunk.size(0)
 
             # free memory of micro-batch
-            del pos_1_all_chunk, pos_2_all_chunk, indexs_chunk, loss
+            del pos_all_chunk, indexs_chunk, loss
             torch.cuda.empty_cache()
         
-        # end for pos_1_all_chunk, pos_2_all_chunk, indexs_chunk in zip(pos_1_all_chunks, pos_2_all_chunks, indexs_chunks):
+        # end for pos_all_chunk, indexs_chunk in zip(pos_1_all_chunks, pos_2_all_chunks, indexs_chunks):
 
         loader_step += 1
         if (loader_step * loader_batch_size) == gradients_batch_size:
@@ -286,13 +283,12 @@ def train_update_split(net, update_loader, soft_split, random_init=False, args=N
                 bar_format=bar_format,          # request bar width
                 desc='train_update_split(): Feature extracting'
             )
-            for pos_1, pos_2, target, Index in train_bar:
-                pos_1 = pos_1.cuda(non_blocking=True)
-                pos_2 = pos_2.cuda(non_blocking=True)
+            for pos_, target, Index in train_bar:
+                pos_ = pos_.cuda(non_blocking=True)
       
                 if transform is not None:
-                    pos_1 = transform(pos_1)
-                    pos_2 = transform(pos_2)
+                    pos_1 = transform(pos_)
+                    pos_2 = transform(pos_)
                 if target_transform is not None:
                     target = target_transform(target)
                 
@@ -566,10 +562,10 @@ if __name__ == '__main__':
     if args.dataset == 'STL':
         train_transform = utils.make_train_transform(normalize=args.image_class)
         test_transform = utils.make_test_transform(normalize=args.image_class)
-        train_data = utils.STL10Pair_Index(root=args.data, split='train+unlabeled', transform=train_transform)
-        update_data = utils.STL10Pair_Index(root=args.data, split='train+unlabeled', transform=train_transform, target_transform=target_transform)
-        memory_data = utils.STL10Pair(root=args.data, split='train', transform=test_transform, target_transform=target_transform)
-        test_data = utils.STL10Pair(root=args.data, split='test', transform=test_transform, target_transform=target_transform)
+        train_data = utils.STL10_Index(root=args.data, split='train+unlabeled', transform=train_transform)
+        update_data = utils.STL10_Index(root=args.data, split='train+unlabeled', transform=train_transform, target_transform=target_transform)
+        memory_data = utils.STL10(root=args.data, split='train', transform=test_transform, target_transform=target_transform)
+        test_data = utils.STL10(root=args.data, split='test', transform=test_transform, target_transform=target_transform)
         train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, shuffle=True, pin_memory=True, 
             drop_last=True, persistent_workers=tr_pw)
         update_loader = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, prefetch_factor=u_pf, shuffle=True, pin_memory=True, 
@@ -583,10 +579,10 @@ if __name__ == '__main__':
     elif args.dataset == 'CIFAR10':
         train_transform = utils.make_train_transform(normalize=args.image_class)
         test_transform = utils.make_test_transform(normalize=args.image_class)
-        train_data = utils.CIFAR10Pair_Index(root=args.data, train=True, transform=train_transform, target_transform=target_transform, download=True)
-        update_data = utils.CIFAR10Pair_Index(root=args.data, train=True, transform=train_transform, target_transform=target_transform)
-        memory_data = utils.CIFAR10Pair(root=args.data, train=True, transform=test_transform, target_transform=target_transform)
-        test_data = utils.CIFAR10Pair(root=args.data, train=False, transform=test_transform, target_transform=target_transform)
+        train_data = utils.CIFAR10_Index(root=args.data, train=True, transform=train_transform, target_transform=target_transform, download=True)
+        update_data = utils.CIFAR10_Index(root=args.data, train=True, transform=train_transform, target_transform=target_transform)
+        memory_data = utils.CIFAR10(root=args.data, train=True, transform=test_transform, target_transform=target_transform)
+        test_data = utils.CIFAR10(root=args.data, train=False, transform=test_transform, target_transform=target_transform)
         train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, shuffle=True, pin_memory=True, 
             drop_last=True, persistent_workers=tr_pw)
         update_loader = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, prefetch_factor=u_pf, shuffle=True, pin_memory=True, 
@@ -600,10 +596,10 @@ if __name__ == '__main__':
     elif args.dataset == 'CIFAR100':
         train_transform = utils.make_train_transform(normalize=args.image_class)
         test_transform = utils.make_test_transform(normalize=args.image_class)
-        train_data = utils.CIFAR100Pair_Index(root=args.data, train=True, transform=train_transform, target_transform=target_transform)
-        update_data = utils.CIFAR100Pair_Index(root=args.data, train=True, transform=train_transform, target_transform=target_transform)
-        memory_data = utils.CIFAR100Pair(root=args.data, train=True, transform=test_transform, target_transform=target_transform)
-        test_data = utils.CIFAR100Pair(root=args.data, train=False, transform=test_transform, target_transform=target_transform)
+        train_data = utils.CIFAR100_Index(root=args.data, train=True, transform=train_transform, target_transform=target_transform)
+        update_data = utils.CIFAR100_Index(root=args.data, train=True, transform=train_transform, target_transform=target_transform)
+        memory_data = utils.CIFAR100(root=args.data, train=True, transform=test_transform, target_transform=target_transform)
+        test_data = utils.CIFAR100(root=args.data, train=False, transform=test_transform, target_transform=target_transform)
         train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, shuffle=True, pin_memory=True, 
             drop_last=True, persistent_workers=tr_pw)
         update_loader = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, prefetch_factor=u_pf, shuffle=True, pin_memory=True, 
@@ -619,7 +615,7 @@ if __name__ == '__main__':
         test_transform = utils.make_test_transform(normalize=args.image_class)
         wrap = args.extract_features
         # descriptors of train data
-        train_desc  =   {'dataset': utils.Imagenet_idx_pair,
+        train_desc  =   {'dataset': utils.Imagenet_idx,
                           'transform': train_transform,
                           'target_transform': target_transform,
                           'class_to_index': class_to_idx,
@@ -627,7 +623,7 @@ if __name__ == '__main__':
                           'target_pos': 2,
                           'required_split': "in",
                         }
-        update_desc =   {'dataset': utils.Imagenet_idx_pair,
+        update_desc =   {'dataset': utils.Imagenet_idx,
                           'transform': train_transform,
                           'target_transform': target_transform,
                           'class_to_index': class_to_idx,
@@ -635,7 +631,7 @@ if __name__ == '__main__':
                           'target_pos': 2,
                           'required_split': "in",
                         }
-        memory_desc =   {'dataset': utils.Imagenet_pair,
+        memory_desc =   {'dataset': utils.Imagenet,
                           'transform': test_transform,
                           'target_transform': target_transform,
                           'class_to_index': class_to_idx,
@@ -643,7 +639,7 @@ if __name__ == '__main__':
                           'target_pos': 2,
                           'required_split': "in",
                         }
-        val_desc    =   {'dataset': utils.Imagenet_pair,
+        val_desc    =   {'dataset': utils.Imagenet,
                           'transform': test_transform,
                           'target_transform': target_transform,
                           'class_to_index': class_to_idx,
@@ -652,7 +648,7 @@ if __name__ == '__main__':
                           'required_split': "out",
                         }
         # descriptors of test data
-        test_desc   =   {'dataset': utils.Imagenet_pair,
+        test_desc   =   {'dataset': utils.Imagenet,
                           'transform': test_transform,
                           'target_transform': target_transform,
                           'class_to_index': class_to_idx,
