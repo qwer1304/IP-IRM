@@ -322,7 +322,8 @@ def get_feature_bank(net, memory_data_loader, args, progress=False, prefix="Test
                 total=len(memory_data_loader),
                 ncols=args.ncols,               # total width available
                 dynamic_ncols=False,            # disable autosizing
-                bar_format=bar_format           # request bar width
+                bar_format=bar_format,          # request bar width
+                desc='get_feature_bank(), memory: Feature extracting'
             )
         else:
             feature_bar = memory_data_loader
@@ -365,8 +366,7 @@ def test(net, feature_bank, feature_labels, test_data_loader, args, progress=Fal
                 total=len(test_data_loader),
                 ncols=args.ncols,               # total width available
                 dynamic_ncols=False,            # disable autosizing
-                bar_format=bar_format,          # request bar width
-                desc=f'test(), {prefix} inference'
+                bar_format=bar_format           # request bar width
             )
         else:
            test_bar = test_data_loader
