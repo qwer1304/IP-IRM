@@ -9,7 +9,7 @@ class Model(nn.Module):
         super(Model, self).__init__()
 
         self.f = []
-        res50 = models.resnet50(weights=None) 
+        res50 = resnet50(weights=None) 
         if state_dict is not None:
             msg = res50.load_state_dict(state_dict, strict=False)
             print(msg)
