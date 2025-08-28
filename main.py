@@ -685,7 +685,6 @@ if __name__ == '__main__':
 
     # model setup and optimizer config
     model = Model(feature_dim, image_class=image_class).cuda()
-    model = nn.DataParallel(model)
     # pretrain model
     if args.pretrain_path is not None and os.path.isfile(args.pretrain_path):
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -702,7 +701,7 @@ if __name__ == '__main__':
         print(msg)
     else:
         print('Using default model')
-
+    model = nn.DataParallel(model)
 
     optimizer = optim.Adam(model.parameters(), lr=1e-3, weight_decay=1e-6)
     c = len(memory_data.classes) if args.dataset != "ImageNet" else args.class_num
