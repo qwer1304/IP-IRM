@@ -687,7 +687,7 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
     # dataset and dataloader
     traindataset = update_split_dataset(out_1, out_2)
     trainloader = DataLoader(traindataset, batch_size=batch_size, shuffle=True, num_workers=num_workers, 
-        prefetch_factor=prefetch_factor, persistent_workers=persistent_workers)
+        prefetch_factor=prefetch_factor, persistent_workers=persistent_workers, pin_memory=True)
 
     for epoch in range(100):
         risk_all_list, risk_cont_all_list, risk_penalty_all_list, risk_constrain_all_list, training_num = [],[],[],[], 0
