@@ -151,7 +151,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
         
         for pos_all_chunk, indexs_chunk in zip(pos_all_chunks, indexs_chunks):
         
-            pos_all_chunk = pos_1_all_chunk.cuda(non_blocking=True)
+            pos_all_chunk = pos_all_chunk.cuda(non_blocking=True)
 
             if transform is not None:
                 pos_1_all_chunk = transform(pos_all_chunk)
