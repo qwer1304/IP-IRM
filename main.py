@@ -13,6 +13,7 @@ from tqdm import tqdm
 import utils
 from model import Model
 from prepare import prepare_datasets, traverse_objects
+import gc
 
 def get_negative_mask(batch_size):
     negative_mask = torch.ones((batch_size, 2 * batch_size), dtype=bool)
@@ -793,6 +794,8 @@ if __name__ == '__main__':
             is_best = False
         if feature_bank is not None:
             del feauture_bank, feature_labels
+            gc.collect()              # run Python’s garbage collector
+            torch.cuda.empty_cache()  # (this only clears GPU but safe to call)
 
         if (epoch % args.checkpoint_freq == 0) or (epoch == epochs):
             cuda_rng_state = torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None
