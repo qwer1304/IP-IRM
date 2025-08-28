@@ -683,8 +683,6 @@ if __name__ == '__main__':
         val_loader = DataLoader(val_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
             pin_memory=True, persistent_workers=te_pw)
 
-    # model setup and optimizer config
-    model = Model(feature_dim, image_class=image_class).cuda()
     # pretrain model
     if args.pretrain_path is not None and os.path.isfile(args.pretrain_path):
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -697,10 +695,12 @@ if __name__ == '__main__':
         else:
             state_dict = checkpoint
             print("Epoch: N/A")
-        msg = model.load_state_dict(state_dict, strict=False)
-        print(msg)
     else:
+        state_dict = None
         print('Using default model')
+
+    # model setup and optimizer config
+    model = Model(feature_dim, image_class=image_class, state_dict=state_dict).cuda()
     model = nn.DataParallel(model)
 
     optimizer = optim.Adam(model.parameters(), lr=1e-3, weight_decay=1e-6)

@@ -5,11 +5,16 @@ from torchvision.models.resnet import resnet50
 
 
 class Model(nn.Module):
-    def __init__(self, feature_dim=128, image_class='ImageNet'):
+    def __init__(self, feature_dim=128, image_class='ImageNet', state_dict=None):
         super(Model, self).__init__()
 
         self.f = []
-        for name, module in resnet50().named_children():
+        res50 = models.resnet50(weights=None) 
+        if state_dict is not None:
+            msg = res50.load_state_dict(state_dict, strict=False)
+            print(msg)
+
+        for name, module in res50.named_children():
             if image_class != 'ImageNet':  # STL, CIFAR
                 if name == 'conv1':
                     module = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False)
