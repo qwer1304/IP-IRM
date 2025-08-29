@@ -455,10 +455,24 @@ def test(net, feature_bank, feature_labels, test_data_loader, args, progress=Fal
 
     return total_top1 / total_num * 100, total_top5 / total_num * 100
 
-def save_checkpoint(state, is_best, args, filename='checkpoint.pth.tar'):
+def save_checkpoint(state, is_best, args, filename='checkpoint.pth.tar', sync=True):
+    tmp_filename = filename + ".tmp"
     torch.save(state, filename)
+    os.replace(tmp_filename, filename)
     if is_best:
-        shutil.copyfile(filename, '{}/{}/model_best.pth.tar'.format(args.save_root, args.name))
+        best_filename = '{}/{}/model_best.pth.tar'.format(args.save_root, args.name)
+        shutil.copyfile(filename, best_filename)
+    if sync:
+        # Sync file data
+        for p in [filename, best_filename] if is_best else [filename]:
+            fd = os.open(p, os.O_RDONLY)
+            os.fsync(fd)
+            os.close(fd)
+
+        # Sync the directory once (covers both files)
+        dir_fd = os.open(os.path.dirname(filename) or ".", os.O_RDONLY)
+        os.fsync(dir_fd)
+        os.close(dir_fd)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train SimCLR')
