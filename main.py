@@ -761,13 +761,13 @@ if __name__ == '__main__':
                 train_loss = train_env(model, train_loader, optimizer, temperature, updated_split, tr_bs, args)
 
             if epoch % args.maximize_iter == 0: # Maximize Step
-            do_gc = True
-            if args.offline:
-                upd_loader = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, prefetch_factor=u_pf, shuffle=False, 
-                    pin_memory=True, persistent_workers=u_pw)
-            else:
-                upd_loader = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, prefetch_factor=u_pf, shuffle=True, pin_memory=True, 
-                    drop_last=True, persistent_workers=u_pw)
+                do_gc = True
+                if args.offline:
+                    upd_loader = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, prefetch_factor=u_pf, shuffle=False, 
+                        pin_memory=True, persistent_workers=u_pw)
+                else:
+                    upd_loader = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, prefetch_factor=u_pf, shuffle=True, pin_memory=True, 
+                        drop_last=True, persistent_workers=u_pw)
                 updated_split = train_update_split(model, upd_loader, updated_split, random_init=args.random_init, args=args)
                 del upd_loader
                 updated_split_all.append(updated_split)
