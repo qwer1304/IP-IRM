@@ -456,12 +456,14 @@ def test(net, feature_bank, feature_labels, test_data_loader, args, progress=Fal
     return total_top1 / total_num * 100, total_top5 / total_num * 100
 
 def save_checkpoint(state, is_best, args, filename='checkpoint.pth.tar', sync=True):
-    tmp_filename = filename + ".tmp"
-    torch.save(state, filename)
-    os.replace(tmp_filename, filename)
+    filename_tmp = filename + ".tmp"
+    torch.save(state, filename_tmp)
+    os.replace(filename_tmp, filename)
     if is_best:
         best_filename = '{}/{}/model_best.pth.tar'.format(args.save_root, args.name)
-        shutil.copyfile(filename, best_filename)
+        best_filename_tmp = filename + ".tmp"
+        shutil.copyfile(filename, best_filename_tmp)
+        os.replace(best_filename_tmp, best_filename)
     if sync:
         # Sync file data
         for p in [filename, best_filename] if is_best else [filename]:
