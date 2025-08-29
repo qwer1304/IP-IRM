@@ -780,6 +780,7 @@ if __name__ == '__main__':
             memory_loader = DataLoader(memory_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
                 pin_memory=True, persistent_workers=te_pw)
             feauture_bank, feature_labels = get_feature_bank(model, memory_loader, args, progress=True, prefix="Evaluate:")
+            del memory_loader
 
         if (epoch % args.test_freq == 0) or (epoch == epochs): # eval knn every test_freq epochs
             if train_loader is not None:
