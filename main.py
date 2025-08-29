@@ -582,8 +582,6 @@ if __name__ == '__main__':
         update_data = utils.STL10_Index(root=args.data, split='train+unlabeled', transform=train_transform, target_transform=target_transform)
         memory_data = utils.STL10(root=args.data, split='train', transform=test_transform, target_transform=target_transform)
         test_data = utils.STL10(root=args.data, split='test', transform=test_transform, target_transform=target_transform)
-        train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, shuffle=True, pin_memory=True, 
-            drop_last=True, persistent_workers=tr_pw)
     elif args.dataset == 'CIFAR10':
         train_transform = utils.make_train_transform(normalize=args.image_class)
         test_transform = utils.make_test_transform(normalize=args.image_class)
@@ -591,8 +589,6 @@ if __name__ == '__main__':
         update_data = utils.CIFAR10_Index(root=args.data, train=True, transform=train_transform, target_transform=target_transform)
         memory_data = utils.CIFAR10(root=args.data, train=True, transform=test_transform, target_transform=target_transform)
         test_data = utils.CIFAR10(root=args.data, train=False, transform=test_transform, target_transform=target_transform)
-        train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, shuffle=True, pin_memory=True, 
-            drop_last=True, persistent_workers=tr_pw)
     elif args.dataset == 'CIFAR100':
         train_transform = utils.make_train_transform(normalize=args.image_class)
         test_transform = utils.make_test_transform(normalize=args.image_class)
@@ -600,8 +596,6 @@ if __name__ == '__main__':
         update_data = utils.CIFAR100_Index(root=args.data, train=True, transform=train_transform, target_transform=target_transform)
         memory_data = utils.CIFAR100(root=args.data, train=True, transform=test_transform, target_transform=target_transform)
         test_data = utils.CIFAR100(root=args.data, train=False, transform=test_transform, target_transform=target_transform)
-        train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, shuffle=True, pin_memory=True, 
-            drop_last=True, persistent_workers=tr_pw)
     elif args.dataset == 'ImageNet':
         train_transform = utils.make_train_transform(image_size, randgray=not args.norandgray, normalize=args.image_class)
         test_transform = utils.make_test_transform(normalize=args.image_class)
@@ -658,8 +652,6 @@ if __name__ == '__main__':
 
         #traverse_objects(update_data)
         #exit()
-        train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, shuffle=True, pin_memory=True, 
-            drop_last=True, persistent_workers=tr_pw)
 
     # pretrain model
     if args.pretrain_path is not None and os.path.isfile(args.pretrain_path):
@@ -750,18 +742,22 @@ if __name__ == '__main__':
         del upd_loader
         updated_split_all = [updated_split.clone().detach()]
 
+    train_loader = None
     for epoch in range(args.start_epoch, epochs + 1):
         do_gc = False
+        if train_loader is None:
+            train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, shuffle=True, pin_memory=True, 
+                drop_last=True, persistent_workers=tr_pw)
+
         if args.baseline:
             train_loss = train(model, train_loader, optimizer, temperature, debiased, tau_plus, tr_bs, args)
         else: # Minimize Step
-            if args.retain_group: # retain the previous partitions
-                train_loss = train_env(model, train_loader, optimizer, temperature, updated_split_all, tr_bs, args)
-            else:
-                train_loss = train_env(model, train_loader, optimizer, temperature, updated_split, tr_bs, args)
+            upd_split = updated_split_all if args.retain_group else updated_split
+            train_loss = train_env(model, train_loader, optimizer, temperature, upd_split, tr_bs, args)
 
             if epoch % args.maximize_iter == 0: # Maximize Step
-                do_gc = True
+                del train_loader
+                train_loader = None
                 if args.offline:
                     upd_loader = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, prefetch_factor=u_pf, shuffle=False, 
                         pin_memory=True, persistent_workers=u_pw)
@@ -770,33 +766,43 @@ if __name__ == '__main__':
                         drop_last=True, persistent_workers=u_pw)
                 updated_split = train_update_split(model, upd_loader, updated_split, random_init=args.random_init, args=args)
                 del upd_loader
+                do_gc = True
                 updated_split_all.append(updated_split)
 
         feature_bank, feature_labels = None, None
         if (epoch % args.test_freq == 0) or \
            ((epoch % args.val_freq == 0) and (args.dataset == 'ImageNet')) or \
            (epoch == epochs): # eval knn every test_freq/val_freq and last epochs
+           if train_loader is not None:
+                del train_loader
+                train_loader = None
             do_gc = True
             memory_loader = DataLoader(memory_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
                 pin_memory=True, persistent_workers=te_pw)
             feauture_bank, feature_labels = get_feature_bank(model, memory_loader, args, progress=True, prefix="Evaluate:")
 
         if (epoch % args.test_freq == 0) or (epoch == epochs): # eval knn every test_freq epochs
+           if train_loader is not None:
+                del train_loader
+                train_loader = None
             test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
                 pin_memory=True, persistent_workers=te_pw)
-            do_gc = True
             test_acc_1, test_acc_5 = test(model, feauture_bank, feature_labels, test_loader, args, progress=True, prefix="Test:")
             del test_loader
+            do_gc = True
             txt_write = open("results/{}/{}/{}".format(args.dataset, args.name, 'knn_result.txt'), 'a')
             txt_write.write('\ntest_acc@1: {}, test_acc@5: {}'.format(test_acc_1, test_acc_5))
             torch.save(model.state_dict(), 'results/{}/{}/model_{}.pth'.format(args.dataset, args.name, epoch))
 
         if ((epoch % args.val_freq == 0) or (epoch == epochs)) and (args.dataset == 'ImageNet'):
-            do_gc = True
+           if train_loader is not None:
+                del train_loader
+                train_loader = None
             # evaluate on validation set
             val_loader = DataLoader(val_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
                 pin_memory=True, persistent_workers=te_pw)
             acc1, _ = test(model, feauture_bank, feature_labels, val_loader, args, progress=True, prefix="Val:")
+            do_gc = True
             del val_loader
 
             # remember best acc@1 & best epoch and save checkpoint
@@ -808,6 +814,7 @@ if __name__ == '__main__':
             is_best = False
         if feature_bank is not None:
             del feauture_bank, feature_labels
+            do_gc = True
         if do_gc:
             gc.collect()              # run Python's garbage collector
             torch.cuda.empty_cache()  # (this only clears GPU but safe to call)
