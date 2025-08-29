@@ -277,8 +277,8 @@ def train_update_split(net, update_loader, soft_split, random_init=False, args=N
         with torch.no_grad():
             # generate feature bank
             bar_format = '{l_bar}{bar:' + str(args.bar) + '}{r_bar}' #{bar:-' + str(args.bar) + 'b}'
-            train_bar = tqdm(update_loader_offline,
-                total=len(update_loader_offline),
+            train_bar = tqdm(update_loader,
+                total=len(update_loader),
                 ncols=args.ncols,               # total width available
                 dynamic_ncols=False,            # disable autosizing
                 bar_format=bar_format,          # request bar width
@@ -584,14 +584,6 @@ if __name__ == '__main__':
         test_data = utils.STL10(root=args.data, split='test', transform=test_transform, target_transform=target_transform)
         train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, shuffle=True, pin_memory=True, 
             drop_last=True, persistent_workers=tr_pw)
-        update_loader = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, prefetch_factor=u_pf, shuffle=True, pin_memory=True, 
-            drop_last=True, persistent_workers=u_pw)
-        update_loader_offline = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, prefetch_factor=u_pf, shuffle=False, 
-            pin_memory=True, persistent_workers=u_pw)
-        memory_loader = DataLoader(memory_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
-            pin_memory=True, persistent_workers=te_pw)
-        test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
-            pin_memory=True, persistent_workers=te_pw)
     elif args.dataset == 'CIFAR10':
         train_transform = utils.make_train_transform(normalize=args.image_class)
         test_transform = utils.make_test_transform(normalize=args.image_class)
@@ -601,14 +593,6 @@ if __name__ == '__main__':
         test_data = utils.CIFAR10(root=args.data, train=False, transform=test_transform, target_transform=target_transform)
         train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, shuffle=True, pin_memory=True, 
             drop_last=True, persistent_workers=tr_pw)
-        update_loader = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, prefetch_factor=u_pf, shuffle=True, pin_memory=True, 
-            drop_last=True, persistent_workers=u_pw)
-        update_loader_offline = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, prefetch_factor=u_pf, shuffle=False, 
-            pin_memory=True, persistent_workers=u_pw)
-        memory_loader = DataLoader(memory_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
-            pin_memory=True, persistent_workers=te_pw)
-        test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
-            pin_memory=True, persistent_workers=te_pw)
     elif args.dataset == 'CIFAR100':
         train_transform = utils.make_train_transform(normalize=args.image_class)
         test_transform = utils.make_test_transform(normalize=args.image_class)
@@ -618,14 +602,6 @@ if __name__ == '__main__':
         test_data = utils.CIFAR100(root=args.data, train=False, transform=test_transform, target_transform=target_transform)
         train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, shuffle=True, pin_memory=True, 
             drop_last=True, persistent_workers=tr_pw)
-        update_loader = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, prefetch_factor=u_pf, shuffle=True, pin_memory=True, 
-            drop_last=True, persistent_workers=u_pw)
-        update_loader_offline = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, prefetch_factor=u_pf, shuffle=False, 
-            pin_memory=True, persistent_workers=u_pw)
-        memory_loader = DataLoader(memory_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
-            pin_memory=True, persistent_workers=te_pw)
-        test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
-            pin_memory=True, persistent_workers=te_pw)
     elif args.dataset == 'ImageNet':
         train_transform = utils.make_train_transform(image_size, randgray=not args.norandgray, normalize=args.image_class)
         test_transform = utils.make_test_transform(normalize=args.image_class)
@@ -684,16 +660,6 @@ if __name__ == '__main__':
         #exit()
         train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, shuffle=True, pin_memory=True, 
             drop_last=True, persistent_workers=tr_pw)
-        update_loader = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, prefetch_factor=u_pf, shuffle=True, pin_memory=True, 
-            drop_last=True, persistent_workers=u_pw)
-        update_loader_offline = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, prefetch_factor=u_pf, shuffle=False, 
-            pin_memory=True, persistent_workers=u_pw)
-        memory_loader = DataLoader(memory_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
-            pin_memory=True, persistent_workers=te_pw)
-        test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
-            pin_memory=True, persistent_workers=te_pw)
-        val_loader = DataLoader(val_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
-            pin_memory=True, persistent_workers=te_pw)
 
     # pretrain model
     if args.pretrain_path is not None and os.path.isfile(args.pretrain_path):
@@ -756,9 +722,15 @@ if __name__ == '__main__':
     if args.evaluate:
         print(f"Staring evaluation name: {args.name}")
         print('eval on val data')
+        memory_loader = DataLoader(memory_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
+            pin_memory=True, persistent_workers=te_pw)
         feauture_bank, feature_labels = get_feature_bank(model, memory_loader, args, progress=True, prefix="Evaluate:")
+        val_loader = DataLoader(val_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
+            pin_memory=True, persistent_workers=te_pw)
         val_acc_1, val_acc_5 = test(model, feauture_bank, feature_labels, val_loader, args, progress=True, prefix="Val:")
         print('eval on test data')
+        test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
+            pin_memory=True, persistent_workers=te_pw)
         test_acc_1, test_acc_5 = test(model, feauture_bank, feature_labels, test_loader, args, progress=True, prefix="Test:")
         exit()
 
@@ -768,11 +740,18 @@ if __name__ == '__main__':
             updated_split = torch.randn((len(update_data), args.env_num), requires_grad=True, device="cuda")
         else:
             updated_split = torch.randn((len(update_data), args.env_num), requires_grad=True, device="cuda")
-        updated_split = train_update_split(model, update_loader, updated_split, random_init=args.random_init, args=args)
+            if args.offline:
+                upd_loader = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, prefetch_factor=u_pf, shuffle=False, 
+                    pin_memory=True, persistent_workers=u_pw)
+            else:
+                upd_loader = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, prefetch_factor=u_pf, shuffle=True, pin_memory=True, 
+                    drop_last=True, persistent_workers=u_pw)
+        updated_split = train_update_split(model, upd_loader, updated_split, random_init=args.random_init, args=args)
+        del upd_loader
         updated_split_all = [updated_split.clone().detach()]
 
-
     for epoch in range(args.start_epoch, epochs + 1):
+        do_gc = False
         if args.baseline:
             train_loss = train(model, train_loader, optimizer, temperature, debiased, tau_plus, tr_bs, args)
         else: # Minimize Step
@@ -782,24 +761,43 @@ if __name__ == '__main__':
                 train_loss = train_env(model, train_loader, optimizer, temperature, updated_split, tr_bs, args)
 
             if epoch % args.maximize_iter == 0: # Maximize Step
-                updated_split = train_update_split(model, update_loader, updated_split, random_init=args.random_init, args=args)
+            do_gc = True
+            if args.offline:
+                upd_loader = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, prefetch_factor=u_pf, shuffle=False, 
+                    pin_memory=True, persistent_workers=u_pw)
+            else:
+                upd_loader = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, prefetch_factor=u_pf, shuffle=True, pin_memory=True, 
+                    drop_last=True, persistent_workers=u_pw)
+                updated_split = train_update_split(model, upd_loader, updated_split, random_init=args.random_init, args=args)
+                del upd_loader
                 updated_split_all.append(updated_split)
-       
+
         feature_bank, feature_labels = None, None
         if (epoch % args.test_freq == 0) or \
            ((epoch % args.val_freq == 0) and (args.dataset == 'ImageNet')) or \
            (epoch == epochs): # eval knn every test_freq/val_freq and last epochs
-                feauture_bank, feature_labels = get_feature_bank(model, memory_loader, args, progress=True, prefix="Evaluate:")
+           do_gc = True
+            memory_loader = DataLoader(memory_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
+                pin_memory=True, persistent_workers=te_pw)
+            feauture_bank, feature_labels = get_feature_bank(model, memory_loader, args, progress=True, prefix="Evaluate:")
 
         if (epoch % args.test_freq == 0) or (epoch == epochs): # eval knn every test_freq epochs
+            test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
+                pin_memory=True, persistent_workers=te_pw)
+            do_gc = True
             test_acc_1, test_acc_5 = test(model, feauture_bank, feature_labels, test_loader, args, progress=True, prefix="Test:")
+            del test_loader
             txt_write = open("results/{}/{}/{}".format(args.dataset, args.name, 'knn_result.txt'), 'a')
             txt_write.write('\ntest_acc@1: {}, test_acc@5: {}'.format(test_acc_1, test_acc_5))
             torch.save(model.state_dict(), 'results/{}/{}/model_{}.pth'.format(args.dataset, args.name, epoch))
 
         if ((epoch % args.val_freq == 0) or (epoch == epochs)) and (args.dataset == 'ImageNet'):
+            do_gc = True
             # evaluate on validation set
+            val_loader = DataLoader(val_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
+                pin_memory=True, persistent_workers=te_pw)
             acc1, _ = test(model, feauture_bank, feature_labels, val_loader, args, progress=True, prefix="Val:")
+            del val_loader
 
             # remember best acc@1 & best epoch and save checkpoint
             is_best = acc1 > best_acc1
@@ -810,6 +808,7 @@ if __name__ == '__main__':
             is_best = False
         if feature_bank is not None:
             del feauture_bank, feature_labels
+        if do_gc:
             gc.collect()              # run Python's garbage collector
             torch.cuda.empty_cache()  # (this only clears GPU but safe to call)
 

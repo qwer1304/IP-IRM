@@ -780,6 +780,7 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
             write_log('%s' %(pretty_tensor_str(final_split_softmax)), log_file=log_file, print_=True)
             group_assign = final_split_softmax.argmax(dim=1)
             write_log('Debug:  group1 %d  group2 %d' %(group_assign.sum(), group_assign.size(0)-group_assign.sum()), log_file=log_file, print_=True)
+            del trainloader
             return soft_split_best
 
 
