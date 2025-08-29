@@ -773,7 +773,7 @@ if __name__ == '__main__':
         if (epoch % args.test_freq == 0) or \
            ((epoch % args.val_freq == 0) and (args.dataset == 'ImageNet')) or \
            (epoch == epochs): # eval knn every test_freq/val_freq and last epochs
-           if train_loader is not None:
+            if train_loader is not None:
                 del train_loader
                 train_loader = None
             do_gc = True
@@ -782,7 +782,7 @@ if __name__ == '__main__':
             feauture_bank, feature_labels = get_feature_bank(model, memory_loader, args, progress=True, prefix="Evaluate:")
 
         if (epoch % args.test_freq == 0) or (epoch == epochs): # eval knn every test_freq epochs
-           if train_loader is not None:
+            if train_loader is not None:
                 del train_loader
                 train_loader = None
             test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
@@ -795,7 +795,7 @@ if __name__ == '__main__':
             torch.save(model.state_dict(), 'results/{}/{}/model_{}.pth'.format(args.dataset, args.name, epoch))
 
         if ((epoch % args.val_freq == 0) or (epoch == epochs)) and (args.dataset == 'ImageNet'):
-           if train_loader is not None:
+            if train_loader is not None:
                 del train_loader
                 train_loader = None
             # evaluate on validation set
