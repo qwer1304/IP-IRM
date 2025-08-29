@@ -776,7 +776,7 @@ if __name__ == '__main__':
         if (epoch % args.test_freq == 0) or \
            ((epoch % args.val_freq == 0) and (args.dataset == 'ImageNet')) or \
            (epoch == epochs): # eval knn every test_freq/val_freq and last epochs
-           do_gc = True
+            do_gc = True
             memory_loader = DataLoader(memory_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
                 pin_memory=True, persistent_workers=te_pw)
             feauture_bank, feature_labels = get_feature_bank(model, memory_loader, args, progress=True, prefix="Evaluate:")
