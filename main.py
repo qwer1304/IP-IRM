@@ -739,12 +739,12 @@ if __name__ == '__main__':
                 upd_loader = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, prefetch_factor=u_pf, shuffle=True, pin_memory=True, 
                     drop_last=True, persistent_workers=u_pw)
         updated_split = train_update_split(model, upd_loader, updated_split, random_init=args.random_init, args=args)
-        del upd_loader
         updated_split_all = [updated_split.clone().detach()]
+        del upd_loader
+        gc.collect()              # run Python's garbage collector
 
     train_loader = None
     for epoch in range(args.start_epoch, epochs + 1):
-        do_gc = False
         if train_loader is None:
             train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, shuffle=True, pin_memory=True, 
                 drop_last=True, persistent_workers=tr_pw)
@@ -757,6 +757,7 @@ if __name__ == '__main__':
 
             if epoch % args.maximize_iter == 0: # Maximize Step
                 del train_loader
+                gc.collect()              # run Python's garbage collector
                 train_loader = None
                 if args.offline:
                     upd_loader = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, prefetch_factor=u_pf, shuffle=False, 
@@ -766,7 +767,7 @@ if __name__ == '__main__':
                         drop_last=True, persistent_workers=u_pw)
                 updated_split = train_update_split(model, upd_loader, updated_split, random_init=args.random_init, args=args)
                 del upd_loader
-                do_gc = True
+                gc.collect()              # run Python's garbage collector
                 updated_split_all.append(updated_split)
 
         feature_bank, feature_labels = None, None
@@ -775,22 +776,24 @@ if __name__ == '__main__':
            (epoch == epochs): # eval knn every test_freq/val_freq and last epochs
             if train_loader is not None:
                 del train_loader
+                gc.collect()              # run Python's garbage collector
                 train_loader = None
-            do_gc = True
             memory_loader = DataLoader(memory_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
                 pin_memory=True, persistent_workers=te_pw)
             feauture_bank, feature_labels = get_feature_bank(model, memory_loader, args, progress=True, prefix="Evaluate:")
             del memory_loader
+            gc.collect()              # run Python's garbage collector
 
         if (epoch % args.test_freq == 0) or (epoch == epochs): # eval knn every test_freq epochs
             if train_loader is not None:
                 del train_loader
+                gc.collect()              # run Python's garbage collector
                 train_loader = None
             test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
                 pin_memory=True, persistent_workers=te_pw)
             test_acc_1, test_acc_5 = test(model, feauture_bank, feature_labels, test_loader, args, progress=True, prefix="Test:")
             del test_loader
-            do_gc = True
+            gc.collect()              # run Python's garbage collector
             txt_write = open("results/{}/{}/{}".format(args.dataset, args.name, 'knn_result.txt'), 'a')
             txt_write.write('\ntest_acc@1: {}, test_acc@5: {}'.format(test_acc_1, test_acc_5))
             torch.save(model.state_dict(), 'results/{}/{}/model_{}.pth'.format(args.dataset, args.name, epoch))
@@ -798,13 +801,14 @@ if __name__ == '__main__':
         if ((epoch % args.val_freq == 0) or (epoch == epochs)) and (args.dataset == 'ImageNet'):
             if train_loader is not None:
                 del train_loader
+                gc.collect()              # run Python's garbage collector
                 train_loader = None
             # evaluate on validation set
             val_loader = DataLoader(val_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
                 pin_memory=True, persistent_workers=te_pw)
             acc1, _ = test(model, feauture_bank, feature_labels, val_loader, args, progress=True, prefix="Val:")
-            do_gc = True
             del val_loader
+            gc.collect()              # run Python's garbage collector
 
             # remember best acc@1 & best epoch and save checkpoint
             is_best = acc1 > best_acc1
@@ -815,10 +819,7 @@ if __name__ == '__main__':
             is_best = False
         if feature_bank is not None:
             del feauture_bank, feature_labels
-            do_gc = True
-        if do_gc:
             gc.collect()              # run Python's garbage collector
-            torch.cuda.empty_cache()  # (this only clears GPU but safe to call)
 
         if (epoch % args.checkpoint_freq == 0) or (epoch == epochs):
             cuda_rng_state = torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None
