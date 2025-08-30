@@ -34,7 +34,7 @@ def main(args):
     if args.select_method == 'train':
         with os.scandir(input_dir) as e:      # env_dir is directory of per-label sub-directories
             for env_dir in e:
-                if env_dir not in args.domain_names:
+                if env_dir.name not in args.domain_names:
                     continue
                 if env_dir.name != args.test_domain:
                     with os.scandir(env_dir) as l:    # lab_dir is a label sub-directory
