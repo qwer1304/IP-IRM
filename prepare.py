@@ -15,7 +15,6 @@ descriptior:
  'split': True/False, # doesn't apply to test envs
  'concat': True/False, # concatenate envs (in and out separately)
  'wrap': True/False, # for changeable target transform
- 'target_pos': target_index,
  'excluded_envs': list of envs,
  'required_split': "in"/"out",
 }
@@ -36,6 +35,8 @@ class _SplitDataset(torch.utils.data.Dataset):
         super(_SplitDataset, self).__init__()
         self.underlying_dataset = underlying_dataset
         self.keys = keys
+        if hasattr(self.underlying_dataset, "index_pos"):
+            self.index_pos = self.underlying_dataset.index_pos
         # stitch targets if available
         if hasattr(self.underlying_dataset, "targets"):
             self.targets = [self.underlying_dataset.targets[k] for k in self.keys]
@@ -52,8 +53,11 @@ class _SplitDataset(torch.utils.data.Dataset):
             # keep global classes consistent
             self.target_transform = self.underlying_dataset.target_transform
     
-    def __getitem__(self, key):
-        return self.underlying_dataset[self.keys[key]]
+    def __getitem__(self, index):
+        ret = self.underlying_dataset[self.keys[index]]
+        if self.index_pos is not None:
+            ret = (*ret[:self.index_pos], index]
+        return ret
     
     def __len__(self):
         return len(self.keys)
@@ -132,7 +136,10 @@ class ConcatDataset(torch.utils.data.Dataset):
             sample_idx = idx
         else:
             sample_idx = idx - self.cumulative_sizes[dataset_idx - 1]
-        return self.datasets[dataset_idx][sample_idx]
+        ret = self.datasets[dataset_idx][sample_idx]
+        if self.index_pos is not None:
+            ret = (*ret[:self.index_pos], index]
+        return ret
 
     @property
     def cummulative_sizes(self):
@@ -141,10 +148,12 @@ class ConcatDataset(torch.utils.data.Dataset):
         return self.cumulative_sizes
 
 class TargetTransformWrapper(torch.utils.data.Dataset):
-    def __init__(self, dataset, target_transform=None, target_pos=None):
+    def __init__(self, dataset, target_transform=None):
         self.dataset = dataset
         # stitch targets if available
         self.targets = self.dataset.targets if hasattr(self.dataset, "targets") else []
+        if hasattr(self.dataset, "index_pos"):
+            self.index_pos = self.dataset.index_pos
 
         # optionally stitch other ImageFolder attributes
         if hasattr(self.dataset, "classes"):
@@ -155,22 +164,13 @@ class TargetTransformWrapper(torch.utils.data.Dataset):
             # keep global classes consistent
             self.transform = self.dataset.transform
         self.target_transform = target_transform
-        self.target_pos = target_pos
 
-    def __getitem__(self, idx):
-        items = self.dataset[idx]
+    def __getitem__(self, index):
+        ret = self.dataset[index]
 
-        # Ensure it's a tuple
-        if not isinstance(items, tuple):
-            items = (items,)
-
-        if self.target_transform is not None and len(items) >= self.target_pos:
-            items = list(items)
-            target = items[-self.target_pos] 
-            items[-self.target_pos] = self.target_transform(target)
-            items = tuple(items)
-
-        return items
+        if self.index_pos is not None:
+            ret = (*ret[:self.index_pos], index]
+        return ret
 
     def __len__(self):
         return len(self.dataset)
@@ -218,7 +218,7 @@ def prepare_datasets(root, environments, descriptors, holdout_fraction, seed):
         dataset = [ConcatDataset(splits)] if len(splits)>1 else splits
         
         if descriptor['wrap']:
-            dataset = [TargetTransformWrapper(d, target_transform=target_transform, target_pos=descriptor['target_pos']) for d in dataset]
+            dataset = [TargetTransformWrapper(d, target_transform=target_transform) for d in dataset]
             
         datasets_list.append(dataset)
     # end for descriptor in descriptors
@@ -272,7 +272,6 @@ if __name__ == "__main__":
                     'target_transform': target_transform,
                     'class_to_index': class_to_idx,
                     'wrap': args.wrap, # for changeable target transform
-                    'target_pos': 2,
                     'required_split': "in" if not args.out else "out",
     }]
     datasets = prepare_datasets(args.output_dir, args.environments, descriptors, args.holdout_fraction, args.seed)

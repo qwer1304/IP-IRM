@@ -606,7 +606,6 @@ if __name__ == '__main__':
                           'target_transform': target_transform,
                           'class_to_index': class_to_idx,
                           'wrap': False, # for changeable target transform
-                          'target_pos': 2,
                           'required_split': "in",
                         }
         update_desc =   {'dataset': utils.Imagenet_idx,
@@ -614,7 +613,6 @@ if __name__ == '__main__':
                           'target_transform': target_transform,
                           'class_to_index': class_to_idx,
                           'wrap': False, # for changeable target transform
-                          'target_pos': 2,
                           'required_split': "in",
                         }
         memory_desc =   {'dataset': utils.Imagenet,
@@ -622,7 +620,6 @@ if __name__ == '__main__':
                           'target_transform': target_transform,
                           'class_to_index': class_to_idx,
                           'wrap': False, # for changeable target transform
-                          'target_pos': 2,
                           'required_split': "in",
                         }
         val_desc    =   {'dataset': utils.Imagenet,
@@ -630,7 +627,6 @@ if __name__ == '__main__':
                           'target_transform': target_transform,
                           'class_to_index': class_to_idx,
                           'wrap': wrap, # for changeable target transform
-                          'target_pos': 2,
                           'required_split': "out",
                         }
         # descriptors of test data
@@ -639,7 +635,6 @@ if __name__ == '__main__':
                           'target_transform': target_transform,
                           'class_to_index': class_to_idx,
                           'wrap': wrap, # for changeable target transform
-                          'target_pos': 2,
                           'required_split': "in",
                         }
 
