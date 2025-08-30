@@ -34,6 +34,8 @@ def main(args):
     if args.select_method == 'train':
         with os.scandir(input_dir) as e:      # env_dir is directory of per-label sub-directories
             for env_dir in e:
+                if env_dir not in args.domain_names:
+                    continue
                 if env_dir.name != args.test_domain:
                     with os.scandir(env_dir) as l:    # lab_dir is a label sub-directory
                         for lab_dir in l:
@@ -49,12 +51,10 @@ def main(args):
 
                                     output_lab_dir = os.path.join(save_dir_train, label + '/')
                                     os.makedirs(output_lab_dir, exist_ok=True)
-                                    print("Train",output_lab_dir, files[0].path)
                                     for fp in [files[i] for i in train_idx]:
                                         shutil.copy(fp, output_lab_dir)
                                     output_lab_dir = os.path.join(save_dir_val, label + '/')
                                     os.makedirs(output_lab_dir, exist_ok=True)
-                                    print("Val",output_lab_dir, files[0].path)
                                     for fp in [files[i] for i in val_idx]:
                                         shutil.copy(fp, output_lab_dir)
                 else:
