@@ -34,15 +34,13 @@ def main(args):
     if args.select_method == 'train':
         with os.scandir(input_dir) as e:      # env_dir is directory of per-label sub-directories
             for env_dir in e:
-                do_test = env_dir.name != args.test_domain
-                with os.scandir(env_dir) as l:    # lab_dir is a label sub-directory
-                    for lab_dir in l:
-                        if lab_dir.is_dir():
-                            with os.scandir(lab_dir) as fs:     # fs are the images of a label
-                                files = [f for f in fs if f.is_file()]
+                if env_dir.name != args.test_domain:
+                    with os.scandir(env_dir) as l:    # lab_dir is a label sub-directory
+                        for lab_dir in l:
+                            if lab_dir.is_dir():
                                 label = lab_dir.name
-
-                                if not do_test:
+                                with os.scandir(lab_dir) as fs:     # fs are the images of a label
+                                    files = [f for f in fs if f.is_file()]
                                     num_files = len(files)
                                     f_idx = np.random.permutation(num_files)
                                     train_num = int(num_files*args.train_split)
@@ -57,11 +55,8 @@ def main(args):
                                     os.makedirs(output_lab_dir, exist_ok=True)
                                     for fp in [files[i] for i in val_idx]:
                                         shutil.copyfile(fp, output_lab_dir)
-                                else:
-                                    output_lab_dir = os.path.join(save_dir_test, label + '/')
-                                    os.makedirs(output_lab_dir, exist_ok=True)
-                                    for fp in [files[i] for i in train_idx]:
-                                        shutil.copyfile(fp, output_lab_dir)
+                else:
+                    shutil.copytree(env_dir, save_dir_test, dir_exist_ok=True)
     elif args.select_method == 'loo':
         with os.scandir(input_dir) as e:      # env_dir is directory of per-label sub-directories
             for env_dir in e:
