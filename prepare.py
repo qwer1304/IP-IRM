@@ -115,6 +115,9 @@ class ConcatDataset(torch.utils.data.Dataset):
         # stitch targets if available
         self.targets = [t for d in self.datasets if hasattr(d, "targets") for t in d.targets]
 
+        # let's hope they are all the same
+        if hasattr(self.datasets[0], "index_pos"):
+            self.index_pos = self.dataset.index_pos
         # optionally stitch other ImageFolder attributes
         if all(hasattr(d, "classes") for d in self.datasets):
             # keep global classes consistent
