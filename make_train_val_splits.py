@@ -58,7 +58,7 @@ def main(args):
                                     for fp in [files[i] for i in val_idx]:
                                         shutil.copy(fp, output_lab_dir)
                 else:
-                    shutil.copytree(env_dir, save_dir_test, dir_exist_ok=True)
+                    shutil.copytree(env_dir, save_dir_test, dirs_exist_ok=True)
     elif args.select_method == 'loo':
         with os.scandir(input_dir) as e:      # env_dir is directory of per-label sub-directories
             for env_dir in e:
