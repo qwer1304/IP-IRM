@@ -50,11 +50,11 @@ def main(args):
                                     output_lab_dir = os.path.join(save_dir_train, label + '/')
                                     os.makedirs(output_lab_dir, exist_ok=True)
                                     for fp in [files[i] for i in train_idx]:
-                                        shutil.copyfile(fp, output_lab_dir)
+                                        shutil.copy(fp, output_lab_dir)
                                     output_lab_dir = os.path.join(save_dir_val, label + '/')
                                     os.makedirs(output_lab_dir, exist_ok=True)
                                     for fp in [files[i] for i in val_idx]:
-                                        shutil.copyfile(fp, output_lab_dir)
+                                        shutil.copy(fp, output_lab_dir)
                 else:
                     shutil.copytree(env_dir, save_dir_test, dir_exist_ok=True)
     elif args.select_method == 'loo':
