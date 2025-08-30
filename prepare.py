@@ -56,7 +56,7 @@ class _SplitDataset(torch.utils.data.Dataset):
     def __getitem__(self, index):
         ret = self.underlying_dataset[self.keys[index]]
         if self.index_pos is not None:
-            ret = (*ret[:self.index_pos], index]
+            ret = (*ret[:self.index_pos], index])
         return ret
     
     def __len__(self):
@@ -138,7 +138,7 @@ class ConcatDataset(torch.utils.data.Dataset):
             sample_idx = idx - self.cumulative_sizes[dataset_idx - 1]
         ret = self.datasets[dataset_idx][sample_idx]
         if self.index_pos is not None:
-            ret = (*ret[:self.index_pos], index]
+            ret = (*ret[:self.index_pos], index])
         return ret
 
     @property
@@ -169,7 +169,7 @@ class TargetTransformWrapper(torch.utils.data.Dataset):
         ret = self.dataset[index]
 
         if self.index_pos is not None:
-            ret = (*ret[:self.index_pos], index]
+            ret = (*ret[:self.index_pos], index])
         return ret
 
     def __len__(self):
