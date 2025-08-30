@@ -49,10 +49,12 @@ def main(args):
 
                                     output_lab_dir = os.path.join(save_dir_train, label + '/')
                                     os.makedirs(output_lab_dir, exist_ok=True)
+                                    print("Train",output_lab_dir, files[0].path)
                                     for fp in [files[i] for i in train_idx]:
                                         shutil.copy(fp, output_lab_dir)
                                     output_lab_dir = os.path.join(save_dir_val, label + '/')
                                     os.makedirs(output_lab_dir, exist_ok=True)
+                                    print("Val",output_lab_dir, files[0].path)
                                     for fp in [files[i] for i in val_idx]:
                                         shutil.copy(fp, output_lab_dir)
                 else:
