@@ -14,6 +14,7 @@ import utils
 from model import Model
 from prepare import prepare_datasets, traverse_objects
 import gc
+from math import ceil
 
 def get_negative_mask(batch_size):
     negative_mask = torch.ones((batch_size, 2 * batch_size), dtype=bool)
@@ -36,7 +37,7 @@ def train(net, data_loader, train_optimizer, temperature, debiased, tau_plus, ba
     gpu_batch_size = args.micro_batch_size
     
     loader_accum_steps = gradients_batch_size // loader_batch_size 
-    gpu_accum_steps = loader_batch_size // gpu_batch_size 
+    gpu_accum_steps = ceil(loader_batch_size / gpu_batch_size) # better round up 
     
     loader_step = 0
     total_samples = len(data_loader.dataset)
@@ -126,7 +127,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
     gpu_batch_size = args.micro_batch_size
     
     loader_accum_steps = gradients_batch_size // loader_batch_size 
-    gpu_accum_steps = loader_batch_size // gpu_batch_size 
+    gpu_accum_steps = ceil(loader_batch_size / gpu_batch_size) # better round up 
     
     loader_step = 0
     total_samples = len(data_loader.dataset)
@@ -599,55 +600,63 @@ if __name__ == '__main__':
     elif args.dataset == 'ImageNet':
         train_transform = utils.make_train_transform(image_size, randgray=not args.norandgray, normalize=args.image_class)
         test_transform = utils.make_test_transform(normalize=args.image_class)
-        wrap = args.extract_features
-        # descriptors of train data
-        train_desc  =   {'dataset': utils.Imagenet_idx,
-                          'transform': train_transform,
-                          'target_transform': target_transform,
-                          'class_to_index': class_to_idx,
-                          'wrap': False, # for changeable target transform
-                          'required_split': "in",
-                        }
-        update_desc =   {'dataset': utils.Imagenet_idx,
-                          'transform': train_transform,
-                          'target_transform': target_transform,
-                          'class_to_index': class_to_idx,
-                          'wrap': False, # for changeable target transform
-                          'required_split': "in",
-                        }
-        memory_desc =   {'dataset': utils.Imagenet,
-                          'transform': test_transform,
-                          'target_transform': target_transform,
-                          'class_to_index': class_to_idx,
-                          'wrap': False, # for changeable target transform
-                          'required_split': "in",
-                        }
-        val_desc    =   {'dataset': utils.Imagenet,
-                          'transform': test_transform,
-                          'target_transform': target_transform,
-                          'class_to_index': class_to_idx,
-                          'wrap': wrap, # for changeable target transform
-                          'required_split': "out",
-                        }
-        # descriptors of test data
-        test_desc   =   {'dataset': utils.Imagenet,
-                          'transform': test_transform,
-                          'target_transform': target_transform,
-                          'class_to_index': class_to_idx,
-                          'wrap': wrap, # for changeable target transform
-                          'required_split': "in",
-                        }
+        if False:
+            wrap = args.extract_features
+            # descriptors of train data
+            train_desc  =   {'dataset': utils.Imagenet_idx,
+                              'transform': train_transform,
+                              'target_transform': target_transform,
+                              'class_to_index': class_to_idx,
+                              'wrap': False, # for changeable target transform
+                              'required_split': "in",
+                            }
+            update_desc =   {'dataset': utils.Imagenet_idx,
+                              'transform': train_transform,
+                              'target_transform': target_transform,
+                              'class_to_index': class_to_idx,
+                              'wrap': False, # for changeable target transform
+                              'required_split': "in",
+                            }
+            memory_desc =   {'dataset': utils.Imagenet,
+                              'transform': test_transform,
+                              'target_transform': target_transform,
+                              'class_to_index': class_to_idx,
+                              'wrap': False, # for changeable target transform
+                              'required_split': "in",
+                            }
+            val_desc    =   {'dataset': utils.Imagenet,
+                              'transform': test_transform,
+                              'target_transform': target_transform,
+                              'class_to_index': class_to_idx,
+                              'wrap': wrap, # for changeable target transform
+                              'required_split': "out",
+                            }
+            # descriptors of test data
+            test_desc   =   {'dataset': utils.Imagenet,
+                              'transform': test_transform,
+                              'target_transform': target_transform,
+                              'class_to_index': class_to_idx,
+                              'wrap': wrap, # for changeable target transform
+                              'required_split': "in",
+                            }
 
 
-        datas = prepare_datasets(args.data, args.train_envs, [train_desc, update_desc, memory_desc, val_desc], args.holdout_fraction, args.seed)
-        train_data, update_data, memory_data, val_data = tuple(data[0] for data in datas)
+            datas = prepare_datasets(args.data, args.train_envs, [train_desc, update_desc, memory_desc, val_desc], args.holdout_fraction, args.seed)
+            train_data, update_data, memory_data, val_data = tuple(data[0] for data in datas)
 
-        datas = prepare_datasets(args.data, args.test_envs, [test_desc], 1.0, args.seed)
-        test_data = datas[0][0]
+            datas = prepare_datasets(args.data, args.test_envs, [test_desc], 1.0, args.seed)
+            test_data = datas[0][0]
 
-        #traverse_objects(update_data)
-        #exit()
+            #traverse_objects(update_data)
+            #exit()
 
+        else:
+            train_data  = utils.Imagenet_idx(root=args.data + '/train', transform=train_transform, target_transform=target_transform, class_to_index=class_to_idx)
+            update_data = utils.Imagenet_idx(root=args.data + '/train', transform=train_transform, target_transform=target_transform, class_to_index=class_to_idx)
+            memory_data = utils.Imagenet(root=args.data     + '/train', transform=test_transform,  target_transform=target_transform, class_to_index=class_to_idx)
+            test_data   = utils.Imagenet(root=args.data     + '/test',  transform=test_transform,  target_transform=target_transform, class_to_index=class_to_idx)
+            val_data    = utils.Imagenet(root=args.data     + '/val',   transform=test_transform,  target_transform=target_transform, class_to_index=class_to_idx)
+        
     # pretrain model
     if args.pretrain_path is not None and os.path.isfile(args.pretrain_path):
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
