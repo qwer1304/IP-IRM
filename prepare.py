@@ -115,9 +115,8 @@ class ConcatDataset(torch.utils.data.Dataset):
         # stitch targets if available
         self.targets = [t for d in self.datasets if hasattr(d, "targets") for t in d.targets]
 
-        # let's hope they are all the same
-        if hasattr(self.datasets[0], "index_pos"):
-            self.index_pos = self.dataset.index_pos
+        if all(hasattr(d, "index_pos") for d in self.datasets):
+            self.index_pos = self.datasets[0].index_pos
         # optionally stitch other ImageFolder attributes
         if all(hasattr(d, "classes") for d in self.datasets):
             # keep global classes consistent
@@ -141,7 +140,7 @@ class ConcatDataset(torch.utils.data.Dataset):
             sample_idx = idx - self.cumulative_sizes[dataset_idx - 1]
         ret = self.datasets[dataset_idx][sample_idx]
         if self.index_pos is not None:
-            ret = (*ret[:self.index_pos], index)
+            ret = (*ret[:self.index_pos], idx)
         return ret
 
     @property
