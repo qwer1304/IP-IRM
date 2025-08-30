@@ -71,6 +71,17 @@ def main(args):
                     output_task_dir = save_dir_train
                 shutil.copytree(env_dir, output_task_dir, dir_exist_ok=True)
 
+def bounded_type(x, min_val, max_val, cast_type=float):
+    try:
+        val = cast_type(x)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{x} is not a valid {cast_type.__name__}")
+    if not (min_val <= val <= max_val):
+        raise argparse.ArgumentTypeError(
+            f"{val} not in range [{min_val}, {max_val}]"
+        )
+    return val                                              
+            
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
