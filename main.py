@@ -177,7 +177,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
 
                     out_1, out_2 = utils.assign_features(out_1_all, out_2_all, indexs_chunk, updated_split_each, env)
                     # no need to chunk 'updated_split_each' b/c 'assign_features' selects 'indexs_chunk' out of it first
-                    if not out_1:
+                    if len(out_1) == 0:
                         continue # no samples in this env
                         
                     # contrastive loss
