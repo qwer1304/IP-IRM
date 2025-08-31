@@ -154,13 +154,8 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
         # Split into micro-batches
         pos_all_chunks = pos_all.chunk(gpu_accum_steps)
         indexs_chunks = indexs.chunk(gpu_accum_steps)
-        print()
-        print("updated_split:", type(updated_split[0]), len(updated_split), updated_split[0].size())
-        updated_split_chunks = [us.chunk(gpu_accum_steps) for us in updated_split] # list of tuples of tensors
-        print("updated_split_chunks:", len(updated_split_chunks), type(updated_split_chunks[0]))
-        print("updated_split_chunk:", [u.size() for u in updated_split_chunks[0]])
         
-        for pos_all_chunk, indexs_chunk, us_chunk in zip(pos_all_chunks, indexs_chunks, updated_split_chunks):
+        for pos_all_chunk, indexs_chunk in zip(pos_all_chunks, indexs_chunks):
         
             pos_all_chunk = pos_all_chunk.cuda(non_blocking=True)
 
@@ -177,11 +172,11 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
 
             env_contrastive, env_penalty = [], []
 
-            for updated_split_each in us_chunk:
+            for updated_split_each in updated_split:
                 for env in range(args.env_num):          # 'env_num' is usually 2 
 
-                    print("assign_features:", updated_split_each.size(), out_1_all.size(), out_2_all.size(), indexs_chunk.size(), env)
                     out_1, out_2 = utils.assign_features(out_1_all, out_2_all, indexs_chunk, updated_split_each, env)
+                    # no need to chunk 'updated_split_each' b/c 'assign_features' selects 'indexs_chunk' out of it first
                     if not out_1:
                         continue # no samples in this env
                         

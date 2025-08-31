@@ -845,7 +845,7 @@ def assign_samples(data, split, env_idx):
     select_idx = torch.where(group_assign==env_idx)[0]
     return images_pos1[select_idx], images_pos2[select_idx]
 
-def assign_features(feature1,  feature2,  idxs,         split,              env_idx):
+def assign_features(feature1, feature2, idxs, split, env_idx):
     # Returns the indices of the maximum value of all elements in the input tensor.
     # There're 'env_num' groups in a split, so this returns the group [0,env_num) with the biggest value
     # i.e. which group the sample is asigned to
