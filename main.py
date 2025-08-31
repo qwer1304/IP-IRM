@@ -154,7 +154,10 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
         # Split into micro-batches
         pos_all_chunks = pos_all.chunk(gpu_accum_steps)
         indexs_chunks = indexs.chunk(gpu_accum_steps)
+        print("updated_split:", type(updated_split[0]), updated_split[0].size())
         updated_split_chunks = [us.chunk(gpu_accum_steps) for us in updated_split]
+        print("updated_split_chunks:", len(updated_split_chunks), type(updated_split_chunks[0]))
+        print("updated_split_chunk:", [u.size() for u in updated_split_chunks[0]])
         
         for pos_all_chunk, indexs_chunk, us_chunk in zip(pos_all_chunks, indexs_chunks, updated_split_chunks):
         
@@ -176,6 +179,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
             for updated_split_each in us_chunk:
                 for env in range(args.env_num):          # 'env_num' is usually 2 
 
+                    print("assign_features:", updated_split_each.size(), env)
                     out_1, out_2 = utils.assign_features(out_1_all, out_2_all, indexs_chunk, updated_split_each, env)
                     if not out_1:
                         continue # no samples in this env
