@@ -117,6 +117,10 @@ def train(net, data_loader, train_optimizer, temperature, debiased, tau_plus, ba
 
 # ssl training with IP-IRM
 def train_env(net, data_loader, train_optimizer, temperature, updated_split, batch_size, args):
+    if isinstance(updated_split, list): # if retain previous partitions
+        assert args.retain_group
+    else:
+        updated_split = [updated_split]
     net.train()
 
     transform = data_loader.dataset.transform
@@ -145,13 +149,14 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
         
     for batch_index, data_env in enumerate(train_bar):
         # extract all feature
-        pos_all, indexs = data_env[0], data_env[-1]
+        pos_all, indexs = data_env[0], data_env[-1] # 'pos_all' is an batch of images, 'indexs' is their corresponding indices 
 
         # Split into micro-batches
         pos_all_chunks = pos_all.chunk(gpu_accum_steps)
         indexs_chunks = indexs.chunk(gpu_accum_steps)
+        updated_split_chunks = [us.chunk(gpu_accum_steps) for us in updated_split]
         
-        for pos_all_chunk, indexs_chunk in zip(pos_all_chunks, indexs_chunks):
+        for pos_all_chunk, indexs_chunk, us_chunk in zip(pos_all_chunks, indexs_chunks, updated_split_chunks):
         
             pos_all_chunk = pos_all_chunk.cuda(non_blocking=True)
 
@@ -168,42 +173,27 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
 
             env_contrastive, env_penalty = [], []
 
-            if isinstance(updated_split, list): # if retain previous partitions
-                assert args.retain_group
-                for updated_split_each in updated_split:
-                    for env in range(args.env_num):
+            for updated_split_each in us_chunk:
+                for env in range(args.env_num):          # 'env_num' is usually 2 
 
-                        out_1, out_2 = utils.assign_features(out_1_all, out_2_all, indexs_chunk, updated_split_each, env)
-                        # contrastive loss
-                        logits, labels = utils.info_nce_loss(torch.cat([out_1, out_2], dim=0), out_1.size(0), temperature=1.0)
-                        logits_cont = logits / temperature
-
-                        loss = torch.nn.CrossEntropyLoss()(logits_cont, labels)
-                        # penalty
-                        logits_pen = logits / args.irm_temp
-                        penalty_score = utils.penalty(logits_pen, labels, torch.nn.CrossEntropyLoss(), mode=args.ours_mode)
-
-                        # collect it into env dict
-                        env_contrastive.append(loss)
-                        env_penalty.append(penalty_score)
-
-            else:
-                for env in range(args.env_num):
-
-                    out_1, out_2 = utils.assign_features(out_1_all, out_2_all, indexs_chunk, updated_split, env)
-
+                    out_1, out_2 = utils.assign_features(out_1_all, out_2_all, indexs_chunk, updated_split_each, env)
+                    if not out_1:
+                        continue # no samples in this env
+                        
                     # contrastive loss
                     logits, labels = utils.info_nce_loss(torch.cat([out_1, out_2], dim=0), out_1.size(0), temperature=1.0)
                     logits_cont = logits / temperature
-                    logits_pen = logits / args.irm_temp
 
                     loss = torch.nn.CrossEntropyLoss()(logits_cont, labels)
                     # penalty
+                    logits_pen = logits / args.irm_temp
                     penalty_score = utils.penalty(logits_pen, labels, torch.nn.CrossEntropyLoss(), mode=args.ours_mode)
 
                     # collect it into env dict
                     env_contrastive.append(loss)
                     env_penalty.append(penalty_score)
+                # end for env in range(args.env_num):
+            # end for updated_split_each in updated_split:
 
             loss_cont = torch.stack(env_contrastive).mean()
             if args.keep_cont:
