@@ -1,23 +1,10 @@
 import argparse
 import os
-import torch
-from torchvision import transforms
-from torchvision.utils import save_image
-from torchvision.datasets import MNIST
-from torch.utils.data import TensorDataset
-from PIL import Image
-import pandas as pd
 ## Progress bar
 from tqdm.auto import tqdm
 import numpy as np
 import random
 import shutil
-from functools import partial
-
-def create_labels_dir(dir, labels):
-    for label in labels:
-        save_dir_label = dir + str(label) + '/'
-        os.makedirs(save_dir_label, exist_ok=True)
 
 def main(args):
     random.seed(args.seed)
@@ -62,6 +49,8 @@ def main(args):
     elif args.select_method == 'loo':
         with os.scandir(input_dir) as e:      # env_dir is directory of per-label sub-directories
             for env_dir in e:
+                if env_dir.name not in args.domain_names:
+                    continue
                 if env_dir.is_dir():
                     if env_dir == args.val_dir:
                         output_task_dir = save_dir_val
@@ -69,7 +58,7 @@ def main(args):
                         output_task_dir = save_dir_test
                     else:
                         output_task_dir = save_dir_train
-                    shutil.copytree(env_dir, output_task_dir, dir_exist_ok=True)
+                    shutil.copytree(env_dir, output_task_dir, dirs_exist_ok=True)
 
 def bounded_type(x, min_val, max_val, cast_type=float):
     try:

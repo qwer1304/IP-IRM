@@ -507,17 +507,21 @@ def info_nce_loss_update(features, batch_size, temperature):
 
 
 def penalty(logits, y, loss_function, mode='w', batchsize=None):
+    assert((logits.size(0) % 2) == 0) 
     if mode == 'w':
         scale = torch.ones((1, logits.size(-1))).cuda(non_blocking=True).requires_grad_()
         try:
-            loss = loss_function(logits * scale, y)
+            loss1 = loss_function(logits[::2] * scale, y[::2])
+            loss2 = loss_function(logits[1::2] * scale, y[1::2])
         except:
             assert batchsize is not None
-            loss = loss_function(logits * scale, y, batchsize)
-        grad = autograd.grad(loss, [scale], create_graph=True)[0]
+            loss1 = loss_function(logits[::2] * scale, y[::2], batchsize)
+            loss2 = loss_function(logits[1::2] * scale, y[1::2], batchsize)
+        grad1 = autograd.grad(loss1, [scale], create_graph=True)[0]
+        grad2 = autograd.grad(loss2, [scale], create_graph=True)[0]
     elif mode == 'f':
         pass
-    return torch.sum(grad**2)
+    return torch.sum(grad1*grad2)
 
 
 class update_split_dataset(data.Dataset):
@@ -601,10 +605,12 @@ def auto_split(net, update_loader, soft_split_all, temperature, irm_temp, loss_m
 
                     scale = torch.ones((1, logits.size(-1))).cuda(non_blocking=True).requires_grad_()
                     logits_pen = logits / irm_temp
-                    cont_loss_env_scale = soft_contrastive_loss(logits_pen*scale, labels, loss_weight, mode=loss_mode, nonorm=nonorm)
-                    penalty_irm = torch.autograd.grad(cont_loss_env_scale, [scale], create_graph=True)[0]
-                    loss_cont_list.append(cont_loss_env)
-                    loss_penalty_list.append(torch.sum(penalty_irm**2))
+                    cont_loss_env_scale1 = soft_contrastive_loss(logits_pen[::2]*scale, labels[::2], loss_weight[::2], mode=loss_mode, nonorm=nonorm)
+                    cont_loss_env_scale2 = soft_contrastive_loss(logits_pen[1::2]*scale, labels[1::2], loss_weight[1::2], mode=loss_mode, nonorm=nonorm)
+                    penalty_irm1 = torch.autograd.grad(cont_loss_env_scale1, [scale], create_graph=True)[0]
+                    penalty_irm2 = torch.autograd.grad(cont_loss_env_scale2, [scale], create_graph=True)[0]
+                    loss_cont_list.append((cont_loss_env1 + cont_loss_env2)/2)
+                    loss_penalty_list.append(torch.sum(penalty_irm1*penalty_irm2))
 
                 cont_loss_epoch = torch.stack(loss_cont_list).mean()
                 inv_loss_epoch = torch.stack(loss_penalty_list).mean()
@@ -714,10 +720,12 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
 
                     scale = torch.ones((1, logits.size(-1))).cuda(non_blocking=True).requires_grad_()
                     logits_pen = logits / irm_temp
-                    cont_loss_env_scale = soft_contrastive_loss(logits_pen*scale, labels, loss_weight, mode=loss_mode, nonorm=nonorm)
-                    penalty_irm = torch.autograd.grad(cont_loss_env_scale, [scale], create_graph=True)[0]
+                    cont_loss_env_scale1 = soft_contrastive_loss(logits_pen[::2]*scale, labels[::2], loss_weight[::2], mode=loss_mode, nonorm=nonorm)
+                    cont_loss_env_scale2 = soft_contrastive_loss(logits_pen[1::2]*scale, labels[1::2], loss_weight[1::2], mode=loss_mode, nonorm=nonorm)
+                    penalty_irm1 = torch.autograd.grad(cont_loss_env_scale1, [scale], create_graph=True)[0]
+                    penalty_irm2 = torch.autograd.grad(cont_loss_env_scale2, [scale], create_graph=True)[0]
                     loss_cont_list.append(cont_loss_env)
-                    loss_penalty_list.append(torch.sum(penalty_irm**2))
+                    loss_penalty_list.append(torch.sum(penalty_irm1*penalty_irm2))
 
                 cont_loss_epoch = torch.stack(loss_cont_list).mean()
                 inv_loss_epoch = torch.stack(loss_penalty_list).mean()
