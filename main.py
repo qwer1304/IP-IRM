@@ -429,7 +429,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
                         logits_pen = (logits / args.irm_temp)
                         g_i = grad_wrt_scale_sum(logits_pen, labels_cont, create_graph=True)
                         # First addend in IRM averaged over split
-                        irm_mb = penalty_weight * (g_i / Ns[split_num,env] * g2[split_num,env]) # N doesn't change between passes
+                        irm_mb = penalty_weight * (g_i / Ns[split_num,env] * g2s[split_num,env]) # N doesn't change between passes
                         g1_sums_detached[split_num,env] += g_i.detach()
 
                         irm_mb *=  Ns[split_num,env] # N doesn't change between passes
