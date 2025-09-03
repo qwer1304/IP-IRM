@@ -227,17 +227,17 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
                     pos_q = transform(pos)
                     pos_k = transform(pos)
 
-                feature_q, _ = net(pos_q)
+                _, out_q = net(pos_q)
                 with torch.no_grad():
-                    feature_k, _ = model_momentum(pos_k)
+                    _, out_k = model_momentum(pos_k)
 
                 # -----------------------
                 # MoCo / GDI contrastive loss
                 # -----------------------
 
                 # logits: q*k+ / q*negatives
-                l_pos = torch.sum(feature_q * feature_k, dim=1, keepdim=True)
-                l_neg = torch.matmul(feature_k, queue.get().t())  # queue as negatives (detached)
+                l_pos = torch.sum(out_q * out_k, dim=1, keepdim=True)
+                l_neg = torch.matmul(out_k, queue.get().t())  # queue as negatives (detached)
                 logits = torch.cat([l_pos, l_neg], dim=1)
                 logits_cont = logits / temperature
                 labels_cont = torch.zeros(logits_cont.size(0), dtype=torch.long, device=device)
@@ -250,7 +250,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
                 total_loss += loss_cont.item()
 
                 # free memory of micro-batch
-                del pos, indexs, feature_q, feature_k, l_pos, l_neg, logits, logits_cont, loss_cont
+                del pos, indexs, out_q, out_k, l_pos, l_neg, logits, logits_cont, loss_cont
                 torch.cuda.empty_cache()
 
         for split_num, updated_split_each in enumerate(updated_split):
@@ -279,17 +279,17 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
                         pos_q = transform(pos)
                         pos_k = transform(pos)
 
-                    feature_q, _ = net(pos_q)
+                    _,out_q = net(pos_q)
                     with torch.no_grad():
-                        feature_k, _ = model_momentum(pos_k)
+                        _, out_k = model_momentum(pos_k)
 
                     # -----------------------
                     # MoCo / GDI contrastive loss
                     # -----------------------
 
                     # logits: q*k+ / q*negatives
-                    l_pos = torch.sum(feature_q * feature_k, dim=1, keepdim=True)
-                    l_neg = torch.matmul(feature_k, queue.get().t())  # queue as negatives (detached)
+                    l_pos = torch.sum(out_q * oit_k, dim=1, keepdim=True)
+                    l_neg = torch.matmul(out_k, queue.get().t())  # queue as negatives (detached)
                     logits = torch.cat([l_pos, l_neg], dim=1)
                     logits_cont = logits / temperature
                     labels_cont = torch.zeros(logits_cont.size(0), dtype=torch.long, device=device)
@@ -298,7 +298,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
                     # -----------------------
                     # update queue
                     # -----------------------
-                    queue.update(feature_k)
+                    queue.update(out_k)
 
                     # IRM penalty
                     logits_pen = (logits / args.irm_temp)
@@ -316,7 +316,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
                     total_loss += loss_cont.item()
 
                     # free memory of micro-batch
-                    del pos, indexs, feature_q, feature_k, l_pos, l_neg, logits, logits_cont, loss_cont, logits_pen, g_i
+                    del pos, indexs, out_q, out_k, l_pos, l_neg, logits, logits_cont, loss_cont, logits_pen, g_i
                     torch.cuda.empty_cache()
 
                 g2 = g2_sum / N # average over split
@@ -334,17 +334,17 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
                         pos_q = transform(pos)
                         pos_k = transform(pos)
 
-                    feature_q, _ = net(pos_q)
+                    _, out_q = net(pos_q)
                     with torch.no_grad():
-                        feature_k, _ = model_momentum(pos_k)
+                        _, out_k = model_momentum(pos_k)
 
                     # -----------------------
                     # MoCo / GDI contrastive loss
                     # -----------------------
 
                     # logits: q*k+ / q*negatives
-                    l_pos = torch.sum(feature_q * feature_k, dim=1, keepdim=True)
-                    l_neg = torch.matmul(feature_k, queue.get().t())  # queue as negatives (detached)
+                    l_pos = torch.sum(out_q * out_k, dim=1, keepdim=True)
+                    l_neg = torch.matmul(out_k, queue.get().t())  # queue as negatives (detached)
                     logits = torch.cat([l_pos, l_neg], dim=1)
                     logits_cont = logits / temperature
                     labels_cont = torch.zeros(logits_cont.size(0), dtype=torch.long, device=device)
@@ -353,7 +353,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
                     # -----------------------
                     # update queue
                     # -----------------------
-                    queue.update(feature_k)
+                    queue.update(out_k)
 
                     # IRM penalty
                     logits_pen = (logits / args.irm_temp)
@@ -372,7 +372,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
                     total_loss += loss.item()
 
                     # free memory of micro-batch
-                    del pos, indexs, feature_q, feature_k, l_pos, l_neg, logits, logits_cont, loss_cont, logits_pen, g_i, irm_mb, loss
+                    del pos, indexs, out_q, out_k, l_pos, l_neg, logits, logits_cont, loss_cont, logits_pen, g_i, irm_mb, loss
                     torch.cuda.empty_cache()
 
                 g1 = g1_sum_detached / N # average over split
