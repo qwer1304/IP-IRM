@@ -888,6 +888,13 @@ if __name__ == '__main__':
     model = Model(feature_dim, image_class=image_class, state_dict=state_dict).cuda()
     model = nn.DataParallel(model)
 
+    model_momentum = copy.deepcopy(model)
+    for p in model_momentum.parameters():
+        p.requires_grad = False
+    momentum = 0.999              # momentum for model_momentum
+    queue_size = 10000
+    queue = FeatureQueue(queue_size, feature_dim, device='cuda', dtype=torch.float32)
+
     optimizer = optim.Adam(model.parameters(), lr=1e-3, weight_decay=1e-6)
     c = len(memory_data.classes) if args.dataset != "ImageNet" else args.class_num
     print('# Classes: {}'.format(c))
@@ -907,6 +914,9 @@ if __name__ == '__main__':
             optimizer.load_state_dict(checkpoint['optimizer'])
             updated_split = checkpoint['updated_split']
             updated_split_all = checkpoint['updated_split_all']
+            if "queue" in checkpoint:
+                model_momentum.load_state_dict(checkpoint['state_dict_momentum'])
+                queue = checkpoint['queue']
             # Restore RNG states
             rng_dict = checkpoint['rng_dict']
             torch.set_rng_state(rng_dict['rng_state'].cpu())
@@ -1054,6 +1064,8 @@ if __name__ == '__main__':
                 'optimizer':            optimizer.state_dict(),
                 'updated_split':        updated_split,
                 'updated_split_all':    updated_split_all,
+                'state_dict_momentum':  model_momentum.state_dict(),
+                'queue':                queue,
                 "rng_dict": {
                     "rng_state": torch.get_rng_state(),
                     "cuda_rng_state": cuda_rng_state,
