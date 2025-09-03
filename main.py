@@ -295,7 +295,9 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
                 for subset_loader in subset_loaders:
                     data_env = next(iter(macro_subset))
                     print()
-                    print(type(data_env[0]), data_env[0].size(), type(data_env[-1]), len(data_env[-1]))
+                    print(data_env)
+                    print(type(data_env[0]), data_env[0].size())
+                    print(type(data_env[-1]), data_env[-1].size())
                     print()
                     # extract all feature
                     pos_all_batch, indexs_batch = data_env[0], data_env[-1] # 'pos_all' is an batch of images, 'indexs' is their corresponding indices 
