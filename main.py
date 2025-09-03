@@ -520,7 +520,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
             # end for subset_loader in subset_loaders:
         # end if args.keep_cont: # global contrastive loss (1st partition)
 
-        total_num = macro_index * gradients_batch_size # total number of samples processed so far
+        total_num = (macro_index + 1) * gradients_batch_size # total number of samples processed so far
         # total loss is average over entire macro-batch. we want it over the number of batches so far
         total_loss += loss_macro_batch * gradients_batch_size 
 
@@ -548,7 +548,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
 
         if batch_index % 10 == 0:
             utils.write_log('Train Epoch: [{:d}/{:d}] [{:d}/{:d}]  Loss: {:.4f}  LR: {:.4f}  PW {:.4f}'
-                            .format(epoch, epochs, batch_index * batch_size + len(pos_all_batch), len(data_loader.dataset), total_loss/total_num,
+                            .format(epoch, epochs, (macro_index+1) * gradients_batch_size, len(data_loader.dataset), total_loss/total_num,
                                     train_optimizer.param_groups[0]['lr'], penalty_weight), log_file=log_file)
     
     # end for macro_index, macro_indices in enumerate(index_loader):
