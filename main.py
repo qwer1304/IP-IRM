@@ -274,7 +274,6 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
                 # -----------------------
                 # Pass A: compute detached g2 for IRM
                 # -----------------------
-                logits_penA = []
                 g2_sum = 0.0
                 for i in idxs_2:
                     pos, indexs = mb_list[i]
@@ -308,7 +307,6 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
 
                     # IRM penalty
                     logits_pen = (logits / args.irm_temp)
-                    logits_penA.append(logits_pen)
                     
                     logits_pen = logits_pen.detach()
                     g_i = grad_wrt_scale_sum(logits_pen, labels_cont, create_graph=False).detach()
@@ -386,8 +384,30 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
                 # -----------------------
                 # Pass C: group 2
                 # -----------------------
-                for logits_pen in logits_penA:
+                for i in idxs_2:
+                    pos, indexs = mb_list[i]
+                    pos = pos.cuda(non_blocking=True)
+                    indexs = indexs.cuda(non_blocking=True)
+                    
+                    if transform is not None:
+                        pos_q = transform(pos)
+                        pos_k = transform(pos)
 
+                    _,out_q = net(pos_q)
+                    with torch.no_grad():
+                        _, out_k = model_momentum(pos_k)
+
+                    # -----------------------
+                    # MoCo / GDI contrastive loss
+                    # -----------------------
+
+                    # logits: q*k+ / q*negatives
+                    l_pos = torch.sum(out_q * out_k, dim=1, keepdim=True)
+                    l_neg = torch.matmul(out_k, queue.get().t())  # queue as negatives (detached)
+                    logits = torch.cat([l_pos, l_neg], dim=1)
+
+                    # IRM penalty
+                    logits_pen = (logits / args.irm_temp)
                     labels_cont = torch.zeros(logits_pen.size(0), dtype=torch.long, device=device)
                     g_i = grad_wrt_scale_sum(logits_pen, labels_cont, create_graph=True)
                     # Second addend in IRM averaged over split
