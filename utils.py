@@ -443,9 +443,11 @@ def group_crossentropy(logits, labels, batchsize):
 
 
 def info_nce_loss(features, batch_size, temperature):
+    # 'features' is a tensor of two views concatenated along dim=0
+    # 'batch_size' is the length of the first view 
 
-    labels = torch.cat([torch.arange(batch_size) for i in range(2)], dim=0)
-    labels = (labels.unsqueeze(0) == labels.unsqueeze(1)).float()
+    labels = torch.cat([torch.arange(batch_size) for i in range(2)], dim=0) # (2*batch_size,) of [0,batch_size)
+    labels = (labels.unsqueeze(0) == labels.unsqueeze(1)).float() # (2*batch_size,2*batch_size) of True where index match in both views
     labels = labels.to(features.device)
 
     # features = F.normalize(features, dim=1)
@@ -471,13 +473,15 @@ def info_nce_loss(features, batch_size, temperature):
 
 
 def info_nce_loss_update(features, batch_size, temperature):
+    # 'features' is a tensor of two views concatenated along dim=0
+    # 'batch_size' is the length of the first view 
 
-    labels = torch.cat([torch.arange(batch_size) for i in range(2)], dim=0)
-    labels = (labels.unsqueeze(0) == labels.unsqueeze(1)).float()
+    labels = torch.cat([torch.arange(batch_size) for i in range(2)], dim=0) # (2*batch_size,) of [0,batch_size)
+    labels = (labels.unsqueeze(0) == labels.unsqueeze(1)).float() # (2*batch_size,2*batch_size) of True where index match in both views
     labels = labels.to(features.device)
     # split_matrixs = torch.cat([split_matrix, split_matrix], dim=0).to(features.device)
-    index_sequence = torch.cat([torch.arange(batch_size) for i in range(2)], dim=0).to(features.device)
-    index_sequence = index_sequence.unsqueeze(0).expand(2*batch_size, 2*batch_size)
+    index_sequence = torch.cat([torch.arange(batch_size) for i in range(2)], dim=0).to(features.device) # (2*batch_size,) of [0,batch_size)
+    index_sequence = index_sequence.unsqueeze(0).expand(2*batch_size, 2*batch_size) # (2*batch_size,2*batch_size)
 
     # features = F.normalize(features, dim=1)
     similarity_matrix = torch.matmul(features, features.T)
@@ -494,7 +498,7 @@ def info_nce_loss_update(features, batch_size, temperature):
     positives = similarity_matrix[labels.bool()].view(labels.shape[0], -1)
     positive_index = index_sequence[labels.bool()].view(labels.shape[0], -1)
 
-    # select only the negatives the negatives
+    # select only the negatives
     negatives = similarity_matrix[~labels.bool()].view(similarity_matrix.shape[0], -1)
     negative_index = index_sequence[~labels.bool()].view(labels.shape[0], -1)
 
@@ -849,6 +853,9 @@ def assign_features(feature1, feature2, idxs, split, env_idx):
     # Returns the indices of the maximum value of all elements in the input tensor.
     # There're 'env_num' groups in a split, so this returns the group [0,env_num) with the biggest value
     # i.e. which group the sample is asigned to
+    # 'split' is a (dataset_size,env_num) of weights of sample i belonging to env j
+    # feature1/2 are the corresponding features in a batch
+    # idxs are their indices in the dataset
     group_assign = split[idxs].argmax(dim=1)
     # torch.where(condition) is identical to torch.nonzero(condition, as_tuple=True)
     # Returns a tuple of 1-D tensors, one for each dimension in input, each containing the indices 
