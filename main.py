@@ -527,8 +527,9 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
         # -----------------------
         # Step 4: update momentum encoder
         # -----------------------
-        for param_q, param_k in zip(net.parameters(), model_momentum.parameters()):
-            param_k.data = momentum * param_k.data + (1.0 - momentum) * param_q.data
+        with torch.no_grad():
+            for param_q, param_k in zip(net.parameters(), model_momentum.parameters()):
+                param_k.mul_(momentum).add_(param_q, alpha=1.0 - momentum)
 
         loss_macro_batch = 0.0
 
@@ -783,6 +784,7 @@ if __name__ == '__main__':
                         metavar='DataLoader pars [batch_size, number_workers, prefetch_factor, persistent_workers]', help='Testing/Validation/Memory DataLoader pars')
     parser.add_argument('--micro_batch_size', default=32, type=int, help='batch size on gpu')
     parser.add_argument('--gradients_batch_size', default=256, type=int, help='batch size of gradients accumulation')
+    parser.add_argument('--queue_size', default=10000, type=int, help='momentum model queue size')
     parser.add_argument('--epochs', default=200, type=int, help='Number of sweeps over the dataset to train')
     parser.add_argument('--debiased', default=False, type=bool, help='Debiased contrastive loss or standard loss')
     parser.add_argument('--dataset', type=str, default='STL', choices=['STL', 'CIFAR10', 'CIFAR100', 'ImageNet'], help='experiment dataset')
@@ -970,7 +972,7 @@ if __name__ == '__main__':
     for p in model_momentum.parameters():
         p.requires_grad = False
     momentum = 0.999              # momentum for model_momentum
-    queue_size = 10000
+    queue_size = args.queue_size
     queue = FeatureQueue(queue_size, feature_dim, device='cuda', dtype=torch.float32)
 
     optimizer = optim.Adam(model.parameters(), lr=1e-3, weight_decay=1e-6)
