@@ -287,7 +287,8 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
                     # free memory of micro-batch
                     del pos, indexs, out_q, out_k, l_pos, l_neg, logits, logits_cont, loss_cont
                     torch.cuda.empty_cache()
-                    step_bar.update(1)
+                # end for i in idxs:
+                step_bar.update(1)
 
 
         for split_num, updated_split_each in enumerate(updated_split):
@@ -357,7 +358,8 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
                         # free memory of micro-batch
                         del pos, indexs, out_q, out_k, l_pos, l_neg, logits, logits_cont, loss_cont, logits_pen, g_i
                         torch.cuda.empty_cache()
-                        step_bar.update(1)
+                    # end for i in idxs_2:
+                    step_bar.update(1)
                 g2 = g2_sum / N # average over split
 
                 # -----------------------
@@ -427,7 +429,8 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
                         # free memory of micro-batch
                         del pos, indexs, out_q, out_k, l_pos, l_neg, logits, logits_cont, loss_cont, logits_pen, g_i, irm_mb, loss
                         torch.cuda.empty_cache()
-                        step_bar.update(1)
+                    # end for i in idxs_1:
+                    step_bar.update(1)
                 g1 = g1_sum_detached / N # average over split
 
                 # -----------------------
@@ -485,7 +488,8 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
                         # free memory of micro-batch
                         del l_pos, l_neg, logits, logits_pen, g_i, irm_mb
                         torch.cuda.empty_cache()
-                        step_bar.update(1)
+                    # end for i in idxs_2:
+                    step_bar.update(1)
             # end for env in range(args.env_num):
         # end for updated_split_each in updated_split:      
         step_bar.close()
