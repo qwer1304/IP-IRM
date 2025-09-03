@@ -407,7 +407,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
             # end for env in range(args.env_num):
         # end for updated_split_each in updated_split:
 
-        total_num += pos_1_all.size(0)
+        total_num += pos_all_batch.size(0)
         # total loss is average over entire macro-batch. we want it over the number of batches so far
         total_loss *= gradients_batch_size 
 
