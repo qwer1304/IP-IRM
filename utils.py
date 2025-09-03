@@ -11,7 +11,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import nn, optim, autograd
 from torch.optim.lr_scheduler import _LRScheduler, MultiStepLR
-from torch.utils.data import DataLoader
+from torch.utils.data import Dataset, DataLoader, Subset
 from torch.utils import data
 import random
 import os
@@ -432,6 +432,14 @@ class Imagenet_idx_pair_transformone(ImageFolder):
         else:
            return super(Imagenet_idx_pair_transformone, self).find_classes(directory) 
 
+class IndexDataset(Dataset):
+    def __init__(self, size):
+        self.size = size
+    def __len__(self):
+        return self.size
+    def __getitem__(self, idx):
+        return idx
+        
 def group_crossentropy(logits, labels, batchsize):
     sample_dim, label_dim = logits.size(0), logits.size(1)
     logits_exp = logits.exp()
