@@ -293,12 +293,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
                 # -----------------------
                 g2_sum, N = 0.0, 0 # compute N during 1st pass since it's used only after the pass is completed
                 for subset_loader in subset_loaders:
-                    data_env = next(iter(macro_subset))
-                    print()
-                    print(data_env)
-                    print(type(data_env[0]), data_env[0].size())
-                    print(type(data_env[-1]), data_env[-1].size())
-                    print()
+                    data_env = next(iter(subset_loader))
                     # extract all feature
                     pos_all_batch, indexs_batch = data_env[0], data_env[-1] # 'pos_all' is an batch of images, 'indexs' is their corresponding indices 
                     split_idx = utils.assign_idxs(indexs_batch, updated_split_each, env).cpu()
@@ -365,7 +360,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
                 # -----------------------
                 # N doesn't change between passes!!!!!!
                 for subset_loader in subset_loaders:
-                    data_env = next(iter(macro_subset))
+                    data_env = next(iter(subset_loader))
                     # extract all feature
                     pos_all_batch, indexs_batch = data_env[0], data_env[-1] # 'pos_all' is an batch of images, 'indexs' is their corresponding indices 
                     split_idx = utils.assign_idxs(indexs_batch, updated_split_each, env).cpu()
@@ -433,7 +428,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
                 # -----------------------
                 # N doesn't change between passes
                 for subset_loader in subset_loaders:
-                    data_env = next(iter(macro_subset))
+                    data_env = next(iter(subset_loader))
                     # extract all feature
                     pos_all_batch, indexs_batch = data_env[0], data_env[-1] # 'pos_all' is an batch of images, 'indexs' is their corresponding indices 
                     split_idx = utils.assign_idxs(indexs_batch, updated_split_each, env).cpu()
