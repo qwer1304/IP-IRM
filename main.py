@@ -168,8 +168,11 @@ class FeatureQueue:
 def microbatches(x, y, mb_size, min_size=2):
     # yields a micro-batch
     N = x.size(0)
+    yb = None
     for i in range(0, N, mb_size):
-        xb, yb = x[i:i+mb_size], y[i:i+mb_size]
+        xb = x[i:i+mb_size] 
+        if y is not None:
+            yb = y[i:i+mb_size]
         if xb.size(0) < min_size:
             continue  # skip this tiny batch
         yield xb, yb
