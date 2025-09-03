@@ -224,7 +224,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
             bar_format=bar_format,          # request bar width
             )
 
-    for macro_index, macro_indices in enumerate(index_loader):
+    for macro_index, macro_indices in enumerate(train_bar):
         # create subset data loaders
         subset_loaders = []        
         for batch_index, subset_indices in enumerate(microbatches(macro_indices, None, loader_batch_size)):
@@ -242,7 +242,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
 
         number_of_loads = len(subset_loaders)*(3*num_splits*args.env_num + int(args.keep_cont))
         train_optimizer.zero_grad()  # clear gradients at the beginning        
-        step_bar = tqdm(total=number_of_loads, desc=f"Steps in batch {macro_index}", leave=None, position=1)
+        step_bar = tqdm(total=number_of_loads, desc=f"Steps in batch {macro_index}", leave=False, position=1)
         if args.keep_cont: # global contrastive loss (1st partition)
             for subset_loader in subset_loaders:
                 data_env = next(iter(subset_loader))
