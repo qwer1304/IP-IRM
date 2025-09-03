@@ -204,6 +204,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
 
     loader_step = 0
     total_samples = len(data_loader.dataset)
+    loss_macro_batch = 0.0
     
     total_loss, total_num = 0.0, 0
     bar_format = '{l_bar}{bar:' + str(args.bar) + '}{r_bar}' #{bar:-' + str(args.bar) + 'b}'
@@ -252,7 +253,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
                     loss_cont /= penalty_weight
                 loss_cont = loss_cont / gradients_batch_size
                 loss_cont.backward()
-                total_loss += loss_cont.item()
+                loss_macro_batch += loss_cont.item()
 
                 # free memory of micro-batch
                 del pos, indexs, out_q, out_k, l_pos, l_neg, logits, logits_cont, loss_cont
@@ -318,7 +319,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
                         loss_cont /= penalty_weight
                     loss_cont = loss_cont / gradients_batch_size / num_splits / args.env_num
                     loss_cont.backward()
-                    total_loss += loss_cont.item()
+                    loss_macro_batch += loss_cont.item()
 
                     # free memory of micro-batch
                     del pos, indexs, out_q, out_k, l_pos, l_neg, logits, logits_cont, loss_cont, logits_pen, g_i
@@ -374,7 +375,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
                         loss /= penalty_weight
                     loss = loss / gradients_batch_size / num_splits / args.env_num
                     loss.backward()
-                    total_loss += loss.item()
+                    loss_macro_batch += loss.item()
 
                     # free memory of micro-batch
                     del pos, indexs, out_q, out_k, l_pos, l_neg, logits, logits_cont, loss_cont, logits_pen, g_i, irm_mb, loss
@@ -396,7 +397,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
                         irm_mb /= penalty_weight
                     irm_mb =  irm_mb * N / gradients_batch_size / num_splits / args.env_num
                     irm_mb.backward()
-                    total_loss += irm_mb.item()
+                    loss_macro_batch += irm_mb.item()
 
                     # free memory of micro-batch
                     del logits_pen, g_i, irm_mb
@@ -409,7 +410,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
 
         total_num += pos_all_batch.size(0)
         # total loss is average over entire macro-batch. we want it over the number of batches so far
-        total_loss *= gradients_batch_size 
+        total_loss += loss_macro_batch * gradients_batch_size 
 
         loader_step += 1
         if (loader_step * loader_batch_size) == gradients_batch_size:
@@ -426,6 +427,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
                 param_k.data = m * param_k.data + (1.0 - momentum) * param_q.data
 
             loader_step = 0
+            loss_macro_batch = 0.0
 
         train_bar.set_description('Train Epoch: [{}/{}] [{trained_samples}/{total_samples}]  Loss: {:.4f}  LR: {:.4f}  PW {:.4f}'
             .format(epoch, epochs, total_loss/total_num, train_optimizer.param_groups[0]['lr'], penalty_weight,
