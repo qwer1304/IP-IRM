@@ -344,7 +344,13 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
                         pos_q = transform(pos)
                         pos_k = transform(pos)
 
-                    _, out_q = net(pos_q)
+                    try:
+                        _, out_q = net(pos_q)
+                    except:
+                        print()
+                        print(epoch, batch_index, N, pos_q.size(), pos_k.size(), len(idxs_2), i, split_num, env)
+                        print()
+
                     with torch.no_grad():
                         _, out_k = model_momentum(pos_k)
 
@@ -399,7 +405,13 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
                         pos_q = transform(pos)
                         pos_k = transform(pos)
 
-                    _,out_q = net(pos_q)
+                    try:
+                        _, out_q = net(pos_q)
+                    except:
+                        print()
+                        print(epoch, batch_index, N, pos_q.size(), pos_k.size(), len(idxs_2), i, split_num, env)
+                        print()
+
                     with torch.no_grad():
                         _, out_k = model_momentum(pos_k)
 
