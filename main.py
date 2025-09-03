@@ -248,7 +248,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
                                        pin_memory=data_loader.pin_memory, 
                                        persistent_workers=data_loader.persistent_workers,
                                        drop_last=True, 
-                                       shuffle=True)
+                                       shuffle=False)
             subset_loaders.append(subset_loader)
 
         number_of_loads = len(subset_loaders)*(3 + int(args.keep_cont))
