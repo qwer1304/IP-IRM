@@ -257,7 +257,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
 
         for split_num, updated_split_each in enumerate(updated_split):
             for env in range(args.env_num):          # 'env_num' is usually 2 
-                split_idx = utils.assign_idxs(indexs_batch, updated_split_each, env)
+                split_idx = utils.assign_idxs(indexs_batch, updated_split_each, env).cpu()
                 N = len(split_idx)
 
                 # -----------------------
