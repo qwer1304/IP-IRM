@@ -18,6 +18,8 @@ from prepare import prepare_datasets, traverse_objects
 import gc
 from math import ceil
 import copy
+import traceback
+import sys
 
 def get_negative_mask(batch_size):
     negative_mask = torch.ones((batch_size, 2 * batch_size), dtype=bool)
@@ -458,6 +460,9 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
         
         loss_mean = loss_macro_batch / loader_step
         if (loader_step * loader_batch_size) == gradients_batch_size:
+            print()
+            print(loader_step, loader_batch_size, gradients_batch_size)
+            print()
             # -----------------------
             # Step 3: optimizer step
             # -----------------------
