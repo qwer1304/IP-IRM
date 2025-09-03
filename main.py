@@ -224,7 +224,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
             bar_format=bar_format,          # request bar width
             )
 
-    for macro_index, macro_indices in enumerate(train_bar):
+    for macro_index, macro_indices in enumerate(index_loader):
         # create subset data loaders
         subset_loaders = []        
         for batch_index, subset_indices in enumerate(microbatches(macro_indices, None, loader_batch_size)):
