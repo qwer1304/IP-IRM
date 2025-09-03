@@ -413,6 +413,8 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
         total_loss += loss_macro_batch * gradients_batch_size 
 
         loader_step += 1
+        
+        loss_mean = loss_macro_batch / loader_step
         if (loader_step * loader_batch_size) == gradients_batch_size:
             # -----------------------
             # Step 3: optimizer step
@@ -430,7 +432,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
             loss_macro_batch = 0.0
 
         train_bar.set_description('Train Epoch: [{}/{}] [{trained_samples}/{total_samples}]  Loss: {:.4f}  LR: {:.4f}  PW {:.4f}'
-            .format(epoch, epochs, total_loss/total_num, train_optimizer.param_groups[0]['lr'], penalty_weight,
+            .format(epoch, epochs, loss_mean, train_optimizer.param_groups[0]['lr'], penalty_weight,
             trained_samples=batch_index * batch_size + len(pos_all_batch),
             total_samples=len(data_loader.dataset)))
 
