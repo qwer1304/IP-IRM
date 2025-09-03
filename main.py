@@ -420,11 +420,9 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
                     loss_macro_batch += irm_mb.item()
 
                     # free memory of micro-batch
-                    del logits_pen, g_i, irm_mb
+                    del l_pos, l_neg, logits, logits_pen, g_i, irm_mb
                     torch.cuda.empty_cache()
                     
-                del logits_penA
-                torch.cuda.empty_cache()
             # end for env in range(args.env_num):
         # end for updated_split_each in updated_split:
 
