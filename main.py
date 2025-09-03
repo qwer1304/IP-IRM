@@ -294,7 +294,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
                     # -----------------------
 
                     # logits: q*k+ / q*negatives
-                    l_pos = torch.sum(out_q * oit_k, dim=1, keepdim=True)
+                    l_pos = torch.sum(out_q * out_k, dim=1, keepdim=True)
                     l_neg = torch.matmul(out_k, queue.get().t())  # queue as negatives (detached)
                     logits = torch.cat([l_pos, l_neg], dim=1)
                     logits_cont = logits / temperature
