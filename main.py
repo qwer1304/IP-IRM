@@ -218,7 +218,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
     total_loss, total_num = 0.0, 0
     bar_format = '{l_bar}{bar:' + str(args.bar) + '}{r_bar}' #{bar:-' + str(args.bar) + 'b}'
     train_bar = tqdm(index_loader,
-            total=len(data_loader),
+            total=len(index_loader),
             ncols=args.ncols,               # total width available
             dynamic_ncols=False,            # disable autosizing
             bar_format=bar_format,          # request bar width
@@ -294,6 +294,9 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
                 g2_sum, N = 0.0, 0 # compute N during 1st pass since it's used only after the pass is completed
                 for subset_loader in subset_loaders:
                     data_env = next(iter(macro_subset))
+                    print()
+                    print(type(data_env[0]), data_env[0].size(), type(data_env[-1]), len(data_env[-1]))
+                    print()
                     # extract all feature
                     pos_all_batch, indexs_batch = data_env[0], data_env[-1] # 'pos_all' is an batch of images, 'indexs' is their corresponding indices 
                     split_idx = utils.assign_idxs(indexs_batch, updated_split_each, env).cpu()
