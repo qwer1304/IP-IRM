@@ -1021,7 +1021,7 @@ if __name__ == '__main__':
 
     train_loader = None
 
-    index_dataset = IndexDataset(len(train_data))
+    index_dataset = utils.IndexDataset(len(train_data))
     index_loader = DataLoader(index_dataset, batch_size=args.gradients_batch_size, shuffle=True, drop_last=True)
 
     for epoch in range(args.start_epoch, epochs + 1):
