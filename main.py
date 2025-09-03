@@ -9,7 +9,7 @@ import torch.optim as optim
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader, Subset
-from tqdm import tqdm
+from tqdm.auto import tqdm
 
 import utils
 from model import Model
