@@ -166,11 +166,15 @@ class FeatureQueue:
         """Return the current queue tensor."""
         return self.queue
 
-def microbatches(x, y, mb_size):
+def microbatches(x, y, mb_size, min_size=2):
     # yields a micro-batch
-    for i in range(0, x.size(0), mb_size):
-        yield x[i:i+mb_size], y[i:i+mb_size]
-
+    N = x.size(0)
+    for i in range(0, N, mb_size):
+        xb, yb = x[i:i+mb_size], y[i:i+mb_size]
+        if xb.size(0) < min_size:
+            continue  # skip this tiny batch
+        yield xb, yb
+        
 def grad_wrt_scale_sum(logits, targets, create_graph):
     scale = torch.tensor(1.0, device=logits.device, requires_grad=True)
     loss = F.cross_entropy(scale * logits, targets, reduction='sum')
@@ -264,14 +268,14 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
         for split_num, updated_split_each in enumerate(updated_split):
             for env in range(args.env_num):          # 'env_num' is usually 2 
                 split_idx = utils.assign_idxs(indexs_batch, updated_split_each, env).cpu()
-                N = len(split_idx)
+                N = len(split_idx) # size of split
 
                 # -----------------------
                 # Step 0: micro-batches
                 # -----------------------
                 mb_list = list(microbatches(pos_all_batch[split_idx], indexs_batch[split_idx], gpu_batch_size))
-                idxs_1 = [i for i in range(len(mb_list)) if i % 2 == 0]
-                idxs_2 = [i for i in range(len(mb_list)) if i % 2 == 1]
+                idxs_1 = [i for i in range(len(mb_list)) if i % 2 == 0] # indices of "even" micro-batches in mb_list
+                idxs_2 = [i for i in range(len(mb_list)) if i % 2 == 1] # indices of "odd" micro-batches in mb_list
 
                 # -----------------------
                 # Pass A: compute detached g2 for IRM
@@ -285,16 +289,8 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
                     if transform is not None:
                         pos_q = transform(pos)
                         pos_k = transform(pos)
-                                        
-                    try:
-                        _, out_q = net(pos_q)
-                    except Exception:
-                        print()
-                        print(epoch, batch_index, N, pos_q.size(), pos_k.size(), len(idxs_2), i, split_num, env)
-                        print(traceback.format_exc())   
-                        print()
-                        sys.exit(1)
-                    
+
+                    _, out_q = net(pos_q)
                     with torch.no_grad():
                         _, out_k = model_momentum(pos_k)
 
@@ -348,15 +344,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
                         pos_q = transform(pos)
                         pos_k = transform(pos)
 
-                    try:
-                        _, out_q = net(pos_q)
-                    except Exception:
-                        print()
-                        print(epoch, batch_index, N, pos_q.size(), pos_k.size(), len(idxs_2), i, split_num, env)
-                        print()
-                        print(traceback.format_exc())   
-                        sys.exit(1)
-
+                    _, out_q = net(pos_q)
                     with torch.no_grad():
                         _, out_k = model_momentum(pos_k)
 
@@ -411,15 +399,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
                         pos_q = transform(pos)
                         pos_k = transform(pos)
 
-                    try:
-                        _, out_q = net(pos_q)
-                    except Exception:
-                        print()
-                        print(epoch, batch_index, N, pos_q.size(), pos_k.size(), len(idxs_2), i, split_num, env)
-                        print(traceback.format_exc())   
-                        print()
-                        sys.exit(1)
-
+                    _, out_q = net(pos_q)
                     with torch.no_grad():
                         _, out_k = model_momentum(pos_k)
 
@@ -460,9 +440,6 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
         
         loss_mean = loss_macro_batch / loader_step
         if (loader_step * loader_batch_size) == gradients_batch_size:
-            print()
-            print(loader_step, loader_batch_size, gradients_batch_size)
-            print()
             # -----------------------
             # Step 3: optimizer step
             # -----------------------
