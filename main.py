@@ -445,9 +445,6 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
             # -----------------------
             train_optimizer.step()
             train_optimizer.zero_grad()  # clear gradients at beginning of next gradients batch
-            print()
-            print('Done step')
-            print()
 
             # -----------------------
             # Step 4: update momentum encoder
