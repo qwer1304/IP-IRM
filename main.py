@@ -243,7 +243,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
         number_of_loads = len(subset_loaders)*(3*num_splits*args.env_num + int(args.keep_cont))
         train_optimizer.zero_grad()  # clear gradients at the beginning     
         print()
-        print('.'*number_of_loads+'\r', end="")
+        print('.'*number_of_loads+'\r', end="", flush=True)
         if args.keep_cont: # global contrastive loss (1st partition)
             for subset_loader in subset_loaders:
                 data_env = next(iter(subset_loader))
@@ -289,7 +289,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
                     del pos, indexs, out_q, out_k, l_pos, l_neg, logits, logits_cont, loss_cont
                     torch.cuda.empty_cache()
                 # end for i in idxs:
-                print('+', end="")
+                print('+', end="", flush=True)
 
 
         for split_num, updated_split_each in enumerate(updated_split):
@@ -360,7 +360,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
                         del pos, indexs, out_q, out_k, l_pos, l_neg, logits, logits_cont, loss_cont, logits_pen, g_i
                         torch.cuda.empty_cache()
                     # end for i in idxs_2:
-                    print('+', end="")
+                    print('+', end="", flush=True)
                 g2 = g2_sum / N # average over split
 
                 # -----------------------
@@ -431,7 +431,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
                         del pos, indexs, out_q, out_k, l_pos, l_neg, logits, logits_cont, loss_cont, logits_pen, g_i, irm_mb, loss
                         torch.cuda.empty_cache()
                     # end for i in idxs_1:
-                    print('+', end="")
+                    print('+', end="", flush=True)
                 g1 = g1_sum_detached / N # average over split
 
                 # -----------------------
@@ -490,7 +490,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
                         del l_pos, l_neg, logits, logits_pen, g_i, irm_mb
                         torch.cuda.empty_cache()
                     # end for i in idxs_2:
-                    print('+', end="")
+                    print('+', end="", flush=True)
             # end for env in range(args.env_num):
         # end for updated_split_each in updated_split:      
         print("")
