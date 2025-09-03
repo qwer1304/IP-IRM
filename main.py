@@ -177,12 +177,15 @@ def grad_wrt_scale_sum(logits, targets, create_graph):
 
 # ssl training with IP-IRM
 def train_env(net, data_loader, train_optimizer, temperature, updated_split, batch_size, args):
+    net.train()
     if isinstance(updated_split, list): # if retain previous partitions
         assert args.retain_group
     else:
         updated_split = [updated_split]
-    net.train()
+    num_splits = len(updated_split)
+    
     device = next(net.parameters()).device
+
     transform = data_loader.dataset.transform
     target_transform = data_loader.dataset.target_transform
 
