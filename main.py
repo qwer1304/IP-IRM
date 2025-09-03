@@ -286,10 +286,12 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
                                         
                     try:
                         _, out_q = net(pos_q)
-                    except:
+                    except Exception:
                         print()
                         print(epoch, batch_index, N, pos_q.size(), pos_k.size(), len(idxs_2), i, split_num, env)
+                        print(traceback.format_exc())   
                         print()
+                        sys.exit(1)
                     
                     with torch.no_grad():
                         _, out_k = model_momentum(pos_k)
@@ -346,10 +348,12 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
 
                     try:
                         _, out_q = net(pos_q)
-                    except:
+                    except Exception:
                         print()
                         print(epoch, batch_index, N, pos_q.size(), pos_k.size(), len(idxs_2), i, split_num, env)
                         print()
+                        print(traceback.format_exc())   
+                        sys.exit(1)
 
                     with torch.no_grad():
                         _, out_k = model_momentum(pos_k)
@@ -407,10 +411,12 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
 
                     try:
                         _, out_q = net(pos_q)
-                    except:
+                    except Exception:
                         print()
                         print(epoch, batch_index, N, pos_q.size(), pos_k.size(), len(idxs_2), i, split_num, env)
+                        print(traceback.format_exc())   
                         print()
+                        sys.exit(1)
 
                     with torch.no_grad():
                         _, out_k = model_momentum(pos_k)
@@ -457,6 +463,9 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
             # -----------------------
             train_optimizer.step()
             train_optimizer.zero_grad()  # clear gradients at beginning of next gradients batch
+            print()
+            print('Done step')
+            print()
 
             # -----------------------
             # Step 4: update momentum encoder
