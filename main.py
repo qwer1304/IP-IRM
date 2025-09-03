@@ -444,7 +444,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
             # Step 4: update momentum encoder
             # -----------------------
             for param_q, param_k in zip(net.parameters(), model_momentum.parameters()):
-                param_k.data = m * param_k.data + (1.0 - momentum) * param_q.data
+                param_k.data = momentum * param_k.data + (1.0 - momentum) * param_q.data
 
             loader_step = 0
             loss_macro_batch = 0.0
