@@ -243,7 +243,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
         number_of_loads = len(subset_loaders)*(3*num_splits*args.env_num + int(args.keep_cont))
         train_optimizer.zero_grad()  # clear gradients at the beginning     
         print()
-        print('.'*number_of_loads+'\r', end="", flush=True)
+        print('.'*number_of_loads, end="", flush=True)
         if args.keep_cont: # global contrastive loss (1st partition)
             for subset_loader in subset_loaders:
                 data_env = next(iter(subset_loader))
