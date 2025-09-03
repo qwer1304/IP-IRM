@@ -183,6 +183,17 @@ def grad_wrt_scale_sum(logits, targets, create_graph):
     g = torch.autograd.grad(loss, scale, create_graph=create_graph)[0]
     return g
 
+"""
+completed = 0
+# initial line
+print()
+print('.'*number_of_loads, end='\r', flush=True)
+
+completed += 1
+line = '+'*completed + '.'*(number_of_loads - completed)
+print(line, end='\r', flush=True)
+"""
+
 
 # ssl training with IP-IRM
 def train_env(net, data_loader, train_optimizer, temperature, updated_split, batch_size, args):
@@ -240,13 +251,8 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
                                        shuffle=True)
             subset_loaders.append(subset_loader)
 
-        number_of_loads = len(subset_loaders)*(3*num_splits*args.env_num + int(args.keep_cont))
+        number_of_loads = len(subset_loaders)*(3 + int(args.keep_cont))
         train_optimizer.zero_grad()  # clear gradients at the beginning     
-
-        completed = 0
-        # initial line
-        print()
-        print('.'*number_of_loads, end='\r', flush=True)
 
         if args.keep_cont: # global contrastive loss (1st partition)
             for subset_loader in subset_loaders:
@@ -257,7 +263,6 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
 
                 mb_list = list(microbatches(pos_all_batch, indexs_batch, gpu_batch_size))
                 idxs = [i for i in range(len(mb_list))]
-                N = sum(mb_list[i][0].size(0) for i in idxs) or 1
                 for i in idxs:
                     pos, indexs = mb_list[i]
                     pos = pos.cuda(non_blocking=True)
@@ -293,23 +298,22 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
                     del pos, indexs, out_q, out_k, l_pos, l_neg, logits, logits_cont, loss_cont
                     torch.cuda.empty_cache()
                 # end for i in idxs:
-                completed += 1
-                line = '+'*completed + '.'*(number_of_loads - completed)
-                print(line, end='\r', flush=True)
+            # end for subset_loader in subset_loaders:
+        # end if args.keep_cont: # global contrastive loss (1st partition)
 
-
-        for split_num, updated_split_each in enumerate(updated_split):
-            for env in range(args.env_num):          # 'env_num' is usually 2 
-                # -----------------------
-                # Pass A: compute detached g2 for IRM
-                # -----------------------
-                g2_sum, N = 0.0, 0 # compute N during 1st pass since it's used only after the pass is completed
-                for subset_loader in subset_loaders:
-                    data_env = next(iter(subset_loader))
+        # -----------------------
+        # Pass A: compute detached g2 for IRM
+        # -----------------------
+        g2_sums = np.zeros((num_splits, args.env_num), dtype=float) 
+        Ns = np.zeros((num_splits, args.env_num), dtype=int) # compute N during 1st pass since it's used only after the pass is completed
+        for subset_loader in subset_loaders:
+            data_env = next(iter(subset_loader))
+            for split_num, updated_split_each in enumerate(updated_split):
+                for env in range(args.env_num):          # 'env_num' is usually 2 
                     # extract all feature
                     pos_all_batch, indexs_batch = data_env[0], data_env[-1] # 'pos_all' is an batch of images, 'indexs' is their corresponding indices 
                     split_idx = utils.assign_idxs(indexs_batch, updated_split_each, env).cpu()
-                    N += len(split_idx) # size of split
+                    Ns[split_num,env] += len(split_idx) # size of split
 
                     # -----------------------
                     # Step 0: micro-batches
@@ -353,7 +357,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
 
                         logits_pen = logits_pen.detach()
                         g_i = grad_wrt_scale_sum(logits_pen, labels_cont, create_graph=False).detach()
-                        g2_sum += g_i
+                        g2_sums[split_num,env] += g_i
 
                         if penalty_weight > 1.0:
                             # Rescale the entire loss to keep gradients in a reasonable range
@@ -366,18 +370,20 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
                         del pos, indexs, out_q, out_k, l_pos, l_neg, logits, logits_cont, loss_cont, logits_pen, g_i
                         torch.cuda.empty_cache()
                     # end for i in idxs_2:
-                    completed += 1
-                    line = '+'*completed + '.'*(number_of_loads - completed)
-                    print(line, end='\r', flush=True)
-                g2 = g2_sum / N # average over split
+                # end for env in range(args.env_num): 
+            #end for split_num, updated_split_each in enumerate(updated_split):
+        # end for subset_loader in subset_loaders:
+        g2s = g2_sums / Ns # average over split
 
-                # -----------------------
-                # Pass B: group 1
-                # -----------------------
-                # N doesn't change between passes!!!!!!
-                g1_sum_detached = 0.0
-                for subset_loader in subset_loaders:
-                    data_env = next(iter(subset_loader))
+        # -----------------------
+        # Pass B: group 1
+        # -----------------------
+        # N doesn't change between passes!!!!!!
+        g1_sums_detached = np.zeros((num_splits, args.env_num), dtype=float) 
+        for subset_loader in subset_loaders:
+            data_env = next(iter(subset_loader))
+            for split_num, updated_split_each in enumerate(updated_split):
+                for env in range(args.env_num):          # 'env_num' is usually 2 
                     # extract all feature
                     pos_all_batch, indexs_batch = data_env[0], data_env[-1] # 'pos_all' is an batch of images, 'indexs' is their corresponding indices 
                     split_idx = utils.assign_idxs(indexs_batch, updated_split_each, env).cpu()
@@ -423,10 +429,10 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
                         logits_pen = (logits / args.irm_temp)
                         g_i = grad_wrt_scale_sum(logits_pen, labels_cont, create_graph=True)
                         # First addend in IRM averaged over split
-                        irm_mb = penalty_weight * (g_i / N * g2) # N doesn't change between passes
-                        g1_sum_detached += g_i.detach()
+                        irm_mb = penalty_weight * (g_i / Ns[split_num,env] * g2[split_num,env]) # N doesn't change between passes
+                        g1_sums_detached[split_num,env] += g_i.detach()
 
-                        irm_mb *=  N # N doesn't change between passes
+                        irm_mb *=  Ns[split_num,env] # N doesn't change between passes
                         loss = loss_cont + irm_mb
                         if penalty_weight > 1.0:
                             # Rescale the entire loss to keep gradients in a reasonable range
@@ -439,17 +445,19 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
                         del pos, indexs, out_q, out_k, l_pos, l_neg, logits, logits_cont, loss_cont, logits_pen, g_i, irm_mb, loss
                         torch.cuda.empty_cache()
                     # end for i in idxs_1:
-                    completed += 1
-                    line = '+'*completed + '.'*(number_of_loads - completed)
-                    print(line, end='\r', flush=True)
-                g1 = g1_sum_detached / N # average over split
+                # end for env in range(args.env_num): 
+            #end for split_num, updated_split_each in enumerate(updated_split):
+        # end for subset_loader in subset_loaders:
+        g1s = g1_sums_detached / Ns # average over split
 
-                # -----------------------
-                # Pass C: group 2
-                # -----------------------
-                # N doesn't change between passes
-                for subset_loader in subset_loaders:
-                    data_env = next(iter(subset_loader))
+        # -----------------------
+        # Pass C: group 2
+        # -----------------------
+        # N doesn't change between passes
+        for subset_loader in subset_loaders:
+            data_env = next(iter(subset_loader))
+            for split_num, updated_split_each in enumerate(updated_split):
+                for env in range(args.env_num):          # 'env_num' is usually 2 
                     # extract all feature
                     pos_all_batch, indexs_batch = data_env[0], data_env[-1] # 'pos_all' is an batch of images, 'indexs' is their corresponding indices 
                     split_idx = utils.assign_idxs(indexs_batch, updated_split_each, env).cpu()
@@ -488,11 +496,11 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
                         labels_cont = torch.zeros(logits_pen.size(0), dtype=torch.long, device=device)
                         g_i = grad_wrt_scale_sum(logits_pen, labels_cont, create_graph=True)
                         # Second addend in IRM averaged over split
-                        irm_mb = penalty_weight * (g_i / N * g1) # N doesn't change between passes
+                        irm_mb = penalty_weight * (g_i / Ns[split_num,env] * g1s[split_num,env]) # N doesn't change between passes
                         if penalty_weight > 1.0:
                             # Rescale the entire loss to keep gradients in a reasonable range
                             irm_mb /= penalty_weight
-                        irm_mb =  irm_mb * N / gradients_batch_size / num_splits / args.env_num # N doesn't change between passes
+                        irm_mb =  irm_mb * Ns[split_num,env] / gradients_batch_size / num_splits / args.env_num # N doesn't change between passes
                         irm_mb.backward()
                         loss_macro_batch += irm_mb.item()
 
@@ -500,12 +508,9 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
                         del l_pos, l_neg, logits, logits_pen, g_i, irm_mb
                         torch.cuda.empty_cache()
                     # end for i in idxs_2:
-                    completed += 1
-                    line = '+'*completed + '.'*(number_of_loads - completed)
-                    print(line, end='\r', flush=True)
-            # end for env in range(args.env_num):
-        # end for updated_split_each in updated_split:      
-        print("")
+                # end for env in range(args.env_num):
+            # end for updated_split_each in updated_split:      
+        # end for subset_loader in subset_loaders:
         
         total_num = macro_index * gradients_batch_size # total number of samples processed so far
         # total loss is average over entire macro-batch. we want it over the number of batches so far
