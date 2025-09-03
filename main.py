@@ -283,8 +283,12 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
                     if transform is not None:
                         pos_q = transform(pos)
                         pos_k = transform(pos)
-
-                    _,out_q = net(pos_q)
+                    
+                    print()
+                    print(epoch, batch_index, N, pos_q.size(), pos_k.size(), len(idxs_2), i, split_num, env)
+                    print()
+                    
+                    _, out_q = net(pos_q)
                     with torch.no_grad():
                         _, out_k = model_momentum(pos_k)
 
