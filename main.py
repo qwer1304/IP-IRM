@@ -359,6 +359,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
                 # Pass B: group 1
                 # -----------------------
                 # N doesn't change between passes!!!!!!
+                g1_sum_detached = 0.0
                 for subset_loader in subset_loaders:
                     data_env = next(iter(subset_loader))
                     # extract all feature
@@ -407,7 +408,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
                         g_i = grad_wrt_scale_sum(logits_pen, labels_cont, create_graph=True)
                         # First addend in IRM averaged over split
                         irm_mb = penalty_weight * (g_i / N * g2) # N doesn't change between passes
-                        g1_sum_detached += g_i.detach() * logits_pen.size(0)
+                        g1_sum_detached += g_i.detach()
 
                         irm_mb *=  N # N doesn't change between passes
                         loss = loss_cont + irm_mb
