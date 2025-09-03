@@ -429,7 +429,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
 
         train_bar.set_description('Train Epoch: [{}/{}] [{trained_samples}/{total_samples}]  Loss: {:.4f}  LR: {:.4f}  PW {:.4f}'
             .format(epoch, epochs, total_loss/total_num, train_optimizer.param_groups[0]['lr'], penalty_weight,
-            trained_samples=batch_index * batch_size + len(pos_all),
+            trained_samples=batch_index * batch_size + len(pos_all_batch),
             total_samples=len(data_loader.dataset)))
 
         if batch_index % 10 == 0:
