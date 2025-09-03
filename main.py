@@ -245,6 +245,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
 
         completed = 0
         # initial line
+        print()
         print('.'*number_of_loads, end='\r', flush=True)
 
         if args.keep_cont: # global contrastive loss (1st partition)
