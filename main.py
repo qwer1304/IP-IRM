@@ -209,15 +209,16 @@ def time_block(block_name, gpu=True):
 
         def __exit__(self_inner, exc_type, exc_val, exc_tb):
             self_inner.end_cpu = time.perf_counter()
-            self.cpu_time[block_name] = self.cpu_time.get(block_name, 0) + (self_inner.end_cpu - self_inner.start_cpu)
+            # use top-level dictionaries, NOT self
+            cpu_time[block_name] = cpu_time.get(block_name, 0) + (self_inner.end_cpu - self_inner.start_cpu)
             if gpu:
                 self_inner.end_gpu.record()
                 torch.cuda.synchronize()
                 elapsed = self_inner.start_gpu.elapsed_time(self_inner.end_gpu) / 1000.0  # ms -> s
-                self.gpu_time[block_name] = self.gpu_time.get(block_name, 0) + elapsed
+                gpu_time[block_name] = gpu_time.get(block_name, 0) + elapsed
 
     return Timer()
-
+    
 # ssl training with IP-IRM
 def train_env(net, data_loader, train_optimizer, temperature, updated_split, batch_size, args):
     # Initialize dictionaries to store times
