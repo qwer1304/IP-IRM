@@ -271,6 +271,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
         for batch_index, subset_indices in enumerate(microbatches(macro_indices, None, loader_batch_size)):
             subset_indices = subset_indices[0].tolist()
             macro_subset = Subset(data_loader.dataset, macro_indices) # holds one batch that can fit memory
+            print(data_loader.num_workers,data_loader.prefetch_factor,data_loader.pin_memory,data_loader.persistent_workers)
             subset_loader = DataLoader(macro_subset, 
                                        batch_size=loader_batch_size, 
                                        num_workers=data_loader.num_workers, 
