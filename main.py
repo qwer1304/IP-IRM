@@ -194,6 +194,7 @@ line = '+'*completed + '.'*(number_of_loads - completed)
 print(line, end='\r', flush=True)
 """
 
+"""
 import time
 
 cpu_time = {}
@@ -220,7 +221,8 @@ def time_block(block_name, gpu=True):
                 gpu_time[block_name] = gpu_time.get(block_name, 0.0) + gpu_elapsed
 
     return Timer()
-    
+"""
+
 # ssl training with IP-IRM
 def train_env(net, data_loader, train_optimizer, temperature, updated_split, batch_size, args):
     # Initialize dictionaries to store times
@@ -270,9 +272,6 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
         for batch_index, subset_indices in enumerate(microbatches(macro_indices, None, loader_batch_size)):
             subset_indices = subset_indices[0].tolist()
             macro_subset = Subset(data_loader.dataset, macro_indices) # holds one batch that can fit memory
-            print()
-            print("data loader",data_loader.num_workers,data_loader.prefetch_factor,data_loader.pin_memory,data_loader.persistent_workers)
-            print()
             subset_loader = DataLoader(macro_subset, 
                                        batch_size=loader_batch_size, 
                                        num_workers=data_loader.num_workers, 
@@ -297,10 +296,9 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
 
             for split_num, updated_split_each in enumerate(updated_split):
                 for env in range(args.env_num):          # 'env_num' is usually 2 
-                    with time_block("assign_indices", gpu=False):
-                        # extract all feature
-                        split_idx = utils.assign_idxs(indexs_batch, updated_split_each, env).cpu()
-                        Ns[split_num,env] += len(split_idx) # size of split
+                    # extract all feature
+                    split_idx = utils.assign_idxs(indexs_batch, updated_split_each, env).cpu()
+                    Ns[split_num,env] += len(split_idx) # size of split
 
                     # -----------------------
                     # Step 0: micro-batches
@@ -311,32 +309,28 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
 
                     for i in idxs_2:
                         pos, indexs = mb_list[i]
-                        with time_block("data_to_device"):
-                            pos = pos.cuda(non_blocking=True)
-                            indexs = indexs.cuda(non_blocking=True)
+                        pos = pos.cuda(non_blocking=True)
+                        indexs = indexs.cuda(non_blocking=True)
 
-                        with time_block("transform"):
-                            if transform is not None:
-                                pos_q = transform(pos)
-                                pos_k = transform(pos)
+                        if transform is not None:
+                            pos_q = transform(pos)
+                            pos_k = transform(pos)
 
-                        with time_block("forward"):
-                            _, out_q = net(pos_q)
-                            with torch.no_grad():
-                                _, out_k = model_momentum(pos_k)
+                        _, out_q = net(pos_q)
+                        with torch.no_grad():
+                            _, out_k = model_momentum(pos_k)
 
                         # -----------------------
                         # MoCo / GDI contrastive loss
                         # -----------------------
 
                         # logits: q*k+ / q*negatives
-                        with time_block("similarities"):
-                            l_pos = torch.sum(out_q * out_k, dim=1, keepdim=True)
-                            l_neg = torch.matmul(out_k, queue.get().t())  # queue as negatives (detached)
-                            logits = torch.cat([l_pos, l_neg], dim=1)
-                            logits_cont = logits / temperature
-                            labels_cont = torch.zeros(logits_cont.size(0), dtype=torch.long, device=device)
-                            loss_cont = F.cross_entropy(logits_cont, labels_cont, reduction='sum')
+                        l_pos = torch.sum(out_q * out_k, dim=1, keepdim=True)
+                        l_neg = torch.matmul(out_k, queue.get().t())  # queue as negatives (detached)
+                        logits = torch.cat([l_pos, l_neg], dim=1)
+                        logits_cont = logits / temperature
+                        labels_cont = torch.zeros(logits_cont.size(0), dtype=torch.long, device=device)
+                        loss_cont = F.cross_entropy(logits_cont, labels_cont, reduction='sum')
 
                         # -----------------------
                         # update queue
@@ -347,26 +341,25 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
                         logits_pen = (logits / args.irm_temp)
 
                         logits_pen = logits_pen.detach()
-                        with time_block("grads"):
-                            g_i = grad_wrt_scale_sum(logits_pen, labels_cont, create_graph=False).detach()
+                        g_i = grad_wrt_scale_sum(logits_pen, labels_cont, create_graph=False).detach()
                         g2_sums[split_num,env] += g_i
 
                         if penalty_weight > 1.0:
                             # Rescale the entire loss to keep gradients in a reasonable range
                             loss_cont /= penalty_weight
                         loss_cont = loss_cont / macro_batch_size / num_splits / args.env_num / gradients_accumulation_steps
-                        with time_block("backward"):
-                            loss_cont.backward()
+                        loss_cont.backward()
                         loss_macro_batch += loss_cont.item()
 
                         # free memory of micro-batch
-                        with time_block("free_memory", gpu=False):
-                            del pos, indexs, out_q, out_k, l_pos, l_neg, logits, logits_cont, loss_cont, logits_pen, g_i
-                            torch.cuda.empty_cache()
+                        del pos, indexs, out_q, out_k, l_pos, l_neg, logits, logits_cont, loss_cont, logits_pen, g_i
+                        torch.cuda.empty_cache()
                     # end for i in idxs_2:
                 # end for env in range(args.env_num): 
             #end for split_num, updated_split_each in enumerate(updated_split):
         # end for subset_loader in subset_loaders:
+        
+        """
         # After loop, print per-block CPU and GPU times
         print("=== Timing per block ===")
         all_keys = set(cpu_time.keys()).union(set(gpu_time.keys()))
@@ -375,6 +368,8 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
             gpu_t = gpu_time.get(k, 0.0)
             print(f"{k:20s} | CPU: {cpu_t:.4f}s | GPU: {gpu_t:.4f}s")
         exit(1)
+        """
+        
         g2s = g2_sums / Ns # average over split
 
         # -----------------------
