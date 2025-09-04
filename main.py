@@ -199,11 +199,11 @@ import time
 cpu_time = {}
 gpu_time = {}
 
-def time_block(block_name, measure_gpu=True):
+def time_block(block_name, gpu=True):
     class Timer:
         def __enter__(self_inner):
             self_inner.start_cpu = time.perf_counter()  # CPU start
-            if measure_gpu:
+            if gpu:
                 self_inner.start_gpu = torch.cuda.Event(enable_timing=True)
                 self_inner.end_gpu = torch.cuda.Event(enable_timing=True)
                 self_inner.start_gpu.record()
@@ -213,7 +213,7 @@ def time_block(block_name, measure_gpu=True):
             cpu_elapsed = time.perf_counter() - self_inner.start_cpu
             cpu_time[block_name] = cpu_time.get(block_name, 0.0) + cpu_elapsed
 
-            if measure_gpu:
+            if gpu:
                 self_inner.end_gpu.record()
                 torch.cuda.synchronize()  # wait for GPU kernels
                 gpu_elapsed = self_inner.start_gpu.elapsed_time(self_inner.end_gpu) / 1000.0
