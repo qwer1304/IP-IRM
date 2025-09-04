@@ -334,7 +334,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
         # -----------------------
         # N doesn't change between passes!!!!!!
         g1_sums_detached = np.zeros((num_splits, args.env_num), dtype=float) 
-        for sub_idx, subset_loader in reversed(subset_loaders):
+        for sub_idx, subset_loader in enumerate(reversed(subset_loaders)):
             if (len(subset_loaders) > 1) and (sub_idx != 0):
                 data_env = next(iter(subset_loader))
                 pos_all_batch, indexs_batch = data_env[0], data_env[-1] # 'pos_all' is an batch of images, 'indexs' is their corresponding indices 
@@ -410,7 +410,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
         # Pass C: group 2
         # -----------------------
         # N doesn't change between passes
-        for subset_loader in subset_loaders:
+        for sub_idx, subset_loader in enumerate(subset_loaders):
             if (len(subset_loaders) > 1) and (sub_idx != 0):
                 data_env = next(iter(subset_loader))
                 pos_all_batch, indexs_batch = data_env[0], data_env[-1] # 'pos_all' is an batch of images, 'indexs' is their corresponding indices 
@@ -471,7 +471,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
         # end for subset_loader in subset_loaders:
         
         if args.keep_cont: # global contrastive loss (1st partition)
-            for sub_idx, subset_loader in reversed(subset_loaders):
+            for sub_idx, subset_loader in enumerate(reversed(subset_loaders)):
                 if (len(subset_loaders) > 1) and (sub_idx != 0):
                     data_env = next(iter(subset_loader))
                     # extract all feature
@@ -1066,6 +1066,27 @@ if __name__ == '__main__':
         updated_split_all = [updated_split.clone().detach()]
         del upd_loader
         gc.collect()              # run Python's garbage collector
+
+        # Save a baseline checkpoint with initial split to allow skipping its initial creation
+        cuda_rng_state = torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None
+
+        save_checkpoint({
+            'epoch':                epoch,
+            'state_dict':           model.state_dict(),
+            'best_acc1':            best_acc1,
+            'best_epoch':           best_epoch,
+            'optimizer':            optimizer.state_dict(),
+            'updated_split':        updated_split,
+            'updated_split_all':    updated_split_all,
+            'state_dict_momentum':  model_momentum.state_dict(),
+            'queue':                queue,
+            "rng_dict": {
+                "rng_state": torch.get_rng_state(),
+                "cuda_rng_state": cuda_rng_state,
+                "numpy_rng_state": np.random.get_state(),
+                "python_rng_state": random.getstate(),
+            },
+        }, False, args, filename='{}/{}/checkpoint.pth.tar'.format(args.save_root, args.name))
 
     train_loader = None
 
