@@ -5,6 +5,7 @@ from tqdm.auto import tqdm
 import numpy as np
 import random
 import shutil
+from functools import partial
 
 def main(args):
     random.seed(args.seed)
