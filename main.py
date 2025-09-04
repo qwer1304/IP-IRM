@@ -199,26 +199,25 @@ import time
 cpu_time = {}
 gpu_time = {}
 
-def time_block(block_name, gpu=True):
-    """Context manager to measure CPU and GPU time per block."""
+def time_block(block_name, measure_gpu=True):
     class Timer:
         def __enter__(self_inner):
-            self_inner.start_cpu = time.perf_counter()
-            if gpu:
+            self_inner.start_cpu = time.perf_counter()  # CPU start
+            if measure_gpu:
                 self_inner.start_gpu = torch.cuda.Event(enable_timing=True)
                 self_inner.end_gpu = torch.cuda.Event(enable_timing=True)
                 self_inner.start_gpu.record()
             return self_inner
 
         def __exit__(self_inner, exc_type, exc_val, exc_tb):
-            self_inner.end_cpu = time.perf_counter()
-            # use top-level dictionaries, NOT self
-            cpu_time[block_name] = cpu_time.get(block_name, 0) + (self_inner.end_cpu - self_inner.start_cpu)
-            if gpu:
+            cpu_elapsed = time.perf_counter() - self_inner.start_cpu
+            cpu_time[block_name] = cpu_time.get(block_name, 0.0) + cpu_elapsed
+
+            if measure_gpu:
                 self_inner.end_gpu.record()
-                torch.cuda.synchronize()
-                elapsed = self_inner.start_gpu.elapsed_time(self_inner.end_gpu) / 1000.0  # ms -> s
-                gpu_time[block_name] = gpu_time.get(block_name, 0) + elapsed
+                torch.cuda.synchronize()  # wait for GPU kernels
+                gpu_elapsed = self_inner.start_gpu.elapsed_time(self_inner.end_gpu) / 1000.0
+                gpu_time[block_name] = gpu_time.get(block_name, 0.0) + gpu_elapsed
 
     return Timer()
     
