@@ -257,8 +257,8 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
         # -----------------------
         # Pass A: compute detached g2 for IRM
         # -----------------------
-        g2_sums = np.zeros((num_splits, args.env_num), dtype=float) 
-        Ns = np.zeros((num_splits, args.env_num), dtype=int) # compute N during 1st pass since it's used only after the pass is completed
+        g2_sums = torch.zeros((num_splits, args.env_num), dtype=torch.float, device='cuda')
+        Ns = torch.zeros((num_splits, args.env_num), dtype=torch.int, device='cuda') # compute N during 1st pass since it's used only after the pass is completed
         for subset_loader in subset_loaders:
             data_env = next(iter(subset_loader))
             pos_all_batch, indexs_batch = data_env[0], data_env[-1] # 'pos_all' is an batch of images, 'indexs' is their corresponding indices 
@@ -333,7 +333,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
         # Pass B: group 1
         # -----------------------
         # N doesn't change between passes!!!!!!
-        g1_sums_detached = np.zeros((num_splits, args.env_num), dtype=float) 
+        g1_sums_detached = torch.zeros((num_splits, args.env_num), dtype=torch.float, device='cuda') 
         for sub_idx, subset_loader in enumerate(reversed(subset_loaders)):
             if (len(subset_loaders) > 1) and (sub_idx != 0):
                 data_env = next(iter(subset_loader))
@@ -521,8 +521,8 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
         # end if args.keep_cont: # global contrastive loss (1st partition)
 
         total_num = (macro_index + 1) * macro_batch_size # total number of samples processed so far
-        # total loss is average over entire macro-batch. we want it over the number of batches so far
-        total_loss += loss_macro_batch * macro_batch_size * gradients_accumulation_steps / (gradients_accumulation_step + 1)
+        # total loss is sum of losses so far over entire macro-batch.
+        total_loss += loss_macro_batch * macro_batch_size * gradients_accumulation_steps
 
         loss_mean = loss_macro_batch / (macro_index + 1)
 
