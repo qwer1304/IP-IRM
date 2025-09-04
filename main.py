@@ -196,6 +196,9 @@ print(line, end='\r', flush=True)
 
 import time
 
+cpu_time = {}
+gpu_time = {}
+
 def time_block(block_name, gpu=True):
     """Context manager to measure CPU and GPU time per block."""
     class Timer:
@@ -222,8 +225,6 @@ def time_block(block_name, gpu=True):
 # ssl training with IP-IRM
 def train_env(net, data_loader, train_optimizer, temperature, updated_split, batch_size, args):
     # Initialize dictionaries to store times
-    cpu_time = {}
-    gpu_time = {}
 
     net.train()
     if isinstance(updated_split, list): # if retain previous partitions
