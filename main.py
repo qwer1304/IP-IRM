@@ -290,8 +290,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
         g2_sums = torch.zeros((num_splits, args.env_num), dtype=torch.float, device='cuda')
         Ns = torch.zeros((num_splits, args.env_num), dtype=torch.int, device='cuda') # compute N during 1st pass since it's used only after the pass is completed
         for subset_loader in subset_loaders:
-            with time_block("load_data", gpu=False):            
-                data_env = next(iter(subset_loader))
+            data_env = next(iter(subset_loader))
             pos_all_batch, indexs_batch = data_env[0], data_env[-1] # 'pos_all' is an batch of images, 'indexs' is their corresponding indices 
 
             for split_num, updated_split_each in enumerate(updated_split):
