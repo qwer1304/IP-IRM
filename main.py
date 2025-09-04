@@ -194,17 +194,43 @@ line = '+'*completed + '.'*(number_of_loads - completed)
 print(line, end='\r', flush=True)
 """
 
-from torch.profiler import profile, record_function, ProfilerActivity
+import time
+
+def time_block(block_name, gpu=True):
+    """Context manager to measure CPU and GPU time per block."""
+    class Timer:
+        def __enter__(self_inner):
+            self_inner.start_cpu = time.perf_counter()
+            if gpu:
+                self_inner.start_gpu = torch.cuda.Event(enable_timing=True)
+                self_inner.end_gpu = torch.cuda.Event(enable_timing=True)
+                self_inner.start_gpu.record()
+            return self_inner
+
+        def __exit__(self_inner, exc_type, exc_val, exc_tb):
+            self_inner.end_cpu = time.perf_counter()
+            self.cpu_time[block_name] = self.cpu_time.get(block_name, 0) + (self_inner.end_cpu - self_inner.start_cpu)
+            if gpu:
+                self_inner.end_gpu.record()
+                torch.cuda.synchronize()
+                elapsed = self_inner.start_gpu.elapsed_time(self_inner.end_gpu) / 1000.0  # ms -> s
+                self.gpu_time[block_name] = self.gpu_time.get(block_name, 0) + elapsed
+
+    return Timer()
 
 # ssl training with IP-IRM
 def train_env(net, data_loader, train_optimizer, temperature, updated_split, batch_size, args):
+    # Initialize dictionaries to store times
+    cpu_time = {}
+    gpu_time = {}
+
     net.train()
     if isinstance(updated_split, list): # if retain previous partitions
         assert args.retain_group
     else:
         updated_split = [updated_split]
     num_splits = len(updated_split)
-
+    
     device = next(net.parameters()).device
 
     transform = data_loader.dataset.transform
@@ -226,7 +252,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
     gradients_accumulation_step = 0
     total_samples = len(data_loader.dataset)
     loss_macro_batch = 0.0
-
+    
     total_loss, total_num = 0.0, 0
     bar_format = '{l_bar}{bar:' + str(args.bar) + '}{r_bar}' #{bar:-' + str(args.bar) + 'b}'
     train_bar = tqdm(index_loader,
@@ -260,89 +286,90 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
         # -----------------------
         g2_sums = torch.zeros((num_splits, args.env_num), dtype=torch.float, device='cuda')
         Ns = torch.zeros((num_splits, args.env_num), dtype=torch.int, device='cuda') # compute N during 1st pass since it's used only after the pass is completed
-        with profile(
-            activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
-            record_shapes=True,
-            with_stack=True
-        ) as prof:
-            for subset_loader in subset_loaders:
-                with record_function("load_data"):
-                    data_env = next(iter(subset_loader))
-                pos_all_batch, indexs_batch = data_env[0], data_env[-1] # 'pos_all' is an batch of images, 'indexs' is their corresponding indices 
+        for subset_loader in subset_loaders:
+            with time_block("load_data", gpu=False):            
+                data_env = next(iter(subset_loader))
+            pos_all_batch, indexs_batch = data_env[0], data_env[-1] # 'pos_all' is an batch of images, 'indexs' is their corresponding indices 
 
-                for split_num, updated_split_each in enumerate(updated_split):
-                    for env in range(args.env_num):          # 'env_num' is usually 2 
+            for split_num, updated_split_each in enumerate(updated_split):
+                for env in range(args.env_num):          # 'env_num' is usually 2 
+                    with time_block("assign_indices", gpu=False):
                         # extract all feature
                         split_idx = utils.assign_idxs(indexs_batch, updated_split_each, env).cpu()
                         Ns[split_num,env] += len(split_idx) # size of split
 
+                    # -----------------------
+                    # Step 0: micro-batches
+                    # -----------------------
+                    mb_list = list(microbatches(pos_all_batch[split_idx], indexs_batch[split_idx], gpu_batch_size))
+                    idxs_1 = [i for i in range(len(mb_list)) if i % 2 == 0] # indices of "even" micro-batches in mb_list
+                    idxs_2 = [i for i in range(len(mb_list)) if i % 2 == 1] # indices of "odd" micro-batches in mb_list
+
+                    for i in idxs_2:
+                        pos, indexs = mb_list[i]
+                        with time_block("data_to_device"):
+                            pos = pos.cuda(non_blocking=True)
+                            indexs = indexs.cuda(non_blocking=True)
+
+                        with time_block("transform"):
+                            if transform is not None:
+                                pos_q = transform(pos)
+                                pos_k = transform(pos)
+
+                        with time_block("forward"):
+                            _, out_q = net(pos_q)
+                            with torch.no_grad():
+                                _, out_k = model_momentum(pos_k)
+
                         # -----------------------
-                        # Step 0: micro-batches
+                        # MoCo / GDI contrastive loss
                         # -----------------------
-                        mb_list = list(microbatches(pos_all_batch[split_idx], indexs_batch[split_idx], gpu_batch_size))
-                        idxs_1 = [i for i in range(len(mb_list)) if i % 2 == 0] # indices of "even" micro-batches in mb_list
-                        idxs_2 = [i for i in range(len(mb_list)) if i % 2 == 1] # indices of "odd" micro-batches in mb_list
 
-                        for i in idxs_2:
-                            pos, indexs = mb_list[i]
-                            with record_function("data_to_device"):
-                                pos = pos.cuda(non_blocking=True)
-                                indexs = indexs.cuda(non_blocking=True)
-
-                            with record_function("transform"):
-                                if transform is not None:
-                                    pos_q = transform(pos)
-                                    pos_k = transform(pos)
-
-                            with record_function("forward"):
-                                _, out_q = net(pos_q)
-                                with torch.no_grad():
-                                    _, out_k = model_momentum(pos_k)
-
-                            # -----------------------
-                            # MoCo / GDI contrastive loss
-                            # -----------------------
-
-                            # logits: q*k+ / q*negatives
+                        # logits: q*k+ / q*negatives
+                        with time_block("similarities"):
                             l_pos = torch.sum(out_q * out_k, dim=1, keepdim=True)
-                            with record_function("similarities"):
-                                l_neg = torch.matmul(out_k, queue.get().t())  # queue as negatives (detached)
+                            l_neg = torch.matmul(out_k, queue.get().t())  # queue as negatives (detached)
                             logits = torch.cat([l_pos, l_neg], dim=1)
                             logits_cont = logits / temperature
                             labels_cont = torch.zeros(logits_cont.size(0), dtype=torch.long, device=device)
                             loss_cont = F.cross_entropy(logits_cont, labels_cont, reduction='sum')
 
-                            # -----------------------
-                            # update queue
-                            # -----------------------
-                            queue.update(out_k)
+                        # -----------------------
+                        # update queue
+                        # -----------------------
+                        queue.update(out_k)
 
-                            # IRM penalty
-                            logits_pen = (logits / args.irm_temp)
+                        # IRM penalty
+                        logits_pen = (logits / args.irm_temp)
 
-                            logits_pen = logits_pen.detach()
-                            with record_function("grads"):
-                                g_i = grad_wrt_scale_sum(logits_pen, labels_cont, create_graph=False).detach()
-                            g2_sums[split_num,env] += g_i
+                        logits_pen = logits_pen.detach()
+                        with time_block("grads"):
+                            g_i = grad_wrt_scale_sum(logits_pen, labels_cont, create_graph=False).detach()
+                        g2_sums[split_num,env] += g_i
 
-                            if penalty_weight > 1.0:
-                                # Rescale the entire loss to keep gradients in a reasonable range
-                                loss_cont /= penalty_weight
-                            loss_cont = loss_cont / macro_batch_size / num_splits / args.env_num / gradients_accumulation_steps
-                            with record_function("backward"):
-                                loss_cont.backward()
-                            loss_macro_batch += loss_cont.item()
+                        if penalty_weight > 1.0:
+                            # Rescale the entire loss to keep gradients in a reasonable range
+                            loss_cont /= penalty_weight
+                        loss_cont = loss_cont / macro_batch_size / num_splits / args.env_num / gradients_accumulation_steps
+                        with time_block("backward"):
+                            loss_cont.backward()
+                        loss_macro_batch += loss_cont.item()
 
-                            with record_function("free_memory"):
-                                # free memory of micro-batch
-                                del pos, indexs, out_q, out_k, l_pos, l_neg, logits, logits_cont, loss_cont, logits_pen, g_i
-                                torch.cuda.empty_cache()
-                        # end for i in idxs_2:
-                    # end for env in range(args.env_num): 
-                #end for split_num, updated_split_each in enumerate(updated_split):
-            # end for subset_loader in subset_loaders:
-        print()
-        print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=20))
+                        # free memory of micro-batch
+                        with time_block("free_memory", gpu=False):
+                            del pos, indexs, out_q, out_k, l_pos, l_neg, logits, logits_cont, loss_cont, logits_pen, g_i
+                            torch.cuda.empty_cache()
+                    # end for i in idxs_2:
+                # end for env in range(args.env_num): 
+            #end for split_num, updated_split_each in enumerate(updated_split):
+        # end for subset_loader in subset_loaders:
+        # After loop, print per-block CPU and GPU times
+        print("=== Timing per block ===")
+        all_keys = set(cpu_time.keys()).union(set(gpu_time.keys()))
+        for k in all_keys:
+            cpu_t = cpu_time.get(k, 0.0)
+            gpu_t = gpu_time.get(k, 0.0)
+            print(f"{k:20s} | CPU: {cpu_t:.4f}s | GPU: {gpu_t:.4f}s")
         exit(1)
         g2s = g2_sums / Ns # average over split
 
@@ -486,7 +513,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
                 # end for env in range(args.env_num):
             # end for updated_split_each in updated_split:      
         # end for subset_loader in subset_loaders:
-
+        
         if args.keep_cont: # global contrastive loss (1st partition)
             for sub_idx, subset_loader in enumerate(reversed(subset_loaders)):
                 if (len(subset_loaders) > 1) and (sub_idx != 0):
@@ -570,7 +597,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
             utils.write_log('Train Epoch: [{:d}/{:d}] [{:d}/{:d}]  Loss: {:.4f}  LR: {:.4f}  PW {:.4f}'
                             .format(epoch, epochs, (macro_index+1) * macro_batch_size, len(data_loader.dataset), total_loss/total_num,
                                     train_optimizer.param_groups[0]['lr'], penalty_weight), log_file=log_file)
-
+                                        
     # end for macro_index, macro_indices in enumerate(index_loader):
 
     return total_loss / total_num
