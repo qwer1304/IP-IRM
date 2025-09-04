@@ -36,14 +36,14 @@ def train(net, data_loader, train_optimizer, temperature, debiased, tau_plus, ba
     transform = data_loader.dataset.transform
     target_transform = data_loader.dataset.target_transform
     
-    gradients_batch_size = args.gradients_batch_size
+    gradients_accumulation_batch_size = args.gradients_accumulation_batch_size
     loader_batch_size = batch_size
     gpu_batch_size = args.micro_batch_size
     
-    loader_accum_steps = gradients_batch_size // loader_batch_size 
+    gradients_accumulation_steps = gradients_accumulation_batch_size // loader_batch_size 
     gpu_accum_steps = ceil(loader_batch_size / gpu_batch_size) # better round up 
     
-    loader_step = 0
+    gradients_accumulation_step = 0
     total_samples = len(data_loader.dataset)
     
     total_loss, total_num = 0.0, 0
@@ -97,7 +97,7 @@ def train(net, data_loader, train_optimizer, temperature, debiased, tau_plus, ba
 
             # contrastive loss
             loss = (- torch.log(pos / (pos + Ng) )).mean()
-            loss = loss / gpu_accum_steps / loader_accum_steps  # scale loss to account for accumulation
+            loss = loss / gpu_accum_steps / gradients_accumulation_steps  # scale loss to account for accumulation
 
             loss.backward()
 
@@ -108,10 +108,10 @@ def train(net, data_loader, train_optimizer, temperature, debiased, tau_plus, ba
             del pos_chunk, target_chunk, idx_chunk, loss
             torch.cuda.empty_cache()
 
-        loader_step += 1
-        if (loader_step * loader_batch_size) == gradients_batch_size:
+        gradients_accumulation_step += 1
+        if (gradients_accumulation_step * loader_batch_size) == gradients_accumulation_batch_size:
             train_optimizer.step()
-            loader_step = 0
+            gradients_accumulation_step = 0
             train_optimizer.zero_grad()  # clear gradients at beginning of next gradients batch
 
         train_bar.set_description('Train Epoch: [{}/{}] Loss: {:.4f}'.format(epoch, epochs, total_loss / total_num))
@@ -217,12 +217,12 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
         penalty_weight = args.penalty_weight
 
     loader_batch_size = batch_size
-    gradients_batch_size = args.gradients_batch_size
-    loader_accum_steps = gradients_batch_size // loader_batch_size 
+    macro_batch_size = args.macro_batch_size
+    gradients_accumulation_steps = args.gradients_accumulation_batch_size // macro_batch_size 
     gpu_batch_size = args.micro_batch_size
     gpu_accum_steps = ceil(loader_batch_size / gpu_batch_size) # better round up 
 
-    loader_step = 0
+    gradients_accumulation_step = 0
     total_samples = len(data_loader.dataset)
     loss_macro_batch = 0.0
     
@@ -235,6 +235,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
             bar_format=bar_format,          # request bar width
             )
 
+    train_optimizer.zero_grad()  # clear gradients at the beginning     
     for macro_index, macro_indices in enumerate(train_bar):
         # create subset data loaders
         subset_loaders = []        
@@ -251,8 +252,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
                                        shuffle=False)
             subset_loaders.append(subset_loader)
 
-        number_of_loads = len(subset_loaders)*(3 + int(args.keep_cont))
-        train_optimizer.zero_grad()  # clear gradients at the beginning     
+        number_of_loads = len(subset_loaders) + (2 + int(args.keep_cont))*(len(subset_loaders) - 1)
 
         # -----------------------
         # Pass A: compute detached g2 for IRM
@@ -316,7 +316,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
                         if penalty_weight > 1.0:
                             # Rescale the entire loss to keep gradients in a reasonable range
                             loss_cont /= penalty_weight
-                        loss_cont = loss_cont / gradients_batch_size / num_splits / args.env_num
+                        loss_cont = loss_cont / macro_batch_size / num_splits / args.env_num / gradients_accumulation_steps
                         loss_cont.backward()
                         loss_macro_batch += loss_cont.item()
 
@@ -334,8 +334,8 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
         # -----------------------
         # N doesn't change between passes!!!!!!
         g1_sums_detached = np.zeros((num_splits, args.env_num), dtype=float) 
-        for subset_loader in subset_loaders:
-            if len(subset_loaders) > 1:
+        for sub_idx, subset_loader in reversed(subset_loaders):
+            if (len(subset_loaders) > 1) and (sub_idx != 0):
                 data_env = next(iter(subset_loader))
                 pos_all_batch, indexs_batch = data_env[0], data_env[-1] # 'pos_all' is an batch of images, 'indexs' is their corresponding indices 
 
@@ -393,7 +393,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
                         if penalty_weight > 1.0:
                             # Rescale the entire loss to keep gradients in a reasonable range
                             loss /= penalty_weight
-                        loss = loss / gradients_batch_size / num_splits / args.env_num
+                        loss = loss / macro_batch_size / num_splits / args.env_num / gradients_accumulation_steps
                         loss.backward()
                         loss_macro_batch += loss.item()
 
@@ -411,7 +411,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
         # -----------------------
         # N doesn't change between passes
         for subset_loader in subset_loaders:
-            if len(subset_loaders) > 1:
+            if (len(subset_loaders) > 1) and (sub_idx != 0):
                 data_env = next(iter(subset_loader))
                 pos_all_batch, indexs_batch = data_env[0], data_env[-1] # 'pos_all' is an batch of images, 'indexs' is their corresponding indices 
 
@@ -458,7 +458,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
                         if penalty_weight > 1.0:
                             # Rescale the entire loss to keep gradients in a reasonable range
                             irm_mb /= penalty_weight
-                        irm_mb =  irm_mb * Ns[split_num,env] / gradients_batch_size / num_splits / args.env_num # N doesn't change between passes
+                        irm_mb =  irm_mb * Ns[split_num,env] / macro_batch_size / num_splits / args.env_num / gradients_accumulation_steps # N doesn't change between passes
                         irm_mb.backward()
                         loss_macro_batch += irm_mb.item()
 
@@ -471,8 +471,8 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
         # end for subset_loader in subset_loaders:
         
         if args.keep_cont: # global contrastive loss (1st partition)
-            for subset_loader in subset_loaders:
-                if len(subset_loaders) > 1:
+            for sub_idx, subset_loader in reversed(subset_loaders):
+                if (len(subset_loaders) > 1) and (sub_idx != 0):
                     data_env = next(iter(subset_loader))
                     # extract all feature
                     pos_all_batch, indexs_batch = data_env[0], data_env[-1] # 'pos_all' is an batch of images, 'indexs' is their corresponding indices 
@@ -509,7 +509,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
                     if penalty_weight > 1.0:
                         # Rescale the entire loss to keep gradients in a reasonable range
                         loss_cont /= penalty_weight
-                    loss_cont = loss_cont / gradients_batch_size
+                    loss_cont = loss_cont / macro_batch_size / gradients_accumulation_steps
                     loss_cont.backward()
                     loss_macro_batch += loss_cont.item()
 
@@ -520,37 +520,40 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
             # end for subset_loader in subset_loaders:
         # end if args.keep_cont: # global contrastive loss (1st partition)
 
-        total_num = (macro_index + 1) * gradients_batch_size # total number of samples processed so far
+        total_num = (macro_index + 1) * macro_batch_size # total number of samples processed so far
         # total loss is average over entire macro-batch. we want it over the number of batches so far
-        total_loss += loss_macro_batch * gradients_batch_size 
+        total_loss += loss_macro_batch * macro_batch_size * gradients_accumulation_steps / (gradients_accumulation_step + 1)
 
         loss_mean = loss_macro_batch / (macro_index + 1)
 
-        # -----------------------
-        # Step 3: optimizer step
-        # -----------------------
-        train_optimizer.step()
-        train_optimizer.zero_grad()  # clear gradients at beginning of next gradients batch
+        gradients_accumulation_step += 1
+        if gradients_accumulation_step == gradients_accumulation_steps:
+            gradients_accumulation_step = 0
+            # -----------------------
+            # Step 3: optimizer step
+            # -----------------------
+            train_optimizer.step()
+            train_optimizer.zero_grad()  # clear gradients at beginning of next gradients batch
 
-        # -----------------------
-        # Step 4: update momentum encoder
-        # -----------------------
-        with torch.no_grad():
-            for param_q, param_k in zip(net.parameters(), model_momentum.parameters()):
-                param_k.mul_(momentum).add_(param_q, alpha=1.0 - momentum)
+            # -----------------------
+            # Step 4: update momentum encoder
+            # -----------------------
+            with torch.no_grad():
+                for param_q, param_k in zip(net.parameters(), model_momentum.parameters()):
+                    param_k.mul_(momentum).add_(param_q, alpha=1.0 - momentum)
 
         loss_macro_batch = 0.0
 
         train_bar.set_description('Train Epoch: [{}/{}] [{trained_samples}/{total_samples}]  Loss: {:.4f}  LR: {:.4f}  PW {:.4f}'
-            .format(epoch, epochs, loss_mean, train_optimizer.param_groups[0]['lr'], penalty_weight,
-            trained_samples=(macro_index+1) * gradients_batch_size,
+            .format(epoch, epochs, total_loss/total_num, train_optimizer.param_groups[0]['lr'], penalty_weight,
+            trained_samples=(macro_index+1) * macro_batch_size,
             total_samples=len(data_loader.dataset)))
 
         if batch_index % 10 == 0:
             utils.write_log('Train Epoch: [{:d}/{:d}] [{:d}/{:d}]  Loss: {:.4f}  LR: {:.4f}  PW {:.4f}'
-                            .format(epoch, epochs, (macro_index+1) * gradients_batch_size, len(data_loader.dataset), total_loss/total_num,
+                            .format(epoch, epochs, (macro_index+1) * macro_batch_size, len(data_loader.dataset), total_loss/total_num,
                                     train_optimizer.param_groups[0]['lr'], penalty_weight), log_file=log_file)
-    
+                                        
     # end for macro_index, macro_indices in enumerate(index_loader):
 
     return total_loss / total_num
@@ -791,7 +794,8 @@ if __name__ == '__main__':
                         action=utils.ParseMixed, types=[int, int, int, bool],
                         metavar='DataLoader pars [batch_size, number_workers, prefetch_factor, persistent_workers]', help='Testing/Validation/Memory DataLoader pars')
     parser.add_argument('--micro_batch_size', default=32, type=int, help='batch size on gpu')
-    parser.add_argument('--gradients_batch_size', default=256, type=int, help='batch size of gradients accumulation')
+    parser.add_argument('--macro_batch_size', default=256, type=int, help='virtual macro batch size on gpu')
+    parser.add_argument('--gradients_accumulation_batch_size', default=256, type=int, help='batch size of gradients accumulation')
     parser.add_argument('--queue_size', default=10000, type=int, help='momentum model queue size')
     parser.add_argument('--epochs', default=200, type=int, help='Number of sweeps over the dataset to train')
     parser.add_argument('--debiased', default=False, type=bool, help='Debiased contrastive loss or standard loss')
@@ -1066,7 +1070,7 @@ if __name__ == '__main__':
     train_loader = None
 
     index_dataset = utils.IndexDataset(len(train_data))
-    index_loader = DataLoader(index_dataset, batch_size=args.gradients_batch_size, shuffle=True, drop_last=True)
+    index_loader = DataLoader(index_dataset, batch_size=args.macro_batch_size, shuffle=True, drop_last=True)
 
     for epoch in range(args.start_epoch, epochs + 1):
         if train_loader is None:
