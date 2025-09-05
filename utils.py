@@ -11,7 +11,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import nn, optim, autograd
 from torch.optim.lr_scheduler import _LRScheduler, MultiStepLR
-from torch.utils.data import Dataset, DataLoader, Subset
+from torch.utils.data import Dataset, DataLoader, Sampler
 from torch.utils import data
 import random
 import os
@@ -440,9 +440,6 @@ class IndexDataset(Dataset):
     def __getitem__(self, idx):
         return idx
         
-import random
-from torch.utils.data import DataLoader, Sampler
-
 class MutableSampler(Sampler):
     def __init__(self, indices=None):
         self.indices = indices or []

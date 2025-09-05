@@ -239,8 +239,8 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
 
     subset_iters = [train_loaders.get_pass_iter(p) for p in range(train_loaders.num_passes)]
 
-    transform = train_loaders[0].dataset.transform
-    target_transform = train_loaders[0].dataset.target_transform
+    transform = train_loaders.dataset.transform
+    target_transform = train_loaders.dataset.target_transform
 
     if args.increasing_weight:
         penalty_weight = utils.increasing_weight(0, args.penalty_weight, epoch, args.epochs)
@@ -257,7 +257,7 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
     gpu_accum_steps = ceil(loader_batch_size / gpu_batch_size) # better round up 
 
     gradients_accumulation_step = 0
-    total_samples = len(train_loaders[0].dataset)
+    total_samples = len(train_loaders.dataset)
     loss_macro_batch = 0.0
     
     total_loss, total_num = 0.0, 0
@@ -274,8 +274,8 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
     train_optimizer.zero_grad()  # clear gradients at the beginning     
     for macro_index, macro_indices in enumerate(train_bar):
         # create subset data loaders
-        for d in train_loaders:  # set indices to sample from
-            d.sampler.set_indices(macro_indices)
+        for s in train_loaders.samplers:  # set indices to sample from
+            s.set_indices(macro_indices)
 
         # -----------------------
         # Pass A: compute detached g2 for IRM
