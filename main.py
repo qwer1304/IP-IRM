@@ -262,8 +262,8 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
     
     total_loss, total_num = 0.0, 0
     bar_format = '{l_bar}{bar:' + str(args.bar) + '}{r_bar}' #{bar:-' + str(args.bar) + 'b}'
-    train_bar = tqdm(index_loader,
-            total=len(index_loader),
+    train_bar = tqdm(train_loaders.loaders[0],
+            total=len(train_loaders.loaders[0]),
             ncols=args.ncols,               # total width available
             dynamic_ncols=False,            # disable autosizing
             bar_format=bar_format,          # request bar width
@@ -273,7 +273,7 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
 
     train_optimizer.zero_grad()  # clear gradients at the beginning    
     print()
-    for macro_index, macro_indices in enumerate(train_bar):
+    for macro_index, data_env in enumerate(train_bar):
         if num_passes > 1:
             # create subset data loaders
             for s in train_loaders.samplers:  # set indices to sample from
@@ -288,7 +288,7 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
         Ns = torch.zeros((num_splits, args.env_num), dtype=torch.int, device=device) # compute N during 1st pass since it's used only after the pass is completed
         loader_num = 0
         for subset in range(number_of_subsets):
-            data_env = next(subset_iters[loader_num])
+            # data_env = next(subset_iters[loader_num])
             pos_all_batch, indexs_batch = data_env[0], data_env[-1] # 'pos_all' is an batch of images, 'indexs' is their corresponding indices 
 
             for split_num, updated_split_each in enumerate(updated_split):
