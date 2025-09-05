@@ -273,9 +273,10 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
 
     train_optimizer.zero_grad()  # clear gradients at the beginning     
     for macro_index, macro_indices in enumerate(train_bar):
-        # create subset data loaders
-        for s in train_loaders.samplers:  # set indices to sample from
-            s.set_indices(macro_indices)
+        if num_passes > 1:
+            # create subset data loaders
+            for s in train_loaders.samplers:  # set indices to sample from
+                s.set_indices(macro_indices)
     
         subset_iters = [train_loaders.get_pass_iter(p) for p in range(num_passes)]
 
