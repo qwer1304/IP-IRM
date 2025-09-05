@@ -272,12 +272,14 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
     # number_of_loads = len(subset_loaders) + (2 + int(args.keep_cont))*(len(subset_loaders) - 1)
 
     train_optimizer.zero_grad()  # clear gradients at the beginning     
+    subset_iters = [train_loaders.get_pass_iter(p) for p in range(num_passes)]
     for macro_index, macro_indices in enumerate(train_bar):
         # create subset data loaders
         for s in train_loaders.samplers:  # set indices to sample from
             s.set_indices(macro_indices)
     
-        subset_iters = [train_loaders.get_pass_iter(p) for p in range(num_passes)]
+            if num_passes > 1:
+                subset_iters = [train_loaders.get_pass_iter(p) for p in range(num_passes)]
 
         # -----------------------
         # Pass A: compute detached g2 for IRM
