@@ -1153,6 +1153,7 @@ if __name__ == '__main__':
             train_loss = train_env(model, train_loaders, optimizer, temperature, upd_split, tr_bs, args)
 
             if epoch % args.maximize_iter == 0: # Maximize Step
+                train_loaders.shutdown()
                 train_loaders = None
                 gc.collect()
                 if args.offline:
@@ -1170,6 +1171,7 @@ if __name__ == '__main__':
         if (epoch % args.test_freq == 0) or \
            ((epoch % args.val_freq == 0) and (args.dataset == 'ImageNet')) or \
            (epoch == epochs): # eval knn every test_freq/val_freq and last epochs
+            train_loaders.shutdown()
             train_loaders = None
             gc.collect()
             memory_loader = DataLoader(memory_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
@@ -1179,8 +1181,6 @@ if __name__ == '__main__':
             gc.collect()              # run Python's garbage collector
 
         if (epoch % args.test_freq == 0) or (epoch == epochs): # eval knn every test_freq epochs
-            train_loaders = None
-            gc.collect()
             test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
                 pin_memory=True, persistent_workers=te_pw)
             test_acc_1, test_acc_5 = test(model, feauture_bank, feature_labels, test_loader, args, progress=True, prefix="Test:")
@@ -1191,8 +1191,6 @@ if __name__ == '__main__':
             torch.save(model.state_dict(), 'results/{}/{}/model_{}.pth'.format(args.dataset, args.name, epoch))
 
         if ((epoch % args.val_freq == 0) or (epoch == epochs)) and (args.dataset == 'ImageNet'):
-            train_loaders = None
-            gc.collect()
             # evaluate on validation set
             val_loader = DataLoader(val_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
                 pin_memory=True, persistent_workers=te_pw)

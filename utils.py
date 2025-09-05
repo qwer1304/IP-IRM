@@ -484,6 +484,23 @@ class LoaderManager:
         """Get an iterator over the loader for the given pass."""
         return iter(self.loaders[pass_idx])
 
+    def shutdown(self):
+        """Explicitly shut down persistent workers, iterators, and clear references."""
+        # Kill workers for all loaders
+        for dl in self.loaders:
+            it = getattr(dl, "_iterator", None)
+            if it is not None:
+                it._shutdown_workers()  # terminate subprocesses
+
+        # Drop any saved iterators if you decide to keep them in the future
+        if hasattr(self, "iters"):
+            self.iters = None
+
+        # Clear references so GC can free memory
+        self.loaders = []
+        self.samplers = []
+        self.dataset = None
+
 def group_crossentropy(logits, labels, batchsize):
     sample_dim, label_dim = logits.size(0), logits.size(1)
     logits_exp = logits.exp()
