@@ -440,6 +440,48 @@ class IndexDataset(Dataset):
     def __getitem__(self, idx):
         return idx
         
+import random
+from torch.utils.data import DataLoader, Sampler
+
+class MutableSampler(Sampler):
+    def __init__(self, indices=None):
+        self.indices = indices or []
+
+    def __iter__(self):
+        return iter(self.indices)
+
+    def __len__(self):
+        return len(self.indices)
+
+    def set_indices(self, new_indices):
+        self.indices = new_indices
+
+
+class LoaderManager:
+    def __init__(self, dataset, num_passes, micro_batch_size, **loader_kwargs):
+        self.dataset = dataset
+        self.num_passes = num_passes
+
+        # one sampler per pass
+        self.samplers = [MutableSampler([]) for _ in range(num_passes)]
+
+        # create persistent loaders once
+        self.loaders = [
+            DataLoader(dataset, batch_size=micro_batch_size,
+                       sampler=s, persistent_workers=True, **loader_kwargs)
+            for s in self.samplers
+        ]
+
+    def new_macro_batch(self, indices):
+        """Set a new shuffled order for all passes."""
+        random.shuffle(indices)
+        for s in self.samplers:
+            s.set_indices(indices)
+
+    def get_pass_iter(self, pass_idx):
+        """Get an iterator over the loader for the given pass."""
+        return iter(self.loaders[pass_idx])
+
 def group_crossentropy(logits, labels, batchsize):
     sample_dim, label_dim = logits.size(0), logits.size(1)
     logits_exp = logits.exp()

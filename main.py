@@ -225,7 +225,7 @@ def time_block(block_name, gpu=True):
 """
 
 # ssl training with IP-IRM
-def train_env(net, create_data_loaders, train_optimizer, temperature, updated_split, batch_size, args):
+def train_env(net, train_loaders, train_optimizer, temperature, updated_split, batch_size, args):
     # Initialize dictionaries to store times
 
     net.train()
@@ -237,11 +237,7 @@ def train_env(net, create_data_loaders, train_optimizer, temperature, updated_sp
     
     device = next(net.parameters()).device
 
-    number_of_passes = 3 + int(args.keep_cont)  
-
-    if train_loaders is None:
-        create_data_loaders(number_of_passes) # instantiates train_loaders
-    subset_iters = [iter(d) for d in train_loaders]
+    subset_iters = [train_loaders.get_pass_iter(p) for p in range(train_loaders.num_passes)]
 
     transform = train_loaders[0].dataset.transform
     target_transform = train_loaders[0].dataset.target_transform
@@ -1129,49 +1125,31 @@ if __name__ == '__main__':
             },
         }, False, args, filename='{}/{}/checkpoint.pth.tar'.format(args.save_root, args.name))
 
+    num_passes = args.macro_batch_size // args.batch_size
     train_loaders = None
 
+    def create_train_loaders(num_passes):
+        train_loaders = utils.LoaderManager(train_data, num_passes, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, pin_memory=True, 
+                                            drop_last=True, persistent_workers=tr_pw)    
+        return train_loaders
+        
     index_dataset = utils.IndexDataset(len(train_data))
     index_loader = DataLoader(index_dataset, batch_size=args.macro_batch_size, shuffle=True, drop_last=True)
 
-    class MutableSampler(Sampler):
-        def __init__(self, indices):
-            self.indices = indices
-
-        def __iter__(self):
-            return iter(self.indices)
-
-        def set_indices(self, new_indices):
-            self.indices = new_indices
-
-        def __len__(self):
-            return len(self.indices)
-
-    def create_train_loaders(n):
-        sampler = MutableSampler([])
-        train_loaders = [DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, pin_memory=True, 
-                                  drop_last=True, persistent_workers=tr_pw, sampler=sampler) for _ in range(n)]      
-    def del_train_loaders():
-        if train_loaders is not None:
-            for loader in train_loaders:
-                del loader
-            train_loaders = None
-            gc.collect()              # run Python's garbage collector
-
     for epoch in range(args.start_epoch, epochs + 1):
         if train_loaders is None:
-            train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, shuffle=True, pin_memory=True, 
-                drop_last=True, persistent_workers=tr_pw)
+            train_loaders = create_train_loaders(num_passes)
 
         if args.baseline:
             # FIX ME train_loader !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
             train_loss = train(model, train_loader, optimizer, temperature, debiased, tau_plus, tr_bs, args)
         else: # Minimize Step
             upd_split = updated_split_all if args.retain_group else updated_split
-            train_loss = train_env(model, create_train_loaders, optimizer, temperature, upd_split, tr_bs, args)
+            train_loss = train_env(model, train_loaders, optimizer, temperature, upd_split, tr_bs, args)
 
             if epoch % args.maximize_iter == 0: # Maximize Step
-                del_train_loaders()
+                train_loaders = None
+                gc.collect()
                 if args.offline:
                     upd_loader = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, prefetch_factor=u_pf, shuffle=False, 
                         pin_memory=True, persistent_workers=u_pw)
@@ -1179,7 +1157,7 @@ if __name__ == '__main__':
                     upd_loader = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, prefetch_factor=u_pf, shuffle=True, pin_memory=True, 
                         drop_last=True, persistent_workers=u_pw)
                 updated_split = train_update_split(model, upd_loader, updated_split, random_init=args.random_init, args=args)
-                del upd_loader
+                upd_loader = None
                 gc.collect()              # run Python's garbage collector
                 updated_split_all.append(updated_split)
 
@@ -1187,31 +1165,34 @@ if __name__ == '__main__':
         if (epoch % args.test_freq == 0) or \
            ((epoch % args.val_freq == 0) and (args.dataset == 'ImageNet')) or \
            (epoch == epochs): # eval knn every test_freq/val_freq and last epochs
-            del_train_loaders()
+            train_loaders = None
+            gc.collect()
             memory_loader = DataLoader(memory_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
                 pin_memory=True, persistent_workers=te_pw)
             feauture_bank, feature_labels = get_feature_bank(model, memory_loader, args, progress=True, prefix="Evaluate:")
-            del memory_loader
+            memory_loader = None
             gc.collect()              # run Python's garbage collector
 
         if (epoch % args.test_freq == 0) or (epoch == epochs): # eval knn every test_freq epochs
-            del_train_loaders()
+            train_loaders = None
+            gc.collect()
             test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
                 pin_memory=True, persistent_workers=te_pw)
             test_acc_1, test_acc_5 = test(model, feauture_bank, feature_labels, test_loader, args, progress=True, prefix="Test:")
-            del test_loader
+            test_loader = None
             gc.collect()              # run Python's garbage collector
             txt_write = open("results/{}/{}/{}".format(args.dataset, args.name, 'knn_result.txt'), 'a')
             txt_write.write('\ntest_acc@1: {}, test_acc@5: {}'.format(test_acc_1, test_acc_5))
             torch.save(model.state_dict(), 'results/{}/{}/model_{}.pth'.format(args.dataset, args.name, epoch))
 
         if ((epoch % args.val_freq == 0) or (epoch == epochs)) and (args.dataset == 'ImageNet'):
-            del_train_loaders()
+            train_loaders = None
+            gc.collect()
             # evaluate on validation set
             val_loader = DataLoader(val_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
                 pin_memory=True, persistent_workers=te_pw)
             acc1, _ = test(model, feauture_bank, feature_labels, val_loader, args, progress=True, prefix="Val:")
-            del val_loader
+            val_loader = None
             gc.collect()              # run Python's garbage collector
 
             # remember best acc@1 & best epoch and save checkpoint
@@ -1222,7 +1203,7 @@ if __name__ == '__main__':
         else:
             is_best = False
         if feature_bank is not None:
-            del feauture_bank, feature_labels
+            feauture_bank, feature_labels = None, None
             gc.collect()              # run Python's garbage collector
 
         if (epoch % args.checkpoint_freq == 0) or (epoch == epochs):
