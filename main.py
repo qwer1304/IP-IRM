@@ -269,26 +269,29 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
     for macro_index, macro_indices in enumerate(train_bar):
         # create subset data loaders
         subset_loaders = []        
-        for batch_index, subset_indices in enumerate(microbatches(macro_indices, None, loader_batch_size)):
-            subset_indices = subset_indices[0].tolist()
-            macro_subset = Subset(data_loader.dataset, macro_indices) # holds one batch that can fit memory
-            subset_loader = DataLoader(macro_subset, 
-                                       batch_size=loader_batch_size, 
-                                       num_workers=data_loader.num_workers, 
-                                       prefetch_factor=data_loader.prefetch_factor, 
-                                       pin_memory=data_loader.pin_memory, 
-                                       persistent_workers=data_loader.persistent_workers,
-                                       drop_last=True, 
-                                       shuffle=False)
-            subset_loaders.append(subset_loader)
+        if False:
+            for batch_index, subset_indices in enumerate(microbatches(macro_indices, None, loader_batch_size)):
+                subset_indices = subset_indices[0].tolist()
+                macro_subset = Subset(data_loader.dataset, macro_indices) # holds one batch that can fit memory
+                subset_loader = DataLoader(macro_subset, 
+                                           batch_size=loader_batch_size, 
+                                           num_workers=data_loader.num_workers, 
+                                           prefetch_factor=data_loader.prefetch_factor, 
+                                           pin_memory=data_loader.pin_memory, 
+                                           persistent_workers=data_loader.persistent_workers,
+                                           drop_last=True, 
+                                           shuffle=False)
+                subset_loaders.append(subset_loader)
+       else:
+            subset_loaders = [data_loader]
 
         number_of_loads = len(subset_loaders) + (2 + int(args.keep_cont))*(len(subset_loaders) - 1)
 
         # -----------------------
         # Pass A: compute detached g2 for IRM
         # -----------------------
-        g2_sums = torch.zeros((num_splits, args.env_num), dtype=torch.float, device='cuda')
-        Ns = torch.zeros((num_splits, args.env_num), dtype=torch.int, device='cuda') # compute N during 1st pass since it's used only after the pass is completed
+        g2_sums = torch.zeros((num_splits, args.env_num), dtype=torch.float, device=device)
+        Ns = torch.zeros((num_splits, args.env_num), dtype=torch.int, device=device) # compute N during 1st pass since it's used only after the pass is completed
         for subset_loader in subset_loaders:
             data_env = next(iter(subset_loader))
             pos_all_batch, indexs_batch = data_env[0], data_env[-1] # 'pos_all' is an batch of images, 'indexs' is their corresponding indices 
@@ -591,7 +594,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
             trained_samples=(macro_index+1) * macro_batch_size,
             total_samples=len(data_loader.dataset)))
 
-        if batch_index % 10 == 0:
+        if macro_index % 10 == 0:
             utils.write_log('Train Epoch: [{:d}/{:d}] [{:d}/{:d}]  Loss: {:.4f}  LR: {:.4f}  PW {:.4f}'
                             .format(epoch, epochs, (macro_index+1) * macro_batch_size, len(data_loader.dataset), total_loss/total_num,
                                     train_optimizer.param_groups[0]['lr'], penalty_weight), log_file=log_file)
