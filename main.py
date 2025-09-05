@@ -1120,7 +1120,7 @@ if __name__ == '__main__':
             },
         }, False, args, filename='{}/{}/checkpoint.pth.tar'.format(args.save_root, args.name))
 
-    num_passes = args.macro_batch_size // tr_bs
+    num_passes = 3 + int(args.keep_cont)
     train_loaders = None
 
     def create_train_loaders(num_passes):
