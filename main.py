@@ -276,6 +276,8 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
         # create subset data loaders
         for s in train_loaders.samplers:  # set indices to sample from
             s.set_indices(macro_indices)
+        print()
+        print('macro_index',macro_index, 'macro_indices', len(macro_indices))
 
         # -----------------------
         # Pass A: compute detached g2 for IRM
@@ -284,6 +286,7 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
         Ns = torch.zeros((num_splits, args.env_num), dtype=torch.int, device=device) # compute N during 1st pass since it's used only after the pass is completed
         loader_num = 0
         for data_env in subset_iters[loader_num]:
+            print('data_env',len(data_env))
             pos_all_batch, indexs_batch = data_env[0], data_env[-1] # 'pos_all' is an batch of images, 'indexs' is their corresponding indices 
 
             for split_num, updated_split_each in enumerate(updated_split):
@@ -1096,7 +1099,7 @@ if __name__ == '__main__':
                     drop_last=True, persistent_workers=u_pw)
         updated_split = train_update_split(model, upd_loader, updated_split, random_init=args.random_init, args=args)
         updated_split_all = [updated_split.clone().detach()]
-        del upd_loader
+        upd_loader = None
         gc.collect()              # run Python's garbage collector
 
         # Save a baseline checkpoint with initial split to allow skipping its initial creation
