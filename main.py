@@ -237,8 +237,14 @@ def train_env(net, create_data_loaders, train_optimizer, temperature, updated_sp
     
     device = next(net.parameters()).device
 
-    transform = data_loader.dataset.transform
-    target_transform = data_loader.dataset.target_transform
+    number_of_passes = 3 + int(args.keep_cont)  
+
+    if train_loaders is None:
+        create_data_loaders(number_of_passes) # instantiates train_loaders
+    subset_iters = [iter(d) for d in train_loaders]
+
+    transform = train_loaders[0].dataset.transform
+    target_transform = train_loaders[0].dataset.target_transform
 
     if args.increasing_weight:
         penalty_weight = utils.increasing_weight(0, args.penalty_weight, epoch, args.epochs)
@@ -255,7 +261,7 @@ def train_env(net, create_data_loaders, train_optimizer, temperature, updated_sp
     gpu_accum_steps = ceil(loader_batch_size / gpu_batch_size) # better round up 
 
     gradients_accumulation_step = 0
-    total_samples = len(data_loader.dataset)
+    total_samples = len(train_loaders[0].dataset)
     loss_macro_batch = 0.0
     
     total_loss, total_num = 0.0, 0
@@ -266,12 +272,6 @@ def train_env(net, create_data_loaders, train_optimizer, temperature, updated_sp
             dynamic_ncols=False,            # disable autosizing
             bar_format=bar_format,          # request bar width
             )
-
-    number_of_passes = 3 + int(args.keep_cont)  
-
-    if train_loaders is None:
-        create_data_loaders(number_of_passes) # instantiates train_loaders
-    subset_iters = [iter(d) for d in train_loaders]
 
     # number_of_loads = len(subset_loaders) + (2 + int(args.keep_cont))*(len(subset_loaders) - 1)
 
@@ -588,11 +588,11 @@ def train_env(net, create_data_loaders, train_optimizer, temperature, updated_sp
         train_bar.set_description('Train Epoch: [{}/{}] [{trained_samples}/{total_samples}]  Loss: {:.4f}  LR: {:.4f}  PW {:.4f}'
             .format(epoch, epochs, total_loss/total_num, train_optimizer.param_groups[0]['lr'], penalty_weight,
             trained_samples=(macro_index+1) * macro_batch_size,
-            total_samples=len(data_loader.dataset)))
+            total_samples=total_samplesf))
 
         if macro_index % 10 == 0:
             utils.write_log('Train Epoch: [{:d}/{:d}] [{:d}/{:d}]  Loss: {:.4f}  LR: {:.4f}  PW {:.4f}'
-                            .format(epoch, epochs, (macro_index+1) * macro_batch_size, len(data_loader.dataset), total_loss/total_num,
+                            .format(epoch, epochs, (macro_index+1) * macro_batch_size, total_samples, total_loss/total_num,
                                     train_optimizer.param_groups[0]['lr'], penalty_weight), log_file=log_file)
                                         
     # end for macro_index, macro_indices in enumerate(index_loader):
