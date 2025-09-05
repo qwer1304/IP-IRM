@@ -237,6 +237,8 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
     
     device = next(net.parameters()).device
 
+    num_passes = train_transforms.num_passes
+    
     transform = train_loaders.dataset.transform
     target_transform = train_loaders.dataset.target_transform
 
@@ -275,7 +277,7 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
         for s in train_loaders.samplers:  # set indices to sample from
             s.set_indices(macro_indices)
     
-        subset_iters = [train_loaders.get_pass_iter(p) for p in range(train_loaders.num_passes)]
+        subset_iters = [train_loaders.get_pass_iter(p) for p in range(num_passes)]
 
         # -----------------------
         # Pass A: compute detached g2 for IRM
@@ -370,8 +372,10 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
         # N doesn't change between passes!!!!!!
         g1_sums_detached = torch.zeros((num_splits, args.env_num), dtype=torch.float, device='cuda') 
         loader_num += 1
-        for data_env in subset_iters[loader_num]:
-            pos_all_batch, indexs_batch = data_env[0], data_env[-1] # 'pos_all' is an batch of images, 'indexs' is their corresponding indices 
+        for subset in range(number_of_subsets):
+            if number_of_subsets > 1:
+                data_env = next(subset_iters[loader_num])
+                pos_all_batch, indexs_batch = data_env[0], data_env[-1] # 'pos_all' is an batch of images, 'indexs' is their corresponding indices 
 
             for split_num, updated_split_each in enumerate(updated_split):
                 for env in range(args.env_num):          # 'env_num' is usually 2 
@@ -445,8 +449,10 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
         # -----------------------
         # N doesn't change between passes
         loader_num += 1
-        for data_env in subset_iters[loader_num]:
-            pos_all_batch, indexs_batch = data_env[0], data_env[-1] # 'pos_all' is an batch of images, 'indexs' is their corresponding indices 
+        for subset in range(number_of_subsets):
+            if number_of_subsets > 1:
+                data_env = next(subset_iters[loader_num])
+                pos_all_batch, indexs_batch = data_env[0], data_env[-1] # 'pos_all' is an batch of images, 'indexs' is their corresponding indices 
 
             for split_num, updated_split_each in enumerate(updated_split):
                 for env in range(args.env_num):          # 'env_num' is usually 2 
@@ -505,9 +511,10 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
         
         if args.keep_cont: # global contrastive loss (1st partition)
             loader_num += 1
-            for data_env in subset_iters[loader_num]:
-                # extract all feature
-                pos_all_batch, indexs_batch = data_env[0], data_env[-1] # 'pos_all' is an batch of images, 'indexs' is their corresponding indices 
+            for subset in range(number_of_subsets):
+                if number_of_subsets > 1:
+                    data_env = next(subset_iters[loader_num])
+                    pos_all_batch, indexs_batch = data_env[0], data_env[-1] # 'pos_all' is an batch of images, 'indexs' is their corresponding indices 
 
                 # -----------------------
                 # Step 0: micro-batches
@@ -1120,7 +1127,7 @@ if __name__ == '__main__':
             },
         }, False, args, filename='{}/{}/checkpoint.pth.tar'.format(args.save_root, args.name))
 
-    num_passes = 3 + int(args.keep_cont)
+    num_passes = 3 + int(args.keep_cont) if (args.macro_batch_size // tr_bs) > 1 else 1
     train_loaders = None
 
     def create_train_loaders(num_passes):
