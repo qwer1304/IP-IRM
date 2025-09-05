@@ -459,14 +459,20 @@ class LoaderManager:
         self.dataset = dataset
         self.num_passes = num_passes
 
-        # one sampler per pass
-        self.samplers = [MutableSampler([]) for _ in range(num_passes)]
+        if num_passes > 1:
+            # one sampler per pass
+            self.samplers = [MutableSampler([]) for _ in range(num_passes)]
 
-        # create persistent loaders once
-        self.loaders = [
-            DataLoader(dataset, sampler=s, **loader_kwargs)
-            for s in self.samplers
-        ]
+            # create persistent loaders once
+            self.loaders = [
+                DataLoader(dataset, sampler=s, **loader_kwargs)
+                for s in self.samplers
+            ]
+        else:           
+            self.samplers = []
+            self.loaders = [
+                DataLoader(dataset, shuffle=True, **loader_kwargs)
+            ]
 
     def new_macro_batch(self, indices):
         """Set a new shuffled order for all passes."""
