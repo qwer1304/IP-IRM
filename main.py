@@ -579,7 +579,7 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
         train_bar.set_description('Train Epoch: [{}/{}] [{trained_samples}/{total_samples}]  Loss: {:.4f}  LR: {:.4f}  PW {:.4f}'
             .format(epoch, epochs, total_loss/total_num, train_optimizer.param_groups[0]['lr'], penalty_weight,
             trained_samples=(macro_index+1) * macro_batch_size,
-            total_samples=total_samplesf))
+            total_samples=total_samples))
 
         if macro_index % 10 == 0:
             utils.write_log('Train Epoch: [{:d}/{:d}] [{:d}/{:d}]  Loss: {:.4f}  LR: {:.4f}  PW {:.4f}'
