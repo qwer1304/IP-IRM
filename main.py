@@ -277,7 +277,7 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
         for s in train_loaders.samplers:  # set indices to sample from
             s.set_indices(macro_indices)
         print()
-        print('macro_index',macro_index, 'macro_indices', len(macro_indices))
+        print('macro_index',macro_index, 'macro_indices', len(macro_indices),'samplers',train_loaders.samplers)
 
         # -----------------------
         # Pass A: compute detached g2 for IRM
