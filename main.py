@@ -237,7 +237,7 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
     
     device = next(net.parameters()).device
 
-    num_passes = train_transforms.num_passes
+    num_passes = train_loaders.num_passes
     
     transform = train_loaders.dataset.transform
     target_transform = train_loaders.dataset.target_transform
