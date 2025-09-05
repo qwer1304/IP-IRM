@@ -458,7 +458,7 @@ class MutableSampler(Sampler):
 
 
 class LoaderManager:
-    def __init__(self, dataset, num_passes, micro_batch_size, **loader_kwargs):
+    def __init__(self, dataset, num_passes, **loader_kwargs):
         self.dataset = dataset
         self.num_passes = num_passes
 
@@ -467,8 +467,7 @@ class LoaderManager:
 
         # create persistent loaders once
         self.loaders = [
-            DataLoader(dataset, batch_size=micro_batch_size,
-                       sampler=s, persistent_workers=True, **loader_kwargs)
+            DataLoader(dataset, sampler=s, **loader_kwargs)
             for s in self.samplers
         ]
 
