@@ -262,8 +262,8 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
     
     total_loss, total_num = 0.0, 0
     bar_format = '{l_bar}{bar:' + str(args.bar) + '}{r_bar}' #{bar:-' + str(args.bar) + 'b}'
-    train_bar = tqdm(index_loader,
-            total=len(index_loader),
+    train_bar = tqdm(train_loaders.loaders[0],
+            total=len(train_loaders.loaders[0]),
             ncols=args.ncols,               # total width available
             dynamic_ncols=False,            # disable autosizing
             bar_format=bar_format,          # request bar width
