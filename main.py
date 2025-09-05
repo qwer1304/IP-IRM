@@ -282,8 +282,9 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
                                            drop_last=True, 
                                            shuffle=False)
                 subset_loaders.append(subset_loader)
-       else:
+        else:
             subset_loaders = [data_loader]
+
 
         number_of_loads = len(subset_loaders) + (2 + int(args.keep_cont))*(len(subset_loaders) - 1)
 
