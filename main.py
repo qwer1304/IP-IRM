@@ -271,7 +271,9 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
 
     # number_of_loads = len(subset_loaders) + (2 + int(args.keep_cont))*(len(subset_loaders) - 1)
 
-    train_optimizer.zero_grad()  # clear gradients at the beginning     
+    train_optimizer.zero_grad()  # clear gradients at the beginning    
+    print()
+    print("1",num_passes, train_loaders.loaders[0]))
     for macro_index, macro_indices in enumerate(train_bar):
         if num_passes > 1:
             # create subset data loaders
