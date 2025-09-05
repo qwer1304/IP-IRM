@@ -283,8 +283,7 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
         g2_sums = torch.zeros((num_splits, args.env_num), dtype=torch.float, device=device)
         Ns = torch.zeros((num_splits, args.env_num), dtype=torch.int, device=device) # compute N during 1st pass since it's used only after the pass is completed
         loader_num = 0
-        for subset in range(number_of_subsets):
-            data_env = next(subset_iters[loader_num])
+        for data_env in subset_iters[loader_num]:
             pos_all_batch, indexs_batch = data_env[0], data_env[-1] # 'pos_all' is an batch of images, 'indexs' is their corresponding indices 
 
             for split_num, updated_split_each in enumerate(updated_split):
@@ -371,9 +370,7 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
         # N doesn't change between passes!!!!!!
         g1_sums_detached = torch.zeros((num_splits, args.env_num), dtype=torch.float, device='cuda') 
         loader_num += 1
-        for subset in range(number_of_subsets):
-            data_env = next(subset_iters[loader_num])
-            data_env = next(iter(subset_loader))
+        for data_env in subset_iters[loader_num]:
             pos_all_batch, indexs_batch = data_env[0], data_env[-1] # 'pos_all' is an batch of images, 'indexs' is their corresponding indices 
 
             for split_num, updated_split_each in enumerate(updated_split):
@@ -448,8 +445,7 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
         # -----------------------
         # N doesn't change between passes
         loader_num += 1
-        for subset in range(number_of_subsets):
-            data_env = next(iter(subset_loader))
+        for data_env in subset_iters[loader_num]:
             pos_all_batch, indexs_batch = data_env[0], data_env[-1] # 'pos_all' is an batch of images, 'indexs' is their corresponding indices 
 
             for split_num, updated_split_each in enumerate(updated_split):
@@ -509,8 +505,7 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
         
         if args.keep_cont: # global contrastive loss (1st partition)
             loader_num += 1
-            for subset in range(number_of_subsets):
-                data_env = next(iter(subset_loader))
+            for data_env in subset_iters[loader_num]:
                 # extract all feature
                 pos_all_batch, indexs_batch = data_env[0], data_env[-1] # 'pos_all' is an batch of images, 'indexs' is their corresponding indices 
 
