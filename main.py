@@ -8,7 +8,8 @@ import torch
 import torch.optim as optim
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.utils.data import Dataset, DataLoader, Subset
+from torch.utils.data import Dataset, DataLoader, Sampler
+
 from tqdm.auto import tqdm
 
 import utils
@@ -224,7 +225,7 @@ def time_block(block_name, gpu=True):
 """
 
 # ssl training with IP-IRM
-def train_env(net, data_loader, train_optimizer, temperature, updated_split, batch_size, args):
+def train_env(net, create_data_loaders, train_optimizer, temperature, updated_split, batch_size, args):
     # Initialize dictionaries to store times
 
     net.train()
@@ -248,6 +249,7 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
 
     loader_batch_size = batch_size
     macro_batch_size = args.macro_batch_size
+    number_of_subsets = macro_batch_size // loader_batch_size
     gradients_accumulation_steps = args.gradients_accumulation_batch_size // macro_batch_size 
     gpu_batch_size = args.micro_batch_size
     gpu_accum_steps = ceil(loader_batch_size / gpu_batch_size) # better round up 
@@ -258,105 +260,101 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
     
     total_loss, total_num = 0.0, 0
     bar_format = '{l_bar}{bar:' + str(args.bar) + '}{r_bar}' #{bar:-' + str(args.bar) + 'b}'
-    train_bar = tqdm(data_loader,
-            total=len(data_loader),
+    train_bar = tqdm(index_loader,
+            total=len(index_loader),
             ncols=args.ncols,               # total width available
             dynamic_ncols=False,            # disable autosizing
             bar_format=bar_format,          # request bar width
             )
 
+    number_of_passes = 3 + int(args.keep_cont)  
+
+    if train_loaders is None:
+        create_data_loaders(number_of_passes) # instantiates train_loaders
+    subset_iters = [iter(d) for d in train_loaders]
+
+    # number_of_loads = len(subset_loaders) + (2 + int(args.keep_cont))*(len(subset_loaders) - 1)
+
     train_optimizer.zero_grad()  # clear gradients at the beginning     
-    #for macro_index, macro_indices in enumerate(train_bar):
-    for macro_index, data_env in enumerate(train_bar):
+    for macro_index, macro_indices in enumerate(train_bar):
         # create subset data loaders
-        """
-        subset_loaders = []        
-        for batch_index, subset_indices in enumerate(microbatches(macro_indices, None, loader_batch_size)):
-            subset_indices = subset_indices[0].tolist()
-            macro_subset = Subset(data_loader.dataset, macro_indices) # holds one batch that can fit memory
-            subset_loader = DataLoader(macro_subset, 
-                                       batch_size=loader_batch_size, 
-                                       num_workers=data_loader.num_workers, 
-                                       prefetch_factor=data_loader.prefetch_factor, 
-                                       pin_memory=data_loader.pin_memory, 
-                                       persistent_workers=data_loader.persistent_workers,
-                                       drop_last=True, 
-                                       shuffle=False)
-            subset_loaders.append(subset_loader)
-        """
-        
-        # number_of_loads = len(subset_loaders) + (2 + int(args.keep_cont))*(len(subset_loaders) - 1)
+        for d in train_loaders:  # set indices to sample from
+            d.sampler.set_indices(macro_indices)
 
         # -----------------------
         # Pass A: compute detached g2 for IRM
         # -----------------------
         g2_sums = torch.zeros((num_splits, args.env_num), dtype=torch.float, device=device)
         Ns = torch.zeros((num_splits, args.env_num), dtype=torch.int, device=device) # compute N during 1st pass since it's used only after the pass is completed
-        pos_all_batch, indexs_batch = data_env[0], data_env[-1] # 'pos_all' is an batch of images, 'indexs' is their corresponding indices 
+        loader_num = 0
+        for subset in range(number_of_subsets):
+            data_env = next(subset_iters[loader_num])
+            pos_all_batch, indexs_batch = data_env[0], data_env[-1] # 'pos_all' is an batch of images, 'indexs' is their corresponding indices 
 
-        for split_num, updated_split_each in enumerate(updated_split):
-            for env in range(args.env_num):          # 'env_num' is usually 2 
-                # extract all feature
-                split_idx = utils.assign_idxs(indexs_batch, updated_split_each, env).cpu()
-                Ns[split_num,env] += len(split_idx) # size of split
-
-                # -----------------------
-                # Step 0: micro-batches
-                # -----------------------
-                mb_list = list(microbatches(pos_all_batch[split_idx], indexs_batch[split_idx], gpu_batch_size))
-                idxs_1 = [i for i in range(len(mb_list)) if i % 2 == 0] # indices of "even" micro-batches in mb_list
-                idxs_2 = [i for i in range(len(mb_list)) if i % 2 == 1] # indices of "odd" micro-batches in mb_list
-
-                for i in idxs_2:
-                    pos, indexs = mb_list[i]
-                    pos = pos.cuda(non_blocking=True)
-                    indexs = indexs.cuda(non_blocking=True)
-
-                    if transform is not None:
-                        pos_q = transform(pos)
-                        pos_k = transform(pos)
-
-                    _, out_q = net(pos_q)
-                    with torch.no_grad():
-                        _, out_k = model_momentum(pos_k)
+            for split_num, updated_split_each in enumerate(updated_split):
+                for env in range(args.env_num):          # 'env_num' is usually 2 
+                    # extract all feature
+                    split_idx = utils.assign_idxs(indexs_batch, updated_split_each, env).cpu()
+                    Ns[split_num,env] += len(split_idx) # size of split
 
                     # -----------------------
-                    # MoCo / GDI contrastive loss
+                    # Step 0: micro-batches
                     # -----------------------
+                    mb_list = list(microbatches(pos_all_batch[split_idx], indexs_batch[split_idx], gpu_batch_size))
+                    idxs_1 = [i for i in range(len(mb_list)) if i % 2 == 0] # indices of "even" micro-batches in mb_list
+                    idxs_2 = [i for i in range(len(mb_list)) if i % 2 == 1] # indices of "odd" micro-batches in mb_list
 
-                    # logits: q*k+ / q*negatives
-                    l_pos = torch.sum(out_q * out_k, dim=1, keepdim=True)
-                    l_neg = torch.matmul(out_k, queue.get().t())  # queue as negatives (detached)
-                    logits = torch.cat([l_pos, l_neg], dim=1)
-                    logits_cont = logits / temperature
-                    labels_cont = torch.zeros(logits_cont.size(0), dtype=torch.long, device=device)
-                    loss_cont = F.cross_entropy(logits_cont, labels_cont, reduction='sum')
+                    for i in idxs_2:
+                        pos, indexs = mb_list[i]
+                        pos = pos.cuda(non_blocking=True)
+                        indexs = indexs.cuda(non_blocking=True)
 
-                    # -----------------------
-                    # update queue
-                    # -----------------------
-                    queue.update(out_k)
+                        if transform is not None:
+                            pos_q = transform(pos)
+                            pos_k = transform(pos)
 
-                    # IRM penalty
-                    logits_pen = (logits / args.irm_temp)
+                        _, out_q = net(pos_q)
+                        with torch.no_grad():
+                            _, out_k = model_momentum(pos_k)
 
-                    logits_pen = logits_pen.detach()
-                    g_i = grad_wrt_scale_sum(logits_pen, labels_cont, create_graph=False).detach()
-                    g2_sums[split_num,env] += g_i
+                        # -----------------------
+                        # MoCo / GDI contrastive loss
+                        # -----------------------
 
-                    if penalty_weight > 1.0:
-                        # Rescale the entire loss to keep gradients in a reasonable range
-                        loss_cont /= penalty_weight
-                    loss_cont = loss_cont / macro_batch_size / num_splits / args.env_num / gradients_accumulation_steps
-                    loss_cont.backward()
-                    loss_macro_batch += loss_cont.item()
+                        # logits: q*k+ / q*negatives
+                        l_pos = torch.sum(out_q * out_k, dim=1, keepdim=True)
+                        l_neg = torch.matmul(out_k, queue.get().t())  # queue as negatives (detached)
+                        logits = torch.cat([l_pos, l_neg], dim=1)
+                        logits_cont = logits / temperature
+                        labels_cont = torch.zeros(logits_cont.size(0), dtype=torch.long, device=device)
+                        loss_cont = F.cross_entropy(logits_cont, labels_cont, reduction='sum')
 
-                    # free memory of micro-batch
-                    del pos, indexs, out_q, out_k, l_pos, l_neg, logits, logits_cont, loss_cont, logits_pen, g_i
-                    torch.cuda.empty_cache()
-                # end for i in idxs_2:
-            # end for env in range(args.env_num): 
-        #end for split_num, updated_split_each in enumerate(updated_split):
+                        # -----------------------
+                        # update queue
+                        # -----------------------
+                        queue.update(out_k)
+
+                        # IRM penalty
+                        logits_pen = (logits / args.irm_temp)
+
+                        logits_pen = logits_pen.detach()
+                        g_i = grad_wrt_scale_sum(logits_pen, labels_cont, create_graph=False).detach()
+                        g2_sums[split_num,env] += g_i
+
+                        if penalty_weight > 1.0:
+                            # Rescale the entire loss to keep gradients in a reasonable range
+                            loss_cont /= penalty_weight
+                        loss_cont = loss_cont / macro_batch_size / num_splits / args.env_num / gradients_accumulation_steps
+                        loss_cont.backward()
+                        loss_macro_batch += loss_cont.item()
+
+                        # free memory of micro-batch
+                        del pos, indexs, out_q, out_k, l_pos, l_neg, logits, logits_cont, loss_cont, logits_pen, g_i
+                        torch.cuda.empty_cache()
+                    # end for i in idxs_2:
+                # end for env in range(args.env_num): 
+            #end for split_num, updated_split_each in enumerate(updated_split):
+        # end for subset_loader in subset_loaders:
         
         """
         # After loop, print per-block CPU and GPU times
@@ -376,20 +374,156 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
         # -----------------------
         # N doesn't change between passes!!!!!!
         g1_sums_detached = torch.zeros((num_splits, args.env_num), dtype=torch.float, device='cuda') 
+        loader_num += 1
+        for subset in range(number_of_subsets):
+            data_env = next(subset_iters[loader_num])
+            data_env = next(iter(subset_loader))
+            pos_all_batch, indexs_batch = data_env[0], data_env[-1] # 'pos_all' is an batch of images, 'indexs' is their corresponding indices 
 
-        for split_num, updated_split_each in enumerate(updated_split):
-            for env in range(args.env_num):          # 'env_num' is usually 2 
+            for split_num, updated_split_each in enumerate(updated_split):
+                for env in range(args.env_num):          # 'env_num' is usually 2 
+                    # extract all feature
+                    split_idx = utils.assign_idxs(indexs_batch, updated_split_each, env).cpu()
+
+                    # -----------------------
+                    # Step 0: micro-batches
+                    # -----------------------
+                    mb_list = list(microbatches(pos_all_batch[split_idx], indexs_batch[split_idx], gpu_batch_size))
+                    idxs_1 = [i for i in range(len(mb_list)) if i % 2 == 0] # indices of "even" micro-batches in mb_list
+                    idxs_2 = [i for i in range(len(mb_list)) if i % 2 == 1] # indices of "odd" micro-batches in mb_list
+
+                    for i in idxs_1:
+                        pos, indexs = mb_list[i]
+                        pos = pos.cuda(non_blocking=True)
+                        indexs = indexs.cuda(non_blocking=True)
+
+                        if transform is not None:
+                            pos_q = transform(pos)
+                            pos_k = transform(pos)
+
+                        _, out_q = net(pos_q)
+                        with torch.no_grad():
+                            _, out_k = model_momentum(pos_k)
+
+                        # -----------------------
+                        # MoCo / GDI contrastive loss
+                        # -----------------------
+
+                        # logits: q*k+ / q*negatives
+                        l_pos = torch.sum(out_q * out_k, dim=1, keepdim=True)
+                        l_neg = torch.matmul(out_k, queue.get().t())  # queue as negatives (detached)
+                        logits = torch.cat([l_pos, l_neg], dim=1)
+                        logits_cont = logits / temperature
+                        labels_cont = torch.zeros(logits_cont.size(0), dtype=torch.long, device=device)
+                        loss_cont = F.cross_entropy(logits_cont, labels_cont, reduction='sum')
+
+                        # -----------------------
+                        # update queue
+                        # -----------------------
+                        queue.update(out_k)
+
+                        # IRM penalty
+                        logits_pen = (logits / args.irm_temp)
+                        g_i = grad_wrt_scale_sum(logits_pen, labels_cont, create_graph=True)
+                        # First addend in IRM averaged over split
+                        irm_mb = penalty_weight * (g_i / Ns[split_num,env] * g2s[split_num,env]) # N doesn't change between passes
+                        g1_sums_detached[split_num,env] += g_i.detach()
+
+                        irm_mb *=  Ns[split_num,env] # N doesn't change between passes
+                        loss = loss_cont + irm_mb
+                        if penalty_weight > 1.0:
+                            # Rescale the entire loss to keep gradients in a reasonable range
+                            loss /= penalty_weight
+                        loss = loss / macro_batch_size / num_splits / args.env_num / gradients_accumulation_steps
+                        loss.backward()
+                        loss_macro_batch += loss.item()
+
+                        # free memory of micro-batch
+                        del pos, indexs, out_q, out_k, l_pos, l_neg, logits, logits_cont, loss_cont, logits_pen, g_i, irm_mb, loss
+                        torch.cuda.empty_cache()
+                    # end for i in idxs_1:
+                # end for env in range(args.env_num): 
+            #end for split_num, updated_split_each in enumerate(updated_split):
+        # end for subset_loader in subset_loaders:
+        g1s = g1_sums_detached / Ns # average over split
+
+        # -----------------------
+        # Pass C: group 2
+        # -----------------------
+        # N doesn't change between passes
+        loader_num += 1
+        for subset in range(number_of_subsets):
+            data_env = next(iter(subset_loader))
+            pos_all_batch, indexs_batch = data_env[0], data_env[-1] # 'pos_all' is an batch of images, 'indexs' is their corresponding indices 
+
+            for split_num, updated_split_each in enumerate(updated_split):
+                for env in range(args.env_num):          # 'env_num' is usually 2 
+                    # extract all feature
+                    split_idx = utils.assign_idxs(indexs_batch, updated_split_each, env).cpu()
+
+                    # -----------------------
+                    # Step 0: micro-batches
+                    # -----------------------
+                    mb_list = list(microbatches(pos_all_batch[split_idx], indexs_batch[split_idx], gpu_batch_size))
+                    idxs_1 = [i for i in range(len(mb_list)) if i % 2 == 0] # indices of "even" micro-batches in mb_list
+                    idxs_2 = [i for i in range(len(mb_list)) if i % 2 == 1] # indices of "odd" micro-batches in mb_list
+
+                    for i in idxs_2:
+                        pos, indexs = mb_list[i]
+                        pos = pos.cuda(non_blocking=True)
+                        indexs = indexs.cuda(non_blocking=True)
+
+                        if transform is not None:
+                            pos_q = transform(pos)
+                            pos_k = transform(pos)
+
+                        _, out_q = net(pos_q)
+                        with torch.no_grad():
+                            _, out_k = model_momentum(pos_k)
+
+                        # -----------------------
+                        # MoCo / GDI contrastive loss
+                        # -----------------------
+
+                        # logits: q*k+ / q*negatives
+                        l_pos = torch.sum(out_q * out_k, dim=1, keepdim=True)
+                        l_neg = torch.matmul(out_k, queue.get().t())  # queue as negatives (detached)
+                        logits = torch.cat([l_pos, l_neg], dim=1)
+
+                        # IRM penalty
+                        logits_pen = (logits / args.irm_temp)
+                        labels_cont = torch.zeros(logits_pen.size(0), dtype=torch.long, device=device)
+                        g_i = grad_wrt_scale_sum(logits_pen, labels_cont, create_graph=True)
+                        # Second addend in IRM averaged over split
+                        irm_mb = penalty_weight * (g_i / Ns[split_num,env] * g1s[split_num,env]) # N doesn't change between passes
+                        if penalty_weight > 1.0:
+                            # Rescale the entire loss to keep gradients in a reasonable range
+                            irm_mb /= penalty_weight
+                        irm_mb =  irm_mb * Ns[split_num,env] / macro_batch_size / num_splits / args.env_num / gradients_accumulation_steps # N doesn't change between passes
+                        irm_mb.backward()
+                        loss_macro_batch += irm_mb.item()
+
+                        # free memory of micro-batch
+                        del l_pos, l_neg, logits, logits_pen, g_i, irm_mb
+                        torch.cuda.empty_cache()
+                    # end for i in idxs_2:
+                # end for env in range(args.env_num):
+            # end for updated_split_each in updated_split:      
+        # end for subset_loader in subset_loaders:
+        
+        if args.keep_cont: # global contrastive loss (1st partition)
+            loader_num += 1
+            for subset in range(number_of_subsets):
+                data_env = next(iter(subset_loader))
                 # extract all feature
-                split_idx = utils.assign_idxs(indexs_batch, updated_split_each, env).cpu()
+                pos_all_batch, indexs_batch = data_env[0], data_env[-1] # 'pos_all' is an batch of images, 'indexs' is their corresponding indices 
 
                 # -----------------------
                 # Step 0: micro-batches
                 # -----------------------
-                mb_list = list(microbatches(pos_all_batch[split_idx], indexs_batch[split_idx], gpu_batch_size))
-                idxs_1 = [i for i in range(len(mb_list)) if i % 2 == 0] # indices of "even" micro-batches in mb_list
-                idxs_2 = [i for i in range(len(mb_list)) if i % 2 == 1] # indices of "odd" micro-batches in mb_list
-
-                for i in idxs_1:
+                mb_list = list(microbatches(pos_all_batch, indexs_batch, gpu_batch_size))
+                idxs = [i for i in range(len(mb_list))]
+                for i in idxs:
                     pos, indexs = mb_list[i]
                     pos = pos.cuda(non_blocking=True)
                     indexs = indexs.cuda(non_blocking=True)
@@ -413,137 +547,18 @@ def train_env(net, data_loader, train_optimizer, temperature, updated_split, bat
                     logits_cont = logits / temperature
                     labels_cont = torch.zeros(logits_cont.size(0), dtype=torch.long, device=device)
                     loss_cont = F.cross_entropy(logits_cont, labels_cont, reduction='sum')
-
-                    # -----------------------
-                    # update queue
-                    # -----------------------
-                    queue.update(out_k)
-
-                    # IRM penalty
-                    logits_pen = (logits / args.irm_temp)
-                    g_i = grad_wrt_scale_sum(logits_pen, labels_cont, create_graph=True)
-                    # First addend in IRM averaged over split
-                    irm_mb = penalty_weight * (g_i / Ns[split_num,env] * g2s[split_num,env]) # N doesn't change between passes
-                    g1_sums_detached[split_num,env] += g_i.detach()
-
-                    irm_mb *=  Ns[split_num,env] # N doesn't change between passes
-                    loss = loss_cont + irm_mb
                     if penalty_weight > 1.0:
                         # Rescale the entire loss to keep gradients in a reasonable range
-                        loss /= penalty_weight
-                    loss = loss / macro_batch_size / num_splits / args.env_num / gradients_accumulation_steps
-                    loss.backward()
-                    loss_macro_batch += loss.item()
+                        loss_cont /= penalty_weight
+                    loss_cont = loss_cont / macro_batch_size / gradients_accumulation_steps
+                    loss_cont.backward()
+                    loss_macro_batch += loss_cont.item()
 
                     # free memory of micro-batch
-                    del pos, indexs, out_q, out_k, l_pos, l_neg, logits, logits_cont, loss_cont, logits_pen, g_i, irm_mb, loss
+                    del pos, indexs, out_q, out_k, l_pos, l_neg, logits, logits_cont, loss_cont
                     torch.cuda.empty_cache()
-                # end for i in idxs_1:
-            # end for env in range(args.env_num): 
-        #end for split_num, updated_split_each in enumerate(updated_split):
-        g1s = g1_sums_detached / Ns # average over split
-
-        # -----------------------
-        # Pass C: group 2
-        # -----------------------
-        # N doesn't change between passes
-
-        for split_num, updated_split_each in enumerate(updated_split):
-            for env in range(args.env_num):          # 'env_num' is usually 2 
-                # extract all feature
-                split_idx = utils.assign_idxs(indexs_batch, updated_split_each, env).cpu()
-
-                # -----------------------
-                # Step 0: micro-batches
-                # -----------------------
-                mb_list = list(microbatches(pos_all_batch[split_idx], indexs_batch[split_idx], gpu_batch_size))
-                idxs_1 = [i for i in range(len(mb_list)) if i % 2 == 0] # indices of "even" micro-batches in mb_list
-                idxs_2 = [i for i in range(len(mb_list)) if i % 2 == 1] # indices of "odd" micro-batches in mb_list
-
-                for i in idxs_2:
-                    pos, indexs = mb_list[i]
-                    pos = pos.cuda(non_blocking=True)
-                    indexs = indexs.cuda(non_blocking=True)
-
-                    if transform is not None:
-                        pos_q = transform(pos)
-                        pos_k = transform(pos)
-
-                    _, out_q = net(pos_q)
-                    with torch.no_grad():
-                        _, out_k = model_momentum(pos_k)
-
-                    # -----------------------
-                    # MoCo / GDI contrastive loss
-                    # -----------------------
-
-                    # logits: q*k+ / q*negatives
-                    l_pos = torch.sum(out_q * out_k, dim=1, keepdim=True)
-                    l_neg = torch.matmul(out_k, queue.get().t())  # queue as negatives (detached)
-                    logits = torch.cat([l_pos, l_neg], dim=1)
-
-                    # IRM penalty
-                    logits_pen = (logits / args.irm_temp)
-                    labels_cont = torch.zeros(logits_pen.size(0), dtype=torch.long, device=device)
-                    g_i = grad_wrt_scale_sum(logits_pen, labels_cont, create_graph=True)
-                    # Second addend in IRM averaged over split
-                    irm_mb = penalty_weight * (g_i / Ns[split_num,env] * g1s[split_num,env]) # N doesn't change between passes
-                    if penalty_weight > 1.0:
-                        # Rescale the entire loss to keep gradients in a reasonable range
-                        irm_mb /= penalty_weight
-                    irm_mb =  irm_mb * Ns[split_num,env] / macro_batch_size / num_splits / args.env_num / gradients_accumulation_steps # N doesn't change between passes
-                    irm_mb.backward()
-                    loss_macro_batch += irm_mb.item()
-
-                    # free memory of micro-batch
-                    del l_pos, l_neg, logits, logits_pen, g_i, irm_mb
-                    torch.cuda.empty_cache()
-                # end for i in idxs_2:
-            # end for env in range(args.env_num):
-        # end for updated_split_each in updated_split:      
-        
-        if args.keep_cont: # global contrastive loss (1st partition)
-
-            # -----------------------
-            # Step 0: micro-batches
-            # -----------------------
-            mb_list = list(microbatches(pos_all_batch, indexs_batch, gpu_batch_size))
-            idxs = [i for i in range(len(mb_list))]
-            for i in idxs:
-                pos, indexs = mb_list[i]
-                pos = pos.cuda(non_blocking=True)
-                indexs = indexs.cuda(non_blocking=True)
-
-                if transform is not None:
-                    pos_q = transform(pos)
-                    pos_k = transform(pos)
-
-                _, out_q = net(pos_q)
-                with torch.no_grad():
-                    _, out_k = model_momentum(pos_k)
-
-                # -----------------------
-                # MoCo / GDI contrastive loss
-                # -----------------------
-
-                # logits: q*k+ / q*negatives
-                l_pos = torch.sum(out_q * out_k, dim=1, keepdim=True)
-                l_neg = torch.matmul(out_k, queue.get().t())  # queue as negatives (detached)
-                logits = torch.cat([l_pos, l_neg], dim=1)
-                logits_cont = logits / temperature
-                labels_cont = torch.zeros(logits_cont.size(0), dtype=torch.long, device=device)
-                loss_cont = F.cross_entropy(logits_cont, labels_cont, reduction='sum')
-                if penalty_weight > 1.0:
-                    # Rescale the entire loss to keep gradients in a reasonable range
-                    loss_cont /= penalty_weight
-                loss_cont = loss_cont / macro_batch_size / gradients_accumulation_steps
-                loss_cont.backward()
-                loss_macro_batch += loss_cont.item()
-
-                # free memory of micro-batch
-                del pos, indexs, out_q, out_k, l_pos, l_neg, logits, logits_cont, loss_cont
-                torch.cuda.empty_cache()
-            # end for i in idxs:
+                # end for i in idxs:
+            # end for subset_loader in subset_loaders:
         # end if args.keep_cont: # global contrastive loss (1st partition)
 
         total_num = (macro_index + 1) * macro_batch_size # total number of samples processed so far
@@ -1114,26 +1129,49 @@ if __name__ == '__main__':
             },
         }, False, args, filename='{}/{}/checkpoint.pth.tar'.format(args.save_root, args.name))
 
-    train_loader = None
+    train_loaders = None
 
     index_dataset = utils.IndexDataset(len(train_data))
     index_loader = DataLoader(index_dataset, batch_size=args.macro_batch_size, shuffle=True, drop_last=True)
 
+    class MutableSampler(Sampler):
+        def __init__(self, indices):
+            self.indices = indices
+
+        def __iter__(self):
+            return iter(self.indices)
+
+        def set_indices(self, new_indices):
+            self.indices = new_indices
+
+        def __len__(self):
+            return len(self.indices)
+
+    def create_train_loaders(n):
+        sampler = MutableSampler([])
+        train_loaders = [DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, pin_memory=True, 
+                                  drop_last=True, persistent_workers=tr_pw, sampler=sampler) for _ in range(n)]      
+    def del_train_loaders():
+        if train_loaders is not None:
+            for loader in train_loaders:
+                del loader
+            train_loaders = None
+            gc.collect()              # run Python's garbage collector
+
     for epoch in range(args.start_epoch, epochs + 1):
-        if train_loader is None:
+        if train_loaders is None:
             train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, shuffle=True, pin_memory=True, 
                 drop_last=True, persistent_workers=tr_pw)
 
         if args.baseline:
+            # FIX ME train_loader !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
             train_loss = train(model, train_loader, optimizer, temperature, debiased, tau_plus, tr_bs, args)
         else: # Minimize Step
             upd_split = updated_split_all if args.retain_group else updated_split
-            train_loss = train_env(model, train_loader, optimizer, temperature, upd_split, tr_bs, args)
+            train_loss = train_env(model, create_train_loaders, optimizer, temperature, upd_split, tr_bs, args)
 
             if epoch % args.maximize_iter == 0: # Maximize Step
-                del train_loader
-                gc.collect()              # run Python's garbage collector
-                train_loader = None
+                del_train_loaders()
                 if args.offline:
                     upd_loader = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, prefetch_factor=u_pf, shuffle=False, 
                         pin_memory=True, persistent_workers=u_pw)
@@ -1149,10 +1187,7 @@ if __name__ == '__main__':
         if (epoch % args.test_freq == 0) or \
            ((epoch % args.val_freq == 0) and (args.dataset == 'ImageNet')) or \
            (epoch == epochs): # eval knn every test_freq/val_freq and last epochs
-            if train_loader is not None:
-                del train_loader
-                gc.collect()              # run Python's garbage collector
-                train_loader = None
+            del_train_loaders()
             memory_loader = DataLoader(memory_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
                 pin_memory=True, persistent_workers=te_pw)
             feauture_bank, feature_labels = get_feature_bank(model, memory_loader, args, progress=True, prefix="Evaluate:")
@@ -1160,10 +1195,7 @@ if __name__ == '__main__':
             gc.collect()              # run Python's garbage collector
 
         if (epoch % args.test_freq == 0) or (epoch == epochs): # eval knn every test_freq epochs
-            if train_loader is not None:
-                del train_loader
-                gc.collect()              # run Python's garbage collector
-                train_loader = None
+            del_train_loaders()
             test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
                 pin_memory=True, persistent_workers=te_pw)
             test_acc_1, test_acc_5 = test(model, feauture_bank, feature_labels, test_loader, args, progress=True, prefix="Test:")
@@ -1174,10 +1206,7 @@ if __name__ == '__main__':
             torch.save(model.state_dict(), 'results/{}/{}/model_{}.pth'.format(args.dataset, args.name, epoch))
 
         if ((epoch % args.val_freq == 0) or (epoch == epochs)) and (args.dataset == 'ImageNet'):
-            if train_loader is not None:
-                del train_loader
-                gc.collect()              # run Python's garbage collector
-                train_loader = None
+            del_train_loaders()
             # evaluate on validation set
             val_loader = DataLoader(val_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
                 pin_memory=True, persistent_workers=te_pw)
