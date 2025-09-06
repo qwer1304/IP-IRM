@@ -229,7 +229,7 @@ def create_indices(epoch_indices, num_loaders, batch_size):
     seq1 = epoch_indices[:-batch_size]
     seq2 = epoch_indices[batch_size:]
     for loader in range(1,num_loaders):
-        loaders_indices.append(seq2 if (loader % 2) == 1 else seq1)
+        loader_indices.append(seq2 if (loader % 2) == 1 else seq1)
     return loader_indices
 
 # ssl training with IP-IRM
