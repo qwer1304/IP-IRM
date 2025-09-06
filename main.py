@@ -838,7 +838,8 @@ if __name__ == '__main__':
     parser.add_argument('--k', default=200, type=int, help='Top k most similar images used to predict the label')
     parser.add_argument('--dl_tr', default=[256, 4, 2, True, True], nargs=5, type=str,
                         action=utils.ParseMixed, types=[int, int, int, bool, bool],
-                        metavar='DataLoader pars [batch_size, number_workers, prefetch_factor, persistent_workers]', help='Training minimization DataLoader pars')
+                        metavar='DataLoader pars [batch_size, number_workers, prefetch_factor, persistent_workers, drop_last]',    
+                        help='Training minimization DataLoader pars')
     parser.add_argument('--dl_u', default=[3096, 4, 2, 1], nargs=4, type=str,
                         action=utils.ParseMixed, types=[int, int, int, bool],
                         metavar='DataLoader pars [batch_size, number_workers, prefetch_factor, persistent_workers]', help='Training Maximization DataLoader pars')
