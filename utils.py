@@ -454,17 +454,23 @@ class MutableSampler(Sampler):
         self.indices = new_indices
 
 class MutableBatchSampler:
-    def __init__(self, batch_size):
+    def __init__(self, batch_size, drop_last=False):
         self.batch_size = batch_size
+        self.drop_last = drop_last
         self.indices = []
 
     def __iter__(self):
-        # yields lists of batch_size indices
         for i in range(0, len(self.indices), self.batch_size):
-            yield self.indices[i:i+self.batch_size]
+            batch = self.indices[i:i + self.batch_size]
+            if self.drop_last and len(batch) < self.batch_size:
+                continue  # skip the last incomplete batch
+            yield batch
 
     def __len__(self):
-        return (len(self.indices) + self.batch_size - 1) // self.batch_size
+        if self.drop_last:
+            return len(self.indices) // self.batch_size
+        else:
+            return (len(self.indices) + self.batch_size - 1) // self.batch_size
 
     def set_indices(self, new_indices):
         self.indices = new_indices
@@ -479,6 +485,9 @@ class LoaderManager:
             if batched:
                 self.samplers = [MutableBatchSampler(loader_kwargs['batch_size']) for _ in range(num_passes)]
                 # create persistent loaders once
+                loader_kwargs.pop('batch_size', None)
+                loader_kwargs.pop('shuffle', None)
+                loader_kwargs.pop('drop_last', None)
                 self.loaders = [DataLoader(dataset, batch_sampler=s, **loader_kwargs) for s in self.samplers]
             else:
                 self.samplers = [MutableSampler([]) for _ in range(num_passes)]
