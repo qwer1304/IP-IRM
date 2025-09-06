@@ -287,7 +287,7 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
     # create subset data loaders
     epoch_indices = list(range(len(index_loader.dataset))) # number of samples
     random.shuffle(epoch_indices)  
-    loader_indices_list = create_indices(epoch_indices, num_passes=num_passes, batch_size=batch_size, drop_last=args.dl_tr[-1])
+    loader_indices_list = create_indices(epoch_indices, num_loaders=num_passes, batch_size=batch_size, drop_last=args.dl_tr[-1])
     for i, s in enumerate(train_loaders.samplers):  # set indices to sample from
         s.set_indices(loader_indices_list[i])
 
