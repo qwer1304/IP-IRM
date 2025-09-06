@@ -434,7 +434,9 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
                         # update queue
                         # -----------------------
                         out_k_ind = [i for i, x in enumerate(indexs_set) if x in indexs_batch_set]
-                        queue.update(out_k[torch.tensor(out_k_ind, device=device)])
+                        if out_k_ind:  # only if not empty
+                            idx = torch.tensor(out_k_ind, device=device, dtype=torch.long)
+                            queue.update(out_k[idx])
                         indexs_batch_set -= indexs_set
 
                         # IRM penalty
@@ -511,7 +513,9 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
                         # update queue
                         # -----------------------
                         out_k_ind = [i for i, x in enumerate(indexs_set) if x in indexs_batch_set]
-                        queue.update(out_k[torch.tensor(out_k_ind, device=device)])
+                        if out_k_ind:  # only if not empty
+                            idx = torch.tensor(out_k_ind, device=device, dtype=torch.long)
+                            queue.update(out_k[idx])
                         indexs_batch_set -= indexs_set
 
                         # IRM penalty
