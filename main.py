@@ -295,6 +295,7 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
     subset_iters = [train_loaders.get_pass_iter(p) for p in range(num_passes)]
         
     for macro_index, macro_indices in enumerate(train_bar):
+        this_macro_batch_size = len(macro_indices) # for the case drop_last=False
         # -----------------------
         # Pass A: compute detached g2 for IRM
         # -----------------------
@@ -358,7 +359,7 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
                         if penalty_weight > 1.0:
                             # Rescale the entire loss to keep gradients in a reasonable range
                             loss_cont /= penalty_weight
-                        loss_cont = loss_cont / macro_batch_size / num_splits / args.env_num / gradients_accumulation_steps
+                        loss_cont = loss_cont / this_macro_batch_size / num_splits / args.env_num / gradients_accumulation_steps
                         loss_cont.backward()
                         loss_macro_batch += loss_cont.item()
 
@@ -448,7 +449,7 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
                         if penalty_weight > 1.0:
                             # Rescale the entire loss to keep gradients in a reasonable range
                             loss /= penalty_weight
-                        loss = loss / macro_batch_size / num_splits / args.env_num / gradients_accumulation_steps
+                        loss = loss / this_macro_batch_size / num_splits / args.env_num / gradients_accumulation_steps
                         loss.backward()
                         loss_macro_batch += loss.item()
 
@@ -514,7 +515,7 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
                         if penalty_weight > 1.0:
                             # Rescale the entire loss to keep gradients in a reasonable range
                             irm_mb /= penalty_weight
-                        irm_mb =  irm_mb * Ns[split_num,env] / macro_batch_size / num_splits / args.env_num / gradients_accumulation_steps # N doesn't change between passes
+                        irm_mb =  irm_mb * Ns[split_num,env] / this_macro_batch_size / num_splits / args.env_num / gradients_accumulation_steps # N doesn't change between passes
                         irm_mb.backward()
                         loss_macro_batch += irm_mb.item()
 
@@ -565,7 +566,7 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
                     if penalty_weight > 1.0:
                         # Rescale the entire loss to keep gradients in a reasonable range
                         loss_cont /= penalty_weight
-                    loss_cont = loss_cont / macro_batch_size / gradients_accumulation_steps
+                    loss_cont = loss_cont / this_macro_batch_size / gradients_accumulation_steps
                     loss_cont.backward()
                     loss_macro_batch += loss_cont.item()
 
@@ -576,9 +577,9 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
             # end for subset_loader in subset_loaders:
         # end if args.keep_cont: # global contrastive loss (1st partition)
 
-        total_num = (macro_index + 1) * macro_batch_size # total number of samples processed so far
+        total_num += this_macro_batch_size # total number of samples processed so far
         # total loss is sum of losses so far over entire macro-batch.
-        total_loss += loss_macro_batch * macro_batch_size * gradients_accumulation_steps
+        total_loss += loss_macro_batch * this_macro_batch_size * gradients_accumulation_steps
 
         loss_mean = loss_macro_batch / (macro_index + 1)
 
@@ -612,12 +613,11 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
 
         train_bar.set_description('Train Epoch: [{}/{}] [{trained_samples}/{total_samples}]  Loss: {:.4f}  LR: {:.4f}  PW {:.4f}'
             .format(epoch, epochs, total_loss/total_num, train_optimizer.param_groups[0]['lr'], penalty_weight,
-            trained_samples=(macro_index+1) * macro_batch_size,
-            total_samples=total_samples))
+            trained_samples=total_num, total_samples=total_samples))
 
         if macro_index % 10 == 0:
             utils.write_log('Train Epoch: [{:d}/{:d}] [{:d}/{:d}]  Loss: {:.4f}  LR: {:.4f}  PW {:.4f}'
-                            .format(epoch, epochs, (macro_index+1) * macro_batch_size, total_samples, total_loss/total_num,
+                            .format(epoch, epochs, total_num, total_samples, total_loss/total_num,
                                     train_optimizer.param_groups[0]['lr'], penalty_weight), log_file=log_file)
                                         
     # end for macro_index, macro_indices in enumerate(index_loader):
@@ -1173,7 +1173,7 @@ if __name__ == '__main__':
         return None
 
     index_dataset = utils.IndexDataset(len(train_data))
-    index_loader = DataLoader(index_dataset, batch_size=args.macro_batch_size, shuffle=True, drop_last=True)
+    index_loader = DataLoader(index_dataset, batch_size=args.macro_batch_size, shuffle=True, drop_last=tr_dl)
 
     for epoch in range(args.start_epoch, epochs + 1):
         if train_loaders is None:
