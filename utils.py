@@ -453,21 +453,44 @@ class MutableSampler(Sampler):
     def set_indices(self, new_indices):
         self.indices = new_indices
 
+class MutableBatchSampler:
+    def __init__(self, batch_size):
+        self.batch_size = batch_size
+        self.indices = []
+
+    def __iter__(self):
+        # yields lists of batch_size indices
+        for i in range(0, len(self.indices), self.batch_size):
+            yield self.indices[i:i+self.batch_size]
+
+    def __len__(self):
+        return (len(self.indices) + self.batch_size - 1) // self.batch_size
+
+    def set_indices(self, new_indices):
+        self.indices = new_indices
 
 class LoaderManager:
-    def __init__(self, dataset, num_passes, **loader_kwargs):
+    def __init__(self, dataset, num_passes, batched=True, **loader_kwargs):
         self.dataset = dataset
         self.num_passes = num_passes
 
         if num_passes > 1:
             # one sampler per pass
-            self.samplers = [MutableSampler([]) for _ in range(num_passes)]
+            if batched:
+                self.samplers = [MutableBatchSampler(loader_kwargs['batch_size']) for _ in range(num_passes)]
+                # create persistent loaders once
+                self.loaders = [
+                    DataLoader(dataset, batch_sampler=s, **loader_kwargs)
+                    for s in self.samplers
+                ]
+            else:
+                self.samplers = [MutableSampler([]) for _ in range(num_passes)]
+                # create persistent loaders once
+                self.loaders = [
+                    DataLoader(dataset, sampler=s, **loader_kwargs)
+                    for s in self.samplers
+                ]
 
-            # create persistent loaders once
-            self.loaders = [
-                DataLoader(dataset, sampler=s, **loader_kwargs)
-                for s in self.samplers
-            ]
         else:           
             self.samplers = []
             self.loaders = [
