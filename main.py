@@ -153,6 +153,8 @@ class FeatureQueue:
                 New keys to enqueue.
         """
         n = k.size(0)
+        if n == 0:
+            return
 
         if self.ptr + n <= self.queue_size:
             self.queue[self.ptr:self.ptr+n] = k
@@ -305,7 +307,7 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
         for subset in range(number_of_subsets):
             data_env = next(subset_iters[loader_num]) # first pass loads all data
             pos_all_batch, indexs_batch = data_env[0], data_env[-1] # 'pos_all' is an batch of images, 'indexs' is their corresponding indices 
-
+            indexs_batch_set = set(indexs_batch)
 
             for split_num, updated_split_each in enumerate(updated_split):
                 for env in range(args.env_num):          # 'env_num' is usually 2 
