@@ -226,7 +226,7 @@ def time_block(block_name, gpu=True):
 
 def create_indices(epoch_indices, num_loaders, batch_size):
     loader_indices = [epoch_indices] # 1st loader gets all indices
-    seq1 = epoch_indices[:,-batch_size]
+    seq1 = epoch_indices[:-batch_size]
     seq2 = epoch_indices[batch_size:]
     for loader in range(1,num_loaders):
         loaders_indices.append(seq2 if (loader % 2) == 1 else seq1)
