@@ -306,6 +306,7 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
             data_env = next(subset_iters[loader_num]) # first pass loads all data
             pos_all_batch, indexs_batch = data_env[0], data_env[-1] # 'pos_all' is an batch of images, 'indexs' is their corresponding indices 
 
+
             for split_num, updated_split_each in enumerate(updated_split):
                 for env in range(args.env_num):          # 'env_num' is usually 2 
                     # extract all feature
@@ -316,7 +317,6 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
                     # Step 0: micro-batches
                     # -----------------------
                     mb_list = list(microbatches(pos_all_batch[split_idx], indexs_batch[split_idx], gpu_batch_size))
-                    idxs_1 = [i for i in range(len(mb_list)) if i % 2 == 0] # indices of "even" micro-batches in mb_list
                     idxs_2 = [i for i in range(len(mb_list)) if i % 2 == 1] # indices of "odd" micro-batches in mb_list
 
                     for i in idxs_2:
@@ -343,11 +343,6 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
                         logits_cont = logits / temperature
                         labels_cont = torch.zeros(logits_cont.size(0), dtype=torch.long, device=device)
                         loss_cont = F.cross_entropy(logits_cont, labels_cont, reduction='sum')
-
-                        # -----------------------
-                        # update queue
-                        # -----------------------
-                        queue.update(out_k)
 
                         # IRM penalty
                         logits_pen = (logits / args.irm_temp)
@@ -394,6 +389,7 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
             if (number_of_subsets > 1) and (subset > 0):
                 data_env = next(subset_iters[loader_num])
                 pos_all_batch, indexs_batch = data_env[0], data_env[-1] # 'pos_all' is an batch of images, 'indexs' is their corresponding indices 
+                indexs_batch_set = set(indexs_batch)
 
             for split_num, updated_split_each in enumerate(updated_split):
                 for env in range(args.env_num):          # 'env_num' is usually 2 
@@ -405,11 +401,11 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
                     # -----------------------
                     mb_list = list(microbatches(pos_all_batch[split_idx], indexs_batch[split_idx], gpu_batch_size))
                     idxs_1 = [i for i in range(len(mb_list)) if i % 2 == 0] # indices of "even" micro-batches in mb_list
-                    idxs_2 = [i for i in range(len(mb_list)) if i % 2 == 1] # indices of "odd" micro-batches in mb_list
 
                     for i in idxs_1:
                         pos, indexs = mb_list[i]
                         pos = pos.cuda(non_blocking=True)
+                        indexs_set = set(indexs)
                         indexs = indexs.cuda(non_blocking=True)
 
                         if transform is not None:
@@ -435,7 +431,9 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
                         # -----------------------
                         # update queue
                         # -----------------------
-                        queue.update(out_k)
+                        out_k_ind = [i for i, x in enumerate(indexs_set) if x in indexs_batch_set]
+                        queue.update(out_k[torch.tensor(out_k_ind, device=device))
+                        indexs_batch_set -= indexs_set
 
                         # IRM penalty
                         logits_pen = (logits / args.irm_temp)
@@ -471,6 +469,7 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
             if (number_of_subsets > 1) and (subset > 0):
                 data_env = next(subset_iters[loader_num])
                 pos_all_batch, indexs_batch = data_env[0], data_env[-1] # 'pos_all' is an batch of images, 'indexs' is their corresponding indices 
+                indexs_batch_set = set(indexs_batch)
 
             for split_num, updated_split_each in enumerate(updated_split):
                 for env in range(args.env_num):          # 'env_num' is usually 2 
@@ -481,12 +480,12 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
                     # Step 0: micro-batches
                     # -----------------------
                     mb_list = list(microbatches(pos_all_batch[split_idx], indexs_batch[split_idx], gpu_batch_size))
-                    idxs_1 = [i for i in range(len(mb_list)) if i % 2 == 0] # indices of "even" micro-batches in mb_list
                     idxs_2 = [i for i in range(len(mb_list)) if i % 2 == 1] # indices of "odd" micro-batches in mb_list
 
                     for i in idxs_2:
                         pos, indexs = mb_list[i]
                         pos = pos.cuda(non_blocking=True)
+                        indexs_set = set(indexs)
                         indexs = indexs.cuda(non_blocking=True)
 
                         if transform is not None:
@@ -505,6 +504,13 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
                         l_pos = torch.sum(out_q * out_k, dim=1, keepdim=True)
                         l_neg = torch.matmul(out_k, queue.get().t())  # queue as negatives (detached)
                         logits = torch.cat([l_pos, l_neg], dim=1)
+
+                        # -----------------------
+                        # update queue
+                        # -----------------------
+                        out_k_ind = [i for i, x in enumerate(indexs_set) if x in indexs_batch_set]
+                        queue.update(out_k[torch.tensor(out_k_ind, device=device))
+                        indexs_batch_set -= indexs_set
 
                         # IRM penalty
                         logits_pen = (logits / args.irm_temp)
@@ -1205,9 +1211,10 @@ if __name__ == '__main__':
         if (epoch % args.test_freq == 0) or \
            ((epoch % args.val_freq == 0) and (args.dataset == 'ImageNet')) or \
            (epoch == epochs): # eval knn every test_freq/val_freq and last epochs
-            train_loaders.shutdown()
-            train_loaders = None
-            gc.collect()
+            if train_loaders is not None:
+                train_loaders.shutdown()
+                train_loaders = None
+                gc.collect()
             memory_loader = DataLoader(memory_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
                 pin_memory=False, persistent_workers=te_pw)
             feauture_bank, feature_labels = get_feature_bank(model, memory_loader, args, progress=True, prefix="Evaluate:")
