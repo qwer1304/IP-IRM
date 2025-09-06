@@ -20,6 +20,7 @@ from math import ceil
 import copy
 import traceback
 import sys
+import time
 
 def get_negative_mask(batch_size):
     negative_mask = torch.ones((batch_size, 2 * batch_size), dtype=bool)
