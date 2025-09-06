@@ -479,17 +479,11 @@ class LoaderManager:
             if batched:
                 self.samplers = [MutableBatchSampler(loader_kwargs['batch_size']) for _ in range(num_passes)]
                 # create persistent loaders once
-                self.loaders = [
-                    DataLoader(dataset, batch_sampler=s, **loader_kwargs)
-                    for s in self.samplers
-                ]
+                self.loaders = [DataLoader(dataset, batch_sampler=s, **loader_kwargs) for s in self.samplers]
             else:
                 self.samplers = [MutableSampler([]) for _ in range(num_passes)]
                 # create persistent loaders once
-                self.loaders = [
-                    DataLoader(dataset, sampler=s, **loader_kwargs)
-                    for s in self.samplers
-                ]
+                self.loaders = [DataLoader(dataset, sampler=s, **loader_kwargs) for s in self.samplers]
 
         else:           
             self.samplers = []
