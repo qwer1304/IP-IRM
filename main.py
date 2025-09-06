@@ -294,8 +294,7 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
 
     subset_iters = [train_loaders.get_pass_iter(p) for p in range(num_passes)]
         
-    macro_index = 0
-    for macro_indices in train_bar:
+    for macro_index, macro_indices in enumerate(train_bar):
         # -----------------------
         # Pass A: compute detached g2 for IRM
         # -----------------------
@@ -601,6 +600,7 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
 
         loss_macro_batch = 0.0
 
+        """
         # discard first batch from ETA
         if macro_index == 0:
             train_bar.start_t = time.time()
@@ -608,6 +608,7 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
             train_bar.n = 0
             train_bar.last_print_t = train_bar.start_t
             train_bar.refresh()   # flush to frontend
+       """
 
         train_bar.set_description('Train Epoch: [{}/{}] [{trained_samples}/{total_samples}]  Loss: {:.4f}  LR: {:.4f}  PW {:.4f}'
             .format(epoch, epochs, total_loss/total_num, train_optimizer.param_groups[0]['lr'], penalty_weight,
@@ -619,7 +620,6 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
                             .format(epoch, epochs, (macro_index+1) * macro_batch_size, total_samples, total_loss/total_num,
                                     train_optimizer.param_groups[0]['lr'], penalty_weight), log_file=log_file)
                                         
-        macro_index += 1
     # end for macro_index, macro_indices in enumerate(index_loader):
 
     return total_loss / total_num
@@ -1192,12 +1192,12 @@ if __name__ == '__main__':
                 gc.collect()
                 if args.offline:
                     upd_loader = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, prefetch_factor=u_pf, shuffle=False, 
-                        pin_memory=True, persistent_workers=u_pw)
+                        pin_memory=False, persistent_workers=u_pw)
                 else:
                     upd_loader = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, prefetch_factor=u_pf, shuffle=True, pin_memory=True, 
                         drop_last=True, persistent_workers=u_pw)
                 updated_split = train_update_split(model, upd_loader, updated_split, random_init=args.random_init, args=args)
-                upd_loader = None
+                upd_loader = shutdown_loader(upd_loader)
                 gc.collect()              # run Python's garbage collector
                 updated_split_all.append(updated_split)
 
