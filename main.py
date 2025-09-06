@@ -600,6 +600,7 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
 
         loss_macro_batch = 0.0
 
+        """
         # discard first batch from ETA
         if macro_index == 0:
             train_bar.start_t = time.time()
@@ -607,6 +608,7 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
             train_bar.n = 0
             train_bar.last_print_t = train_bar.start_t
             train_bar.refresh()   # flush to frontend
+       """
 
         train_bar.set_description('Train Epoch: [{}/{}] [{trained_samples}/{total_samples}]  Loss: {:.4f}  LR: {:.4f}  PW {:.4f}'
             .format(epoch, epochs, total_loss/total_num, train_optimizer.param_groups[0]['lr'], penalty_weight,
