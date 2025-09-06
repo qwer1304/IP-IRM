@@ -842,15 +842,6 @@ def save_checkpoint(state, is_best, args, filename='checkpoint.pth.tar', sync=Tr
         os.fsync(dir_fd)
         os.close(dir_fd)
 
-def shutdown_loader(loader):
-    """Shutdown and release a DataLoader and its workers immediately."""
-    if loader is None:
-        return
-    it = getattr(loader, "_iterator", None)
-    if it is not None:
-        it._shutdown_workers()
-    return None
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train SimCLR')
     parser.add_argument('--feature_dim', default=128, type=int, help='Feature dim for latent vector')
@@ -1170,6 +1161,15 @@ if __name__ == '__main__':
                                             drop_last=tr_dl, persistent_workers=tr_pw)    
         return train_loaders
         
+    def shutdown_loader(loader):
+        """Shutdown and release a DataLoader and its workers immediately."""
+        if loader is None:
+            return None
+        it = getattr(loader, "_iterator", None)
+        if it is not None:
+            it._shutdown_workers()
+        return None
+
     index_dataset = utils.IndexDataset(len(train_data))
     index_loader = DataLoader(index_dataset, batch_size=args.macro_batch_size, shuffle=True, drop_last=True)
 
