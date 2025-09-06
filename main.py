@@ -224,6 +224,14 @@ def time_block(block_name, gpu=True):
     return Timer()
 """
 
+def create_indices(epoch_indices, num_loaders, batch_size):
+    loader_indices = [epoch_indices] # 1st loader gets all indices
+    seq1 = epoch_indices[:,-batch_size]
+    seq2 = epoch_indices[batch_size:]
+    for loader in range(1,num_loaders):
+        loaders_indices.append(seq2 if (loader % 2) == 1 else seq1)
+    return loader_indices
+
 # ssl training with IP-IRM
 def train_env(net, train_loaders, train_optimizer, temperature, updated_split, batch_size, args):
     # Initialize dictionaries to store times
@@ -276,8 +284,9 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
     # create subset data loaders
     epoch_indices = list(range(len(index_loader.dataset))) # number of samples
     random.shuffle(epoch_indices)  
-    for s in train_loaders.samplers:  # set indices to sample from
-        s.set_indices(epoch_indices)
+    loader_indices_list = create_indices(epoch_indices, num_passes, train_loaders.loaders[0].batch_size)
+    for i, s in enumerate(train_loaders.samplers):  # set indices to sample from
+        s.set_indices(loader_indices_list[i])
 
     subset_iters = [train_loaders.get_pass_iter(p) for p in range(num_passes)]
         
@@ -289,7 +298,7 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
         Ns = torch.zeros((num_splits, args.env_num), dtype=torch.int, device=device) # compute N during 1st pass since it's used only after the pass is completed
         loader_num = 0
         for subset in range(number_of_subsets):
-            data_env = next(subset_iters[loader_num])
+            data_env = next(subset_iters[loader_num]) # first pass loads all data
             pos_all_batch, indexs_batch = data_env[0], data_env[-1] # 'pos_all' is an batch of images, 'indexs' is their corresponding indices 
 
             for split_num, updated_split_each in enumerate(updated_split):
@@ -377,7 +386,7 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
         g1_sums_detached = torch.zeros((num_splits, args.env_num), dtype=torch.float, device='cuda') 
         loader_num += 1
         for subset in range(number_of_subsets):
-            if number_of_subsets > 1:
+            if (number_of_subsets > 1) and (subset > 0):
                 data_env = next(subset_iters[loader_num])
                 pos_all_batch, indexs_batch = data_env[0], data_env[-1] # 'pos_all' is an batch of images, 'indexs' is their corresponding indices 
 
@@ -454,7 +463,7 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
         # N doesn't change between passes
         loader_num += 1
         for subset in range(number_of_subsets):
-            if number_of_subsets > 1:
+            if (number_of_subsets > 1) and (subset > 0):
                 data_env = next(subset_iters[loader_num])
                 pos_all_batch, indexs_batch = data_env[0], data_env[-1] # 'pos_all' is an batch of images, 'indexs' is their corresponding indices 
 
@@ -516,7 +525,7 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
         if args.keep_cont: # global contrastive loss (1st partition)
             loader_num += 1
             for subset in range(number_of_subsets):
-                if number_of_subsets > 1:
+                if (number_of_subsets > 1) and (subset > 0):
                     data_env = next(subset_iters[loader_num])
                     pos_all_batch, indexs_batch = data_env[0], data_env[-1] # 'pos_all' is an batch of images, 'indexs' is their corresponding indices 
 
