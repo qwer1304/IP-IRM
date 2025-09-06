@@ -483,7 +483,7 @@ class LoaderManager:
         if num_passes > 1:
             # one sampler per pass
             if batched:
-                self.samplers = [MutableBatchSampler(loader_kwargs['batch_size']) for _ in range(num_passes)]
+                self.samplers = [MutableBatchSampler(loader_kwargs['batch_size'], loader_kwargs['drop_last']) for _ in range(num_passes)]
                 # create persistent loaders once
                 loader_kwargs.pop('batch_size', None)
                 loader_kwargs.pop('shuffle', None)

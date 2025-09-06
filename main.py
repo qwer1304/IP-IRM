@@ -836,8 +836,8 @@ if __name__ == '__main__':
     parser.add_argument('--temperature', default=0.5, type=float, help='Temperature used in softmax')
     parser.add_argument('--tau_plus', default=0.1, type=float, help='Positive class priorx')
     parser.add_argument('--k', default=200, type=int, help='Top k most similar images used to predict the label')
-    parser.add_argument('--dl_tr', default=[256, 4, 2, True], nargs=4, type=str,
-                        action=utils.ParseMixed, types=[int, int, int, bool],
+    parser.add_argument('--dl_tr', default=[256, 4, 2, True, True], nargs=5, type=str,
+                        action=utils.ParseMixed, types=[int, int, int, bool, bool],
                         metavar='DataLoader pars [batch_size, number_workers, prefetch_factor, persistent_workers]', help='Training minimization DataLoader pars')
     parser.add_argument('--dl_u', default=[3096, 4, 2, 1], nargs=4, type=str,
                         action=utils.ParseMixed, types=[int, int, int, bool],
@@ -928,7 +928,7 @@ if __name__ == '__main__':
         os.makedirs('{}/{}'.format(args.save_root, args.name))
 
     # data prepare
-    tr_bs, tr_nw, tr_pf, tr_pw = dl_tr
+    tr_bs, tr_nw, tr_pf, tr_pw, tr_dl = dl_tr
     te_bs, te_nw, te_pf, te_pw = dl_te
     u_bs, u_nw, u_pf, u_pw = dl_u
     if args.dataset == 'STL':
@@ -1145,7 +1145,7 @@ if __name__ == '__main__':
 
     def create_train_loaders(num_passes):
         train_loaders = utils.LoaderManager(train_data, num_passes, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, pin_memory=True, 
-                                            drop_last=True, persistent_workers=tr_pw)    
+                                            drop_last=tr_dl, persistent_workers=tr_pw)    
         return train_loaders
         
     index_dataset = utils.IndexDataset(len(train_data))
