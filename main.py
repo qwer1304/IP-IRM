@@ -141,8 +141,8 @@ class FeatureQueue:
         self.dtype = dtype
 
         self.queue = torch.zeros(queue_size, dim, device=device, dtype=dtype)
-        self.write_ptr = 0  # keeps track of insertion index
-        self.read_ptr = 0  # keeps track of insertion index
+        self.write_ptr = 0  # write index - first index to write from
+        self.read_ptr = 0  # read index - first index to read from 
 
     @torch.no_grad()
     def update(self, k):
@@ -166,25 +166,26 @@ class FeatureQueue:
             self.queue[:n-first] = k[first:]
             self.write_ptr = n - first
 
-    def get(self, n=None):
+    def get(self, n=None, advance=True):
         """Return the current queue tensor."""
-        # n: if n>0    - number of elements from the back of the queue to return
-        #    if n<=0   - number of elements at the front of the queue NOT to return
+        # n: if n>0    - number of elements from the current read location to return
         #    if n=None - return the whole queue
         if n is None:
             n = self.queue_size
-        elif (n >= self.queue_size) or (n <= -self.queue_size):
-            k = []
-        elif n <= 0:
-            n = self.queue_size + n
+        else: 
+            assert (n > self.queue_size) or (n < 0)
+        
         if self.read_ptr + n <= self.queue_size:
             k = self.queue[self.read_ptr:self.read_ptr+n]
-            self.read_ptr = self.read_ptr + n
+            if advance:
+                self.read_ptr = self.read_ptr + n
         else:  # wrap around
             first = self.queue_size - self.read_ptr
-            k[:first] = self.queue[self.read_ptr:]
-            k[first:] = self.queue[:n-first]
-            self.read_ptr = n - first
+            k1 = self.queue[self.read_ptr:]
+            k2 = self.queue[:n-first]
+            k = torch.cat([k1,k2])
+            if advance:
+                self.read_ptr = n - first
         return k
 
 def microbatches(x, y, mb_size, min_size=2):
@@ -316,6 +317,7 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
         
     for macro_index, macro_indices in enumerate(train_bar):
         this_macro_batch_size = len(macro_indices) # for the case drop_last=False
+        queue.get(this_macro_batch_size) # advance read pointer
         # -----------------------
         # Pass A: compute detached g2 for IRM
         # -----------------------
@@ -361,7 +363,7 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
 
                         # logits: q*k+ / q*negatives
                         l_pos = torch.sum(out_q * out_k, dim=1, keepdim=True)
-                        l_neg = torch.matmul(out_k, queue.get().t())  # queue as negatives (detached)
+                        l_neg = torch.matmul(out_k, queue.get(queue.queue_size-this_macro_batch_size, advance=False).t())  # queue as negatives (detached)
                         logits = torch.cat([l_pos, l_neg], dim=1)
                         logits_cont = logits / temperature
                         labels_cont = torch.zeros(logits_cont.size(0), dtype=torch.long, device=device)
@@ -452,7 +454,7 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
 
                         # logits: q*k+ / q*negatives
                         l_pos = torch.sum(out_q * out_k, dim=1, keepdim=True)
-                        l_neg = torch.matmul(out_k, queue.get().t())  # queue as negatives (detached)
+                        l_neg = torch.matmul(out_k, queue.get(queue.queue_size-this_macro_batch_size, advance=False).t())  # queue as negatives (detached)
                         logits = torch.cat([l_pos, l_neg], dim=1)
                         logits_cont = logits / temperature
                         labels_cont = torch.zeros(logits_cont.size(0), dtype=torch.long, device=device)
@@ -536,7 +538,7 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
 
                         # logits: q*k+ / q*negatives
                         l_pos = torch.sum(out_q * out_k, dim=1, keepdim=True)
-                        l_neg = torch.matmul(out_k, queue.get().t())  # queue as negatives (detached)
+                        l_neg = torch.matmul(out_k, queue.get(queue.queue_size-this_macro_batch_size, advance=not args.keep_cont).t())  # queue as negatives (detached)
                         logits = torch.cat([l_pos, l_neg], dim=1)
 
                         # IRM penalty
@@ -571,7 +573,6 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
         
         if args.keep_cont: # global contrastive loss (1st partition)
             loader_num += 1
-            num_samples_to_avoid = 0
             for subset in range(number_of_subsets):
                 if (number_of_subsets > 1) and (subset > 0):
                     data_env = next(subset_iters[loader_num])
@@ -601,7 +602,7 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
 
                     # logits: q*k+ / q*negatives
                     l_pos = torch.sum(out_q * out_k, dim=1, keepdim=True)
-                    l_neg = torch.matmul(out_k, queue.get(-num_samples_to_avoid).t())  # queue as negatives (detached)
+                    l_neg = torch.matmul(out_k, queue.get(queue.queue_size-this_macro_batch_size).t())  # queue as negatives (detached)
                     logits = torch.cat([l_pos, l_neg], dim=1)
                     logits_cont = logits / temperature
                     labels_cont = torch.zeros(logits_cont.size(0), dtype=torch.long, device=device)
@@ -617,7 +618,6 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
                     # update queue
                     # -----------------------
                     queue.update(out_k)
-                    num_samples_to_avoid += out_k.size(0)
 
                     # free memory of micro-batch
                     del pos, indexs, pos_q, pos_k, out_q, out_k, l_pos, l_neg, logits, logits_cont, loss_cont
