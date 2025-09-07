@@ -284,7 +284,6 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
 
     loader_batch_size = batch_size
     macro_batch_size = args.macro_batch_size
-    number_of_subsets = macro_batch_size // loader_batch_size
     gradients_accumulation_steps = args.gradients_accumulation_batch_size // macro_batch_size 
     gpu_batch_size = args.micro_batch_size
     gpu_accum_steps = ceil(loader_batch_size / gpu_batch_size) # better round up 
@@ -317,6 +316,8 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
         
     for macro_index, macro_indices in enumerate(train_bar):
         this_macro_batch_size = len(macro_indices) # for the case drop_last=False
+        number_of_subsets = this_macro_batch_size // loader_batch_size
+        this_macro_batch_size = number_of_subsets * loader_batch_size
         queue.get(this_macro_batch_size) # advance read pointer
         # -----------------------
         # Pass A: compute detached g2 for IRM
@@ -1209,7 +1210,7 @@ if __name__ == '__main__':
 
     def create_train_loaders(num_passes):
         train_loaders = utils.LoaderManager(train_data, num_passes, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, pin_memory=True, 
-                                            drop_last=tr_dl, persistent_workers=tr_pw)    
+                                            drop_last=True, persistent_workers=tr_pw)    
         return train_loaders
         
     def shutdown_loader(loader):
