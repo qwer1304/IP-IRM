@@ -359,16 +359,11 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
                             # Rescale the entire loss to keep gradients in a reasonable range
                             loss_cont /= penalty_weight
                         loss_cont = loss_cont / this_macro_batch_size / num_splits / args.env_num / gradients_accumulation_steps
-                        print()
-                        print(macro_index,subset,i,split_num,env)
-                        print()
-                        loss_cont.backward()
+                        loss_cont.backward(retain_graph=True) # must keep graph for all splits!
                         loss_macro_batch += loss_cont.item()
 
                         # free memory of split
-                        print('del split')
-                        #del out_q, out_k, l_pos, l_neg, logits, logits_cont, loss_cont, logits_pen, g_i
-                        del l_pos, l_neg, logits, logits_cont, loss_cont, logits_pen, g_i
+                        del out_q, out_k, l_pos, l_neg, logits, logits_cont, loss_cont, logits_pen, g_i
                         torch.cuda.empty_cache()
                     # end for env in range(args.env_num): 
                 #end for split_num, updated_split_each in enumerate(updated_split):
@@ -454,7 +449,7 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
                             # Rescale the entire loss to keep gradients in a reasonable range
                             loss /= penalty_weight
                         loss = loss / this_macro_batch_size / num_splits / args.env_num / gradients_accumulation_steps
-                        loss.backward()
+                        loss.backward(retain_graph=True) # must keep graph for all splits!
                         loss_macro_batch += loss.item()
 
                         # free memory of split
@@ -529,7 +524,7 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
                             # Rescale the entire loss to keep gradients in a reasonable range
                             irm_mb /= penalty_weight
                         irm_mb =  irm_mb * Ns[split_num,env] / this_macro_batch_size / num_splits / args.env_num / gradients_accumulation_steps # N doesn't change between passes
-                        irm_mb.backward()
+                        irm_mb.backward(retain_graph=True)
                         loss_macro_batch += irm_mb.item()
 
                         # free memory of split
@@ -589,7 +584,7 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
                         # Rescale the entire loss to keep gradients in a reasonable range
                         loss_cont /= penalty_weight
                     loss_cont = loss_cont / this_macro_batch_size / gradients_accumulation_steps
-                    loss_cont.backward()
+                    loss_cont.backward(retain_graph=True)
                     loss_macro_batch += loss_cont.item()
 
                     # -----------------------
