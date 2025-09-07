@@ -315,6 +315,10 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
         s.set_indices(loader_indices_list[i])
 
     subset_iters = [train_loaders.get_pass_iter(p) for p in range(num_passes)]
+    
+    print()
+    print(f"len(epoch_indices):{len(epoch_indices)}, index_loader.drop_last:{index_loader.drop_last}, num_passes:{num_passes}," + \
+          f"loader # batches: {len(train_loaders.loaders[0])}, loader_indices_list lengths:", [len(l) for l in loader_indices_list])
         
     for macro_index, macro_indices in enumerate(train_bar):
         this_macro_batch_size = len(macro_indices) # for the case drop_last=False
