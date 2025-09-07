@@ -248,7 +248,7 @@ def time_block(block_name, gpu=True):
 
 def create_indices(epoch_indices, num_loaders=None, batch_size=None, drop_last=False):
     loader_indices = [epoch_indices] # 1st loader gets all indices
-    last_batch_size = len(epoch_indices) % batch_size
+    last_batch_size = int(len(epoch_indices) -  (len(epoch_indices) // batch_size) * batch_size)
     if (last_batch_size == 0) or drop_last:
         last_batch_size += batch_size # if drop_last drops the "tail" and last batch
     seq1 = epoch_indices[:-last_batch_size]
@@ -308,7 +308,8 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
     # create subset data loaders
     epoch_indices = list(range(len(index_loader.dataset))) # number of samples
     random.shuffle(epoch_indices)  
-    epoch_indices = epoch_indices[:(len(epoch_indices) // args.macro_batch_size) * args.macro_batch_size] # assume index_loader drops last 
+    if index_loader.drop_last:
+        epoch_indices = epoch_indices[:len(index_loader) * args.macro_batch_size] # len(index_loader) gives number of batches
     loader_indices_list = create_indices(epoch_indices, num_loaders=num_passes, batch_size=batch_size, drop_last=args.dl_tr[-1])
     for i, s in enumerate(train_loaders.samplers):  # set indices to sample from
         s.set_indices(loader_indices_list[i])
