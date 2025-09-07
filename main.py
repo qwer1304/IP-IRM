@@ -173,7 +173,7 @@ class FeatureQueue:
         if n is None:
             n = self.queue_size
         else: 
-            assert (n > self.queue_size) or (n < 0)
+            assert (n <= self.queue_size) and (n > 0)
         
         if self.read_ptr + n <= self.queue_size:
             k = self.queue[self.read_ptr:self.read_ptr+n]
