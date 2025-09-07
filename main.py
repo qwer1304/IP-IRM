@@ -422,7 +422,7 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
                         # split mb
                         out_q, out_k = utils.assign_features(out_q_mb, out_k_mb, indexs, updated_split_each, env)
                         N = out_q.size(0)
-                        if len(N) == 0:
+                        if N == 0:
                             # free memory of split
                             del out_q, out_k
                             torch.cuda.empty_cache()
@@ -506,7 +506,7 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
                         # split mb
                         out_q, out_k = utils.assign_features(out_q_mb, out_k_mb, indexs, updated_split_each, env)
                         N = out_q.size(0)
-                        if len(N) == 0:
+                        if N == 0:
                             # free memory of split
                             del out_q, out_k
                             torch.cuda.empty_cache()
