@@ -330,11 +330,11 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
                 for split_num, updated_split_each in enumerate(updated_split):
                     for env in range(args.env_num):
                         # split mb
-                        pos_q, pos_k = utils.assign_features(pos_q_mb, pos_k_mb, indexs, updated_split_each, env)
-                        if len(pos_q) == 0:
+                        out_q, out_k = utils.assign_features(out_q_mb, out_k_mb, indexs, updated_split_each, env)
+                        if len(out_q) == 0:
                             continue
 
-                        Ns[split_num,env] += len(pos_q) # size of split
+                        Ns[split_num,env] += len(out_q) # size of split
 
                         # -----------------------
                         # MoCo / GDI contrastive loss
@@ -367,11 +367,10 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
                         torch.cuda.empty_cache()
                     # end for env in range(args.env_num): 
                 #end for split_num, updated_split_each in enumerate(updated_split):
+                # free memory of micro-batch
+                del pos, indexs, pos_q_mb, pos_k_mb, out_q_mb, out_k_mb
+                torch.cuda.empty_cache()
             # end for i in idxs_2:
-
-            # free memory of micro-batch
-            del pos, indexs, pos_q_mb, pos_k_mb
-            torch.cuda.empty_cache()
         # end for subset_loader in subset_loaders:
         
         """
@@ -420,8 +419,8 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
                 for split_num, updated_split_each in enumerate(updated_split):
                     for env in range(args.env_num):
                         # split mb
-                        pos_q, pos_k = utils.assign_features(pos_q_mb, pos_k_mb, indexs, updated_split_each, env)
-                        if len(pos_q) == 0:
+                        out_q, out_k = utils.assign_features(out_q_mb, out_k_mb, indexs, updated_split_each, env)
+                        if len(out_q) == 0:
                             continue
 
                         # -----------------------
@@ -464,7 +463,7 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
                     queue.update(out_k_mb)
 
                 # free memory of micro-batch
-                del pos, indexs, out_q_mb, out_k_mb
+                del pos, indexs, pos_q_mb, pos_k_mb, out_q_mb, out_k_mb
                 torch.cuda.empty_cache()
             # end for i in idxs_1:
         # end for subset_loader in subset_loaders:
@@ -488,7 +487,6 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
             for i in idxs_2:
                 pos, indexs = mb_list[i]
                 pos = pos.cuda(non_blocking=True)
-                indexs_set = set(indexs)
                 indexs = indexs.cuda(non_blocking=True)
 
                 if transform is not None:
@@ -502,8 +500,8 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
                 for split_num, updated_split_each in enumerate(updated_split):
                     for env in range(args.env_num):
                         # split mb
-                        pos_q, pos_k = utils.assign_features(pos_q_mb, pos_k_mb, indexs, updated_split_each, env)
-                        if len(pos_q) == 0:
+                        out_q, out_k = utils.assign_features(out_q_mb, out_k_mb, indexs, updated_split_each, env)
+                        if len(out_q) == 0:
                             continue
 
                         # -----------------------
@@ -529,7 +527,7 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
                         loss_macro_batch += irm_mb.item()
 
                         # free memory of split
-                        del pos_q, pos_k, l_pos, l_neg, logits, logits_pen, g_i, irm_mb
+                        del out_q, out_k, l_pos, l_neg, logits, logits_pen, g_i, irm_mb
                         torch.cuda.empty_cache()
                     # end for env in range(args.env_num):
                 # end for updated_split_each in updated_split:      
@@ -540,7 +538,7 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
                     queue.update(out_k_mb)
 
                 # free memory of micro-batch
-                del pos, indexs, out_q_mb, out_k_mb
+                del pos, indexs, pos_q_mb, pos_k_mb, out_q_mb, out_k_mb
                 torch.cuda.empty_cache()
             # end for i in idxs_2:
         # end for subset_loader in subset_loaders:
@@ -594,7 +592,7 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
                     queue.update(out_k)
 
                     # free memory of micro-batch
-                    del pos, indexs, out_q, out_k, l_pos, l_neg, logits, logits_cont, loss_cont
+                    del pos, indexs, pos_q, pos_k, out_q, out_k, l_pos, l_neg, logits, logits_cont, loss_cont
                     torch.cuda.empty_cache()
                 # end for i in idxs:
             # end for subset_loader in subset_loaders:
