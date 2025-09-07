@@ -359,6 +359,9 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
                             # Rescale the entire loss to keep gradients in a reasonable range
                             loss_cont /= penalty_weight
                         loss_cont = loss_cont / this_macro_batch_size / num_splits / args.env_num / gradients_accumulation_steps
+                        print()
+                        print(macro_index,subset,i,split_num,env)
+                        print()
                         loss_cont.backward()
                         loss_macro_batch += loss_cont.item()
 
