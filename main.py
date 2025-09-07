@@ -366,11 +366,13 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
                         loss_macro_batch += loss_cont.item()
 
                         # free memory of split
+                        print('del split')
                         del out_q, out_k, l_pos, l_neg, logits, logits_cont, loss_cont, logits_pen, g_i
                         torch.cuda.empty_cache()
                     # end for env in range(args.env_num): 
                 #end for split_num, updated_split_each in enumerate(updated_split):
                 # free memory of micro-batch
+                print('del mb')
                 del pos, indexs, pos_q_mb, pos_k_mb, out_q_mb, out_k_mb
                 torch.cuda.empty_cache()
             # end for i in idxs_2:
