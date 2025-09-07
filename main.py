@@ -308,6 +308,7 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
     # create subset data loaders
     epoch_indices = list(range(len(index_loader.dataset))) # number of samples
     random.shuffle(epoch_indices)  
+    epoch_indices = epoch_indices[:(len(epoch_indices) // args.macro_batch_size) * args.macro_batch_size] # assume index_loader drops last 
     loader_indices_list = create_indices(epoch_indices, num_loaders=num_passes, batch_size=batch_size, drop_last=args.dl_tr[-1])
     for i, s in enumerate(train_loaders.samplers):  # set indices to sample from
         s.set_indices(loader_indices_list[i])
@@ -316,7 +317,9 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
         
     for macro_index, macro_indices in enumerate(train_bar):
         this_macro_batch_size = len(macro_indices) # for the case drop_last=False
-        number_of_subsets = ceil(this_macro_batch_size / loader_batch_size)
+        number_of_subsets = ceil(this_macro_batch_size / loader_batch_size) # for the case they don't divide precisely
+                                                                            # assume loaders don't drop last
+                                                                            # last load could be different
         queue.get(this_macro_batch_size) # advance read pointer
         # -----------------------
         # Pass A: compute detached g2 for IRM
