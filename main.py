@@ -251,10 +251,10 @@ def create_indices(epoch_indices, num_loaders=None, batch_size=None, drop_last=F
     last_batch_size = int(len(epoch_indices) -  (len(epoch_indices) // batch_size) * batch_size)
     if (last_batch_size == 0) or drop_last:
         last_batch_size += batch_size # if drop_last drops the "tail" and last batch
-    seq1 = epoch_indices[:-last_batch_size]
-    seq2 = epoch_indices[batch_size:]
+    seq1 = list(reversed(epoch_indices[:-last_batch_size]))
+    seq0 = epoch_indices[batch_size:]
     for loader in range(1,num_loaders):
-        loader_indices.append(seq2 if (loader % 2) == 1 else seq1)
+        loader_indices.append(seq1 if (loader % 2) == 1 else seq0)
     return loader_indices
 
 # ssl training with IP-IRM
