@@ -302,7 +302,6 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
         # Pass A: compute detached g2 for IRM
         # -----------------------
         g2_sums = torch.zeros((num_splits, args.env_num), dtype=torch.float, device=device)
-        Ns = torch.zeros((num_splits, args.env_num), dtype=torch.int, device=device) # compute N during 1st pass since it's used only after the pass is completed
         loader_num = 0
         for subset in range(number_of_subsets):
             data_env = next(subset_iters[loader_num]) # first pass loads all data
@@ -331,10 +330,12 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
                     for env in range(args.env_num):
                         # split mb
                         out_q, out_k = utils.assign_features(out_q_mb, out_k_mb, indexs, updated_split_each, env)
-                        if len(out_q) == 0:
+                        N = out_q.size(0)
+                        if N == 0:
+                            # free memory of split
+                            del out_q, out_k
+                            torch.cuda.empty_cache()
                             continue
-
-                        Ns[split_num,env] += len(out_q) # size of split
 
                         # -----------------------
                         # MoCo / GDI contrastive loss
@@ -346,14 +347,14 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
                         logits = torch.cat([l_pos, l_neg], dim=1)
                         logits_cont = logits / temperature
                         labels_cont = torch.zeros(logits_cont.size(0), dtype=torch.long, device=device)
-                        loss_cont = F.cross_entropy(logits_cont, labels_cont, reduction='sum')
+                        loss_cont = F.cross_entropy(logits_cont, labels_cont, reduction='sum') / N # average per split
 
                         # IRM penalty
                         logits_pen = (logits / args.irm_temp)
 
                         logits_pen = logits_pen.detach()
-                        g_i = grad_wrt_scale_sum(logits_pen, labels_cont, create_graph=False).detach()
-                        g2_sums[split_num,env] += g_i
+                        g_i = grad_wrt_scale_sum(logits_pen, labels_cont, create_graph=False).detach() / N # average per split
+                        g2_sums[split_num,env] += g_i # sum over subsets
 
                         if penalty_weight > 1.0:
                             # Rescale the entire loss to keep gradients in a reasonable range
@@ -384,7 +385,7 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
         exit(1)
         """
         
-        g2s = g2_sums / Ns # average over split
+        g2s = g2_sums # averages per split
 
         # -----------------------
         # Pass B: group 1
@@ -420,7 +421,11 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
                     for env in range(args.env_num):
                         # split mb
                         out_q, out_k = utils.assign_features(out_q_mb, out_k_mb, indexs, updated_split_each, env)
-                        if len(out_q) == 0:
+                        N = out_q.size(0)
+                        if len(N) == 0:
+                            # free memory of split
+                            del out_q, out_k
+                            torch.cuda.empty_cache()
                             continue
 
                         # -----------------------
@@ -433,16 +438,15 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
                         logits = torch.cat([l_pos, l_neg], dim=1)
                         logits_cont = logits / temperature
                         labels_cont = torch.zeros(logits_cont.size(0), dtype=torch.long, device=device)
-                        loss_cont = F.cross_entropy(logits_cont, labels_cont, reduction='sum')
+                        loss_cont = F.cross_entropy(logits_cont, labels_cont, reduction='sum') / N # average per split
 
                         # IRM penalty
                         logits_pen = (logits / args.irm_temp)
-                        g_i = grad_wrt_scale_sum(logits_pen, labels_cont, create_graph=True)
+                        g_i = grad_wrt_scale_sum(logits_pen, labels_cont, create_graph=True) / N # average per split
                         # First addend in IRM averaged over split
-                        irm_mb = penalty_weight * (g_i / Ns[split_num,env] * g2s[split_num,env]) # N doesn't change between passes
-                        g1_sums_detached[split_num,env] += g_i.detach()
+                        irm_mb = penalty_weight * g_i * g2s[split_num,env] # average per split
+                        g1_sums_detached[split_num,env] += g_i.detach() # sum over subsets
 
-                        irm_mb *=  Ns[split_num,env] # N doesn't change between passes
                         loss = loss_cont + irm_mb
                         if penalty_weight > 1.0:
                             # Rescale the entire loss to keep gradients in a reasonable range
@@ -467,7 +471,7 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
                 torch.cuda.empty_cache()
             # end for i in idxs_1:
         # end for subset_loader in subset_loaders:
-        g1s = g1_sums_detached / Ns # average over split
+        g1s = g1_sums_detached # average per split
 
         # -----------------------
         # Pass C: group 2
@@ -501,7 +505,11 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
                     for env in range(args.env_num):
                         # split mb
                         out_q, out_k = utils.assign_features(out_q_mb, out_k_mb, indexs, updated_split_each, env)
-                        if len(out_q) == 0:
+                        N = out_q.size(0)
+                        if len(N) == 0:
+                            # free memory of split
+                            del out_q, out_k
+                            torch.cuda.empty_cache()
                             continue
 
                         # -----------------------
@@ -516,13 +524,13 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
                         # IRM penalty
                         logits_pen = (logits / args.irm_temp)
                         labels_cont = torch.zeros(logits_pen.size(0), dtype=torch.long, device=device)
-                        g_i = grad_wrt_scale_sum(logits_pen, labels_cont, create_graph=True)
+                        g_i = grad_wrt_scale_sum(logits_pen, labels_cont, create_graph=True) / N # average per split
                         # Second addend in IRM averaged over split
-                        irm_mb = penalty_weight * (g_i / Ns[split_num,env] * g1s[split_num,env]) # N doesn't change between passes
+                        irm_mb = penalty_weight * g_i * g1s[split_num,env]
                         if penalty_weight > 1.0:
                             # Rescale the entire loss to keep gradients in a reasonable range
                             irm_mb /= penalty_weight
-                        irm_mb =  irm_mb * Ns[split_num,env] / this_macro_batch_size / num_splits / args.env_num / gradients_accumulation_steps # N doesn't change between passes
+                        irm_mb =  irm_mb / this_macro_batch_size / num_splits / args.env_num / gradients_accumulation_steps
                         irm_mb.backward(retain_graph=True)
                         loss_macro_batch += irm_mb.item()
 
