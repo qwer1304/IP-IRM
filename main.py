@@ -368,7 +368,6 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
                     # end for env in range(args.env_num): 
                 #end for split_num, updated_split_each in enumerate(updated_split):
                 # free memory of micro-batch
-                print('del mb')
                 del pos, indexs, pos_q_mb, pos_k_mb, out_q_mb, out_k_mb
                 torch.cuda.empty_cache()
             # end for i in idxs_2:
@@ -482,7 +481,7 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
 
             # Step 0: micro-batches
             # -----------------------
-            mb_list = list(microbatches(pos_all_batch[split_idx], indexs_batch[split_idx], gpu_batch_size))
+            mb_list = list(microbatches(pos_all_batch, indexs_batch, gpu_batch_size))
             idxs_2 = [i for i in range(len(mb_list)) if i % 2 == 1] # indices of "odd" micro-batches in mb_list
 
             for i in idxs_2:
