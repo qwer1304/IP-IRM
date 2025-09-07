@@ -168,14 +168,14 @@ class FeatureQueue:
 
     def get(self, n=None):
         """Return the current queue tensor."""
-        # n: if n>0 - number of elements from the back of the queue to return
-        #    if n<0 - number of elements at the front of the queue NOT to return
+        # n: if n>0    - number of elements from the back of the queue to return
+        #    if n<=0   - number of elements at the front of the queue NOT to return
         #    if n=None - return the whole queue
         if n is None:
             n = self.queue_size
         elif (n >= self.queue_size) or (n <= -self.queue_size):
             k = []
-        elif n < 0:
+        elif n <= 0:
             n = self.queue_size + n
         if self.read_ptr + n <= self.queue_size:
             k = self.queue[self.read_ptr:self.read_ptr+n]
@@ -361,7 +361,7 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
 
                         # logits: q*k+ / q*negatives
                         l_pos = torch.sum(out_q * out_k, dim=1, keepdim=True)
-                        l_neg = torch.matmul(out_k, queue.get(-this_macro_batch_size).t())  # queue as negatives (detached)
+                        l_neg = torch.matmul(out_k, queue.get().t())  # queue as negatives (detached)
                         logits = torch.cat([l_pos, l_neg], dim=1)
                         logits_cont = logits / temperature
                         labels_cont = torch.zeros(logits_cont.size(0), dtype=torch.long, device=device)
@@ -452,7 +452,7 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
 
                         # logits: q*k+ / q*negatives
                         l_pos = torch.sum(out_q * out_k, dim=1, keepdim=True)
-                        l_neg = torch.matmul(out_k, queue.get(-this_macro_batch_size).t())  # queue as negatives (detached)
+                        l_neg = torch.matmul(out_k, queue.get().t())  # queue as negatives (detached)
                         logits = torch.cat([l_pos, l_neg], dim=1)
                         logits_cont = logits / temperature
                         labels_cont = torch.zeros(logits_cont.size(0), dtype=torch.long, device=device)
@@ -536,7 +536,7 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
 
                         # logits: q*k+ / q*negatives
                         l_pos = torch.sum(out_q * out_k, dim=1, keepdim=True)
-                        l_neg = torch.matmul(out_k, queue.get(-this_macro_batch_size).t())  # queue as negatives (detached)
+                        l_neg = torch.matmul(out_k, queue.get().t())  # queue as negatives (detached)
                         logits = torch.cat([l_pos, l_neg], dim=1)
 
                         # IRM penalty
@@ -571,6 +571,7 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
         
         if args.keep_cont: # global contrastive loss (1st partition)
             loader_num += 1
+            num_samples_to_avoid = 0
             for subset in range(number_of_subsets):
                 if (number_of_subsets > 1) and (subset > 0):
                     data_env = next(subset_iters[loader_num])
@@ -600,7 +601,7 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
 
                     # logits: q*k+ / q*negatives
                     l_pos = torch.sum(out_q * out_k, dim=1, keepdim=True)
-                    l_neg = torch.matmul(out_k, queue.get(-this_macro_batch_size).t())  # queue as negatives (detached)
+                    l_neg = torch.matmul(out_k, queue.get(-num_samples_to_avoid).t())  # queue as negatives (detached)
                     logits = torch.cat([l_pos, l_neg], dim=1)
                     logits_cont = logits / temperature
                     labels_cont = torch.zeros(logits_cont.size(0), dtype=torch.long, device=device)
@@ -616,6 +617,7 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
                     # update queue
                     # -----------------------
                     queue.update(out_k)
+                    num_samples_to_avoid += out_k.size(0)
 
                     # free memory of micro-batch
                     del pos, indexs, pos_q, pos_k, out_q, out_k, l_pos, l_neg, logits, logits_cont, loss_cont
