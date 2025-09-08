@@ -305,6 +305,7 @@ def train_env(net, train_loader, train_optimizer, temperature, updated_split, ba
                     # Rescale the entire loss to keep gradients in a reasonable range
                     loss_cont /= penalty_weight
                 loss_cont = loss_cont / this_batch_size / gradients_accumulation_steps
+                loss_cont *= args.penalty_cont
                 # loss and grad normalized
                 loss_cont.backward()
                 loss_cont_batch += loss_cont.detach()
@@ -709,7 +710,8 @@ if __name__ == '__main__':
 
     #### ours model param ####
     parser.add_argument('--ours_mode', default='w', type=str, help='what mode to use')
-    parser.add_argument('--penalty_weight', default=1, type=float, help='penalty weight')
+    parser.add_argument('--penalty_weight', default=1.0, type=float, help='penalty weight')
+    parser.add_argument('--penalty_cont', default=1.0, type=float, help='cont penalty weight')
     parser.add_argument('--penalty_iters', default=0, type=int, help='penalty weight start iteration')
     parser.add_argument('--increasing_weight', action="store_true", default=False, help='increasing the penalty weight?')
     parser.add_argument('--env_num', default=2, type=int, help='num of the environments')
