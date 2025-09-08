@@ -400,7 +400,7 @@ def train_env(net, train_loaders, train_optimizer, temperature, updated_split, b
                 del pos, indexs, pos_q_mb, pos_k_mb, out_q_mb, out_k_mb
                 torch.cuda.empty_cache()
             # end for i in idxs_2:
-        # end for subset_loader in subset_loaders:
+        # end for subset in range(number_of_subsets):
         
         """
         # After loop, print per-block CPU and GPU times
