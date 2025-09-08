@@ -415,7 +415,7 @@ def train_env(net, train_loader, train_optimizer, temperature, updated_split, ba
             else:
                 p.grad = total_grad_flat.view(p.shape)                   # reshape back to parameter shape
 
-        loss_irm_batch = (losses_irm * gs).sum().detach()
+        loss_irm_batch = (losses_irm * gs).sum()                         # already detached
 
         # -----------------------
         # Step 3: optimizer step
@@ -449,7 +449,7 @@ def train_env(net, train_loader, train_optimizer, temperature, updated_split, ba
         loss_cont_batch.zero_()
         for buf in losses_irm_grads_buffers:
             buf.zero_()
-        del gs, total_grad_flat, loss_irm_batch, loss_irm_batch
+        del gs, total_grad_flat, loss_irm_batch
         torch.cuda.empty_cache()
     # end for batch_index, data_env in enumerate(train_bar):
 
