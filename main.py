@@ -314,7 +314,7 @@ def train_env(net, train_loader, train_optimizer, temperature, updated_split, ba
             # end for i in idxs:
         # end if args.keep_cont: # global contrastive loss (1st partition)
 
-        for j in range(idxs_01):
+        for j in range(len(idxs_01)):
             for i in idxs_01[j]:
                 pos, indexs = mb_list[i]
                 pos = pos.cuda(non_blocking=True)
