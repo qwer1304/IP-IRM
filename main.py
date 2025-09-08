@@ -306,7 +306,7 @@ def train_env(net, train_loader, train_optimizer, temperature, updated_split, ba
                     loss_cont /= penalty_weight
                 loss_cont = loss_cont / this_macro_batch_size / gradients_accumulation_steps
                 loss_cont.backward(retain_graph=True)
-                lost_cont_batch += loss_cont
+                loss_cont_batch += loss_cont
 
                 # free memory of micro-batch
                 del pos, indexs, pos_q, pos_k, out_q, out_k, l_pos, l_neg, logits, logits_cont, loss_cont
@@ -364,7 +364,7 @@ def train_env(net, train_loader, train_optimizer, temperature, updated_split, ba
                             loss_cont /= penalty_weight
                             irm /= penalty_weight
                         losses_irm[j,split_num,env] = irm / this_macro_batch_size / num_splits / args.env_num / gradients_accumulation_steps
-                        lost_cont_batch += loss_cont
+                        loss_cont_batch += loss_cont
 
                         # compute gradients for this loss
                         loss_cont.backward(retain_graph=True)
