@@ -384,12 +384,12 @@ def train_env(net, train_loader, train_optimizer, temperature, updated_split, ba
                     # end for env in range(args.env_num): 
                 #end for split_num, updated_split_each in enumerate(updated_split):
                 # free memory of micro-batch
-                del pos, indexs, pos_q_mb, pos_k_mb, out_q_mb, out_k_mb
-                torch.cuda.empty_cache()
                 # -----------------------
                 # update queue
                 # -----------------------
                 queue.update(out_k_mb)
+                del pos, indexs, pos_q_mb, pos_k_mb, out_q_mb, out_k_mb
+                torch.cuda.empty_cache()
             # end for i in idxs[j]:
         # end for j in range(idxs):
 
