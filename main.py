@@ -351,7 +351,7 @@ def train_env(net, train_loader, train_optimizer, temperature, updated_split, ba
                         logits_cont = logits / temperature
                         labels_cont = torch.zeros(logits_cont.size(0), dtype=torch.long, device=device)
                         loss_cont = F.cross_entropy(logits_cont, labels_cont, reduction='sum') / N # average per split
-                        loss_cont = (loss_cont.detach() / this_batch_size / num_splits / args.env_num / gradients_accumulation_steps)
+                        loss_cont = (loss_cont / this_batch_size / num_splits / args.env_num / gradients_accumulation_steps)
                         # Rescale the entire loss to keep gradients in a reasonable range
                         if penalty_weight > 1.0:
                             loss_cont /= penalty_weight
