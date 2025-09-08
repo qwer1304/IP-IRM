@@ -268,7 +268,7 @@ def train_env(net, train_loader, train_optimizer, temperature, updated_split, ba
         # Step 0: micro-batches
         # -----------------------
         mb_list = list(microbatches(pos_all_batch, indexs_batch, gpu_batch_size))
-        idxs_01 = [[i for i in range(len(mb_list)) if i % 2 == 0],  \ # indices of "even" micro-batches in mb_list
+        idxs_01 = [[i for i in range(len(mb_list)) if i % 2 == 0],    # indices of "even" micro-batches in mb_list
                    [i for i in range(len(mb_list)) if i % 2 == 1]]    # indices of "odd" micro-batches in mb_list
 
         if args.keep_cont: # global contrastive loss (1st partition)
