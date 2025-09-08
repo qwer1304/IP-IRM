@@ -307,8 +307,8 @@ def train_env(net, train_loader, train_optimizer, temperature, updated_split, ba
                     # Rescale the entire loss to keep gradients in a reasonable range
                     loss_cont /= penalty_weight
                 loss_cont = loss_cont / this_macro_batch_size / gradients_accumulation_steps
-                loss_cont.backward(retain_graph=True)
-                loss_cont_batch += loss_cont
+                loss_cont.backward()
+                loss_cont_batch += loss_cont.detach()
 
                 # free memory of micro-batch
                 del pos, indexs, pos_q, pos_k, out_q, out_k, l_pos, l_neg, logits, logits_cont, loss_cont
@@ -366,20 +366,21 @@ def train_env(net, train_loader, train_optimizer, temperature, updated_split, ba
                         if penalty_weight > 1.0:
                             loss_cont /= penalty_weight
                             irm /= penalty_weight
-                        losses_irm[j,split_num,env] = irm / this_macro_batch_size / num_splits / args.env_num / gradients_accumulation_steps
-                        loss_cont_batch += loss_cont
+                        losses_irm[j,split_num,env] = irm.detach() / this_macro_batch_size / num_splits / args.env_num / gradients_accumulation_steps
+                        loss_cont_batch += loss_cont.detach()
 
                         # compute gradients for this loss
                         loss_cont.backward(retain_graph=True)
                         grads = torch.autograd.grad(
                             irm,
                             net.parameters(),
-                            retain_graph=True  # keep graph for next loss
+                            retain_graph=True,  # keep graph for next loss
+                            allow_unused=True
                         )
                         
                         # flatten and accumulate per parameter
                         for _j, g in enumerate(grads):
-                            losses_irm_grads_buffers[_j][j,split_num,env] += g.view(-1)
+                            losses_irm_grads_buffers[_j][j,split_num,env] += g.detach().view(-1)
                                 
                         # free memory of split
                         del out_q, out_k, l_pos, l_neg, logits, logits_cont, loss_cont, logits_pen, g_i, irm, loss, grads, g
@@ -414,7 +415,7 @@ def train_env(net, train_loader, train_optimizer, temperature, updated_split, ba
             else:
                 p.grad = total_grad_flat.view(p.shape)                   # reshape back to parameter shape
 
-        loss_irm_batch = (losses_irm * gs).sum()
+        loss_irm_batch = (losses_irm * gs).sum().detach()
 
         # -----------------------
         # Step 3: optimizer step
@@ -443,14 +444,12 @@ def train_env(net, train_loader, train_optimizer, temperature, updated_split, ba
                                         
         # Prepare for next iteration
         gradients_accumulation_step = 0
-        g_sums_detached = torch.zeros((2, num_splits, args.env_num), dtype=torch.float, device=device) 
-        losses_irm      = torch.zeros((2, num_splits, args.env_num), dtype=torch.float, device=device) 
-        num_irm_losses  = losses_irm.numel()
-        loss_cont_batch = torch.tensor([0], dtype=torch.float, device=device)
-        losses_irm_grads = [
-            [torch.zeros_like(p, requires_grad=False) for p in net.parameters()] # only a buffer, hence requires_grad=False
-            for _ in range(num_irm_losses)
-        ]
+        g_sums_detached.zero_()
+        losses_irm.zero_()
+        loss_cont_batch.zero_()
+        for buf in losses_irm_grads_buffers:
+            buf.zero_()
+        del gs, total_grad_flat, loss_irm_batch, loss_irm_batch
         torch.cuda.empty_cache()
     # end for batch_index, data_env in enumerate(train_bar):
 
