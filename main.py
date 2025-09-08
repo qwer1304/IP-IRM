@@ -434,7 +434,7 @@ def train_env(net, train_loader, train_optimizer, temperature, updated_split, ba
             .format(epoch, epochs, total_loss/total_num, train_optimizer.param_groups[0]['lr'], penalty_weight,
             trained_samples=total_num, total_samples=total_samples))
 
-        if macro_index % 10 == 0:
+        if batch_index % 10 == 0:
             utils.write_log('Train Epoch: [{:d}/{:d}] [{:d}/{:d}]  Loss: {:.4f}  LR: {:.4f}  PW {:.4f}'
                             .format(epoch, epochs, total_num, total_samples, total_loss/total_num,
                                     train_optimizer.param_groups[0]['lr'], penalty_weight), log_file=log_file)
