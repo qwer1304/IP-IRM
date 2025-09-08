@@ -258,11 +258,11 @@ def train_env(net, train_loader, train_optimizer, temperature, updated_split, ba
     train_optimizer.zero_grad(set_to_none=True) # clear gradients at the beginning 
 
     for batch_index, data_env in enumerate(train_bar):
-        this_macro_batch_size = len(data_env) # for the case drop_last=False
-
-        queue.get(this_macro_batch_size) # advance read pointer
 
         pos_all_batch, indexs_batch = data_env[0], data_env[-1] # 'pos_all' is an batch of images, 'indexs' is their corresponding indices 
+        this_macro_batch_size = len(indexs_batch) # for the case drop_last=False
+
+        queue.get(this_macro_batch_size) # advance read pointer
 
         # -----------------------
         # Step 0: micro-batches
