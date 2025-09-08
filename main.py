@@ -260,9 +260,9 @@ def train_env(net, train_loader, train_optimizer, temperature, updated_split, ba
     for batch_index, data_env in enumerate(train_bar):
 
         pos_all_batch, indexs_batch = data_env[0], data_env[-1] # 'pos_all' is an batch of images, 'indexs' is their corresponding indices 
-        this_macro_batch_size = len(indexs_batch) # for the case drop_last=False
+        this_batch_size = len(indexs_batch) # for the case drop_last=False
 
-        queue.get(this_macro_batch_size) # advance read pointer
+        queue.get(this_batch_size) # advance read pointer
 
         # -----------------------
         # Step 0: micro-batches
@@ -296,7 +296,7 @@ def train_env(net, train_loader, train_optimizer, temperature, updated_split, ba
 
                 # logits: q*k+ / q*negatives
                 l_pos = torch.sum(out_q * out_k, dim=1, keepdim=True)
-                l_neg = torch.matmul(out_k, queue.get(queue.queue_size-this_macro_batch_size).t())  # queue as negatives (detached)
+                l_neg = torch.matmul(out_k, queue.get(queue.queue_size-this_batch_size).t())  # queue as negatives (detached)
                 logits = torch.cat([l_pos, l_neg], dim=1)
                 logits_cont = logits / temperature
                 labels_cont = torch.zeros(logits_cont.size(0), dtype=torch.long, device=device)
@@ -304,7 +304,8 @@ def train_env(net, train_loader, train_optimizer, temperature, updated_split, ba
                 if penalty_weight > 1.0:
                     # Rescale the entire loss to keep gradients in a reasonable range
                     loss_cont /= penalty_weight
-                loss_cont = loss_cont / this_macro_batch_size / gradients_accumulation_steps
+                loss_cont = loss_cont / this_batch_size / gradients_accumulation_steps
+                # loss and grad normalized
                 loss_cont.backward()
                 loss_cont_batch += loss_cont.detach()
 
@@ -345,26 +346,29 @@ def train_env(net, train_loader, train_optimizer, temperature, updated_split, ba
 
                         # logits: q*k+ / q*negatives
                         l_pos = torch.sum(out_q * out_k, dim=1, keepdim=True)
-                        l_neg = torch.matmul(out_k, queue.get(queue.queue_size-this_macro_batch_size, advance=False).t())  # queue as negatives (detached)
+                        l_neg = torch.matmul(out_k, queue.get(queue.queue_size-this_batch_size, advance=False).t())  # queue as negatives (detached)
                         logits = torch.cat([l_pos, l_neg], dim=1)
                         logits_cont = logits / temperature
                         labels_cont = torch.zeros(logits_cont.size(0), dtype=torch.long, device=device)
                         loss_cont = F.cross_entropy(logits_cont, labels_cont, reduction='sum') / N # average per split
+                        loss_cont = (loss_cont.detach() / this_batch_size / num_splits / args.env_num / gradients_accumulation_steps)
+                        # Rescale the entire loss to keep gradients in a reasonable range
+                        if penalty_weight > 1.0:
+                            loss_cont /= penalty_weight
+                        loss_cont.backward(retain_graph=True)
+                        loss_cont_batch += loss_cont.detach()
 
                         # IRM penalty
                         logits_pen = (logits / args.irm_temp)
                         g_i = grad_wrt_scale_sum(logits_pen, labels_cont, create_graph=True) / N # average per split
                         # First addend in IRM averaged over split
-                        irm = penalty_weight * g_i # average per split
-                        g_sums_detached[j,split_num,env] += g_i.detach() # irm loss scalers
+                        g_sums_detached[j,split_num,env] += (g_i.detach() / this_batch_size / num_splits / args.env_num / gradients_accumulation_steps) # irm loss scalers
 
-                        loss = loss_cont + irm
+                        irm = penalty_weight * g_i / this_batch_size  / num_splits / args.env_num / gradients_accumulation_steps# average per split
                         # Rescale the entire loss to keep gradients in a reasonable range
                         if penalty_weight > 1.0:
-                            loss_cont /= penalty_weight
                             irm /= penalty_weight
-                        losses_irm[j,split_num,env] = irm.detach() / this_macro_batch_size / num_splits / args.env_num / gradients_accumulation_steps
-                        loss_cont_batch += loss_cont.detach()
+                        losses_irm[j,split_num,env] = irm.detach() 
 
                         # compute gradients for this loss
                         loss_cont.backward(retain_graph=True)
@@ -380,7 +384,7 @@ def train_env(net, train_loader, train_optimizer, temperature, updated_split, ba
                             losses_irm_grads_buffers[_j][j,split_num,env] += g.detach().view(-1)
                                 
                         # free memory of split
-                        del out_q, out_k, l_pos, l_neg, logits, logits_cont, loss_cont, logits_pen, g_i, irm, loss, grads, g
+                        del out_q, out_k, l_pos, l_neg, logits, logits_cont, loss_cont, logits_pen, g_i, irm, grads, g
                         torch.cuda.empty_cache()
                     # end for env in range(args.env_num): 
                 #end for split_num, updated_split_each in enumerate(updated_split):
@@ -395,8 +399,7 @@ def train_env(net, train_loader, train_optimizer, temperature, updated_split, ba
         # end for j in range(idxs):
         torch.cuda.empty_cache()
 
-
-        total_num += this_macro_batch_size # total number of samples processed so far
+        total_num += this_batch_size # total number of samples processed so far
 
         gradients_accumulation_step += 1
         if gradients_accumulation_step < gradients_accumulation_steps:
@@ -428,7 +431,7 @@ def train_env(net, train_loader, train_optimizer, temperature, updated_split, ba
                 param_k.mul_(momentum).add_(param_q, alpha=1.0 - momentum)
 
         # total loss is sum of losses so far over entire batch aggregation period.
-        total_loss += (loss_irm_batch + loss_cont_batch).item() * this_macro_batch_size * gradients_accumulation_steps
+        total_loss += (loss_irm_batch + loss_cont_batch).item() * this_batch_size * gradients_accumulation_steps
 
         train_bar.set_description('Train Epoch: [{}/{}] [{trained_samples}/{total_samples}]  Loss: {:.4f}  LR: {:.4f}  PW {:.4f}'
             .format(epoch, epochs, total_loss/total_num, train_optimizer.param_groups[0]['lr'], penalty_weight,
