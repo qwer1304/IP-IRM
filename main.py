@@ -332,7 +332,7 @@ def train_env(net, train_loader, train_optimizer, temperature, updated_split, ba
 
                 for split_num, updated_split_each in enumerate(updated_split):
                     for env in range(args.env_num):
-                        print("env",f"batch_index:{batch_index}, i:{i}, split_num:{split_num}, env:{env}")
+                        print("env",f"batch_index:{batch_index}, j:{j}, i:{i}, split_num:{split_num}, env:{env}")
                         # split mb
                         out_q, out_k = utils.assign_features(out_q_mb, out_k_mb, indexs, updated_split_each, env)
                         N = out_q.size(0)
