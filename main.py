@@ -428,7 +428,7 @@ def train_env(net, train_loader, train_optimizer, temperature, updated_split, ba
                 param_k.mul_(momentum).add_(param_q, alpha=1.0 - momentum)
 
         # total loss is sum of losses so far over entire batch aggregation period.
-        total_loss += (loss_irm_batch + loss_cont_batch) * this_macro_batch_size * gradients_accumulation_steps
+        total_loss += (loss_irm_batch + loss_cont_batch).item() * this_macro_batch_size * gradients_accumulation_steps
 
         train_bar.set_description('Train Epoch: [{}/{}] [{trained_samples}/{total_samples}]  Loss: {:.4f}  LR: {:.4f}  PW {:.4f}'
             .format(epoch, epochs, total_loss/total_num, train_optimizer.param_groups[0]['lr'], penalty_weight,
