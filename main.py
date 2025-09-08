@@ -395,6 +395,8 @@ def train_env(net, train_loader, train_optimizer, temperature, updated_split, ba
                 torch.cuda.empty_cache()
             # end for i in idxs[j]:
         # end for j in range(idxs):
+        torch.cuda.empty_cache()
+
 
         total_num += this_macro_batch_size # total number of samples processed so far
 
@@ -418,7 +420,7 @@ def train_env(net, train_loader, train_optimizer, temperature, updated_split, ba
         # Step 3: optimizer step
         # -----------------------
         train_optimizer.step()
-        train_optimizer.zero_grad()  # clear gradients at beginning of next gradients batch
+        train_optimizer.zero_grad(set_to_none=True)  # clear gradients at beginning of next gradients batch
 
         # -----------------------
         # Step 4: update momentum encoder
@@ -449,6 +451,7 @@ def train_env(net, train_loader, train_optimizer, temperature, updated_split, ba
             [torch.zeros_like(p, requires_grad=False) for p in net.parameters()] # only a buffer, hence requires_grad=False
             for _ in range(num_irm_losses)
         ]
+        torch.cuda.empty_cache()
     # end for batch_index, data_env in enumerate(train_bar):
 
     return total_loss / total_num
