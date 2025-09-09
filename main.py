@@ -255,7 +255,7 @@ def train_env(net, train_loader, train_optimizer, temperature, updated_split, ba
     Ns             = torch.zeros((2, num_splits, args.env_num), dtype=torch.float, device=device) 
     # One buffer per parameter
     losses_cont_grads = [
-        torch.zeros((*losses_irm.shape, p.numel()), dtype=p.dtype, device=p.device)
+        torch.zeros((*g_sums.shape, p.numel()), dtype=p.dtype, device=p.device)
         for p in net.parameters()
     ]
     losses_irm_grads = [
