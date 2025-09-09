@@ -707,6 +707,49 @@ def save_checkpoint(state, is_best, args, filename='checkpoint.pth.tar', sync=Tr
         os.fsync(dir_fd)
         os.close(dir_fd)
 
+def load_checkpoint(path, model, model_momentum, optimizer, device='cuda'):
+    print("=> loading checkpoint '{}'".format(path))
+    checkpoint = torch.load(path, map_location=device, weights_only=False)
+
+    # Restore training bookkeeping
+    start_epoch = checkpoint['epoch'] + 1
+    best_acc1 = checkpoint['best_acc1']
+    best_epoch = checkpoint['best_epoch']
+    updated_split = checkpoint['updated_split']
+    updated_split_all = checkpoint['updated_split_all']
+
+    # Restore models
+    msg_model = model.load_state_dict(checkpoint['state_dict'])
+    if "queue" in checkpoint:
+        msg_momemntum = model_momentum.load_state_dict(checkpoint['state_dict_momentum'])
+        queue = checkpoint['queue']
+    else:
+        msg_momemntum = 'No momentum queue is checkpoint'
+    
+    # Restore optimizer
+    msg_opt = optimizer.load_state_dict(checkpoint['optimizer'])
+    # Ensure optimizer state tensors are on the right device
+    for state in optimizer.state.values():
+        for k, v in state.items():
+            if torch.is_tensor(v):
+                state[k] = v.to(device)
+
+    # Restore RNG states
+    rng_dict = checkpoint['rng_dict']
+    torch.set_rng_state(rng_dict['rng_state'])
+    if rng_dict['cuda_rng_state'] is not None and torch.cuda.is_available():
+        torch.cuda.set_rng_state_all(rng_dict['cuda_rng_state'])
+    np.random.set_state(rng_dict['numpy_rng_state'])
+    random.setstate(rng_dict['python_rng_state'])
+
+    print(f"\tmodel load: {msg_model}")
+    print(f"\toptimizers load: {msg_opt}")
+    print(f"\tqueue load: {msg_momemntum}")
+    print("<= loaded checkpoint '{}' (epoch {})"
+          .format(path, checkpoint['epoch']))
+
+    return model, model_momentum, optimizer, queue, start_epoch, best_acc1, best_epoch, updated_split, updated_split_all
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train SimCLR')
     parser.add_argument('--feature_dim', default=128, type=int, help='Feature dim for latent vector')
@@ -928,32 +971,9 @@ if __name__ == '__main__':
     resumed = False
     if args.resume:
         if os.path.isfile(args.resume):
-            print("=> loading checkpoint '{}'".format(args.resume))
-            checkpoint = torch.load(args.resume, weights_only=False)
-            args.start_epoch = checkpoint['epoch'] + 1
-            best_acc1 = checkpoint['best_acc1']
-            best_epoch = checkpoint['best_epoch']
-            msg_model = model.load_state_dict(checkpoint['state_dict'])
-            msg_opt = optimizer.load_state_dict(checkpoint['optimizer'])
-            updated_split = checkpoint['updated_split']
-            updated_split_all = checkpoint['updated_split_all']
-            if "queue" in checkpoint:
-                msg_momemntum = model_momentum.load_state_dict(checkpoint['state_dict_momentum'])
-                queue = checkpoint['queue']
-            else:
-                msg_momemntum = 'No momentum queue is checkpoint'
-            # Restore RNG states
-            rng_dict = checkpoint['rng_dict']
-            torch.set_rng_state(rng_dict['rng_state'].cpu())
-            if torch.cuda.is_available():
-                torch.cuda.set_rng_state_all([t.cpu() for t in rng_dict['cuda_rng_state']])
-            np.random.set_state(rng_dict['numpy_rng_state'])
-            random.setstate(rng_dict['python_rng_state'])
-            print("=> loaded checkpoint '{}' (epoch {})"
-                  .format(args.resume, checkpoint['epoch']))
-            print(f"model load: {msg_model}")
-            print(f"optimizers load: {msg_opt}")
-            print(f"queue load: {msg_momemntum}")
+            (model, model_momentum, optimizer, queue,
+             args.start_epoch, best_acc1, best_epoch,
+             updated_split, updated_split_all) = load_checkpoint(args.resume, model, model_momentum, optimizer)
             resumed = True
         else:
             print("=> no checkpoint found at '{}'".format(args.resume))
