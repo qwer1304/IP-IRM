@@ -980,12 +980,6 @@ if __name__ == '__main__':
         else:
             print("=> no checkpoint found at '{}'".format(args.resume))
 
-    for p in model_momentum.parameters():
-        p.requires_grad = False
-    momentum = 0.999              # momentum for model_momentum
-    queue_size = 10000
-    queue = FeatureQueue(queue_size, feature_dim, device='cuda', dtype=torch.float32)
-
     # training loop
     if not os.path.exists('results'):
         os.mkdir('results')
