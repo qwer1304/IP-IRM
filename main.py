@@ -444,6 +444,7 @@ def train_env(net, train_loader, train_optimizer, temperature, updated_split, ba
             buffer = losses_irm_grads_buffers[pind]                      # shape (I,J,K,param_numel)
             for i in range(2):
                 j = 0 if i == 1 else 1
+                print(total_grad_flat.size())
                 total_grad_flat = (buffer[i] / Ns[i, ..., None] * 
                                    gs[j, ..., None] / Ns[j, ..., None]
                                   ).sum(dim=(0,1,2))  # shape (param_numel,)
