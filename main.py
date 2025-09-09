@@ -486,7 +486,7 @@ def train_env(net, train_loader, train_optimizer, temperature, updated_split, ba
         g_sums_detached.zero_()
         losses_irm.zero_()
         loss_cont_batch.zero_()
-        loss_cont_sums_detached._zero()
+        loss_cont_sums_detached.zero_()
         Ns.zero_()
         for buf in losses_irm_grads_buffers:
             buf.zero_()
