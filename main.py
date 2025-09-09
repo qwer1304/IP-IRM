@@ -443,7 +443,7 @@ def train_env(net, train_loader, train_optimizer, temperature, updated_split, ba
                     p.grad = total_grad_flat.view(p.shape)                   # reshape back to parameter shape
        
         loss_batch = (loss_keep_cont * penalty_cont) + \
-                     ((penalty_irm * penalty_irm_env) + \ 
+                     ((penalty_irm * penalty_irm_env) + \
                       (loss_cont_env * penalty_cont)
                      ).mean() # mean over envs, mean over macro-batch
 
