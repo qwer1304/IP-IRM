@@ -311,7 +311,7 @@ def train_env(net, train_loader, train_optimizer, temperature, updated_split, ba
                 # Here we know that losses are over the whole macro-batch, so we can normalize up-front
                 loss_cont = loss_cont / this_batch_size / gradients_accumulation_steps
                 # loss and grad normalized
-                (loss_cont * penalty_cont).backward() # gradients must be multiplied by loss scaler
+                (loss_cont * penalty_cont).backward() # gradients must be multiplied by scaler
                 loss_keep_cont += loss_cont.detach() # before scaler
 
                 # free memory of micro-batch
@@ -362,7 +362,7 @@ def train_env(net, train_loader, train_optimizer, temperature, updated_split, ba
 
                         # compute gradients for this loss
                         grads = torch.autograd.grad(
-                            loss_cont,
+                            penalty_cont * loss_cont, # gradients must be multiplied by scaler
                             net.parameters(),
                             retain_graph=True,  # keep graph for next loss
                             allow_unused=True
@@ -442,10 +442,9 @@ def train_env(net, train_loader, train_optimizer, temperature, updated_split, ba
                 else:
                     p.grad = total_grad_flat.view(p.shape)                   # reshape back to parameter shape
        
-        loss_batch = (loss_keep_cont * penalty_cont) + \
-                     ((penalty_irm * penalty_irm_env) + \
-                      (loss_cont_env * penalty_cont)
-                     ).mean() # mean over envs, mean over macro-batch
+        loss_batch = (penalty_cont * loss_keep_cont) + \
+                     (penalty_irm  * penalty_irm_env.mean()) + \
+                     (penalty_cont * loss_cont_env.mean())                   # mean over envs, mean over macro-batch
 
         # -----------------------
         # Step 3: optimizer step
