@@ -444,14 +444,13 @@ def train_env(net, train_loader, train_optimizer, temperature, updated_split, ba
             buffer = losses_irm_grads_buffers[pind]                      # shape (I,J,K,param_numel)
             for i in range(2):
                 j = 0 if i == 1 else 1
-                print(total_grad_flat.size())
                 total_grad_flat = (buffer[i] / Ns[i, ..., None] * 
                                    gs[j, ..., None] / Ns[j, ..., None]
                                   ).sum(dim=(0,1,2))  # shape (param_numel,)
-            if args.keep_cont:
-                p.grad += total_grad_flat.view(p.shape)                  # reshape back to parameter shape
-            else:
-                p.grad = total_grad_flat.view(p.shape)                   # reshape back to parameter shape
+                if args.keep_cont:
+                    p.grad += total_grad_flat.view(p.shape)                  # reshape back to parameter shape
+                else:
+                    p.grad = total_grad_flat.view(p.shape)                   # reshape back to parameter shape
 
         loss_irm_batch = losses_irm[0] / Ns[0] * losses_irm[1] / Ns[1]   # already detached, per env losses
         
