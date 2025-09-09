@@ -229,7 +229,7 @@ def train_env(net, train_loader, train_optimizer, temperature, updated_split, ba
     else:
         penalty_weight = args.penalty_weight
         
-    penalty_cont = args.penalty_cont / (1 if penlty_weight <= 1 else 1 / penalty_weight)
+    penalty_cont = args.penalty_cont / (1 if penalty_weight <= 1 else 1 / penalty_weight)
     penalty_irm = 1 if penalty_weight > 1 else penalty_weight
 
     loader_batch_size = batch_size
