@@ -736,9 +736,10 @@ def load_checkpoint(path, model, model_momentum, optimizer, device='cuda'):
 
     # Restore RNG states
     rng_dict = checkpoint['rng_dict']
+    rng_state = rng_dict['rng_state']
     if rng_state.device != torch.device('cpu'):
         rng_state = rng_state.cpu()   
-    torch.set_rng_state(rng_dict['rng_state'])
+    torch.set_rng_state(rng_state)
     if rng_dict['cuda_rng_state'] is not None:
         torch.cuda.set_rng_state_all([t.cpu() if t.device != torch.device('cpu') else t for t in rng_dict['cuda_rng_state']])
     np.random.set_state(rng_dict['numpy_rng_state'])
