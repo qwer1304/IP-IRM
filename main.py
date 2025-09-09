@@ -374,7 +374,7 @@ def train_env(net, train_loader, train_optimizer, temperature, updated_split, ba
 
                         # IRM penalty
                         logits_pen = (logits / args.irm_temp)
-                        g_i = grad_wrt_scale_sum(logits_pen, labels_cont, create_graph=True)
+                        g_i = grad_wrt_scale_sum(logits_pen, labels_cont, create_graph=True) # loss gradient w.r.t scaler for batch half 'i'
                         # First addend in IRM averaged over split
                         g_sums[j,split_num,env] += g_i.detach() # irm penalty components before penalty scaler
 
@@ -933,13 +933,15 @@ if __name__ == '__main__':
             args.start_epoch = checkpoint['epoch'] + 1
             best_acc1 = checkpoint['best_acc1']
             best_epoch = checkpoint['best_epoch']
-            model.load_state_dict(checkpoint['state_dict'])
-            optimizer.load_state_dict(checkpoint['optimizer'])
+            msg_model = model.load_state_dict(checkpoint['state_dict'])
+            msg_opt = optimizer.load_state_dict(checkpoint['optimizer'])
             updated_split = checkpoint['updated_split']
             updated_split_all = checkpoint['updated_split_all']
             if "queue" in checkpoint:
-                model_momentum.load_state_dict(checkpoint['state_dict_momentum'])
+                msg_momemntum = model_momentum.load_state_dict(checkpoint['state_dict_momentum'])
                 queue = checkpoint['queue']
+            else:
+                msg_momemntum = 'No momentum queue is checkpoint'
             # Restore RNG states
             rng_dict = checkpoint['rng_dict']
             torch.set_rng_state(rng_dict['rng_state'].cpu())
@@ -949,6 +951,9 @@ if __name__ == '__main__':
             random.setstate(rng_dict['python_rng_state'])
             print("=> loaded checkpoint '{}' (epoch {})"
                   .format(args.resume, checkpoint['epoch']))
+            print(f"model load: {msg_model}")
+            print(f"optimizers load: {msg_opt}")
+            print(f"queue load: {msg_momemntum}")
             resumed = True
         else:
             print("=> no checkpoint found at '{}'".format(args.resume))
