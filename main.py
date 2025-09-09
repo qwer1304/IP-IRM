@@ -207,10 +207,12 @@ def grad_wrt_scale_sum(logits, targets, create_graph):
     return g
 
 # ssl training with IP-IRM
-def train_env(net, train_loader, train_optimizer, temperature, updated_split, batch_size, args):
+def train_env(net, net_momentum, queue, train_loader, train_optimizer, temperature, updated_split, batch_size, args):
     # Initialize dictionaries to store times
 
     net.train()
+    net_momentum.train()
+    
     if isinstance(updated_split, list): # if retain previous partitions
         assert args.retain_group
     else:
@@ -295,7 +297,7 @@ def train_env(net, train_loader, train_optimizer, temperature, updated_split, ba
 
                 _, out_q = net(pos_q)
                 with torch.no_grad():
-                    _, out_k = model_momentum(pos_k)
+                    _, out_k = net_momentum(pos_k)
 
                 # -----------------------
                 # MoCo / GDI contrastive loss
@@ -332,7 +334,7 @@ def train_env(net, train_loader, train_optimizer, temperature, updated_split, ba
 
                 _, out_q_mb = net(pos_q_mb)
                 with torch.no_grad():
-                    _, out_k_mb = model_momentum(pos_k_mb)
+                    _, out_k_mb = net_momentum(pos_k_mb)
 
                 for split_num, updated_split_each in enumerate(updated_split):
                     for env in range(args.env_num):
@@ -456,7 +458,7 @@ def train_env(net, train_loader, train_optimizer, temperature, updated_split, ba
         # Step 4: update momentum encoder
         # -----------------------
         with torch.no_grad():
-            for param_q, param_k in zip(net.parameters(), model_momentum.parameters()):
+            for param_q, param_k in zip(net.parameters(), net_momentum.parameters()):
                 param_k.mul_(momentum).add_(param_q, alpha=1.0 - momentum)
 
         # total loss is sum of losses so far over entire batch aggregation period.
@@ -1060,7 +1062,7 @@ if __name__ == '__main__':
             train_loss = train(model, train_loader, optimizer, temperature, debiased, tau_plus, tr_bs, args)
         else: # Minimize Step
             upd_split = updated_split_all if args.retain_group else updated_split
-            train_loss = train_env(model, train_loader, optimizer, temperature, upd_split, tr_bs, args)
+            train_loss = train_env(model, model_momentum, queue, train_loader, optimizer, temperature, upd_split, tr_bs, args)
 
             if epoch % args.maximize_iter == 0: # Maximize Step
                 train_loader = shutdown_loader(train_loader)
