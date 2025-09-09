@@ -251,7 +251,7 @@ def train_env(net, train_loader, train_optimizer, temperature, updated_split, ba
     losses_irm              = torch.zeros((2, num_splits, args.env_num), dtype=torch.float, device=device) 
     loss_cont_batch         = torch.tensor(0, dtype=torch.float, device=device)
     num_irm_losses          = losses_irm.numel()
-    Ns = torch.zeros((2, num_splits, args.env_num), dtype=torch.float, device=device) 
+    Ns                      = torch.zeros((2, num_splits, args.env_num), dtype=torch.float, device=device) 
     # One buffer per parameter
     losses_cont_grads_buffers = [
         torch.zeros((*losses_irm.shape, p.numel()), dtype=p.dtype, device=p.device)
@@ -486,6 +486,8 @@ def train_env(net, train_loader, train_optimizer, temperature, updated_split, ba
         g_sums_detached.zero_()
         losses_irm.zero_()
         loss_cont_batch.zero_()
+        loss_cont_sums_detached._zero()
+        Ns.zero_()
         for buf in losses_irm_grads_buffers:
             buf.zero_()
         del gs, total_grad_flat, loss_irm_batch
