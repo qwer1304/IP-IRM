@@ -727,20 +727,13 @@ def load_checkpoint(path, model, model_momentum, optimizer, device='cuda'):
         msg_momemntum = 'No momentum queue is checkpoint'
     
     # Restore optimizer
-    msg_opt = optimizer.load_state_dict(checkpoint['optimizer'])
+    optimizer.load_state_dict(checkpoint['optimizer']) # nothing ia returned
     # Ensure optimizer state tensors are on the right device
     for state in optimizer.state.values():
         for k, v in state.items():
             if torch.is_tensor(v):
                 state[k] = v.to(device)
                 
-    for i, (param, state) in enumerate(optimizer.state.items()):
-        print(f"Parameter {i}:")
-        print(f"  Keys: {list(state.keys())}")
-        for k, v in state.items():
-            if torch.is_tensor(v):
-                print(f"    {k}: device={v.device}, shape={v.shape}")
-
     # Restore RNG states
     rng_dict = checkpoint['rng_dict']
     rng_state = rng_dict['rng_state']
@@ -753,7 +746,6 @@ def load_checkpoint(path, model, model_momentum, optimizer, device='cuda'):
     random.setstate(rng_dict['python_rng_state'])
 
     print(f"\tmodel load: {msg_model}")
-    print(f"\toptimizers load: {msg_opt}")
     print(f"\tqueue load: {msg_momemntum}")
     print("<= loaded checkpoint '{}' (epoch {})"
           .format(path, checkpoint['epoch']))
