@@ -440,6 +440,7 @@ def train_env(net, train_loader, train_optimizer, temperature, updated_split, ba
 
         # IRM losses and gradients
         gs = g_sums_detached
+        print()
         for pind, p in enumerate(net.parameters()):
             buffer = losses_irm_grads_buffers[pind]                      # shape (I,J,K,param_numel)
             for i in range(2):
@@ -447,6 +448,7 @@ def train_env(net, train_loader, train_optimizer, temperature, updated_split, ba
                 total_grad_flat = (buffer[i] / Ns[i, ..., None] * 
                                    gs[j, ..., None] / Ns[j, ..., None]
                                   ).sum(dim=(0,1,2))  # shape (param_numel,)
+                print(buffer.size(), total_grad_flat.size())
                 if args.keep_cont:
                     p.grad += total_grad_flat.view(p.shape)                  # reshape back to parameter shape
                 else:
