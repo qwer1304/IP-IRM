@@ -228,6 +228,9 @@ def train_env(net, train_loader, train_optimizer, temperature, updated_split, ba
         penalty_weight = args.penalty_weight if epoch >= args.penalty_iters else 0.
     else:
         penalty_weight = args.penalty_weight
+        
+    penalty_cont = args.penalty_cont / (1 if penlty_weight <= 1 else 1 / penalty_weight)
+    penalty_irm = 1 if penalty_weight > 1 else penalty_weight
 
     loader_batch_size = batch_size
     gradients_accumulation_steps = args.gradients_accumulation_batch_size // loader_batch_size 
@@ -246,19 +249,17 @@ def train_env(net, train_loader, train_optimizer, temperature, updated_split, ba
             bar_format=bar_format,          # request bar width
             )
 
-    loss_cont_sums_detached = torch.zeros((2, num_splits, args.env_num), dtype=torch.float, device=device) 
-    g_sums_detached         = torch.zeros((2, num_splits, args.env_num), dtype=torch.float, device=device) 
-    losses_irm              = torch.zeros((2, num_splits, args.env_num), dtype=torch.float, device=device) 
-    loss_keep_cont          = torch.tensor(0, dtype=torch.float, device=device)
-    num_irm_losses          = losses_irm.numel()
-    Ns                      = torch.zeros((2, num_splits, args.env_num), dtype=torch.float, device=device) 
+    loss_cont_sums = torch.zeros((2, num_splits, args.env_num), dtype=torch.float, device=device) 
+    g_sums         = torch.zeros((2, num_splits, args.env_num), dtype=torch.float, device=device) 
+    loss_keep_cont = torch.tensor(0, dtype=torch.float, device=device)
+    Ns             = torch.zeros((2, num_splits, args.env_num), dtype=torch.float, device=device) 
     # One buffer per parameter
-    losses_cont_grads_buffers = [
+    losses_cont_grads = [
         torch.zeros((*losses_irm.shape, p.numel()), dtype=p.dtype, device=p.device)
         for p in net.parameters()
     ]
-    losses_irm_grads_buffers = [
-        torch.zeros((*losses_irm.shape, p.numel()), dtype=p.dtype, device=p.device)
+    losses_irm_grads = [
+        torch.zeros((*g_sums.shape, p.numel()), dtype=p.dtype, device=p.device)
         for p in net.parameters()
     ]
     train_optimizer.zero_grad(set_to_none=True) # clear gradients at the beginning 
@@ -307,15 +308,11 @@ def train_env(net, train_loader, train_optimizer, temperature, updated_split, ba
                 logits_cont = logits / temperature
                 labels_cont = torch.zeros(logits_cont.size(0), dtype=torch.long, device=device)
                 loss_cont   = F.cross_entropy(logits_cont, labels_cont, reduction='sum')
-                if penalty_weight > 1.0:
-                    # Rescale the entire loss to keep gradients in a reasonable range
-                    loss_cont /= penalty_weight
                 # Here we know that losses are over the whole macro-batch, so we can normalize up-front
                 loss_cont = loss_cont / this_batch_size / gradients_accumulation_steps
-                loss_cont *= args.penalty_cont
                 # loss and grad normalized
-                loss_cont.backward()
-                loss_keep_cont += loss_cont.detach()
+                (loss_cont * penalty_cont).backward() # gradients must be multiplied by loss scaler
+                loss_keep_cont += loss_cont.detach() # before scaler
 
                 # free memory of micro-batch
                 del pos, indexs, pos_q, pos_k, out_q, out_k, l_pos, l_neg, logits, logits_cont, loss_cont
@@ -361,10 +358,7 @@ def train_env(net, train_loader, train_optimizer, temperature, updated_split, ba
                         logits_cont = logits / temperature
                         labels_cont = torch.zeros(logits_cont.size(0), dtype=torch.long, device=device)
                         loss_cont = F.cross_entropy(logits_cont, labels_cont, reduction='sum')
-                        # Rescale the entire loss to keep gradients in a reasonable range
-                        if penalty_weight > 1.0:
-                            loss_cont /= penalty_weight
-                        loss_cont_sums_detached[j,split_num,env] += loss_cont.detach()
+                        loss_cont_sums[j,split_num,env] += loss_cont.detach() # before penalty scaler
 
                         # compute gradients for this loss
                         grads = torch.autograd.grad(
@@ -376,24 +370,18 @@ def train_env(net, train_loader, train_optimizer, temperature, updated_split, ba
                         
                         # flatten and accumulate per parameter
                         for _j, g in enumerate(grads):
-                            losses_cont_grads_buffers[_j][j,split_num,env] += g.detach().view(-1)
+                            losses_cont_grads[_j][j,split_num,env] += g.detach().view(-1)
 
                         # IRM penalty
                         logits_pen = (logits / args.irm_temp)
-                        g_i = grad_wrt_scale_sum(logits_pen, labels_cont, create_graph=True) / N # average per split
+                        g_i = grad_wrt_scale_sum(logits_pen, labels_cont, create_graph=True)
                         # First addend in IRM averaged over split
-                        g_sums_detached[j,split_num,env] += g_i.detach() # irm loss scalers
-
-                        irm = penalty_weight * g_i
-                        # Rescale the entire loss to keep gradients in a reasonable range
-                        if penalty_weight > 1.0:
-                            irm /= penalty_weight
-                        losses_irm[j,split_num,env] = irm.detach() 
+                        g_sums[j,split_num,env] += g_i.detach() # irm penalty components before penalty scaler
 
                         # compute gradients for this loss
                         loss_cont.backward(retain_graph=True)
                         grads = torch.autograd.grad(
-                            irm,
+                            penalty_irm * g_i,  # gradients must be multiplied by scaler
                             net.parameters(),
                             retain_graph=True,  # keep graph for next loss
                             allow_unused=True
@@ -401,10 +389,10 @@ def train_env(net, train_loader, train_optimizer, temperature, updated_split, ba
                         
                         # flatten and accumulate per parameter
                         for _j, g in enumerate(grads):
-                            losses_irm_grads_buffers[_j][j,split_num,env] += g.detach().view(-1)
+                            losses_irm_grads[_j][j,split_num,env] += g.detach().view(-1)
                                 
                         # free memory of split
-                        del out_q, out_k, l_pos, l_neg, logits, logits_cont, loss_cont, logits_pen, g_i, irm, grads, g
+                        del out_q, out_k, l_pos, l_neg, logits, logits_cont, loss_cont, logits_pen, g_i, grads, g
                         torch.cuda.empty_cache()
                     # end for env in range(args.env_num): 
                 #end for split_num, updated_split_each in enumerate(updated_split):
@@ -428,9 +416,9 @@ def train_env(net, train_loader, train_optimizer, temperature, updated_split, ba
         Nenv = Ns.sum(dim=1, keepdim=True) # (1,J,K)
 
         # Environments losses and gradients
-        loss_cont_env = loss_cont_sums_detached / Nenv                               # already detached, per env losses
+        loss_cont_env = loss_cont_sums / Nenv                               # already detached, per env losses
         for j, p in enumerate(net.parameters()):
-            dCont_dTheta_env = losses_cont_grads_buffers[j]                          # per env sum of dCont/dTheta, shape (I,J,K,param_numel)
+            dCont_dTheta_env = losses_cont_grads[j]                          # per env sum of dCont/dTheta, shape (I,J,K,param_numel)
             total_grad_flat = (dCont_dTheta_env / Nenv[..., None]).sum(dim=(0,1,2))  # shape (param_numel,)
             if args.keep_cont:
                 p.grad += total_grad_flat.view(p.shape)                    # reshape back to parameter shape
@@ -438,24 +426,26 @@ def train_env(net, train_loader, train_optimizer, temperature, updated_split, ba
                 p.grad = total_grad_flat.view(p.shape)                     # reshape back to parameter shape
 
         # IRM losses and gradients
-        gs = g_sums_detached
+        gs = g_sums
+        penalty_irm_env = (gs[0] / Ns[0]) * (gs[1] / Ns[1])  # already detached, per env penalty
         # IRM = gs1 * gs2, where gs1 and gs2 are gradients w.r.t. scaler of mean CE of halves of sample in a batch
         # dIRM/dTheta = d(gs1 * gs2)/dTheta = dgs1/dTheta * gs2 + gs1 * dgs2/dTheta
         for pind, p in enumerate(net.parameters()):
-            dgs_dTheta_env = losses_irm_grads_buffers[pind]  # per env sum of dg_i/dTheta over macro-batch per parameter, shape (I,J,K,param_numel)
+            dgs_dTheta_env = losses_irm_grads[pind]  # per env sum of dg_i/dTheta over macro-batch per parameter, shape (I,J,K,param_numel)
             for i in range(2):
                 j = 0 if i == 1 else 1
-                total_grad_flat = (dgs_dTheta_env[i] / Ns[i, ..., None] * 
-                                   gs[j, ..., None] / Ns[j, ..., None]
+                total_grad_flat = ((dgs_dTheta_env[i] / Ns[i, ..., None]) * 
+                                   (gs[j, ..., None] / Ns[j, ..., None])
                                   ).sum(dim=(0,1))  # shape (param_numel,)
                 if args.keep_cont:
                     p.grad += total_grad_flat.view(p.shape)                  # reshape back to parameter shape
                 else:
                     p.grad = total_grad_flat.view(p.shape)                   # reshape back to parameter shape
-
-        penalty_irm_env = (losses_irm[0] / Ns[0]) * (losses_irm[1] / Ns[1])     # already detached, per env penalty
-        
-        loss_batch = loss_keep_cont + (penalty_irm_env + loss_cont_env).mean() # mean over envs, mean over macro-batch
+       
+        loss_batch = (loss_keep_cont * penalty_cont) + 
+                     ((penalty_irm * penalty_irm_env) + 
+                      (loss_cont_env * penalty_cont)
+                     ).mean() # mean over envs, mean over macro-batch
 
         # -----------------------
         # Step 3: optimizer step
@@ -484,15 +474,14 @@ def train_env(net, train_loader, train_optimizer, temperature, updated_split, ba
                                         
         # Prepare for next iteration
         gradients_accumulation_step = 0
-        g_sums_detached.zero_()
-        losses_irm.zero_()
+        g_sums.zero_()
         loss_keep_cont.zero_()
-        loss_cont_sums_detached.zero_()
+        loss_cont_sums.zero_()
         Ns.zero_()
-        for buf in losses_cont_grads_buffers:
-            buf.zero_()
-        for buf in losses_irm_grads_buffers:
-            buf.zero_()
+        for par in losses_cont_grads:
+            par.zero_()
+        for par in losses_irm_grads:
+            par.zero_()
         del gs, total_grad_flat, penalty_irm_env, loss_cont_env, dgs_dTheta_env, dCont_dTheta_env, loss_batch
         torch.cuda.empty_cache()
     # end for batch_index, data_env in enumerate(train_bar):
