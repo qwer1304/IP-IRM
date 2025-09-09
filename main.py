@@ -733,6 +733,13 @@ def load_checkpoint(path, model, model_momentum, optimizer, device='cuda'):
         for k, v in state.items():
             if torch.is_tensor(v):
                 state[k] = v.to(device)
+                
+    for i, (param, state) in enumerate(optimizer.state.items()):
+        print(f"Parameter {i}:")
+        print(f"  Keys: {list(state.keys())}")
+        for k, v in state.items():
+            if torch.is_tensor(v):
+                print(f"    {k}: device={v.device}, shape={v.shape}")
 
     # Restore RNG states
     rng_dict = checkpoint['rng_dict']
