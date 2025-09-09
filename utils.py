@@ -542,25 +542,33 @@ def info_nce_loss(features, batch_size, temperature):
     # 'batch_size' is the length of the first view 
 
     labels = torch.cat([torch.arange(batch_size) for i in range(2)], dim=0) # (2*batch_size,) of [0,batch_size)
-    labels = (labels.unsqueeze(0) == labels.unsqueeze(1)).float() # (2*batch_size,2*batch_size) of True where index match in both views
+    labels = (labels.unsqueeze(0) == labels.unsqueeze(1)).float() # (2*batch_size,2*batch_size) of labels{i,j]=True if labels[i]==labels[j]
     labels = labels.to(features.device)
 
     # features = F.normalize(features, dim=1)
-    similarity_matrix = torch.matmul(features, features.T)
+    similarity_matrix = torch.matmul(features, features.T) # (2*batch_size,2*batch_size)
 
     # discard the main diagonal from both: labels and similarities matrix
-    mask = torch.eye(labels.shape[0], dtype=torch.bool).to(features.device)
-    labels = labels[~mask].view(labels.shape[0], -1)
+    mask = torch.eye(labels.shape[0], dtype=torch.bool).to(features.device) # (2*batch_size,2*batch_size) w/ True along the diagonal
+    # When you do boolean indexing like labels[~mask], PyTorch (and NumPy) flattens the result into a 1D tensor of just the selected elements.
+    # The order is row-major (C-order) in PyTorch (same as NumPy): pick a row, go across columns, move to next row.
+    # each row corresponds to one anchor, and the columns are the other samples (diagonal removed).
+    # PyTorch uses row-major storage. That means the 1D array FILLS the new 2D array row by row.
+    labels = labels[~mask].view(labels.shape[0], -1) # (2*batch_size, 2*batch_size-1)
     similarity_matrix = similarity_matrix[~mask].view(similarity_matrix.shape[0], -1)
+    # For each row i (an anchor), columns correspond to all other examples j != i in the concatenated 
+    # batch (ordered by original column order, but with the diagonal element removed).
     # assert similarity_matrix.shape == labels.shape
 
     # select and combine multiple positives
-    positives = similarity_matrix[labels.bool()].view(labels.shape[0], -1)
+    # each row has exactly one positive after removing the diagonal
+    positives = similarity_matrix[labels.bool()].view(labels.shape[0], -1) # (2*batch_size,1) of positive similarity scalars
 
-    # select only the negatives the negatives
-    negatives = similarity_matrix[~labels.bool()].view(similarity_matrix.shape[0], -1)
+    # select only the negatives
+    negatives = similarity_matrix[~labels.bool()].view(similarity_matrix.shape[0], -1) # (2B, 2B-2)
 
-    logits = torch.cat([positives, negatives], dim=1)
+    logits = torch.cat([positives, negatives], dim=1) # (2B, 2B-1)
+    # because positives are put in the first column, the correct class index (for the positive) is 0 for every row.
     labels = torch.zeros(logits.shape[0], dtype=torch.long).to(features.device)
 
     logits = logits / temperature

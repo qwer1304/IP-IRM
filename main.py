@@ -246,11 +246,17 @@ def train_env(net, train_loader, train_optimizer, temperature, updated_split, ba
             bar_format=bar_format,          # request bar width
             )
 
-    g_sums_detached = torch.zeros((2, num_splits, args.env_num), dtype=torch.float, device=device) 
-    losses_irm      = torch.zeros((2, num_splits, args.env_num), dtype=torch.float, device=device) 
-    num_irm_losses  = losses_irm.numel()
-    loss_cont_batch = torch.tensor([0], dtype=torch.float, device=device)
+    loss_cont_sums_detached = torch.zeros((2, num_splits, args.env_num), dtype=torch.float, device=device) 
+    g_sums_detached         = torch.zeros((2, num_splits, args.env_num), dtype=torch.float, device=device) 
+    losses_irm              = torch.zeros((2, num_splits, args.env_num), dtype=torch.float, device=device) 
+    loss_cont_batch         = torch.tensor(0, dtype=torch.float, device=device)
+    num_irm_losses          = losses_irm.numel()
+    Ns = torch.zeros((2, num_splits, args.env_num), dtype=torch.float, device=device) 
     # One buffer per parameter
+    losses_cont_grads_buffers = [
+        torch.zeros((*losses_irm.shape, p.numel()), dtype=p.dtype, device=p.device)
+        for p in net.parameters()
+    ]
     losses_irm_grads_buffers = [
         torch.zeros((*losses_irm.shape, p.numel()), dtype=p.dtype, device=p.device)
         for p in net.parameters()
@@ -304,6 +310,7 @@ def train_env(net, train_loader, train_optimizer, temperature, updated_split, ba
                 if penalty_weight > 1.0:
                     # Rescale the entire loss to keep gradients in a reasonable range
                     loss_cont /= penalty_weight
+                # Here we know that losses are over the whole macro-batch, so we can normalize up-front
                 loss_cont = loss_cont / this_batch_size / gradients_accumulation_steps
                 loss_cont *= args.penalty_cont
                 # loss and grad normalized
@@ -340,6 +347,8 @@ def train_env(net, train_loader, train_optimizer, temperature, updated_split, ba
                             del out_q, out_k
                             torch.cuda.empty_cache()
                             continue
+                            
+                        Ns[j,split_num,env] += N # update number of elements in environment
 
                         # -----------------------
                         # MoCo / GDI contrastive loss
@@ -351,21 +360,31 @@ def train_env(net, train_loader, train_optimizer, temperature, updated_split, ba
                         logits = torch.cat([l_pos, l_neg], dim=1)
                         logits_cont = logits / temperature
                         labels_cont = torch.zeros(logits_cont.size(0), dtype=torch.long, device=device)
-                        loss_cont = F.cross_entropy(logits_cont, labels_cont, reduction='sum') / N # average per split
-                        loss_cont = (loss_cont / this_batch_size / num_splits / args.env_num / gradients_accumulation_steps)
+                        loss_cont = F.cross_entropy(logits_cont, labels_cont, reduction='sum')
                         # Rescale the entire loss to keep gradients in a reasonable range
                         if penalty_weight > 1.0:
                             loss_cont /= penalty_weight
-                        loss_cont.backward(retain_graph=True)
-                        loss_cont_batch += loss_cont.detach()
+                        loss_cont_sums_detached[j,split_num,env] += loss_cont.detach()
+
+                        # compute gradients for this loss
+                        grads = torch.autograd.grad(
+                            loss_cont,
+                            net.parameters(),
+                            retain_graph=True,  # keep graph for next loss
+                            allow_unused=True
+                        )
+                        
+                        # flatten and accumulate per parameter
+                        for _j, g in enumerate(grads):
+                            losses_cont_grads_buffers[_j][j,split_num,env] += g.detach().view(-1)
 
                         # IRM penalty
                         logits_pen = (logits / args.irm_temp)
                         g_i = grad_wrt_scale_sum(logits_pen, labels_cont, create_graph=True) / N # average per split
                         # First addend in IRM averaged over split
-                        g_sums_detached[j,split_num,env] += (g_i.detach() / this_batch_size / num_splits / args.env_num / gradients_accumulation_steps) # irm loss scalers
+                        g_sums_detached[j,split_num,env] += g_i.detach() # irm loss scalers
 
-                        irm = penalty_weight * g_i / this_batch_size  / num_splits / args.env_num / gradients_accumulation_steps# average per split
+                        irm = penalty_weight * g_i
                         # Rescale the entire loss to keep gradients in a reasonable range
                         if penalty_weight > 1.0:
                             irm /= penalty_weight
@@ -406,17 +425,36 @@ def train_env(net, train_loader, train_optimizer, temperature, updated_split, ba
         if gradients_accumulation_step < gradients_accumulation_steps:
             continue
 
-        gs = g_sums_detached # average per split
-        # scale per-loss gradients and sum into .grad
+        Nenv = Ns.sum(dim=1, keepdim=True) # (1,J,K)
+
+        # Environments losses and gradients
         for j, p in enumerate(net.parameters()):
-            buffer = losses_irm_grads_buffers[j]                         # shape (I,J,K,param_numel)
-            total_grad_flat = (buffer * gs[..., None]).sum(dim=(0,1,2))  # shape (param_numel,)
+            buffer = losses_cont_grads_buffers[j]                          # shape (I,J,K,param_numel)
+            total_grad_flat = (buffer / Nenv[..., None]).sum(dim=(0,1,2))  # shape (param_numel,)
+            if args.keep_cont:
+                p.grad += total_grad_flat.view(p.shape)                    # reshape back to parameter shape
+            else:
+                p.grad = total_grad_flat.view(p.shape)                     # reshape back to parameter shape
+
+        loss_cont_env = loss_cont_sums_detached / Nenv                     # already detached, per env losses
+
+        # IRM losses and gradients
+        gs = g_sums_detached
+        for pind, p in enumerate(net.parameters()):
+            buffer = losses_irm_grads_buffers[pind]                      # shape (I,J,K,param_numel)
+            for i in range(2):
+                j = 0 if i == 1 else 1
+                total_grad_flat = (buffer[i] / Ns[i, ..., None] * 
+                                   gs[j, ..., None] / Ns[j, ..., None]
+                                  ).sum(dim=(0,1,2))  # shape (param_numel,)
             if args.keep_cont:
                 p.grad += total_grad_flat.view(p.shape)                  # reshape back to parameter shape
             else:
                 p.grad = total_grad_flat.view(p.shape)                   # reshape back to parameter shape
 
-        loss_irm_batch = (losses_irm * gs).sum()                         # already detached
+        loss_irm_batch = losses_irm[0] / Ns[0] * losses_irm[1] / Ns[1]   # already detached, per env losses
+        
+        loss_batch = loss_cont_batch + (loss_irm_batch + loss_cont_env).mean() # mean over envs, mean over macro-batch
 
         # -----------------------
         # Step 3: optimizer step
@@ -432,7 +470,7 @@ def train_env(net, train_loader, train_optimizer, temperature, updated_split, ba
                 param_k.mul_(momentum).add_(param_q, alpha=1.0 - momentum)
 
         # total loss is sum of losses so far over entire batch aggregation period.
-        total_loss += (loss_irm_batch + loss_cont_batch).item() * this_batch_size * gradients_accumulation_steps
+        total_loss += loss_batch.item() * this_batch_size * gradients_accumulation_steps
 
         train_bar.set_description('Train Epoch: [{}/{}] [{trained_samples}/{total_samples}]  Loss: {:.4f}  LR: {:.4f}  PW {:.4f}'
             .format(epoch, epochs, total_loss/total_num, train_optimizer.param_groups[0]['lr'], penalty_weight,
