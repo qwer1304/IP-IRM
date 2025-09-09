@@ -249,7 +249,7 @@ def train_env(net, train_loader, train_optimizer, temperature, updated_split, ba
     loss_cont_sums_detached = torch.zeros((2, num_splits, args.env_num), dtype=torch.float, device=device) 
     g_sums_detached         = torch.zeros((2, num_splits, args.env_num), dtype=torch.float, device=device) 
     losses_irm              = torch.zeros((2, num_splits, args.env_num), dtype=torch.float, device=device) 
-    loss_cont_batch         = torch.tensor(0, dtype=torch.float, device=device)
+    loss_keep_cont          = torch.tensor(0, dtype=torch.float, device=device)
     num_irm_losses          = losses_irm.numel()
     Ns                      = torch.zeros((2, num_splits, args.env_num), dtype=torch.float, device=device) 
     # One buffer per parameter
@@ -315,7 +315,7 @@ def train_env(net, train_loader, train_optimizer, temperature, updated_split, ba
                 loss_cont *= args.penalty_cont
                 # loss and grad normalized
                 loss_cont.backward()
-                loss_cont_batch += loss_cont.detach()
+                loss_keep_cont += loss_cont.detach()
 
                 # free memory of micro-batch
                 del pos, indexs, pos_q, pos_k, out_q, out_k, l_pos, l_neg, logits, logits_cont, loss_cont
@@ -428,23 +428,24 @@ def train_env(net, train_loader, train_optimizer, temperature, updated_split, ba
         Nenv = Ns.sum(dim=1, keepdim=True) # (1,J,K)
 
         # Environments losses and gradients
+        loss_cont_env = loss_cont_sums_detached / Nenv                               # already detached, per env losses
         for j, p in enumerate(net.parameters()):
-            buffer = losses_cont_grads_buffers[j]                          # shape (I,J,K,param_numel)
-            total_grad_flat = (buffer / Nenv[..., None]).sum(dim=(0,1,2))  # shape (param_numel,)
+            dCont_dTheta_env = losses_cont_grads_buffers[j]                          # per env sum of dCont/dTheta, shape (I,J,K,param_numel)
+            total_grad_flat = (dCont_dTheta_env / Nenv[..., None]).sum(dim=(0,1,2))  # shape (param_numel,)
             if args.keep_cont:
                 p.grad += total_grad_flat.view(p.shape)                    # reshape back to parameter shape
             else:
                 p.grad = total_grad_flat.view(p.shape)                     # reshape back to parameter shape
 
-        loss_cont_env = loss_cont_sums_detached / Nenv                     # already detached, per env losses
-
         # IRM losses and gradients
         gs = g_sums_detached
+        # IRM = gs1 * gs2, where gs1 and gs2 are gradients w.r.t. scaler of mean CE of halves of sample in a batch
+        # dIRM/dTheta = d(gs1 * gs2)/dTheta = dgs1/dTheta * gs2 + gs1 * dgs2/dTheta
         for pind, p in enumerate(net.parameters()):
-            buffer = losses_irm_grads_buffers[pind]                      # shape (I,J,K,param_numel)
+            dgs_dTheta_env = losses_irm_grads_buffers[pind]  # per env sum of dg_i/dTheta over macro-batch per parameter, shape (I,J,K,param_numel)
             for i in range(2):
                 j = 0 if i == 1 else 1
-                total_grad_flat = (buffer[i] / Ns[i, ..., None] * 
+                total_grad_flat = (dgs_dTheta_env[i] / Ns[i, ..., None] * 
                                    gs[j, ..., None] / Ns[j, ..., None]
                                   ).sum(dim=(0,1))  # shape (param_numel,)
                 if args.keep_cont:
@@ -452,9 +453,9 @@ def train_env(net, train_loader, train_optimizer, temperature, updated_split, ba
                 else:
                     p.grad = total_grad_flat.view(p.shape)                   # reshape back to parameter shape
 
-        loss_irm_batch = losses_irm[0] / Ns[0] * losses_irm[1] / Ns[1]   # already detached, per env losses
+        penalty_irm_env = (losses_irm[0] / Ns[0]) * (losses_irm[1] / Ns[1])     # already detached, per env penalty
         
-        loss_batch = loss_cont_batch + (loss_irm_batch + loss_cont_env).mean() # mean over envs, mean over macro-batch
+        loss_batch = loss_keep_cont + (penalty_irm_env + loss_cont_env).mean() # mean over envs, mean over macro-batch
 
         # -----------------------
         # Step 3: optimizer step
@@ -485,12 +486,14 @@ def train_env(net, train_loader, train_optimizer, temperature, updated_split, ba
         gradients_accumulation_step = 0
         g_sums_detached.zero_()
         losses_irm.zero_()
-        loss_cont_batch.zero_()
+        loss_keep_cont.zero_()
         loss_cont_sums_detached.zero_()
         Ns.zero_()
+        for buf in losses_cont_grads_buffers:
+            buf.zero_()
         for buf in losses_irm_grads_buffers:
             buf.zero_()
-        del gs, total_grad_flat, loss_irm_batch
+        del gs, total_grad_flat, penalty_irm_env, loss_cont_env, dgs_dTheta_env, dCont_dTheta_env, loss_batch
         torch.cuda.empty_cache()
     # end for batch_index, data_env in enumerate(train_bar):
 
