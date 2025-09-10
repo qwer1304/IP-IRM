@@ -353,8 +353,8 @@ def train_env(net, net_momentum, queue, train_loader, train_optimizer, temperatu
                             losses_cont_grads[_j][j,split_num,env] += g.detach().view(-1)
 
                         # IRM penalty
-                        logits_pen = (logits[indx] / args.irm_temp)
-                        g_i = grad_wrt_scale_sum(logits_pen, labels_cont[indx], create_graph=True) # loss gradient w.r.t scaler for batch half 'i'
+                        logits_pen = (logits[idxs] / args.irm_temp)
+                        g_i = grad_wrt_scale_sum(logits_pen, labels_cont[idxs], create_graph=True) # loss gradient w.r.t scaler for batch half 'i'
                         # First addend in IRM averaged over split
                         g_sums[j,split_num,env] += g_i.detach() # irm penalty components before penalty scaler
 
