@@ -292,8 +292,8 @@ def train_env(net, net_momentum, queue, train_loader, train_optimizer, temperatu
                 indexs_mb = indexs_mb.cuda(non_blocking=True)
 
                 if transform is not None:
-                    pos_q_mb = transform(pos)
-                    pos_k_mb = transform(pos)
+                    pos_q_mb = transform(pos_mb)
+                    pos_k_mb = transform(pos_mb)
 
                 _, out_q_mb = net(pos_q_mb)
                 out_q_mb = F.normalize(out_q_mb, dim=1)
