@@ -482,7 +482,11 @@ def train_env(net, net_momentum, queue, train_loader, train_optimizer, temperatu
             par.zero_()
         for par in losses_irm_grads:
             par.zero_()
-        del gs, total_grad_flat, penalty_irm_env, loss_cont_env, dgs_dTheta_env, dCont_dTheta_env, loss_batch
+        del gs, total_grad_flat, penalty_irm_env, loss_cont_env, loss_batch
+        if penalty_irm > 0:
+            del dgs_dTheta_env
+        if penalty_cont > 0:
+            dCont_dTheta_env
         torch.cuda.empty_cache()
     # end for batch_index, data_env in enumerate(train_bar):
 
