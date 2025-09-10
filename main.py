@@ -326,7 +326,7 @@ def train_env(net, net_momentum, queue, train_loader, train_optimizer, temperatu
                         # split mb
                         idxs = utils.assign_idxs(indexs_mb, updated_split_each, env)
                         
-                        N = out_q.size(0)
+                        N = len(idxs)
                         if N == 0:
                             continue
                             
