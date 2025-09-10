@@ -359,7 +359,6 @@ def train_env(net, net_momentum, queue, train_loader, train_optimizer, temperatu
                             g_sums[j,split_num,env] += g_i.detach() # irm penalty components before penalty scaler
 
                             # compute gradients for this loss
-                            loss_cont_split.backward(retain_graph=True)
                             grads = torch.autograd.grad(
                                 penalty_irm * g_i,  # gradients must be multiplied by scaler
                                 net.parameters(),
