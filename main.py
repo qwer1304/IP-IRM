@@ -431,9 +431,10 @@ def train_env(net, net_momentum, queue, train_loader, train_optimizer, temperatu
                     else:
                         p.grad = total_grad_flat.view(p.shape)   # reshape back to parameter shape
             
-        loss_batch = (penalty_cont * loss_keep_cont)         + \ # loss_keep_cont is a scalar
-                     (penalty_irm  * penalty_irm_env.mean()) + \
-                     (penalty_cont * loss_cont_env.mean())       # mean over envs, mean over macro-batch
+        loss_batch = ((penalty_cont * loss_keep_cont)         +  # loss_keep_cont is a scalar
+                      (penalty_irm  * penalty_irm_env.mean()) + 
+                      (penalty_cont * loss_cont_env.mean())      # mean over envs, mean over macro-batch
+                     )
 
         # -----------------------
         # Step 3: optimizer step
