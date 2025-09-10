@@ -242,7 +242,12 @@ def train_env(net, net_momentum, queue, train_loader, train_optimizer, temperatu
     gradients_accumulation_step = 0
     total_samples = len(train_loader.dataset)
     
-    total_loss, total_num = 0.0, 0
+    trained_samples = 0
+    total_keep_cont_loss = 0.0
+    total_cont_loss = 0.0
+    total_irm_loss = 0.0
+    total_loss = 0.0
+
     bar_format = '{l_bar}{bar:' + str(args.bar) + '}{r_bar}' #{bar:-' + str(args.bar) + 'b}'
     train_bar = tqdm(train_loader,
             total=len(train_loader),        # number of batches
@@ -308,7 +313,7 @@ def train_env(net, net_momentum, queue, train_loader, train_optimizer, temperatu
 
                 # logits: q*k+ / q*negatives
                 l_pos = torch.sum(out_q * out_k, dim=1, keepdim=True)
-                l_neg = torch.matmul(out_k, queue.get(queue.queue_size-this_batch_size).t())  # queue as negatives (detached)
+                l_neg = torch.matmul(out_k, queue.get(queue.queue_size-this_batch_size).t(), advance=False)  # queue as negatives (detached)
                 logits = torch.cat([l_pos, l_neg], dim=1)
                 logits_cont = logits / temperature
                 labels_cont = torch.zeros(logits_cont.size(0), dtype=torch.long, device=device)
@@ -340,6 +345,24 @@ def train_env(net, net_momentum, queue, train_loader, train_optimizer, temperatu
                 with torch.no_grad():
                     _, out_k_mb = net_momentum(pos_k_mb)
                     out_k_mb = F.normalize(out_k_mb, dim=1)
+
+                if args.keep_cont: # global contrastive loss (1st partition)
+                    # -----------------------
+                    # MoCo / GDI contrastive loss
+                    # -----------------------
+
+                    # logits: q*k+ / q*negatives
+                    l_pos = torch.sum(out_q_mb * out_k_mb, dim=1, keepdim=True)
+                    l_neg = torch.matmul(out_k_mb, queue.get(queue.queue_size-this_batch_size).t(), advance=False)  # queue as negatives (detached)
+                    logits = torch.cat([l_pos, l_neg], dim=1)
+                    logits_cont = logits / temperature
+                    labels_cont = torch.zeros(logits_cont.size(0), dtype=torch.long, device=device)
+                    loss_cont   = F.cross_entropy(logits_cont, labels_cont, reduction='sum')
+                    # Here we know that losses are over the whole macro-batch, so we can normalize up-front
+                    loss_cont = loss_cont / this_batch_size / gradients_accumulation_steps
+                    # loss and grad normalized
+                    (loss_cont * penalty_cont).backward(retain_graph=True) # gradients must be multiplied by scaler
+                    loss_keep_cont += loss_cont.detach() # before scaler
 
                 for split_num, updated_split_each in enumerate(updated_split):
                     for env in range(args.env_num):
@@ -415,7 +438,7 @@ def train_env(net, net_momentum, queue, train_loader, train_optimizer, temperatu
         # end for j in range(idxs):
         torch.cuda.empty_cache()
 
-        total_num += this_batch_size # total number of samples processed so far
+        trained_samples += this_batch_size # total number of samples processed so far
 
         gradients_accumulation_step += 1
         if gradients_accumulation_step < gradients_accumulation_steps:
@@ -468,15 +491,24 @@ def train_env(net, net_momentum, queue, train_loader, train_optimizer, temperatu
                 param_k.mul_(momentum).add_(param_q, alpha=1.0 - momentum)
 
         # total loss is sum of losses so far over entire batch aggregation period.
-        total_loss += loss_batch.item() * this_batch_size * gradients_accumulation_steps
+        total_keep_cont_loss += (penalty_cont * loss_keep_cont).item()         * this_batch_size * gradients_accumulation_steps
+        total_irm_loss       += (penalty_irm  * penalty_irm_env.mean()).item() * this_batch_size * gradients_accumulation_steps
+        total_cont_loss      += (penalty_cont * loss_cont_env.mean()).item()   * this_batch_size * gradients_accumulation_steps
+        total_loss           += loss_batch.item()                              * this_batch_size * gradients_accumulation_steps
 
-        train_bar.set_description('Train Epoch: [{}/{}] [{trained_samples}/{total_samples}]  Loss: {:.4f}  LR: {:.4f}  PW {:.4f}'
-            .format(epoch, epochs, total_loss/total_num, train_optimizer.param_groups[0]['lr'], penalty_weight,
-            trained_samples=total_num, total_samples=total_samples))
+        train_bar.set_description(f'Train Epoch: [{epoch}/{epochs}] [{trained_samples}/{total_samples}]' +
+                                   ' Losses:' +
+                                  f' Total: {total_loss/trained_samples:.4f}' +
+                                  f' Keep: {total_keep_cont_loss/trained_samples:.4f}' +
+                                  f' Cont: {total_cont_loss/trained_samples:.4f}' +
+                                  f' IRM: {total_irm_loss/trained_samples:.4f}' +
+                                  f' LR: {train_optimizer.param_groups[0]['lr']:.4f} PW {penalty_weight:.4f}')
 
         if batch_index % 10 == 0:
-            utils.write_log('Train Epoch: [{:d}/{:d}] [{:d}/{:d}]  Loss: {:.4f}  LR: {:.4f}  PW {:.4f}'
-                            .format(epoch, epochs, total_num, total_samples, total_loss/total_num,
+            utils.write_log('Train Epoch: [{:d}/{:d}] [{:d}/{:d}]  Losses: Total: {:.4f}  Keep: {:.4f} Cont: {:.4f} IRM: {:.4f} LR: {:.4f}  PW {:.4f}'
+                            .format(epoch, epochs, trained_samples, total_samples,
+                                    total_loss/trained_samples, total_keep_cont_loss/trained_samples, 
+                                    total_cont_loss/trained_samples, total_irm_loss/trained_samples, 
                                     train_optimizer.param_groups[0]['lr'], penalty_weight), log_file=log_file)
                                         
         # Prepare for next iteration
@@ -493,7 +525,7 @@ def train_env(net, net_momentum, queue, train_loader, train_optimizer, temperatu
         torch.cuda.empty_cache()
     # end for batch_index, data_env in enumerate(train_bar):
 
-    return total_loss / total_num
+    return total_loss / trained_samples
 
 def train_update_split(net, update_loader, soft_split, random_init=False, args=None):
     utils.write_log('Start Maximizing ...', log_file, print_=True)
