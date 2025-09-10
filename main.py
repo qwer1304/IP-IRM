@@ -140,7 +140,7 @@ class FeatureQueue:
         self.device = device
         self.dtype = dtype
 
-        self.queue = torch.zeros(queue_size, dim, device=device, dtype=dtype)
+        self.queue = F.normalize(torch.randn(queue_size, dim, device=device, dtype=dtype), dim=1)
         self.write_ptr = 0  # write index - first index to write from
         self.read_ptr = 0  # read index - first index to read from 
 
@@ -296,8 +296,11 @@ def train_env(net, net_momentum, queue, train_loader, train_optimizer, temperatu
                     pos_k = transform(pos)
 
                 _, out_q = net(pos_q)
+                out_q = F.normalize(out_q, dim=1)
+
                 with torch.no_grad():
                     _, out_k = net_momentum(pos_k)
+                    out_k = F.normalize(out_k, dim=1)
 
                 # -----------------------
                 # MoCo / GDI contrastive loss
@@ -333,13 +336,16 @@ def train_env(net, net_momentum, queue, train_loader, train_optimizer, temperatu
                     pos_k_mb = transform(pos)
 
                 _, out_q_mb = net(pos_q_mb)
+                out_q_mb = F.normalize(out_q_mb, dim=1)
                 with torch.no_grad():
                     _, out_k_mb = net_momentum(pos_k_mb)
+                    out_k_mb = F.normalize(out_k_mb, dim=1)
 
                 for split_num, updated_split_each in enumerate(updated_split):
                     for env in range(args.env_num):
                         # split mb
                         out_q, out_k = utils.assign_features(out_q_mb, out_k_mb, indexs, updated_split_each, env)
+
                         N = out_q.size(0)
                         if N == 0:
                             # free memory of split
