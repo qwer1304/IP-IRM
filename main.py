@@ -301,17 +301,18 @@ def train_env(net, net_momentum, queue, train_loader, train_optimizer, temperatu
                     _, out_k_mb = net_momentum(pos_k_mb)
                     out_k_mb = F.normalize(out_k_mb, dim=1)
 
-                if args.keep_cont: # global contrastive loss (1st partition)
-                    # -----------------------
-                    # MoCo / GDI contrastive loss
-                    # -----------------------
+                # -----------------------
+                # MoCo / GDI contrastive loss
+                # -----------------------
 
-                    # logits: q*k+ / q*negatives
-                    l_pos = torch.sum(out_q_mb * out_k_mb, dim=1, keepdim=True)
-                    l_neg = torch.matmul(out_k_mb, queue.get(queue.queue_size-this_batch_size, advance=False).t())  # queue as negatives (detached)
-                    logits = torch.cat([l_pos, l_neg], dim=1)
-                    logits_cont = logits / temperature
-                    labels_cont = torch.zeros(logits_cont.size(0), dtype=torch.long, device=device)
+                # logits: q*k+ / q*negatives
+                l_pos = torch.sum(out_q_mb * out_k_mb, dim=1, keepdim=True)
+                l_neg = torch.matmul(out_k_mb, queue.get(queue.queue_size-this_batch_size, advance=False).t())  # queue as negatives (detached)
+                logits = torch.cat([l_pos, l_neg], dim=1)
+                logits_cont = logits / temperature
+                labels_cont = torch.zeros(logits_cont.size(0), dtype=torch.long, device=device)
+
+                if args.keep_cont: # global contrastive loss (1st partition)
                     loss_cont   = F.cross_entropy(logits_cont, labels_cont, reduction='sum')
                     # Here we know that losses are over the whole macro-batch, so we can normalize up-front
                     loss_cont = loss_cont / this_batch_size / gradients_accumulation_steps
@@ -321,14 +322,12 @@ def train_env(net, net_momentum, queue, train_loader, train_optimizer, temperatu
 
                 for split_num, updated_split_each in enumerate(updated_split):
                     for env in range(args.env_num):
-                        # split mb
-                        out_q, out_k = utils.assign_features(out_q_mb, out_k_mb, indexs_mb, updated_split_each, env)
 
+                        # split mb
+                        idxs = utils.assign_idxs(indexs_mb, updated_split_each, env)
+                        
                         N = out_q.size(0)
                         if N == 0:
-                            # free memory of split
-                            del out_q, out_k
-                            torch.cuda.empty_cache()
                             continue
                             
                         Ns[j,split_num,env] += N # update number of elements in environment
@@ -338,17 +337,12 @@ def train_env(net, net_momentum, queue, train_loader, train_optimizer, temperatu
                         # -----------------------
 
                         # logits: q*k+ / q*negatives
-                        l_pos = torch.sum(out_q * out_k, dim=1, keepdim=True)
-                        l_neg = torch.matmul(out_k, queue.get(queue.queue_size-this_batch_size, advance=False).t())  # queue as negatives (detached)
-                        logits = torch.cat([l_pos, l_neg], dim=1)
-                        logits_cont = logits / temperature
-                        labels_cont = torch.zeros(logits_cont.size(0), dtype=torch.long, device=device)
-                        loss_cont = F.cross_entropy(logits_cont, labels_cont, reduction='sum')
-                        loss_cont_sums[j,split_num,env] += loss_cont.detach() # before penalty scaler
+                        loss_cont_split = F.cross_entropy(logits_cont[idxs], labels_cont[idxs], reduction='sum')
+                        loss_cont_sums[j,split_num,env] += loss_cont_split.detach() # before penalty scaler
 
                         # compute gradients for this loss
                         grads = torch.autograd.grad(
-                            penalty_cont * loss_cont, # gradients must be multiplied by scaler
+                            penalty_cont * loss_cont_split, # gradients must be multiplied by scaler
                             net.parameters(),
                             retain_graph=True,  # keep graph for next loss
                             allow_unused=True
@@ -359,13 +353,13 @@ def train_env(net, net_momentum, queue, train_loader, train_optimizer, temperatu
                             losses_cont_grads[_j][j,split_num,env] += g.detach().view(-1)
 
                         # IRM penalty
-                        logits_pen = (logits / args.irm_temp)
-                        g_i = grad_wrt_scale_sum(logits_pen, labels_cont, create_graph=True) # loss gradient w.r.t scaler for batch half 'i'
+                        logits_pen = (logits[indx] / args.irm_temp)
+                        g_i = grad_wrt_scale_sum(logits_pen, labels_cont[indx], create_graph=True) # loss gradient w.r.t scaler for batch half 'i'
                         # First addend in IRM averaged over split
                         g_sums[j,split_num,env] += g_i.detach() # irm penalty components before penalty scaler
 
                         # compute gradients for this loss
-                        loss_cont.backward(retain_graph=True)
+                        loss_cont_split.backward(retain_graph=True)
                         grads = torch.autograd.grad(
                             penalty_irm * g_i,  # gradients must be multiplied by scaler
                             net.parameters(),
@@ -378,7 +372,7 @@ def train_env(net, net_momentum, queue, train_loader, train_optimizer, temperatu
                             losses_irm_grads[_j][j,split_num,env] += g.detach().view(-1)
                                 
                         # free memory of split
-                        del out_q, out_k, l_pos, l_neg, logits, logits_cont, loss_cont, logits_pen, g_i, grads, g
+                        del loss_cont_split, logits_pen, g_i, grads, g
                         torch.cuda.empty_cache()
                     # end for env in range(args.env_num): 
                 #end for split_num, updated_split_each in enumerate(updated_split):
@@ -387,7 +381,7 @@ def train_env(net, net_momentum, queue, train_loader, train_optimizer, temperatu
                 # update queue
                 # -----------------------
                 queue.update(out_k_mb)
-                del pos_mb, indexs_mb, pos_q_mb, pos_k_mb, out_q_mb, out_k_mb
+                del pos_mb, indexs_mb, pos_q_mb, pos_k_mb, out_q_mb, out_k_mb, l_pos, l_neg, logits, logits_cont
                 torch.cuda.empty_cache()
             # end for i in idxs[j]:
         # end for j in range(idxs):
