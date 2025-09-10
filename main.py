@@ -285,56 +285,11 @@ def train_env(net, net_momentum, queue, train_loader, train_optimizer, temperatu
         idxs_01 = [[i for i in range(len(mb_list)) if i % 2 == 0],    # indices of "even" micro-batches in mb_list
                    [i for i in range(len(mb_list)) if i % 2 == 1]]    # indices of "odd" micro-batches in mb_list
 
-        if args.keep_cont: # global contrastive loss (1st partition)
-
-            # -----------------------
-            # Step 0: micro-batches
-            # -----------------------
-            idxs = [i for i in range(len(mb_list))]
-            for i in idxs:
-                pos, indexs = mb_list[i]
-                pos = pos.cuda(non_blocking=True)
-                indexs = indexs.cuda(non_blocking=True)
-
-                if transform is not None:
-                    pos_q = transform(pos)
-                    pos_k = transform(pos)
-
-                _, out_q = net(pos_q)
-                out_q = F.normalize(out_q, dim=1)
-
-                with torch.no_grad():
-                    _, out_k = net_momentum(pos_k)
-                    out_k = F.normalize(out_k, dim=1)
-
-                # -----------------------
-                # MoCo / GDI contrastive loss
-                # -----------------------
-
-                # logits: q*k+ / q*negatives
-                l_pos = torch.sum(out_q * out_k, dim=1, keepdim=True)
-                l_neg = torch.matmul(out_k, queue.get(queue.queue_size-this_batch_size, advance=False).t())  # queue as negatives (detached)
-                logits = torch.cat([l_pos, l_neg], dim=1)
-                logits_cont = logits / temperature
-                labels_cont = torch.zeros(logits_cont.size(0), dtype=torch.long, device=device)
-                loss_cont   = F.cross_entropy(logits_cont, labels_cont, reduction='sum')
-                # Here we know that losses are over the whole macro-batch, so we can normalize up-front
-                loss_cont = loss_cont / this_batch_size / gradients_accumulation_steps
-                # loss and grad normalized
-                (loss_cont * penalty_cont).backward() # gradients must be multiplied by scaler
-                loss_keep_cont += loss_cont.detach() # before scaler
-
-                # free memory of micro-batch
-                del pos, indexs, pos_q, pos_k, out_q, out_k, l_pos, l_neg, logits, logits_cont, loss_cont
-                torch.cuda.empty_cache()
-            # end for i in idxs:
-        # end if args.keep_cont: # global contrastive loss (1st partition)
-
         for j in range(len(idxs_01)):
             for i in idxs_01[j]:
-                pos, indexs = mb_list[i]
-                pos = pos.cuda(non_blocking=True)
-                indexs = indexs.cuda(non_blocking=True)
+                pos_mb, indexs_mb = mb_list[i]
+                pos_mb = pos_mb.cuda(non_blocking=True)
+                indexs_mb = indexs_mb.cuda(non_blocking=True)
 
                 if transform is not None:
                     pos_q_mb = transform(pos)
@@ -367,7 +322,7 @@ def train_env(net, net_momentum, queue, train_loader, train_optimizer, temperatu
                 for split_num, updated_split_each in enumerate(updated_split):
                     for env in range(args.env_num):
                         # split mb
-                        out_q, out_k = utils.assign_features(out_q_mb, out_k_mb, indexs, updated_split_each, env)
+                        out_q, out_k = utils.assign_features(out_q_mb, out_k_mb, indexs_mb, updated_split_each, env)
 
                         N = out_q.size(0)
                         if N == 0:
@@ -432,7 +387,7 @@ def train_env(net, net_momentum, queue, train_loader, train_optimizer, temperatu
                 # update queue
                 # -----------------------
                 queue.update(out_k_mb)
-                del pos, indexs, pos_q_mb, pos_k_mb, out_q_mb, out_k_mb
+                del pos_mb, indexs_mb, pos_q_mb, pos_k_mb, out_q_mb, out_k_mb
                 torch.cuda.empty_cache()
             # end for i in idxs[j]:
         # end for j in range(idxs):
