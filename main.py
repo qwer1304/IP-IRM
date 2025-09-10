@@ -395,40 +395,44 @@ def train_env(net, net_momentum, queue, train_loader, train_optimizer, temperatu
         if gradients_accumulation_step < gradients_accumulation_steps:
             continue
 
-        Nenv = Ns.sum(dim=0, keepdim=True) # (1,J,K)
+        Nenv = Ns.sum(dim=0, keepdim=True) # (1,J,K) # sizes of envs
+        Nenvs = Nenv.size().prod()
 
         # Environments & original cont losses and gradients
-        loss_cont_env = loss_cont_sums.sum(dim=0, keepdim=True) / Nenv # already detached, per env losses, always initialized
+        loss_keep_cont = loss_keep_cont.sum(dim=0) # for macro batch
+        loss_cont_env = loss_cont_sums.sum(dim=0, keepdim=True) / Nenv # per env for macro-batch
         if penalty_cont > 0:
             for j, p in enumerate(net.parameters()):
-                dCont_dTheta_env = losses_cont_grads[j]                                  # per env sum of dCont/dTheta, shape (I,J,K,param_numel)
-                total_grad_flat = (dCont_dTheta_env / Nenv[..., None]).sum(dim=(0,1,2))  # shape (param_numel,)
+                dCont_dTheta_env = losses_cont_grads[j]                        # per env sum of dCont/dTheta, shape (I,J,K,param_numel)
+                total_grad_flat = (dCont_dTheta_env / Nenv[..., None] / Nenvs
+                                  ).sum(dim=(0,1,2))                           # shape (param_numel,)
                 if args.keep_cont:
-                    p.grad += total_grad_flat.view(p.shape)                              # reshape back to parameter shape
+                    p.grad += total_grad_flat.view(p.shape)                    # reshape back to parameter shape
                 else:
-                    p.grad = total_grad_flat.view(p.shape)                               # reshape back to parameter shape
+                    p.grad = total_grad_flat.view(p.shape)                     # reshape back to parameter shape
 
         # IRM losses and gradients
         gs = g_sums # always initialized
-        penalty_irm_env = (gs[0] / Ns[0]) * (gs[1] / Ns[1])  # already detached, per env penalty
+        penalty_irm_env = (gs[0] / Ns[0]) * (gs[1] / Ns[1])  # per env for macro-batch
         if penalty_irm > 0:
             # IRM = gs1 * gs2, where gs1 and gs2 are gradients w.r.t. scaler of mean CE of halves of sample in a batch
             # dIRM/dTheta = d(gs1 * gs2)/dTheta = dgs1/dTheta * gs2 + gs1 * dgs2/dTheta
             for pind, p in enumerate(net.parameters()):
                 dgs_dTheta_env = losses_irm_grads[pind]  # per env sum of dg_i/dTheta over macro-batch per parameter, shape (I,J,K,param_numel)
                 for i in range(2):
-                    j = 0 if i == 1 else 1
+                    j = (i + 1) % 2
                     total_grad_flat = ((dgs_dTheta_env[i] / Ns[i, ..., None]) * 
-                                       (gs[j, ..., None] / Ns[j, ..., None])
+                                       (gs[j, ..., None]  / Ns[j, ..., None]) / 
+                                       Nenvs 
                                       ).sum(dim=(0,1))  # shape (param_numel,)
                     if args.keep_cont:
-                        p.grad += total_grad_flat.view(p.shape)                  # reshape back to parameter shape
+                        p.grad += total_grad_flat.view(p.shape)  # reshape back to parameter shape
                     else:
-                        p.grad = total_grad_flat.view(p.shape)                   # reshape back to parameter shape
+                        p.grad = total_grad_flat.view(p.shape)   # reshape back to parameter shape
             
-        loss_batch = (penalty_cont * loss_keep_cont) + \
+        loss_batch = (penalty_cont * loss_keep_cont)         + \
                      (penalty_irm  * penalty_irm_env.mean()) + \
-                     (penalty_cont * loss_cont_env.mean())                       # mean over envs, mean over macro-batch
+                     (penalty_cont * loss_cont_env.mean())       # mean over envs, mean over macro-batch
 
         # -----------------------
         # Step 3: optimizer step
