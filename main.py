@@ -259,7 +259,7 @@ def train_env(net, net_momentum, queue, train_loader, train_optimizer, temperatu
     loss_cont_sums = torch.zeros((2, num_splits, args.env_num), dtype=torch.float, device=device) 
     g_sums         = torch.zeros((2, num_splits, args.env_num), dtype=torch.float, device=device) 
     loss_keep_cont = torch.tensor(0, dtype=torch.float, device=device)
-    Ns             = torch.zeros((2, num_splits, args.env_num), dtype=torch.float, device=device) 
+    half_split_sz             = torch.zeros((2, num_splits, args.env_num), dtype=torch.float, device=device) 
     # One buffer per parameter
     losses_cont_grads = [
         torch.zeros((*g_sums.shape, p.numel()), dtype=p.dtype, device=p.device)
@@ -328,7 +328,7 @@ def train_env(net, net_momentum, queue, train_loader, train_optimizer, temperatu
                         if (N := len(idxs)) == 0:
                             continue
                             
-                        Ns[j,split_num,env] += N # update number of elements in environment
+                        half_split_sz[j,split_num,env] += N # update number of elements in environment
 
                         # -----------------------
                         # MoCo / GDI contrastive loss
@@ -395,16 +395,16 @@ def train_env(net, net_momentum, queue, train_loader, train_optimizer, temperatu
         if gradients_accumulation_step < gradients_accumulation_steps:
             continue
 
-        Nenv = Ns.sum(dim=0, keepdim=True) # (1,J,K) # sizes of envs
-        Nenvs = prod(Nenv.size())
+        split_sz = half_split_sz.sum(dim=0, keepdim=True) # (1,J,K) # sizes of envs
+        num_env = prod(split_sz.size())
 
         # Environments & original cont losses and gradients
         loss_keep_cont = loss_keep_cont.sum(dim=0) # for macro batch
-        loss_cont_env = loss_cont_sums.sum(dim=0, keepdim=True) / Nenv # per env for macro-batch
+        loss_cont_env = loss_cont_sums.sum(dim=0, keepdim=True) / split_sz # per env for macro-batch
         if penalty_cont > 0:
             for j, p in enumerate(net.parameters()):
                 dCont_dTheta_env = losses_cont_grads[j]                        # per env sum of dCont/dTheta, shape (I,J,K,param_numel)
-                total_grad_flat = (dCont_dTheta_env / Nenv[..., None] / Nenvs
+                total_grad_flat = (dCont_dTheta_env / split_sz[..., None] / num_env
                                   ).sum(dim=(0,1,2))                           # shape (param_numel,)
                 if args.keep_cont:
                     p.grad += total_grad_flat.view(p.shape)                    # reshape back to parameter shape
@@ -413,7 +413,7 @@ def train_env(net, net_momentum, queue, train_loader, train_optimizer, temperatu
 
         # IRM losses and gradients
         gs = g_sums # always initialized
-        penalty_irm_env = (gs[0] / Ns[0]) * (gs[1] / Ns[1])  # per env for macro-batch
+        penalty_irm_env = (gs[0] / half_split_sz[0]) * (gs[1] / half_split_sz[1])  # per env for macro-batch
         if penalty_irm > 0:
             # IRM = gs1 * gs2, where gs1 and gs2 are gradients w.r.t. scaler of mean CE of halves of sample in a batch
             # dIRM/dTheta = d(gs1 * gs2)/dTheta = dgs1/dTheta * gs2 + gs1 * dgs2/dTheta
@@ -421,9 +421,9 @@ def train_env(net, net_momentum, queue, train_loader, train_optimizer, temperatu
                 dgs_dTheta_env = losses_irm_grads[pind]  # per env sum of dg_i/dTheta over macro-batch per parameter, shape (I,J,K,param_numel)
                 for i in range(2):
                     j = (i + 1) % 2
-                    total_grad_flat = ((dgs_dTheta_env[i] / Ns[i, ..., None]) * 
-                                       (gs[j, ..., None]  / Ns[j, ..., None]) / 
-                                       Nenvs 
+                    total_grad_flat = ((dgs_dTheta_env[i] / half_split_sz[i, ..., None]) * 
+                                       (gs[j, ..., None]  / half_split_sz[j, ..., None]) / 
+                                       num_env 
                                       ).sum(dim=(0,1))  # shape (param_numel,)
                     if args.keep_cont:
                         p.grad += total_grad_flat.view(p.shape)  # reshape back to parameter shape
@@ -480,7 +480,7 @@ def train_env(net, net_momentum, queue, train_loader, train_optimizer, temperatu
         g_sums.zero_()
         loss_keep_cont.zero_()
         loss_cont_sums.zero_()
-        Ns.zero_()
+        half_split_sz.zero_()
         for par in losses_cont_grads:
             par.zero_()
         for par in losses_irm_grads:
