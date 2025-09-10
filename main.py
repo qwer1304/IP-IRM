@@ -428,6 +428,13 @@ def train_env(net, net_momentum, queue, train_loader, train_optimizer, temperatu
         # -----------------------
         # Step 3: optimizer step
         # -----------------------
+        if (args.penalty_iters > 0) and (epoch == args.penalty_iters):
+            # Reset Adam, because it doesn't like the sharp jump in gradient
+            # magnitudes that happens at this step.
+            train_optimizer = torch.optim.Adam(
+                net.parameters(),
+                lr=train_optimizer.param_groups[0]["lr"],
+                weight_decay=train_optimizer.param_groups[0]["weight_decay"])
         train_optimizer.step()
         train_optimizer.zero_grad(set_to_none=True)  # clear gradients at beginning of next gradients batch
 
@@ -757,7 +764,6 @@ if __name__ == '__main__':
                         action=utils.ParseMixed, types=[int, int, int, bool],
                         metavar='DataLoader pars [batch_size, number_workers, prefetch_factor, persistent_workers]', help='Testing/Validation/Memory DataLoader pars')
     parser.add_argument('--micro_batch_size', default=32, type=int, help='batch size on gpu')
-    parser.add_argument('--macro_batch_size', default=256, type=int, help='virtual macro batch size on gpu')
     parser.add_argument('--gradients_accumulation_batch_size', default=256, type=int, help='batch size of gradients accumulation')
     parser.add_argument('--queue_size', default=10000, type=int, help='momentum model queue size')
     parser.add_argument('--epochs', default=200, type=int, help='Number of sweeps over the dataset to train')
