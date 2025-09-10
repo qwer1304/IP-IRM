@@ -396,7 +396,7 @@ def train_env(net, net_momentum, queue, train_loader, train_optimizer, temperatu
             continue
 
         Nenv = Ns.sum(dim=0, keepdim=True) # (1,J,K) # sizes of envs
-        Nenvs = math.prod(Nenv.size())
+        Nenvs = prod(Nenv.size())
 
         # Environments & original cont losses and gradients
         loss_keep_cont = loss_keep_cont.sum(dim=0) # for macro batch
