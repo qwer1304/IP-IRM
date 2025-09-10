@@ -395,10 +395,10 @@ def train_env(net, net_momentum, queue, train_loader, train_optimizer, temperatu
         if gradients_accumulation_step < gradients_accumulation_steps:
             continue
 
-        Nenv = Ns.sum(dim=1, keepdim=True) # (1,J,K)
+        Nenv = Ns.sum(dim=0, keepdim=True) # (1,J,K)
 
         # Environments & original cont losses and gradients
-        loss_cont_env = loss_cont_sums / Nenv # already detached, per env losses, always initialized
+        loss_cont_env = loss_cont_sums.sum(dim=0, keepdim=True) / Nenv # already detached, per env losses, always initialized
         if penalty_cont > 0:
             for j, p in enumerate(net.parameters()):
                 dCont_dTheta_env = losses_cont_grads[j]                                  # per env sum of dCont/dTheta, shape (I,J,K,param_numel)
@@ -837,6 +837,9 @@ if __name__ == '__main__':
 
     # args parse
     args = parser.parse_args()
+
+
+    assert ((args.penalty_weight > 0) or (args.penalty_cont > 0)) or ((args.penalty_cont == 0) and (args.penalty_iters == 0))
 
     # seed
     utils.set_seed(args.seed)
