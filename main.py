@@ -502,7 +502,7 @@ def train_env(net, net_momentum, queue, train_loader, train_optimizer, temperatu
                                   f' Keep: {total_keep_cont_loss/trained_samples:.4f}' +
                                   f' Cont: {total_cont_loss/trained_samples:.4f}' +
                                   f' IRM: {total_irm_loss/trained_samples:.4f}' +
-                                  f' LR: {train_optimizer.param_groups[0]['lr']:.4f} PW {penalty_weight:.4f}')
+                                  f' LR: {train_optimizer.param_groups[0]["lr"]:.4f} PW {penalty_weight:.4f}')
 
         if batch_index % 10 == 0:
             utils.write_log('Train Epoch: [{:d}/{:d}] [{:d}/{:d}]  Losses: Total: {:.4f}  Keep: {:.4f} Cont: {:.4f} IRM: {:.4f} LR: {:.4f}  PW {:.4f}'
