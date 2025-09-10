@@ -399,17 +399,18 @@ def train_env(net, net_momentum, queue, train_loader, train_optimizer, temperatu
         num_env = prod(split_sz.size())
 
         # Environments & original cont losses and gradients
-        loss_keep_cont = loss_keep_cont.sum(dim=0) # for macro batch
-        loss_cont_env = loss_cont_sums.sum(dim=0, keepdim=True) / split_sz # per env for macro-batch
+        loss_cont_env = loss_cont_sums.sum(dim=0, keepdim=True) / split_sz     # per env for macro-batch
         if penalty_cont > 0:
             for j, p in enumerate(net.parameters()):
-                dCont_dTheta_env = losses_cont_grads[j]                        # per env sum of dCont/dTheta, shape (I,J,K,param_numel)
-                total_grad_flat = (dCont_dTheta_env / split_sz[..., None] / num_env
-                                  ).sum(dim=(0,1,2))                           # shape (param_numel,)
+                dCont_dTheta_env = losses_cont_grads[j]     # per env sum of dCont/dTheta, shape (I,J,K,param_numel)
+                total_grad_flat = (dCont_dTheta_env / 
+                                   split_sz[..., None] / 
+                                   num_env
+                                  ).sum(dim=(0,1,2))        # shape (param_numel,)
                 if args.keep_cont:
-                    p.grad += total_grad_flat.view(p.shape)                    # reshape back to parameter shape
+                    p.grad += total_grad_flat.view(p.shape) # reshape back to parameter shape
                 else:
-                    p.grad = total_grad_flat.view(p.shape)                     # reshape back to parameter shape
+                    p.grad = total_grad_flat.view(p.shape)  # reshape back to parameter shape
 
         # IRM losses and gradients
         gs = g_sums # always initialized
@@ -430,7 +431,7 @@ def train_env(net, net_momentum, queue, train_loader, train_optimizer, temperatu
                     else:
                         p.grad = total_grad_flat.view(p.shape)   # reshape back to parameter shape
             
-        loss_batch = (penalty_cont * loss_keep_cont)         + \
+        loss_batch = (penalty_cont * loss_keep_cont)         + \ # loss_keep_cont is a scalar
                      (penalty_irm  * penalty_irm_env.mean()) + \
                      (penalty_cont * loss_cont_env.mean())       # mean over envs, mean over macro-batch
 
@@ -779,6 +780,7 @@ if __name__ == '__main__':
     parser.add_argument('--micro_batch_size', default=32, type=int, help='batch size on gpu')
     parser.add_argument('--gradients_accumulation_batch_size', default=256, type=int, help='batch size of gradients accumulation')
     parser.add_argument('--queue_size', default=10000, type=int, help='momentum model queue size')
+    parser.add_argument('--momentum', default=0.995, type=float, help='momentum model momentum')
     parser.add_argument('--epochs', default=200, type=int, help='Number of sweeps over the dataset to train')
     parser.add_argument('--debiased', default=False, type=bool, help='Debiased contrastive loss or standard loss')
     parser.add_argument('--dataset', type=str, default='STL', choices=['STL', 'CIFAR10', 'CIFAR100', 'ImageNet'], help='experiment dataset')
@@ -969,7 +971,7 @@ if __name__ == '__main__':
     model_momentum = copy.deepcopy(model)
     for p in model_momentum.parameters():
         p.requires_grad = False
-    momentum = 0.999              # momentum for model_momentum
+    momentum = args.momentum              # momentum for model_momentum
     queue_size = args.queue_size
     queue = FeatureQueue(queue_size, feature_dim, device='cuda', dtype=torch.float32)
 
