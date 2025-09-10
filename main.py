@@ -313,7 +313,7 @@ def train_env(net, net_momentum, queue, train_loader, train_optimizer, temperatu
 
                 # logits: q*k+ / q*negatives
                 l_pos = torch.sum(out_q * out_k, dim=1, keepdim=True)
-                l_neg = torch.matmul(out_k, queue.get(queue.queue_size-this_batch_size).t(), advance=False)  # queue as negatives (detached)
+                l_neg = torch.matmul(out_k, queue.get(queue.queue_size-this_batch_size, advance=False).t())  # queue as negatives (detached)
                 logits = torch.cat([l_pos, l_neg], dim=1)
                 logits_cont = logits / temperature
                 labels_cont = torch.zeros(logits_cont.size(0), dtype=torch.long, device=device)
