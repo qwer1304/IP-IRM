@@ -1031,7 +1031,7 @@ if __name__ == '__main__':
                 "numpy_rng_state": np.random.get_state(),
                 "python_rng_state": random.getstate(),
             },
-        }, False, args, filename='{}/{}/checkpoint.pth.tar'.format(args.save_root, args.name))
+        }, False, args, filename='{}/{}/checkpoint_1st.pth.tar'.format(args.save_root, args.name))
 
     train_loader = None
 
