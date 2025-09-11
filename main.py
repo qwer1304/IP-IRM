@@ -502,7 +502,9 @@ def train_env(net, net_momentum, queue, train_loader, train_optimizer, temperatu
             par.zero_()
         for par in losses_irm_grads:
             par.zero_()
-        del gs, total_grad_flat, penalty_irm_env, loss_cont_env, loss_batch
+        del gs, penalty_irm_env, loss_cont_env, loss_batch
+        if (penalty_irm > 0) or (penalty_cont > 0):
+            del total_grad_flat
         if penalty_irm > 0:
             del dgs_dTheta_env
         if penalty_cont > 0:
