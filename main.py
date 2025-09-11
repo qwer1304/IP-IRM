@@ -315,7 +315,7 @@ def train_env(net, net_momentum, queue, train_loader, train_optimizer, temperatu
 
                 # logits: q*k+ / q*negatives
                 l_pos = torch.sum(out_q * out_k, dim=1, keepdim=True)
-                l_neg = torch.matmul(out_k, queue.get(queue.queue_size-this_batch_size, advance=False).t())  # queue as negatives (detached)
+                l_neg = torch.matmul(out_q, queue.get(queue.queue_size-this_batch_size, advance=False).t())  # queue as negatives (detached)
 
                 # for debug
                 if debug:
@@ -394,7 +394,7 @@ def train_env(net, net_momentum, queue, train_loader, train_optimizer, temperatu
                 # -----------------------
                 # update queue
                 # -----------------------
-                queue.update(out_k)
+                queue.update(out_k.detach())
                 # free memory of micro-batch
                 del pos, indexs, pos_q, pos_k, out_q, out_k, l_pos, l_neg, logits, logits_cont
                 if penalty_cont > 0:
