@@ -320,7 +320,7 @@ def train_env(net, net_momentum, queue, train_loader, train_optimizer, temperatu
                 # for debug
                 if debug:
                     total_pos    += l_pos.mean().item() * l_pos.size(0)
-                    l_neg        += l_neg.mean().item() * l_pos.size(0)
+                    total_neg    += l_neg.mean().item() * l_pos.size(0)
                     total_maxneg += l_neg.max().item()  * l_pos.size(0)
                     count        += l_pos.size(0)
 
