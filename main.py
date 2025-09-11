@@ -904,8 +904,6 @@ if __name__ == '__main__':
     parser.add_argument('--SGD_momentum', default=0.9, type=float, help='LR')
     parser.add_argument('--weight_decay', default=1e-6, type=float, help='weight decay')
     
-    parser.add_argument('--debug', action="store_true", help="debug switch")
-    
 
     # args parse
     args = parser.parse_args()
