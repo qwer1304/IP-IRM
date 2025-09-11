@@ -395,14 +395,28 @@ def train_env(net, net_momentum, queue, train_loader, train_optimizer, temperatu
         if gradients_accumulation_step < gradients_accumulation_steps:
             continue
 
+        """
+        L = 1/Ntr * (nll + IRM)
+        nll = sum_e(nll_e)
+        IRM = sum_e(IRM_e)
+        nll_e = 1/Ne sum_i(nll_i(f(xi),yi))
+        IRM_e = g1 * g2 # two halves of Ni 
+        gi = 1/Ni d/ds sum_j(nll_j(s*f(xj),yj)) = 1/Ni sum_j(d/ds nll_j(s*f(xj),yj))
+        d/dTheta L = 1/Ntr * (d/dTheta nll + d/dTheta IRM)
+        d/dTheta nll = 1/Ne sum_j(d/dTheta nll_j(f(xj),yj))
+        d/dTheta IRM = sum_e(d/dTheta IRM_e)
+        d/dTheta IRM_e = d/dTheta (g1 * g2) = d/dTheta g1 * g2 + g1 * d/dTheta g2
+        d/dTheta gi = 1/Ni sum_j(d/dTheta d/ds nll_j(s*f(xj),yj))
+        """
+        
         split_sz = half_split_sz.sum(dim=0, keepdim=True) # (1,J,K) # sizes of envs
         num_env = prod(split_sz.size())
 
         # Environments & original cont losses and gradients
         loss_cont_env = loss_cont_sums.sum(dim=0, keepdim=True) / split_sz     # per env for macro-batch
         if penalty_cont > 0:
-            for j, p in enumerate(net.parameters()):
-                dCont_dTheta_env = losses_cont_grads[j]     # per env sum of dCont/dTheta, shape (I,J,K,param_numel)
+            for pind, p in enumerate(net.parameters()):
+                dCont_dTheta_env = losses_cont_grads[pind]     # per env sum of dCont/dTheta, shape (I,J,K,param_numel)
                 total_grad_flat = (dCont_dTheta_env / 
                                    split_sz[..., None] / 
                                    num_env
@@ -816,6 +830,7 @@ if __name__ == '__main__':
     parser.add_argument('--offline', action="store_true", default=False, help='save feature at the beginning of the maximize?')
     parser.add_argument('--keep_cont', action="store_true", default=False, help='keep original contrastive?')
     parser.add_argument('--pretrain_path', type=str, default=None, help='the path of pretrain model')
+    parser.add_argument('--lr', default=0.001, type=float, help='LR')
 
     # image
     parser.add_argument('--image_size', type=int, default=224, help='image size')
@@ -976,7 +991,7 @@ if __name__ == '__main__':
     queue_size = args.queue_size
     queue = FeatureQueue(queue_size, feature_dim, device='cuda', dtype=torch.float32)
 
-    optimizer = optim.Adam(model.parameters(), lr=1e-3, weight_decay=1e-6)
+    optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-6)
     c = len(memory_data.classes) if args.dataset != "ImageNet" else args.class_num
     print('# Classes: {}'.format(c))
 
