@@ -270,6 +270,15 @@ def train_env(net, net_momentum, queue, train_loader, train_optimizer, temperatu
         torch.zeros((*g_sums.shape, p.numel()), dtype=p.dtype, device=p.device)
         for p in net.parameters()
     ]
+
+    # for debug
+    debug = args.debug
+    if debug:
+        total_pos = 0.0
+        total_neg = 0.0
+        total_maxneg = 0.0
+        count = 0
+
     train_optimizer.zero_grad(set_to_none=True) # clear gradients at the beginning 
 
     for batch_index, data_env in enumerate(train_bar):
@@ -307,6 +316,14 @@ def train_env(net, net_momentum, queue, train_loader, train_optimizer, temperatu
                 # logits: q*k+ / q*negatives
                 l_pos = torch.sum(out_q * out_k, dim=1, keepdim=True)
                 l_neg = torch.matmul(out_k, queue.get(queue.queue_size-this_batch_size, advance=False).t())  # queue as negatives (detached)
+
+                # for debug
+                if debug:
+                    total_pos    += l_pos.mean().item() * l_pos.size(0)
+                    l_neg        += l_neg.mean().item() * l_pos.size(0)
+                    total_maxneg += l_neg.max().item()  * l_pos.size(0)
+                    count        += l_pos.size(0)
+
                 logits = torch.cat([l_pos, l_neg], dim=1)
                 logits_cont = logits / temperature
                 labels_cont = torch.zeros(logits_cont.size(0), dtype=torch.long, device=device)
@@ -486,13 +503,20 @@ def train_env(net, net_momentum, queue, train_loader, train_optimizer, temperatu
         total_cont_loss      += (penalty_cont * loss_cont_env.mean()).item()   * this_batch_size * gradients_accumulation_steps
         total_loss           += loss_batch.item()                              * this_batch_size * gradients_accumulation_steps
 
-        train_bar.set_description(f'Train Epoch: [{epoch}/{epochs}] [{trained_samples}/{total_samples}]' +
-                                   ' Losses:' +
-                                  f' Total: {total_loss/trained_samples:.4f}' +
-                                  f' Keep: {total_keep_cont_loss/trained_samples:.4f}' +
-                                  f' Cont: {total_cont_loss/trained_samples:.4f}' +
-                                  f' IRM: {total_irm_loss/trained_samples:.4f}' +
-                                  f' LR: {train_optimizer.param_groups[0]["lr"]:.4f} PW {penalty_weight:.4f}')
+        desc_str = f'Train Epoch: [{epoch}/{epochs}] [{trained_samples}/{total_samples}]' + \
+                    ' Losses:' + \
+                   f' Total: {total_loss/trained_samples:.4f}' + \
+                   f' Keep: {total_keep_cont_loss/trained_samples:.4f}' + \
+                   f' Cont: {total_cont_loss/trained_samples:.4f}' + \
+                   f' IRM: {total_irm_loss/trained_samples:.4f}' + \
+                   f' LR: {train_optimizer.param_groups[0]["lr"]:.4f} PW {penalty_weight:.4f}'
+        if debug:
+            mean_pos = total_pos / count
+            mean_neg = total_neg / count
+            mean_maxneg = total_maxneg / count
+            desc_str += f' mean_pos: {mean_pos:.4f} mean_neg: {mean_neg:.4f} mean_maxneg: {mean_maxneg:.4f}'
+        
+        train_bar.set_description(desc_str)
 
         if batch_index % 10 == 0:
             utils.write_log('Train Epoch: [{:d}/{:d}] [{:d}/{:d}]  Losses: Total: {:.4f}  Keep: {:.4f} Cont: {:.4f} IRM: {:.4f} LR: {:.4f}  PW {:.4f}'
@@ -519,6 +543,12 @@ def train_env(net, net_momentum, queue, train_loader, train_optimizer, temperatu
         if penalty_cont > 0:
             dCont_dTheta_env
         torch.cuda.empty_cache()
+
+        if debug:
+            total_pos = 0.0
+            total_neg = 0.0
+            total_maxneg = 0.0
+            count = 0
     # end for batch_index, data_env in enumerate(train_bar):
 
     return total_loss / trained_samples
@@ -873,6 +903,9 @@ if __name__ == '__main__':
     parser.add_argument('--lr', default=0.001, type=float, help='LR')
     parser.add_argument('--SGD_momentum', default=0.9, type=float, help='LR')
     parser.add_argument('--weight_decay', default=1e-6, type=float, help='weight decay')
+    
+    parser.add_argument('--debug', action="store_true", help="debug switch")
+    
 
     # args parse
     args = parser.parse_args()
