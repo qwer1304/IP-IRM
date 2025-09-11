@@ -232,6 +232,7 @@ def train_env(net, net_momentum, queue, train_loader, train_optimizer, temperatu
         penalty_weight = args.penalty_weight
         
     penalty_cont = args.penalty_cont / (1 if penalty_weight <= 1 else 1 / penalty_weight)
+    penalty_keep_cont = args.penalty_keep_cont / (1 if penalty_weight <= 1 else 1 / penalty_weight)
     penalty_irm = 1 if penalty_weight > 1 else penalty_weight
 
     loader_batch_size = batch_size
@@ -310,13 +311,13 @@ def train_env(net, net_momentum, queue, train_loader, train_optimizer, temperatu
                 logits_cont = logits / temperature
                 labels_cont = torch.zeros(logits_cont.size(0), dtype=torch.long, device=device)
 
-                if args.keep_cont and (penalty_cont > 0): # global contrastive loss (1st partition)
+                if args.keep_cont and (penalty_keep_cont > 0): # global contrastive loss (1st partition)
                     # This could be done w/o the split into two halves, but this streamlines the code w/o any harm
                     loss_cont   = F.cross_entropy(logits_cont, labels_cont, reduction='sum')
                     # Here we know that losses are over the whole macro-batch, so we can normalize up-front
                     loss_cont = loss_cont / this_batch_size / gradients_accumulation_steps
                     # loss and grad normalized
-                    (loss_cont * penalty_cont).backward(retain_graph=True) # gradients must be multiplied by scaler
+                    (loss_cont * penalty_keep_cont).backward(retain_graph=True) # gradients must be multiplied by scaler
                     loss_keep_cont += loss_cont.detach() # before scaler
 
                 for split_num, updated_split_each in enumerate(updated_split):
@@ -381,8 +382,8 @@ def train_env(net, net_momentum, queue, train_loader, train_optimizer, temperatu
                 del pos, indexs, pos_q, pos_k, out_q, out_k, l_pos, l_neg, logits, logits_cont
                 if penalty_cont > 0:
                     del loss_cont_split
-                    if args.keep_cont:
-                        del loss_cont
+                if  args.keep_cont and (penalty_keep_cont > 0):
+                    del loss_cont
                 if penalty_irm > 0:
                     del logits_pen_split, g_i, grads, g
             # end for i in idxs[j]:
@@ -445,7 +446,7 @@ def train_env(net, net_momentum, queue, train_loader, train_optimizer, temperatu
                     else:
                         p.grad = total_grad_flat.view(p.shape)   # reshape back to parameter shape
             
-        loss_batch = ((penalty_cont * loss_keep_cont)         +  # loss_keep_cont is a scalar
+        loss_batch = ((penalty_keep_cont * loss_keep_cont)    +  # loss_keep_cont is a scalar
                       (penalty_irm  * penalty_irm_env.mean()) + 
                       (penalty_cont * loss_cont_env.mean())      # mean over envs, mean over macro-batch
                      )
@@ -471,7 +472,7 @@ def train_env(net, net_momentum, queue, train_loader, train_optimizer, temperatu
                 param_k.mul_(momentum).add_(param_q, alpha=1.0 - momentum)
 
         # total loss is sum of losses so far over entire batch aggregation period.
-        total_keep_cont_loss += (penalty_cont * loss_keep_cont).item()         * this_batch_size * gradients_accumulation_steps
+        total_keep_cont_loss += (penalty_keep_cont * loss_keep_cont).item()    * this_batch_size * gradients_accumulation_steps
         total_irm_loss       += (penalty_irm  * penalty_irm_env.mean()).item() * this_batch_size * gradients_accumulation_steps
         total_cont_loss      += (penalty_cont * loss_cont_env.mean()).item()   * this_batch_size * gradients_accumulation_steps
         total_loss           += loss_batch.item()                              * this_batch_size * gradients_accumulation_steps
@@ -812,6 +813,7 @@ if __name__ == '__main__':
     parser.add_argument('--ours_mode', default='w', type=str, help='what mode to use')
     parser.add_argument('--penalty_weight', default=1.0, type=float, help='penalty weight')
     parser.add_argument('--penalty_cont', default=1.0, type=float, help='cont penalty weight')
+    parser.add_argument('--penalty_keep_cont', default=1.0, type=float, help='cont keep penalty weight')
     parser.add_argument('--penalty_iters', default=0, type=int, help='penalty weight start iteration')
     parser.add_argument('--increasing_weight', action="store_true", default=False, help='increasing the penalty weight?')
     parser.add_argument('--env_num', default=2, type=int, help='num of the environments')
@@ -861,7 +863,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
 
-    assert ((args.penalty_weight > 0) or (args.penalty_cont > 0)) or ((args.penalty_cont == 0) and (args.penalty_iters == 0))
+    assert ((args.penalty_weight > 0) or (args.penalty_cont > 0)      or  (args.penalty_keep_cont > 0)) or \
+           ((args.penalty_cont == 0) and (args.penalty_keep_cont > 0) and (args.penalty_iters == 0))
 
     # seed
     utils.set_seed(args.seed)
@@ -1004,6 +1007,9 @@ if __name__ == '__main__':
             (model, model_momentum, optimizer, queue,
              args.start_epoch, best_acc1, best_epoch,
              updated_split, updated_split_all) = load_checkpoint(args.resume, model, model_momentum, optimizer)
+             # use current LR, not the one from checkpoint
+            for param_group in optimizer.param_groups:
+                param_group['lr'] = args.lr
             resumed = True
         else:
             print("=> no checkpoint found at '{}'".format(args.resume))
