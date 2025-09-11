@@ -457,10 +457,19 @@ def train_env(net, net_momentum, queue, train_loader, train_optimizer, temperatu
         if (args.penalty_iters > 0) and (epoch == args.penalty_iters):
             # Reset Adam, because it doesn't like the sharp jump in gradient
             # magnitudes that happens at this step.
-            train_optimizer = torch.optim.Adam(
-                net.parameters(),
-                lr=train_optimizer.param_groups[0]["lr"],
-                weight_decay=train_optimizer.param_groups[0]["weight_decay"])
+
+            if args.opt == "Adam":
+                train_optimizer = torch.optim.Adam(
+                    net.parameters(),
+                    lr=train_optimizer.param_groups[0]["lr"],
+                    weight_decay=train_optimizer.param_groups[0]["weight_decay"])
+            elif args.opt == 'SGD':
+                    optimizer = optim.SGD(
+                    net.parameters(),
+                    lr=train_optimizer.param_groups[0]["lr"],
+                    weight_decay=train_optimizer.param_groups[0]["weight_decay"],
+                    momentum=args.train_optimizer.param_groups[0]["momentum"])
+
         train_optimizer.step()
         train_optimizer.zero_grad(set_to_none=True)  # clear gradients at beginning of next gradients batch
 
@@ -834,7 +843,6 @@ if __name__ == '__main__':
     parser.add_argument('--offline', action="store_true", default=False, help='save feature at the beginning of the maximize?')
     parser.add_argument('--keep_cont', action="store_true", default=False, help='keep original contrastive?')
     parser.add_argument('--pretrain_path', type=str, default=None, help='the path of pretrain model')
-    parser.add_argument('--lr', default=0.001, type=float, help='LR')
 
     # image
     parser.add_argument('--image_size', type=int, default=224, help='image size')
@@ -860,6 +868,11 @@ if __name__ == '__main__':
     parser.add_argument('--norandgray', action="store_true", default=False, help='skip rand gray transform')
     parser.add_argument('--evaluate', action="store_true", default=False, help='only evaluate')
     parser.add_argument('--extract_features', action="store_true", help="extract features for post processiin during evaluate")
+
+    parser.add_argument('--opt', choices=['Adam', 'SGD'], default='Adam', help='Optimizer to use')
+    parser.add_argument('--lr', default=0.001, type=float, help='LR')
+    parser.add_argument('--SGD_momentum', default=0.9, type=float, help='LR')
+    parser.add_argument('--weight_decay', default=1e-6, type=float, help='weight decay')
 
     # args parse
     args = parser.parse_args()
@@ -996,7 +1009,10 @@ if __name__ == '__main__':
     queue_size = args.queue_size
     queue = FeatureQueue(queue_size, feature_dim, device='cuda', dtype=torch.float32)
 
-    optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-6)
+    if args.opt == "Adam":
+        optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    elif args.opt == 'SGD':
+        optimizer = optim.SGD(model.parameters(), lr=args.lr, weight_decay=args.weight_decay, momentum=args.SGD_momentum)
     c = len(memory_data.classes) if args.dataset != "ImageNet" else args.class_num
     print('# Classes: {}'.format(c))
 
@@ -1058,7 +1074,7 @@ if __name__ == '__main__':
         cuda_rng_state = torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None
 
         save_checkpoint({
-            'epoch':                epoch,
+            'epoch':                0, # restore is from epoch+1
             'state_dict':           model.state_dict(),
             'best_acc1':            best_acc1,
             'best_epoch':           best_epoch,
