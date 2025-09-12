@@ -234,6 +234,10 @@ def train_env(net, net_momentum, queue, train_loader, train_optimizer, temperatu
     penalty_cont = args.penalty_cont / (1 if penalty_weight <= 1 else 1 / penalty_weight)
     penalty_keep_cont = args.penalty_keep_cont / (1 if penalty_weight <= 1 else 1 / penalty_weight)
     penalty_irm = 1 if penalty_weight > 1 else penalty_weight
+    
+    print()
+    print(penalty_cont, penalty_keep_cont, penalty_irm)
+    print()
 
     loader_batch_size = batch_size
     gradients_accumulation_steps = args.gradients_accumulation_batch_size // loader_batch_size 
