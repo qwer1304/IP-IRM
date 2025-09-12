@@ -231,8 +231,8 @@ def train_env(net, net_momentum, queue, train_loader, train_optimizer, temperatu
     else:
         penalty_weight = args.penalty_weight
         
-    penalty_cont = args.penalty_cont / (1 if penalty_weight <= 1 else (1 / penalty_weight))
-    penalty_keep_cont = args.penalty_keep_cont / (1 if penalty_weight <= 1 else (1 / penalty_weight))
+    penalty_cont = args.penalty_cont * (1 if penalty_weight <= 1 else 1 / penalty_weight)
+    penalty_keep_cont = args.penalty_keep_cont * (1 if penalty_weight <= 1 else (1 / penalty_weight))
     penalty_irm = 1 if penalty_weight > 1 else penalty_weight
     
     print()
