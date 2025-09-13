@@ -233,7 +233,7 @@ class CE_IRMCalculator(IRMCalculator):
         g_i = torch.autograd.grad(loss, scale, create_graph=True)[0]
         return g_i
 
-class SimSiamIRMCalculator(BaseIRMCalculator):
+class SimSiamIRMCalculator(IRMCalculator):
     def gradients(self, idxs=None):
         device = self.loss_module.reperesentations[0].device
         # one scalar (requires grad)
