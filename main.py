@@ -667,7 +667,7 @@ def train_env(net, train_loader, train_optimizer, updated_split, batch_size, arg
                    f' Total: {total_loss/trained_samples:.4f}' + \
                    f' Keep: {total_keep_cont_loss/trained_samples:.4f}' + \
                    f' Cont: {total_cont_loss/trained_samples:.4f}' + \
-                   f' IRM: {total_irm_loss/trained_samples:.4f}' + \
+                   f' IRM: {total_irm_loss/trained_samples:.4g}' + \
                    f' LR: {train_optimizer.param_groups[0]["lr"]:.4f} PW {penalty_weight:.4f}'
         desc_str += loss_module.get_debug_info_str()
         
