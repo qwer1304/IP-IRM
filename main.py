@@ -460,14 +460,20 @@ def train_env(net, train_loader, train_optimizer, updated_split, batch_size, arg
     # default to MoCo if args.loss_type not provided
     loss_type = args.ssl_type
     loss_type = loss_type.lower()
+    print()
     if loss_type == 'moco':
+        print('in moco')
         loss_module = MoCoLossModule(net, **kwargs)
     elif 'simsiam' in loss_type:
+        print('In simsiam')
         try:
+            print('doing simsiamlossmodule')
             loss_module = SimSiamLossModule(net)
         except:
             print('except')
+            exit(-1)
     else:
+        print('in else')
         raise ValueError(f"Unknown loss_type: {loss_type}")
 
     # IRM calculator selection
