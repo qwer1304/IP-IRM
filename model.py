@@ -136,7 +136,7 @@ class SimSiam(nn.Module):
     
     def forward(self, x):
 
-        f, h = self.encoder, self.predictor
+        f = self.projector
 
         x = self.f(x)
         feature = torch.flatten(x, start_dim=1)
