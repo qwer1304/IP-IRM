@@ -459,6 +459,8 @@ def train_env(net, train_loader, train_optimizer, updated_split, batch_size, arg
     # instantiate LossModule and IRMCalculator based on args (pluggable)
     # default to MoCo if args.loss_type not provided
     loss_type = getattr(args, 'ssl_type', 'moco')
+    print()
+    print(repr(loss_type), repr(loss_type.lower()))
     if loss_type.lower() == 'moco':
         loss_module = MoCoLossModule(net, **kwargs)
     elif loss_type.lower() == 'simsiam':
