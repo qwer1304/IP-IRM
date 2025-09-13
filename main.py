@@ -230,9 +230,7 @@ class CE_IRMCalculator(IRMCalculator):
         # one scalar (requires grad)
         s = torch.tensor(1.0, device=device, requires_grad=True)
         # Compute g_i in a CE-specific way
-        logits = self.loss_module.logits(idxs) / self.irm_temp
-        targets = self.loss_module.targets(idxs)
-        loss = F.cross_entropy(s * logits, targets, reduction='sum')       
+        loss = self.loss_module.compute_loss_micro(idxs=idxs, scale=s, temperature=self.irm_temp)
         g_i = torch.autograd.grad(loss, s, create_graph=True)[0]
         return g_i
 
@@ -284,13 +282,12 @@ class MoCoLossModule(LossModule):
     def __init__(self, net, net_momentum=None, queue=None, temperature=None, debug=False, **kwargs):
         assert net_momentum is not None
         assert queue is not None
-        assert temperature is not None
         self.net = net
         self.net_momentum = net_momentum
         self.momentum = kwargs['momentum']
         self.net_momentum.train()
         self.queue = queue
-        self.temperature = temperature
+        self.temperature = temperature or 1.0
         self.this_batch_size = 0
         self.debug = debug
         if self.debug:
@@ -318,8 +315,7 @@ class MoCoLossModule(LossModule):
         l_pos = torch.sum(out_q * out_k, dim=1, keepdim=True)
         l_neg = torch.matmul(out_q, self.queue.get((self.queue.queue_size - self.this_batch_size), advance=False).t())
         self.logits = torch.cat([l_pos, l_neg], dim=1)
-        self.logits_cont = self.logits / self.temperature
-        self.labels_cont = torch.zeros(self.logits_cont.size(0), dtype=torch.long, device=logits.device)
+        self.labels = torch.zeros(self.logits.size(0), dtype=torch.long, device=logits.device)
         if self.debug:
             self.total_pos    += l_pos.mean().item() * l_pos.size(0)
             self.total_neg    += l_neg.mean().item() * l_pos.size(0)
@@ -333,15 +329,16 @@ class MoCoLossModule(LossModule):
         
     def targets(self, idxs=None):
         if idxs is None:
-            idxs = torch.arange(self.logits_cont.size(0), device=self.logits_cont.device)
+            idxs = torch.arange(self.logits.size(0), device=self.logits.device)
         return self.labels_cont[idxs]
 
-    def compute_loss_micro(self, idxs=None, scale=1.0):
+    def compute_loss_micro(self, idxs=None, scale=1.0, temperature=None):
         if idxs is None:
-            idxs = torch.arange(self.logits_cont.size(0), device=self.logits_cont.device)
+            idxs = torch.arange(self.logits.size(0), device=self.logits.device)
         # sum over batch, per env handled by driver
-        loss_cont = F.cross_entropy(scale * self.logits_cont[idxs], self.labels_cont[idxs], reduction='sum')
-        return loss_cont
+        temperature = temperature or self.temperature
+        loss = F.cross_entropy(scale * self.logits[idxs] / temperature, self.labels[idxs], reduction='sum')
+        return loss
 
     def post_micro_batch(self):
         self.queue.update(self.out_k.detach())
@@ -463,7 +460,7 @@ def train_env(net, train_loader, train_optimizer, updated_split, batch_size, arg
     if loss_type == 'moco':
         loss_module = MoCoLossModule(net, **kwargs)
     elif loss_type == 'simsiam':
-        loss_module = SimSiamLossModule(net)
+        loss_module = SimSiamLossModule(net, **kwargs)
     else:
         raise ValueError(f"Unknown loss_type: {loss_type}")
 
@@ -945,7 +942,7 @@ def load_checkpoint(path, model, model_momentum, optimizer, device='cuda'):
             msg_momemntum = model_momentum.load_state_dict(checkpoint['state_dict_momentum'])
             queue = checkpoint['queue']
         else:
-            msg_momemntum = 'No momentum queue is checkpoint'
+            msg_momemntum = 'No momentum queue in checkpoint'
     else:
         model_momentum, queue = None, None
     
@@ -1280,7 +1277,7 @@ if __name__ == '__main__':
             'optimizer':            optimizer.state_dict(),
             'updated_split':        updated_split,
             'updated_split_all':    updated_split_all,
-            'state_dict_momentum':  model_momentum.state_dict(),
+            'state_dict_momentum':  model_momentum.state_dict() if model_momentum else None
             'queue':                queue,
             "rng_dict": {
                 "rng_state": torch.get_rng_state(),
@@ -1314,7 +1311,7 @@ if __name__ == '__main__':
 
 
             if args.ssl_type.lower() == 'moco':
-                kwargs = {'net_momentum': model_momentum, 'queue': queue, 'temperature':temperature}
+                kwargs = {'net_momentum': model_momentum, 'queue': queue, 'temperature': temperature}
             elif args.ssl_type.lower() == 'simsiam':
                 kwargs = {}
 
@@ -1387,7 +1384,7 @@ if __name__ == '__main__':
                 'optimizer':            optimizer.state_dict(),
                 'updated_split':        updated_split,
                 'updated_split_all':    updated_split_all,
-                'state_dict_momentum':  model_momentum.state_dict(),
+                'state_dict_momentum':  model_momentum.state_dict() if model_momentum else None,
                 'queue':                queue,
                 "rng_dict": {
                     "rng_state": torch.get_rng_state(),
