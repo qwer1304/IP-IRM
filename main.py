@@ -242,9 +242,6 @@ class SimSiamIRMCalculator(IRMCalculator):
         # Compute g_i in a SimSiam-specific way (e.g., L2 or cosine loss)
         loss = self.loss_module.compute_loss_micro(idxs=idxs, scale=s)
         g_i = torch.autograd.grad(loss, s, create_graph=True)[0]
-        if self.debug:
-            print()
-            print(f'loss={loss}')
         return g_i
         
 # ---------------------------
@@ -616,6 +613,8 @@ def train_env(net, train_loader, train_optimizer, updated_split, batch_size, arg
         # IRM losses and gradients
         gs = g_sums # always initialized
         penalty_irm_env = (gs[0] / half_split_sz[0]) * (gs[1] / half_split_sz[1])  # per env for macro-batch
+        print()
+        print(penalty_irm_env, gs)
         if penalty_irm > 0:
             # IRM = gs1 * gs2, where gs1 and gs2 are gradients w.r.t. scaler of mean CE of halves of sample in a batch
             # dIRM/dTheta = d(gs1 * gs2)/dTheta = dgs1/dTheta * gs2 + gs1 * dgs2/dTheta
