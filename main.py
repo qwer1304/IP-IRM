@@ -376,8 +376,8 @@ class SimSiamLossModule(LossModule):
 
         _, z1 = self.net(x1)
         _, z2 = self.net(x2)
-        p1 = self.net.predictor(z1)
-        p2 = self.net.predictor(z2)
+        p1 = self.net.module.predictor(z1)
+        p2 = self.net.module.predictor(z2)
         self.representations = (z1, z2, p1, p2)
 
     def compute_loss_micro(self, idxs=None, scale=1.0, **kwargs):
@@ -1194,12 +1194,13 @@ if __name__ == '__main__':
         raise NotImplemented
     model = nn.DataParallel(model)
 
-    model_momentum = copy.deepcopy(model)
-    for p in model_momentum.parameters():
-        p.requires_grad = False
-    momentum = args.momentum              # momentum for model_momentum
-    queue_size = args.queue_size
-    queue = FeatureQueue(queue_size, feature_dim, device='cuda', dtype=torch.float32)
+    if args.ssl_type.lower() == 'moco':
+        model_momentum = copy.deepcopy(model)
+        for p in model_momentum.parameters():
+            p.requires_grad = False
+        momentum = args.momentum              # momentum for model_momentum
+        queue_size = args.queue_size
+        queue = FeatureQueue(queue_size, feature_dim, device='cuda', dtype=torch.float32)
 
     if args.opt == "Adam":
         optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
