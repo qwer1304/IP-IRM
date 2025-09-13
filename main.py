@@ -313,7 +313,7 @@ class MoCoLossModule(LossModule):
                 out_k = F.normalize(out_k, dim=1)
         
         l_pos = torch.sum(out_q * out_k, dim=1, keepdim=True)
-        l_neg = torch.matmul(out_q, self.queue.get(self.queue.queue_size - self.this_batch_size), advance=False).t())
+        l_neg = torch.matmul(out_q, self.queue.get((self.queue.queue_size - self.this_batch_size), advance=False).t())
         self.logits = torch.cat([l_pos, l_neg], dim=1)
         self.logits_cont = self.logits / self.temperature
         self.labels_cont = torch.zeros(self.logits_cont.size(0), dtype=torch.long, device=logits.device)
@@ -457,7 +457,7 @@ def train_env(net, train_loader, train_optimizer, updated_split, batch_size, arg
 
     # instantiate LossModule and IRMCalculator based on args (pluggable)
     # default to MoCo if args.loss_type not provided
-    loss_type = getattr(args, 'loss_type', 'moco')
+    loss_type = getattr(args, 'ssl_type', 'moco')
     if loss_type.lower() == 'moco':
         loss_module = MoCoLossModule(**kwargs)
     elif loss_type.lower() == 'simsiam':
@@ -972,7 +972,7 @@ def load_checkpoint(path, model, model_momentum, optimizer, device='cuda'):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train SimCLR')
-    parser.add_argument('--ssl_type', default='SimCLR', type=str, choices=['SimCLR', 'SimSiam'], help='SSL type')    
+    parser.add_argument('--ssl_type', default='MoCo', type=str, choices=['MoCo', 'SimSiam'], help='SSL type')    
     parser.add_argument('--feature_dim', default=128, type=int, help='Feature dim for latent vector')
     parser.add_argument('--temperature', default=0.5, type=float, help='Temperature used in softmax')
     parser.add_argument('--tau_plus', default=0.1, type=float, help='Positive class priorx')
@@ -1183,7 +1183,7 @@ if __name__ == '__main__':
         print('Using default model')
 
     # model setup and optimizer config
-    if lower(args.ssl_type) == 'simclr':
+    if lower(args.ssl_type) == 'moco':
         model = Model(feature_dim, image_class=image_class, state_dict=state_dict).cuda()
     elif lower(args.ssl_type) == 'simsiam':
         model = SimSiam(feature_dim, image_class=image_class, state_dict=state_dict).cuda()
