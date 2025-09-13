@@ -941,11 +941,14 @@ def load_checkpoint(path, model, model_momentum, optimizer, device='cuda'):
 
     # Restore models
     msg_model = model.load_state_dict(checkpoint['state_dict'])
-    if "queue" in checkpoint:
-        msg_momemntum = model_momentum.load_state_dict(checkpoint['state_dict_momentum'])
-        queue = checkpoint['queue']
+    if model_momentum is not None:
+        if "queue" in checkpoint:
+            msg_momemntum = model_momentum.load_state_dict(checkpoint['state_dict_momentum'])
+            queue = checkpoint['queue']
+        else:
+            msg_momemntum = 'No momentum queue is checkpoint'
     else:
-        msg_momemntum = 'No momentum queue is checkpoint'
+        model_momentum, queue = None, None
     
     # Restore optimizer
     optimizer.load_state_dict(checkpoint['optimizer']) # nothing ia returned
@@ -1201,6 +1204,9 @@ if __name__ == '__main__':
         momentum = args.momentum              # momentum for model_momentum
         queue_size = args.queue_size
         queue = FeatureQueue(queue_size, feature_dim, device='cuda', dtype=torch.float32)
+    elif args.ssl_type.lower() == 'simsiam':
+        model_momentum = None
+        queue = None       
 
     if args.opt == "Adam":
         optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
