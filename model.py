@@ -132,7 +132,7 @@ class SimSiam(nn.Module):
             self.f,
             self.projector
         )
-        self.predictor = prediction_MLP(in_dim=feature_dim, hidden_dim=feature_dim/2, out_dim=feature_dim)
+        self.predictor = prediction_MLP(in_dim=feature_dim, hidden_dim=int(feature_dim/2), out_dim=feature_dim)
     
     def forward(self, x):
 
