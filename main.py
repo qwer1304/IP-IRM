@@ -1303,7 +1303,12 @@ if __name__ == '__main__':
             train_loss = train(model, train_loader, optimizer, temperature, debiased, tau_plus, tr_bs, args)
         else: # Minimize Step
             upd_split = updated_split_all if args.retain_group else updated_split
-            train_loss = train_env(model, model_momentum, queue, train_loader, optimizer, temperature, upd_split, tr_bs, args)
+
+
+            if args.ssl_type.lower() == 'moco':
+                kwargs = {'net_momentum': model_momentum, 'queue': queue, 'temperature':temperature}
+
+            train_loss = train_env(model, train_loader, optimizer, upd_split, tr_bs, args, **kwargs)
 
             if epoch % args.maximize_iter == 0: # Maximize Step
                 train_loader = shutdown_loader(train_loader)
