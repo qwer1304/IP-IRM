@@ -376,8 +376,8 @@ class SimSiamLossModule(LossModule):
 
         _, z1 = self.net(x1)
         _, z2 = self.net(x2)
-        p1 = F.normalize(self.net.predictor(z1), dim=-1)
-        p2 = F.normalize(self.net.predictor(z2), dim=-1)
+        p1 = self.net.predictor(z1)
+        p2 = self.net.predictor(z2)
         self.representations = (z1, z2, p1, p2)
 
     def compute_loss_micro(self, idxs=None, scale=1.0, **kwargs):
