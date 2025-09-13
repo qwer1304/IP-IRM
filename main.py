@@ -208,9 +208,10 @@ class IRMCalculator:
     Base class for IRM calculation. Subclass this and implement
     `gradients_for_half` to return g_i for a half-batch.
     """
-    def __init__(self, loss_module, irm_temp=1.0):
+    def __init__(self, loss_module, irm_temp=1.0, debug=False, **kwargs):
         self.loss_module = loss_module
         self.irm_temp = irm_temp
+        self.debug = debug
 
     def gradients(self, idxs=None, **kwargs):
         """
