@@ -229,7 +229,7 @@ class CE_IRMCalculator(IRMCalculator):
         # one scalar (requires grad)
         s = torch.tensor(1.0, device=device, requires_grad=True)
         # Compute g_i in a CE-specific way
-        loss = self.loss_module(idxs=idxs, scale=s)
+        loss = self.loss_module.compute_loss_micro(idxs=idxs, scale=s)
         g_i = torch.autograd.grad(loss, scale, create_graph=True)[0]
         return g_i
 
@@ -239,7 +239,7 @@ class SimSiamIRMCalculator(IRMCalculator):
         # one scalar (requires grad)
         s = torch.tensor(1.0, device=device, requires_grad=True)
         # Compute g_i in a SimSiam-specific way (e.g., L2 or cosine loss)
-        loss = self.loss_module(idxs=idxs, scale=s)
+        loss = self.loss_module.compute_loss_micro(idxs=idxs, scale=s)
         g_i = torch.autograd.grad(loss, s, create_graph=True)[0]
         return g_i
         
@@ -458,29 +458,20 @@ def train_env(net, train_loader, train_optimizer, updated_split, batch_size, arg
 
     # instantiate LossModule and IRMCalculator based on args (pluggable)
     # default to MoCo if args.loss_type not provided
-    loss_type = args.ssl_type
+    loss_type = getattr(args, 'ssl_type', 'moco')
     loss_type = loss_type.lower()
-    print()
     if loss_type == 'moco':
-        print('in moco')
         loss_module = MoCoLossModule(net, **kwargs)
-    elif 'simsiam' in loss_type:
-        print('In simsiam')
-        try:
-            print('doing simsiamlossmodule')
-            loss_module = SimSiamLossModule(net)
-        except:
-            print('except')
-            exit(-1)
+    elif loss_type == 'simsiam':
+        loss_module = SimSiamLossModule(net)
     else:
-        print('in else')
         raise ValueError(f"Unknown loss_type: {loss_type}")
 
     # IRM calculator selection
     if loss_type == 'moco':
         irm_calculator = CE_IRMCalculator(loss_module, irm_temp=args.irm_temp, debug=args.debug, **kwargs)
     elif loss_type == 'simsiam':
-        raise ValueError(f"IRM not implemented for  {loss_type}")
+        irm_calculator = SimSiamIRMCalculator(loss_module, irm_temp=args.irm_temp, debug=args.debug, **kwargs)
     else:
         raise ValueError(f"Unknown loss_type: {loss_type}")
 
