@@ -13,7 +13,7 @@ from torch.utils.data import Dataset, DataLoader, Sampler
 from tqdm.auto import tqdm
 
 import utils
-from model import Model
+from model import Model, SimSiam
 from prepare import prepare_datasets, traverse_objects
 import gc
 from math import ceil, prod
@@ -200,18 +200,202 @@ def microbatches(x, y, mb_size, min_size=2):
             continue  # skip this tiny batch
         yield xb, yb
         
-def grad_wrt_scale_sum(logits, targets, create_graph):
-    scale = torch.tensor(1.0, device=logits.device, requires_grad=True)
-    loss = F.cross_entropy(scale * logits, targets, reduction='sum')
-    g = torch.autograd.grad(loss, scale, create_graph=create_graph)[0]
-    return g
+# ---------------------------
+# Base IRM Calculator
+# ---------------------------
+class IRMCalculator:
+    """
+    Base class for IRM calculation. Subclass this and implement
+    `gradients_for_half` to return g_i for a half-batch.
+    """
+    def __init__(self, loss_module, irm_temp=1.0):
+        self.loss_module = loss_module
+        self.irm_temp = irm_temp
+
+    def gradients(self, idxs=None, **kwargs):
+        """
+        Compute gradient w.r.t. scale for a half-batch.
+        Must be implemented by subclass.
+        Returns a tensor g_i.
+        """
+        raise NotImplementedError
+
+# ---------------------------
+# CE-based IRM (for MoCo)
+# ---------------------------
+class CE_IRMCalculator(IRMCalculator):
+    def gradients(self, idxs=None, **kwargs):
+        device = self.loss_module.logits().device
+        # one scalar (requires grad)
+        s = torch.tensor(1.0, device=device, requires_grad=True)
+        # Compute g_i in a CE-specific way
+        loss = self.loss_module(idxs=idxs, scale=s)
+        g_i = torch.autograd.grad(loss, scale, create_graph=True)[0]
+        return g_i
+
+class SimSiamIRMCalculator(BaseIRMCalculator):
+    def gradients(self, idxs=None):
+        device = self.loss_module.reperesentations[0].device
+        # one scalar (requires grad)
+        s = torch.tensor(1.0, device=device, requires_grad=True)
+        # Compute g_i in a SimSiam-specific way (e.g., L2 or cosine loss)
+        loss = self.loss_module(idxs=idxs, scale=s)
+        g_i = torch.autograd.grad(loss, s, create_graph=True)[0]
+        return g_i
+        
+# ---------------------------
+# Base Loss Module
+# ---------------------------
+class LossModule:
+    """
+    Base class for pluggable loss module.
+    Subclass for MoCo, SimSiam, etc.
+    """
+    def pre_batch(self, batch_data):
+        pass
+
+    def pre_micro_batch(self, batch_data):
+        pass
+
+    def compute_loss_micro(self, batch_data):
+        raise NotImplementedError
+
+    def post_micro_batch(self):
+        pass
+
+    def post_batch(self):
+        pass
+
+    def prepare_for_free(self):
+        for k, v in list(self.__dict__.items()):
+            if isinstance(v, torch.Tensor) and v.is_cuda:
+                setattr(self, k, None)    
+
+    def get_debug_info_str():
+        return ""
+
+# ---------------------------
+# MoCo Loss Module
+# ---------------------------
+class MoCoLossModule(LossModule):
+    def __init__(self, net, net_momentum=None, queue=None, temperature=None, debug=False, **kwargs):
+        assert net_momentum is not None
+        assert queue is not None
+        assert temperature is not None
+        self.net = net
+        self.net_momentum = net_momentum
+        self.momentum = kwargs['momentum']
+        self.net_momentum.train()
+        self.queue = queue
+        self.temperature = temperature
+        self.this_batch_size = 0
+        self.debug = debug
+        if self.debug:
+            self.total_pos = 0.0
+            self.total_neg = 0.0
+            self.total_maxneg = 0.0
+            self.count = 0
+
+    def pre_batch(self, batch_data):
+        self.this_batch_size = len(batch_data)
+        self.queue.get(self.this_batch_size) # advance read pointer
+
+    def pre_micro_batch(self, pos, transform, normalize=True):
+        pos_q = transform(pos)
+        pos_k = transform(pos)
+
+        _, out_q = self.net(pos_q)
+        if normalize:
+            out_q = F.normalize(out_q, dim=1)
+        with torch.no_grad():
+            _, out_k = self.net_momentum(pos_k)
+            if normalize:
+                out_k = F.normalize(out_k, dim=1)
+        
+        l_pos = torch.sum(out_q * out_k, dim=1, keepdim=True)
+        l_neg = torch.matmul(out_q, self.queue.get(self.queue.queue_size - self.this_batch_size), advance=False).t())
+        self.logits = torch.cat([l_pos, l_neg], dim=1)
+        self.logits_cont = self.logits / self.temperature
+        self.labels_cont = torch.zeros(self.logits_cont.size(0), dtype=torch.long, device=logits.device)
+        if self.debug:
+            self.total_pos    += l_pos.mean().item() * l_pos.size(0)
+            self.total_neg    += l_neg.mean().item() * l_pos.size(0)
+            self.total_maxneg += l_neg.max().item()  * l_pos.size(0)
+            self.count        += l_pos.size(0)
+        
+    def logits(self, idxs=None):
+        if idxs is None:
+            idxs = torch.arange(self.logits.size(0)+1, device=self.logits.device)
+        return self.logits[idxs]
+        
+    def targets(self, idxs=None):
+        if idxs is None:
+            idxs = torch.arange(self.logits_cont.size(0)+1, device=self.logits_cont.device)
+        return self.labels_cont[idxs]
+
+    def compute_loss_micro(self, idxs=None, scale=1.0):
+        if idxs is None:
+            idxs = torch.arange(self.logits_cont.size(0)+1, device=self.logits_cont.device)
+        # sum over batch, per env handled by driver
+        loss_cont = F.cross_entropy(scale * self.logits_cont[idxs], self.labels_cont[idxs], reduction='sum')
+        return loss_cont
+
+    def post_micro_batch(self):
+        self.queue.update(self.out_k.detach())
+
+    def post_batch(self):
+        with torch.no_grad():
+            for param_q, param_k in zip(self.net.parameters(), self.net_momentum.parameters()):
+                param_k.mul_(self.momentum).add_(param_q, alpha=1.0 - self.momentum)
+        if self.debug:
+            self.total_pos = 0.0
+            self.total_neg = 0.0
+            self.total_maxneg = 0.0
+            self.count = 0
+
+    def get_debug_info_str():
+        if self.debug:
+            mean_pos = self.total_pos / self.count
+            mean_neg = self.total_neg / self.count
+            mean_maxneg = self.total_maxneg / self.count
+            return f' mean_pos: {mean_pos:.4f} mean_neg: {mean_neg:.4f} mean_maxneg: {mean_maxneg:.4f}'
+        else:
+            return ""
+
+# ---------------------------
+# SimSiam Loss Module
+# ---------------------------
+class SimSiamLossModule(LossModule):
+    def __init__(self, net, projector, **kwargs):
+        self.net = net
+        self.projector = projector  # optional projector if used
+
+    def pre_micro_batch(self, pos, transform, normalize=True):
+        x1 = transform(pos)
+        x2 = transform(pos)
+
+        _, z1, p1 = self.net(x1)
+        _, z2, p2 = self.net(x2)
+        self.representations = (z1, z2, p1, p2)
+
+    def compute_loss_micro(self, idxs=None, scale=1.0, **kwargs):
+        def cos_sim_mean(a, b):
+            return (a * b).sum(dim=1).mean()
+            
+        z1, z2, p1, p2 = self.representations
+        if idxs is None:
+            idxs = torch.arange(self.z1.size(0)+1, device=self.z1.device)
+        # symmetric SimSiam loss (neg cosine, average two directions)
+        loss_dir1 = - cos_sim_mean(scale * p1[idxs], z2[idxs].detach())
+        loss_dir2 = - cos_sim_mean(scale * p2[idxs], z1[idxs].detach())
+        loss = 0.5 * (loss_dir1 + loss_dir2)
+        return loss
 
 # ssl training with IP-IRM
-def train_env(net, net_momentum, queue, train_loader, train_optimizer, temperature, updated_split, batch_size, args):
+def train_env(net, train_loader, train_optimizer, updated_split, batch_size, args, **kwargs):
     # Initialize dictionaries to store times
 
     net.train()
-    net_momentum.train()
     
     if isinstance(updated_split, list): # if retain previous partitions
         assert args.retain_group
@@ -271,69 +455,61 @@ def train_env(net, net_momentum, queue, train_loader, train_optimizer, temperatu
         for p in net.parameters()
     ]
 
-    # for debug
-    debug = args.debug
-    if debug:
-        total_pos = 0.0
-        total_neg = 0.0
-        total_maxneg = 0.0
-        count = 0
+    # instantiate LossModule and IRMCalculator based on args (pluggable)
+    # default to MoCo if args.loss_type not provided
+    loss_type = getattr(args, 'loss_type', 'moco')
+    if loss_type.lower() == 'moco':
+        loss_module = MoCoLossModule(**kwargs)
+    elif loss_type.lower() == 'simsiam':
+        loss_module = SimSiamLossModule(projector=getattr(args, 'projector', None))
+    else:
+        raise ValueError(f"Unknown loss_type: {loss_type}")
+
+    # IRM calculator selection
+    if loss_type == 'moco':
+        irm_calculator = CE_IRMCalculator(loss_module, irm_temp=args.irm_temp, debug=args.debug, **kwargs)
+    elif loss_type == 'simsiam':
+        raise ValueError(f"IRM not implemented for  {loss_type}")
+    else:
+        raise ValueError(f"Unknown loss_type: {loss_type}")
 
     train_optimizer.zero_grad(set_to_none=True) # clear gradients at the beginning 
 
     for batch_index, data_env in enumerate(train_bar):
 
-        pos_all_batch, indexs_batch = data_env[0], data_env[-1] # 'pos_all' is an batch of images, 'indexs' is their corresponding indices 
+        data_batch, indexs_batch = data_env[0], data_env[-1] # 'pos_all' is an batch of images, 'indexs' is their corresponding indices 
         this_batch_size = len(indexs_batch) # for the case drop_last=False
 
-        queue.get(this_batch_size) # advance read pointer
+        loss_module.pre_batch(data_batch)
 
         # -----------------------
         # Step 0: micro-batches
         # -----------------------
-        mb_list = list(microbatches(pos_all_batch, indexs_batch, gpu_batch_size))
+        mb_list = list(microbatches(data_batch, indexs_batch, gpu_batch_size))
 
         for j in range(2): # over two halves of micro-batches
             for i in [i_ for i_ in range(len(mb_list)) if i_ % 2 == j]: # loop over micro-batches
-                pos, indexs = mb_list[i]
-                pos = pos.cuda(non_blocking=True)
+                batch_micro, indexs = mb_list[i]
+                batch_micro = batch_micro.cuda(non_blocking=True)
                 indexs = indexs.cuda(non_blocking=True)
-
-                if transform is not None:
-                    pos_q = transform(pos)
-                    pos_k = transform(pos)
-
-                _, out_q = net(pos_q)
-                out_q = F.normalize(out_q, dim=1)
-                with torch.no_grad():
-                    _, out_k = net_momentum(pos_k)
-                    out_k = F.normalize(out_k, dim=1)
+                """
+                prepare for micro-batch in loss-sepcific way:
+                    MoCo:    generate two views, get their embeddings from respective encoders, normalize them, etc
+                    SimSiam: generate two views, get their projections and predictions, etc
+                """
+                loss_module.pre_micro_batch(batch_micro, transform=transform, normalize=True)
 
                 # -----------------------
-                # MoCo / GDI contrastive loss
+                # SSL
                 # -----------------------
 
-                # logits: q*k+ / q*negatives
-                l_pos = torch.sum(out_q * out_k, dim=1, keepdim=True)
-                l_neg = torch.matmul(out_q, queue.get(queue.queue_size-this_batch_size, advance=False).t())  # queue as negatives (detached)
-
-                # for debug
-                if debug:
-                    total_pos    += l_pos.mean().item() * l_pos.size(0)
-                    total_neg    += l_neg.mean().item() * l_pos.size(0)
-                    total_maxneg += l_neg.max().item()  * l_pos.size(0)
-                    count        += l_pos.size(0)
-
-                logits = torch.cat([l_pos, l_neg], dim=1)
-                logits_cont = logits / temperature
-                labels_cont = torch.zeros(logits_cont.size(0), dtype=torch.long, device=device)
+                # compute micro-batch loss
+                loss_cont = loss_module.compute_loss_micro()
 
                 if args.keep_cont and (penalty_keep_cont > 0): # global contrastive loss (1st partition)
                     # This could be done w/o the split into two halves, but this streamlines the code w/o any harm
-                    loss_cont   = F.cross_entropy(logits_cont, labels_cont, reduction='sum')
                     # Here we know that losses are over the whole macro-batch, so we can normalize up-front
                     loss_cont = loss_cont / this_batch_size / gradients_accumulation_steps
-                    # loss and grad normalized
                     (loss_cont * penalty_keep_cont).backward(retain_graph=True) # gradients must be multiplied by scaler
                     loss_keep_cont += loss_cont.detach() # before scaler
 
@@ -349,17 +525,15 @@ def train_env(net, net_momentum, queue, train_loader, train_optimizer, temperatu
                         half_split_sz[j,split_num,env] += N # update number of elements in environment
 
                         # -----------------------
-                        # MoCo / GDI contrastive loss
+                        # SSL
                         # -----------------------
-
-                        # logits: q*k+ / q*negatives
                         if penalty_cont > 0:
-                            loss_cont_split = F.cross_entropy(logits_cont[idxs], labels_cont[idxs], reduction='sum')
-                            loss_cont_sums[j,split_num,env] += loss_cont_split.detach() # before penalty scaler
+                            loss_cont = loss_module.compute_loss_micro(idxs=idxs)
+                            loss_cont_sums[j,split_num,env] += loss_cont.detach() # before penalty scaler
 
                             # compute gradients for this loss
                             grads = torch.autograd.grad(
-                                penalty_cont * loss_cont_split, # gradients must be multiplied by scaler
+                                penalty_cont * loss_cont, # gradients must be multiplied by scaler
                                 net.parameters(),
                                 retain_graph=True,  # keep graph for next loss
                                 allow_unused=True
@@ -371,9 +545,7 @@ def train_env(net, net_momentum, queue, train_loader, train_optimizer, temperatu
 
                         # IRM penalty
                         if penalty_irm > 0:
-                            logits_pen_split = logits[idxs] / args.irm_temp
-                            g_i = grad_wrt_scale_sum(logits_pen_split, labels_cont[idxs], create_graph=True) # loss gradient w.r.t scaler for the micro-batch
-                            # First addend in IRM averaged over split
+                            g_i = irm_calculator.gradients(idxs=idxs)
                             g_sums[j,split_num,env] += g_i.detach() # irm penalty components before penalty scaler
 
                             # compute gradients for this loss
@@ -387,23 +559,18 @@ def train_env(net, net_momentum, queue, train_loader, train_optimizer, temperatu
                             # flatten and accumulate per parameter
                             for _j, g in enumerate(grads):
                                 losses_irm_grads[_j][j,split_num,env] += g.detach().view(-1)
-                                
                         # free memory of split
                     # end for env in range(args.env_num): 
-                #end for split_num, updated_split_each in enumerate(updated_split):
-                # -----------------------
-                # update queue
-                # -----------------------
-                queue.update(out_k.detach())
+                # end for split_num, updated_split_each in enumerate(updated_split):
+                loss_module.post_micro_batch()
+                loss_module.prepare_for_free()
+                
                 # free memory of micro-batch
-                del pos, indexs, pos_q, pos_k, out_q, out_k, l_pos, l_neg, logits, logits_cont
-                if penalty_cont > 0:
-                    del loss_cont_split
-                if  args.keep_cont and (penalty_keep_cont > 0):
-                    del loss_cont
+                del batch_micro, indexs, loss_cont
                 if penalty_irm > 0:
-                    del logits_pen_split, g_i, grads, g
-            # end for i in idxs[j]:
+                    del g_i, grads, g
+            # end for i in [i_ for i_ in range(len(mb_list)) if i_ % 2 == j]:
+            torch.cuda.empty_cache()
         # end for j in range(idxs):
         torch.cuda.empty_cache()
 
@@ -463,9 +630,9 @@ def train_env(net, net_momentum, queue, train_loader, train_optimizer, temperatu
                     else:
                         p.grad = total_grad_flat.view(p.shape)   # reshape back to parameter shape
             
-        loss_batch = ((penalty_keep_cont * loss_keep_cont)    +  # loss_keep_cont is a scalar
-                      (penalty_irm  * penalty_irm_env.mean()) + 
-                      (penalty_cont * loss_cont_env.mean())      # mean over envs, mean over macro-batch
+        loss_batch = ((penalty_keep_cont * loss_keep_cont)         + # loss_keep_cont is a scalar
+                      (penalty_irm       * penalty_irm_env.mean()) + 
+                      (penalty_cont      * loss_cont_env.mean())     # mean over envs, mean over macro-batch
                      )
 
         # -----------------------
@@ -490,13 +657,6 @@ def train_env(net, net_momentum, queue, train_loader, train_optimizer, temperatu
         train_optimizer.step()
         train_optimizer.zero_grad(set_to_none=True)  # clear gradients at beginning of next gradients batch
 
-        # -----------------------
-        # Step 4: update momentum encoder
-        # -----------------------
-        with torch.no_grad():
-            for param_q, param_k in zip(net.parameters(), net_momentum.parameters()):
-                param_k.mul_(momentum).add_(param_q, alpha=1.0 - momentum)
-
         # total loss is sum of losses so far over entire batch aggregation period.
         total_keep_cont_loss += (penalty_keep_cont * loss_keep_cont).item()    * this_batch_size * gradients_accumulation_steps
         total_irm_loss       += (penalty_irm  * penalty_irm_env.mean()).item() * this_batch_size * gradients_accumulation_steps
@@ -510,11 +670,7 @@ def train_env(net, net_momentum, queue, train_loader, train_optimizer, temperatu
                    f' Cont: {total_cont_loss/trained_samples:.4f}' + \
                    f' IRM: {total_irm_loss/trained_samples:.4f}' + \
                    f' LR: {train_optimizer.param_groups[0]["lr"]:.4f} PW {penalty_weight:.4f}'
-        if debug:
-            mean_pos = total_pos / count
-            mean_neg = total_neg / count
-            mean_maxneg = total_maxneg / count
-            desc_str += f' mean_pos: {mean_pos:.4f} mean_neg: {mean_neg:.4f} mean_maxneg: {mean_maxneg:.4f}'
+        desc_str += loss_module.get_debug_info_str()
         
         train_bar.set_description(desc_str)
 
@@ -544,11 +700,7 @@ def train_env(net, net_momentum, queue, train_loader, train_optimizer, temperatu
             dCont_dTheta_env
         torch.cuda.empty_cache()
 
-        if debug:
-            total_pos = 0.0
-            total_neg = 0.0
-            total_maxneg = 0.0
-            count = 0
+        loss_module.post_batch()
     # end for batch_index, data_env in enumerate(train_bar):
 
     return total_loss / trained_samples
@@ -820,6 +972,7 @@ def load_checkpoint(path, model, model_momentum, optimizer, device='cuda'):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train SimCLR')
+    parser.add_argument('--ssl_type', default='SimCLR', type=str, choices=['SimCLR', 'SimSiam'], help='SSL type')    
     parser.add_argument('--feature_dim', default=128, type=int, help='Feature dim for latent vector')
     parser.add_argument('--temperature', default=0.5, type=float, help='Temperature used in softmax')
     parser.add_argument('--tau_plus', default=0.1, type=float, help='Positive class priorx')
@@ -1030,7 +1183,10 @@ if __name__ == '__main__':
         print('Using default model')
 
     # model setup and optimizer config
-    model = Model(feature_dim, image_class=image_class, state_dict=state_dict).cuda()
+    if lower(args.ssl_type) == 'simclr':
+        model = Model(feature_dim, image_class=image_class, state_dict=state_dict).cuda()
+    elif lower(args.ssl_type) == 'simsiam':
+        model = SimSiam(feature_dim, image_class=image_class, state_dict=state_dict).cuda()
     model = nn.DataParallel(model)
 
     model_momentum = copy.deepcopy(model)
