@@ -84,7 +84,7 @@ class prediction_MLP(nn.Module):
         to its hidden fc layers. Its output fc does not have BN
         (ablation in Sec. 4.4) or ReLU. This MLP has 2 layers. 
         The dimension of h’s input and output (z and p) is d = 2048, 
-        and h’s hidden layer’s dimension is 512, making h a 
+        and h's hidden layer's dimension is 512, making h a 
         bottleneck structure (ablation in supplement). 
         """
         self.layer1 = nn.Sequential(
