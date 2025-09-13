@@ -1307,6 +1307,8 @@ if __name__ == '__main__':
 
             if args.ssl_type.lower() == 'moco':
                 kwargs = {'net_momentum': model_momentum, 'queue': queue, 'temperature':temperature}
+            elif args.ssl_type.lower() == 'simsiam':
+                kwargs = {}
 
             train_loss = train_env(model, train_loader, optimizer, upd_split, tr_bs, args, **kwargs)
 
