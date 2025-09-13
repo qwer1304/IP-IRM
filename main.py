@@ -970,7 +970,8 @@ def load_checkpoint(path, model, model_momentum, optimizer, device='cuda'):
     random.setstate(rng_dict['python_rng_state'])
 
     print(f"\tmodel load: {msg_model}")
-    print(f"\tqueue load: {msg_momemntum}")
+    if queue is not None:
+        print(f"\tqueue load: {msg_momemntum}")
     print("<= loaded checkpoint '{}' (epoch {})"
           .format(path, checkpoint['epoch']))
 
