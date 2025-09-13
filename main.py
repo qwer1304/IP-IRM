@@ -1183,10 +1183,12 @@ if __name__ == '__main__':
         print('Using default model')
 
     # model setup and optimizer config
-    if lower(args.ssl_type) == 'moco':
+    if args.ssl_type.lower() == 'moco':
         model = Model(feature_dim, image_class=image_class, state_dict=state_dict).cuda()
-    elif lower(args.ssl_type) == 'simsiam':
+    elif args.ssl_type.lower() == 'simsiam':
         model = SimSiam(feature_dim, image_class=image_class, state_dict=state_dict).cuda()
+    else:
+        raise NotImplemented
     model = nn.DataParallel(model)
 
     model_momentum = copy.deepcopy(model)
