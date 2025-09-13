@@ -613,8 +613,6 @@ def train_env(net, train_loader, train_optimizer, updated_split, batch_size, arg
         # IRM losses and gradients
         gs = g_sums # always initialized
         penalty_irm_env = (gs[0] / half_split_sz[0]) * (gs[1] / half_split_sz[1])  # per env for macro-batch
-        print()
-        print(penalty_irm_env, gs)
         if penalty_irm > 0:
             # IRM = gs1 * gs2, where gs1 and gs2 are gradients w.r.t. scaler of mean CE of halves of sample in a batch
             # dIRM/dTheta = d(gs1 * gs2)/dTheta = dgs1/dTheta * gs2 + gs1 * dgs2/dTheta
@@ -676,7 +674,7 @@ def train_env(net, train_loader, train_optimizer, updated_split, batch_size, arg
         train_bar.set_description(desc_str)
 
         if batch_index % 10 == 0:
-            utils.write_log('Train Epoch: [{:d}/{:d}] [{:d}/{:d}]  Losses: Total: {:.4f}  Keep: {:.4f} Cont: {:.4f} IRM: {:.4f} LR: {:.4f}  PW {:.4f}'
+            utils.write_log('Train Epoch: [{:d}/{:d}] [{:d}/{:d}]  Losses: Total: {:.4f}  Keep: {:.4f} Cont: {:.4f} IRM: {:.4g} LR: {:.4f}  PW {:.4f}'
                             .format(epoch, epochs, trained_samples, total_samples,
                                     total_loss/trained_samples, total_keep_cont_loss/trained_samples, 
                                     total_cont_loss/trained_samples, total_irm_loss/trained_samples, 
