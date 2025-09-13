@@ -382,16 +382,12 @@ class SimSiamLossModule(LossModule):
         p2 = self.net.module.predictor(z2)
         self.representations = (z1, z2, p1, p2)
 
-    def compute_loss_micro(self, idxs=None, scale=1.0, **kwargs):
-        def cos_sim_mean(a, b):
-            return (a * b).sum(dim=1).mean()
-            
         z1, z2, p1, p2 = self.representations
         if idxs is None:
             idxs = torch.arange(z1.size(0), device=z1.device)
         # symmetric SimSiam loss (neg cosine, average two directions)
-        loss_dir1 = - cos_sim_mean(scale * p1[idxs], z2[idxs].detach())
-        loss_dir2 = - cos_sim_mean(scale * p2[idxs], z1[idxs].detach())
+        loss_dir1 = - F.cosine_similarity(scale * p1[idxs], z2[idxs].detach(), dim=-1).sum()
+        loss_dir2 = - F.cosine_similarity(scale * p2[idxs], z1[idxs].detach(), dim=-1).sum()
         loss = 0.5 * (loss_dir1 + loss_dir2)
         return loss
 
