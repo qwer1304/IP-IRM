@@ -59,6 +59,7 @@ class projection_MLP(nn.Module):
             nn.BatchNorm1d(out_dim)
         )
         self.num_layers = 3
+    
     def set_layers(self, num_layers):
         self.num_layers = num_layers
 
@@ -128,10 +129,6 @@ class SimSiam(nn.Module):
 
         self.projector = projection_MLP(2048, hidden_dim=512, out_dim=feature_dim)
 
-        self.encoder = nn.Sequential( # f encoder
-            self.f,
-            self.projector
-        )
         self.predictor = prediction_MLP(in_dim=feature_dim, hidden_dim=int(feature_dim/2), out_dim=feature_dim)
     
     def forward(self, x):
@@ -145,10 +142,7 @@ class SimSiam(nn.Module):
 
         return F.normalize(feature, dim=-1), F.normalize(z, dim=-1)
         
-    def projector(self, x):
-        z = self.predictor(x)
-        return F.normalize(z, dim=-1)
-
     def predictor(self, z):
         p = self.predictor(z)
         return F.normalize(p, dim=-1)
+
