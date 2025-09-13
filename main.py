@@ -388,6 +388,9 @@ class SimSiamLossModule(LossModule):
         if idxs is None:
             idxs = torch.arange(z1.size(0)+1, device=z1.device)
         # symmetric SimSiam loss (neg cosine, average two directions)
+        print()
+        print(z1.size(), z2.size(), p1.size(), p2.size(), idxs.size())
+        print()
         loss_dir1 = - cos_sim_mean(scale * p1[idxs], z2[idxs].detach())
         loss_dir2 = - cos_sim_mean(scale * p2[idxs], z1[idxs].detach())
         loss = 0.5 * (loss_dir1 + loss_dir2)
