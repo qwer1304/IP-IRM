@@ -1277,7 +1277,7 @@ if __name__ == '__main__':
             'optimizer':            optimizer.state_dict(),
             'updated_split':        updated_split,
             'updated_split_all':    updated_split_all,
-            'state_dict_momentum':  model_momentum.state_dict() if model_momentum else None
+            'state_dict_momentum':  model_momentum.state_dict() if model_momentum else None,
             'queue':                queue,
             "rng_dict": {
                 "rng_state": torch.get_rng_state(),
