@@ -326,17 +326,17 @@ class MoCoLossModule(LossModule):
         
     def logits(self, idxs=None):
         if idxs is None:
-            idxs = torch.arange(self.logits.size(0)+1, device=self.logits.device)
+            idxs = torch.arange(self.logits.size(0), device=self.logits.device)
         return self.logits[idxs]
         
     def targets(self, idxs=None):
         if idxs is None:
-            idxs = torch.arange(self.logits_cont.size(0)+1, device=self.logits_cont.device)
+            idxs = torch.arange(self.logits_cont.size(0), device=self.logits_cont.device)
         return self.labels_cont[idxs]
 
     def compute_loss_micro(self, idxs=None, scale=1.0):
         if idxs is None:
-            idxs = torch.arange(self.logits_cont.size(0)+1, device=self.logits_cont.device)
+            idxs = torch.arange(self.logits_cont.size(0), device=self.logits_cont.device)
         # sum over batch, per env handled by driver
         loss_cont = F.cross_entropy(scale * self.logits_cont[idxs], self.labels_cont[idxs], reduction='sum')
         return loss_cont
@@ -386,11 +386,8 @@ class SimSiamLossModule(LossModule):
             
         z1, z2, p1, p2 = self.representations
         if idxs is None:
-            idxs = torch.arange(z1.size(0)+1, device=z1.device)
+            idxs = torch.arange(z1.size(0), device=z1.device)
         # symmetric SimSiam loss (neg cosine, average two directions)
-        print()
-        print(z1.size(), z2.size(), p1.size(), p2.size(), idxs.size())
-        print()
         loss_dir1 = - cos_sim_mean(scale * p1[idxs], z2[idxs].detach())
         loss_dir2 = - cos_sim_mean(scale * p2[idxs], z1[idxs].detach())
         loss = 0.5 * (loss_dir1 + loss_dir2)
