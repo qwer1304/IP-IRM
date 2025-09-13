@@ -142,6 +142,5 @@ class SimSiam(nn.Module):
         feature = torch.flatten(x, start_dim=1)
         
         z = f(feature)
-        p = h(z)
 
-        return F.normalize(feature, dim=-1), F.normalize(z, dim=-1), F.normalize(p, dim=-1)
+        return F.normalize(feature, dim=-1), F.normalize(z, dim=-1)
