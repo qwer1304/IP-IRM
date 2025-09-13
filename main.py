@@ -236,7 +236,7 @@ class CE_IRMCalculator(IRMCalculator):
 
 class SimSiamIRMCalculator(IRMCalculator):
     def gradients(self, idxs=None):
-        device = self.loss_module.reperesentations[0].device
+        device = self.loss_module.representations[0].device
         # one scalar (requires grad)
         s = torch.tensor(1.0, device=device, requires_grad=True)
         # Compute g_i in a SimSiam-specific way (e.g., L2 or cosine loss)
@@ -476,7 +476,7 @@ def train_env(net, train_loader, train_optimizer, updated_split, batch_size, arg
 
     for batch_index, data_env in enumerate(train_bar):
 
-        data_batch, indexs_batch = data_env[0], data_env[-1] # 'pos_all' is an batch of images, 'indexs' is their corresponding indices 
+        data_batch, indexs_batch = data_env[0], data_env[-1] # 'data_batch' is an batch of images, 'indexs_batch' is their corresponding indices 
         this_batch_size = len(indexs_batch) # for the case drop_last=False
 
         loss_module.pre_batch(data_batch)
@@ -515,7 +515,7 @@ def train_env(net, train_loader, train_optimizer, updated_split, batch_size, arg
                 for split_num, updated_split_each in enumerate(updated_split):
                     for env in range(args.env_num):
 
-                        # split mb
+                        # split mb: 'idxs' are indices into 'indexs' that correspond to env 'env' in 'updated_split_each'
                         idxs = utils.assign_idxs(indexs, updated_split_each, env)
                         
                         if (N := len(idxs)) == 0:
