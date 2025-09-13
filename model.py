@@ -142,7 +142,3 @@ class SimSiam(nn.Module):
 
         return F.normalize(feature, dim=-1), F.normalize(z, dim=-1)
         
-    def predictor(self, z):
-        p = self.predictor(z)
-        return F.normalize(p, dim=-1)
-
