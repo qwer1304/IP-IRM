@@ -366,9 +366,8 @@ class MoCoLossModule(LossModule):
 # SimSiam Loss Module
 # ---------------------------
 class SimSiamLossModule(LossModule):
-    def __init__(self, net, projector, **kwargs):
+    def __init__(self, net, **kwargs):
         self.net = net
-        self.projector = projector  # optional projector if used
 
     def pre_micro_batch(self, pos, transform, normalize=True):
         x1 = transform(pos)
@@ -461,9 +460,9 @@ def train_env(net, train_loader, train_optimizer, updated_split, batch_size, arg
     # default to MoCo if args.loss_type not provided
     loss_type = getattr(args, 'ssl_type', 'moco')
     if loss_type.lower() == 'moco':
-        loss_module = MoCoLossModule(**kwargs)
+        loss_module = MoCoLossModule(net, **kwargs)
     elif loss_type.lower() == 'simsiam':
-        loss_module = SimSiamLossModule(projector=getattr(args, 'projector', None))
+        loss_module = SimSiamLossModule(net)
     else:
         raise ValueError(f"Unknown loss_type: {loss_type}")
 
