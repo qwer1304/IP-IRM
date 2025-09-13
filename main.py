@@ -382,6 +382,7 @@ class SimSiamLossModule(LossModule):
         p2 = self.net.module.predictor(z2)
         self.representations = (z1, z2, p1, p2)
 
+    def compute_loss_micro(self, idxs=None, scale=1.0):
         z1, z2, p1, p2 = self.representations
         if idxs is None:
             idxs = torch.arange(z1.size(0), device=z1.device)
