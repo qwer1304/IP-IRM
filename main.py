@@ -272,7 +272,7 @@ class LossModule:
             if isinstance(v, torch.Tensor) and v.is_cuda:
                 setattr(self, k, None)    
 
-    def get_debug_info_str():
+    def get_debug_info_str(self):
         return ""
 
 # ---------------------------
@@ -354,7 +354,7 @@ class MoCoLossModule(LossModule):
             self.total_maxneg = 0.0
             self.count = 0
 
-    def get_debug_info_str():
+    def get_debug_info_str(self):
         if self.debug:
             mean_pos = self.total_pos / self.count
             mean_neg = self.total_neg / self.count
