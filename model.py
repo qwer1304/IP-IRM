@@ -73,7 +73,7 @@ class projection_MLP(nn.Module):
             x = self.layer3(x)
         else:
             raise Exception
-        return x 
+        return F.normalize(x, dim=-1) 
 
 
 class prediction_MLP(nn.Module):
@@ -103,7 +103,7 @@ class prediction_MLP(nn.Module):
     def forward(self, x):
         x = self.layer1(x)
         x = self.layer2(x)
-        return x 
+        return F.normalize(x, dim=-1) 
 
 class SimSiam(nn.Module):
     def __init__(self, feature_dim=128, image_class='ImageNet', state_dict=None):

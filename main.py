@@ -230,8 +230,10 @@ class CE_IRMCalculator(IRMCalculator):
         # one scalar (requires grad)
         s = torch.tensor(1.0, device=device, requires_grad=True)
         # Compute g_i in a CE-specific way
-        loss = self.loss_module.compute_loss_micro(idxs=idxs, scale=s)
-        g_i = torch.autograd.grad(loss, scale, create_graph=True)[0]
+        logits = self.loss_module.logits(idxs) / self.irm_temp
+        targets = self.loss_module.targets(idxs)
+        loss = F.cross_entropy(s * logits, targets, reduction='sum')       
+        g_i = torch.autograd.grad(loss, s, create_graph=True)[0]
         return g_i
 
 class SimSiamIRMCalculator(IRMCalculator):
