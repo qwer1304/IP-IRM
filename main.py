@@ -667,14 +667,14 @@ def train_env(net, train_loader, train_optimizer, updated_split, batch_size, arg
                    f' Total: {total_loss/trained_samples:.4f}' + \
                    f' Keep: {total_keep_cont_loss/trained_samples:.4f}' + \
                    f' Cont: {total_cont_loss/trained_samples:.4f}' + \
-                   f' IRM: {total_irm_loss/trained_samples:.4g}' + \
+                   f' IRM: {total_irm_loss/trained_samples:.4f}' + \
                    f' LR: {train_optimizer.param_groups[0]["lr"]:.4f} PW {penalty_weight:.4f}'
         desc_str += loss_module.get_debug_info_str()
         
         train_bar.set_description(desc_str)
 
         if batch_index % 10 == 0:
-            utils.write_log('Train Epoch: [{:d}/{:d}] [{:d}/{:d}]  Losses: Total: {:.4f}  Keep: {:.4f} Cont: {:.4f} IRM: {:.4g} LR: {:.4f}  PW {:.4f}'
+            utils.write_log('Train Epoch: [{:d}/{:d}] [{:d}/{:d}]  Losses: Total: {:.4f}  Keep: {:.4f} Cont: {:.4f} IRM: {:.4f} LR: {:.4f}  PW {:.4f}'
                             .format(epoch, epochs, trained_samples, total_samples,
                                     total_loss/trained_samples, total_keep_cont_loss/trained_samples, 
                                     total_cont_loss/trained_samples, total_irm_loss/trained_samples, 
