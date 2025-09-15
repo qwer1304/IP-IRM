@@ -236,10 +236,10 @@ class IRMCalculator:
         """
         raise NotImplementedError
         
-     def penalty_finalize(grads, szs):
+    def penalty_finalize(self, grads, szs):
         return (grads[0] / szs[0]) * (grads[1] / szs[1])  # per env for macro-batch
 
-     def penalty_grads_finalize(grads, penalties, szs):
+    def penalty_grads_finalize(self, grads, penalties, szs):
         # IRM = gs1 * gs2, where gs1 and gs2 are gradients w.r.t. scaler of mean CE of halves of sample in a batch
         # dIRM/dTheta = d(gs1 * gs2)/dTheta = dgs1/dTheta * gs2 + gs1 * dgs2/dTheta
 
