@@ -569,6 +569,8 @@ def train_env(net, train_loader, train_optimizer, updated_split, batch_size, arg
     # default to MoCo if args.loss_type not provided
     loss_type = getattr(args, 'ssl_type', 'moco')
     loss_type = loss_type.lower()
+    penalty_type = getattr(args, 'penalty_type', 'moco')
+    penalty_type = penalty_type.lower()
 
     if loss_type == 'moco':
         LossModule = MoCoLossModule
@@ -580,12 +582,17 @@ def train_env(net, train_loader, train_optimizer, updated_split, batch_size, arg
     loss_module = LossModule(net, **kwargs)
 
     # IRM calculator selection
-    if loss_type   == 'moco':
-        PenaltyCalculator = CE_IRMCalculator
-    elif loss_type == 'simsiam':
-        PenaltyCalculator = SimSiamIRMCalculator
+    if penalty_type == 'irm':
+        if loss_type   == 'moco':
+            PenaltyCalculator = CE_IRMCalculator
+        elif loss_type == 'simsiam':
+            PenaltyCalculator = SimSiamIRMCalculator
+        else:
+            raise ValueError(f"Unknown loss_type: {loss_type}")
+    elif penalty_type == 'vrex':
+        PenaltyCalculator = VRExCalculator
     else:
-        raise ValueError(f"Unknown loss_type: {loss_type}")
+        raise ValueError(f"Unknown penalty_type: {penalty_type}")
 
     penalty_calculator   = PenaltyCalculator(loss_module, irm_temp=args.irm_temp, debug=args.debug, **kwargs)
     num_halves  = PenaltyCalculator.num_halves()
