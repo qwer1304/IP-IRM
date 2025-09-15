@@ -203,29 +203,73 @@ def microbatches(x, y, mb_size, min_size=2):
 # ---------------------------
 # Base IRM Calculator
 # ---------------------------
+
+"""
+L = 1/Ntr * (nll + IRM)
+nll = sum_e(nll_e)
+IRM = sum_e(IRM_e)
+nll_e = 1/Ne sum_i(nll_i(f(xi),yi))
+IRM_e = g1 * g2 # two halves of Ni 
+gi = 1/Ni d/ds sum_j(nll_j(s*f(xj),yj)) = 1/Ni sum_j(d/ds nll_j(s*f(xj),yj))
+d/dTheta L = 1/Ntr * (d/dTheta nll + d/dTheta IRM)
+d/dTheta nll = 1/Ne sum_j(d/dTheta nll_j(f(xj),yj))
+d/dTheta IRM = sum_e(d/dTheta IRM_e)
+d/dTheta IRM_e = d/dTheta (g1 * g2) = d/dTheta g1 * g2 + g1 * d/dTheta g2
+d/dTheta gi = 1/Ni sum_j(d/dTheta d/ds nll_j(s*f(xj),yj))
+"""
+        
 class IRMCalculator:
     """
     Base class for IRM calculation. Subclass this and implement
     `gradients_for_half` to return g_i for a half-batch.
     """
-    def __init__(self, loss_module, irm_temp=1.0, debug=False, **kwargs):
-        self.loss_module = loss_module
-        self.irm_temp = irm_temp
-        self.debug = debug
+    def __init__(self, loss_module, num_halves, num_splits, num_envs, irm_temp=1.0, debug=False, device='cuda', **kwargs):
+        self.loss_module         = loss_module
+        self.irm_temp            = irm_temp
+        self.debug               = debug
 
-    def gradients(self, idxs=None, **kwargs):
+    def penalty(self, idxs=None, **kwargs):
         """
         Compute gradient w.r.t. scale for a half-batch.
         Must be implemented by subclass.
         Returns a tensor g_i.
         """
         raise NotImplementedError
+        
+     def penalty_finalize(grads, szs):
+        return (grads[0] / szs[0]) * (grads[1] / szs[1])  # per env for macro-batch
+
+    def penalty_grads_finalize(grads, penalties, szs):
+        # IRM = gs1 * gs2, where gs1 and gs2 are gradients w.r.t. scaler of mean CE of halves of sample in a batch
+        # dIRM/dTheta = d(gs1 * gs2)/dTheta = dgs1/dTheta * gs2 + gs1 * dgs2/dTheta
+
+        num_halves = self.num_halves()
+        for i in range(num_halves):
+            j = (i + num_halves - 1) % num_halves
+            if i == 0:
+            x = (  (grads[i] / szs[i, ..., None])
+                 * (penalties[j, ..., None]  / szs[j, ..., None])
+                 / num_env 
+                ).sum(dim=(0,1))  # shape (param_numel,)
+            if i == 0:
+                total_grad_flat = x
+            else:
+                total_grad_flat += x
+
+        return total_grad_flat
+
+    @staticmethod
+    def num_halves():
+        return 2
 
 # ---------------------------
 # CE-based IRM (for MoCo)
 # ---------------------------
 class CE_IRMCalculator(IRMCalculator):
-    def gradients(self, idxs=None, **kwargs):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def penalty(self, idxs=None, **kwargs):
         device = self.loss_module.logits().device
         # one scalar (requires grad)
         s = torch.tensor(1.0, device=device, requires_grad=True)
@@ -235,7 +279,10 @@ class CE_IRMCalculator(IRMCalculator):
         return g_i
 
 class SimSiamIRMCalculator(IRMCalculator):
-    def gradients(self, idxs=None):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def penalty(self, idxs=None):
         device = self.loss_module.representations[0].device
         # one scalar (requires grad)
         s = torch.tensor(1.0, device=device, requires_grad=True)
@@ -244,6 +291,10 @@ class SimSiamIRMCalculator(IRMCalculator):
         g_i = torch.autograd.grad(s*loss, s, create_graph=True)[0]
         return g_i
         
+    @staticmethod
+    def num_halves():
+        return 1
+
 # ---------------------------
 # Base Loss Module
 # ---------------------------
@@ -252,6 +303,9 @@ class LossModule:
     Base class for pluggable loss module.
     Subclass for MoCo, SimSiam, etc.
     """
+    def __init__(self, net, num_halves, num_splits, num_envs, device='cuda', **kwargs):
+        self.net = net
+
     def pre_batch(self, batch_data):
         pass
 
@@ -275,14 +329,22 @@ class LossModule:
     def get_debug_info_str(self):
         return ""
 
+
+    def loss_grads_finalize(grads, loses, szs):
+        total_grad_flat  = (dLoss_dTheta_env / 
+                            split_sz[..., None] / 
+                            num_env
+                           ).sum(dim=(0,1,2))        # shape (param_numel,)
+        return total_grad_flat
+
 # ---------------------------
 # MoCo Loss Module
 # ---------------------------
 class MoCoLossModule(LossModule):
-    def __init__(self, net, net_momentum=None, queue=None, temperature=None, debug=False, **kwargs):
+    def __init__(self, *args, net_momentum=None, queue=None, temperature=None, debug=False, **kwargs):
+        super().__init__(*args, **kwargs)
         assert net_momentum is not None
         assert queue is not None
-        self.net = net
         self.net_momentum = net_momentum
         self.momentum = kwargs['momentum']
         self.net_momentum.train()
@@ -366,8 +428,8 @@ class MoCoLossModule(LossModule):
 # SimSiam Loss Module
 # ---------------------------
 class SimSiamLossModule(LossModule):
-    def __init__(self, net, **kwargs):
-        self.net = net
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
     def pre_micro_batch(self, pos, transform, normalize=True):
         x1 = transform(pos)
@@ -413,23 +475,23 @@ def train_env(net, train_loader, train_optimizer, updated_split, batch_size, arg
     else:
         penalty_weight = args.penalty_weight
         
-    penalty_cont = args.penalty_cont * (1 if penalty_weight <= 1 else 1 / penalty_weight)
-    penalty_keep_cont = args.penalty_keep_cont * (1 if penalty_weight <= 1 else (1 / penalty_weight))
-    penalty_irm = 1 if penalty_weight > 1 else penalty_weight
+    loss_weight      = args.penalty_cont * (1 if penalty_weight <= 1 else 1 / penalty_weight)
+    loss_keep_weight = args.penalty_keep_cont * (1 if penalty_weight <= 1 else (1 / penalty_weight))
+    penalty_weight   = 1 if penalty_weight > 1 else penalty_weight
     
-    loader_batch_size = batch_size
+    loader_batch_size            = batch_size
     gradients_accumulation_steps = args.gradients_accumulation_batch_size // loader_batch_size 
-    gpu_batch_size = args.micro_batch_size
-    gpu_accum_steps = ceil(loader_batch_size / gpu_batch_size) # better round up 
+    gpu_batch_size               = args.micro_batch_size
+    gpu_accum_steps              = ceil(loader_batch_size / gpu_batch_size) # better round up 
 
     gradients_accumulation_step = 0
-    total_samples = len(train_loader.dataset)
+    total_samples               = len(train_loader.dataset)
     
-    trained_samples = 0
+    trained_samples      = 0
     total_keep_cont_loss = 0.0
-    total_cont_loss = 0.0
-    total_irm_loss = 0.0
-    total_loss = 0.0
+    total_cont_loss      = 0.0
+    total_irm_loss       = 0.0
+    total_loss           = 0.0
 
     bar_format = '{l_bar}{bar:' + str(args.bar) + '}{r_bar}' #{bar:-' + str(args.bar) + 'b}'
     train_bar = tqdm(train_loader,
@@ -439,38 +501,44 @@ def train_env(net, train_loader, train_optimizer, updated_split, batch_size, arg
             bar_format=bar_format,          # request bar width
             )
 
-    loss_cont_sums = torch.zeros((2, num_splits, args.env_num), dtype=torch.float, device=device) 
-    g_sums         = torch.zeros((2, num_splits, args.env_num), dtype=torch.float, device=device) 
-    loss_keep_cont = torch.tensor(0, dtype=torch.float, device=device)
-    half_split_sz             = torch.zeros((2, num_splits, args.env_num), dtype=torch.float, device=device) 
-    # One buffer per parameter
-    losses_cont_grads = [
-        torch.zeros((*g_sums.shape, p.numel()), dtype=p.dtype, device=p.device)
-        for p in net.parameters()
-    ]
-    losses_irm_grads = [
-        torch.zeros((*g_sums.shape, p.numel()), dtype=p.dtype, device=p.device)
-        for p in net.parameters()
-    ]
-
     # instantiate LossModule and IRMCalculator based on args (pluggable)
     # default to MoCo if args.loss_type not provided
     loss_type = getattr(args, 'ssl_type', 'moco')
     loss_type = loss_type.lower()
+
     if loss_type == 'moco':
-        loss_module = MoCoLossModule(net, **kwargs)
+        Loss_class = MoCoLossModule
     elif loss_type == 'simsiam':
-        loss_module = SimSiamLossModule(net, **kwargs)
+        Loss_class = SimSiamLossModule
     else:
         raise ValueError(f"Unknown loss_type: {loss_type}")
 
+    num_halves  = LossModule.num_halves()
+    loss_module = LossModule(net, num_halves, num_splits, args.env_num, **kwargs)
+
     # IRM calculator selection
-    if loss_type == 'moco':
-        irm_calculator = CE_IRMCalculator(loss_module, irm_temp=args.irm_temp, debug=args.debug, **kwargs)
+    if loss_type   == 'moco':
+        PenaltyCalculator = CE_IRMCalculator
     elif loss_type == 'simsiam':
-        irm_calculator = SimSiamIRMCalculator(loss_module, irm_temp=args.irm_temp, debug=args.debug, **kwargs)
+        PenaltyCalculator = SimSiamIRMCalculator
     else:
         raise ValueError(f"Unknown loss_type: {loss_type}")
+
+    penalty_calculator   = PenaltyCalculator(loss_module, num_halves, num_splits, args.env_num, irm_temp=args.irm_temp, debug=args.debug, **kwargs)
+
+    loss_aggregator      = torch.zeros((num_halves, num_splits, args.env_num), dtype=torch.float, device=device) 
+    penalty_aggregator   = torch.zeros((num_halves, num_splits, args.env_num), dtype=torch.float, device=device) 
+    loss_keep_aggregator = torch.tensor(0, dtype=torch.float, device=device) # scalar
+    halves_sz            = torch.zeros((num_halves, num_splits, args.env_num), dtype=torch.float, device=device) 
+    # One buffer per parameter
+    loss_grads = [  # dLoss / dTheta
+        torch.zeros((*loss_aggregator.shape, p.numel()), dtype=p.dtype, device=p.device)
+        for p in net.parameters()
+    ]
+    penalty_grads = [ # dPenalty / dTheta
+        torch.zeros((*penalty_aggregator.shape, p.numel()), dtype=p.dtype, device=p.device)
+        for p in net.parameters()
+    ]
 
     train_optimizer.zero_grad(set_to_none=True) # clear gradients at the beginning 
 
@@ -486,11 +554,11 @@ def train_env(net, train_loader, train_optimizer, updated_split, batch_size, arg
         # -----------------------
         mb_list = list(microbatches(data_batch, indexs_batch, gpu_batch_size))
 
-        for j in range(2): # over two halves of micro-batches
-            for i in [i_ for i_ in range(len(mb_list)) if i_ % 2 == j]: # loop over micro-batches
+        for j in range(num_halves): # over halves of micro-batches
+            for i in [i_ for i_ in range(len(mb_list)) if i_ % num_halves == j]: # loop over micro-batches
                 batch_micro, indexs = mb_list[i]
-                batch_micro = batch_micro.cuda(non_blocking=True)
-                indexs = indexs.cuda(non_blocking=True)
+                batch_micro         = batch_micro.cuda(non_blocking=True)
+                indexs              = indexs.cuda(non_blocking=True)
                 """
                 prepare for micro-batch in loss-sepcific way:
                     MoCo:    generate two views, get their embeddings from respective encoders, normalize them, etc
@@ -503,36 +571,36 @@ def train_env(net, train_loader, train_optimizer, updated_split, batch_size, arg
                 # -----------------------
 
                 # compute micro-batch loss
-                loss_cont = loss_module.compute_loss_micro()
+                loss = loss_module.compute_loss_micro()
 
-                if args.keep_cont and (penalty_keep_cont > 0): # global contrastive loss (1st partition)
+                if args.keep_cont and (loss_keep_weight > 0): # global loss @ 1st partition
                     # This could be done w/o the split into two halves, but this streamlines the code w/o any harm
                     # Here we know that losses are over the whole macro-batch, so we can normalize up-front
-                    loss_cont = loss_cont / this_batch_size / gradients_accumulation_steps
-                    (loss_cont * penalty_keep_cont).backward(retain_graph=True) # gradients must be multiplied by scaler
-                    loss_keep_cont += loss_cont.detach() # before scaler
+                    loss = loss / this_batch_size / gradients_accumulation_steps
+                    (loss * loss_keep_weight).backward(retain_graph=True) # gradients must be multiplied by scaler
+                    loss_keep_aggregator += loss.detach() # before scaler
 
                 for split_num, updated_split_each in enumerate(updated_split):
                     for env in range(args.env_num):
 
-                        # split mb: 'idxs' are indices into 'indexs' that correspond to env 'env' in 'updated_split_each'
+                        # split mb: 'idxs' are indices into 'indexs' that correspond to domain 'env' in 'updated_split_each'
                         idxs = utils.assign_idxs(indexs, updated_split_each, env)
                         
                         if (N := len(idxs)) == 0:
                             continue
                             
-                        half_split_sz[j,split_num,env] += N # update number of elements in environment
+                        halves_sz[j,split_num,env] += N # update number of elements in environment
 
                         # -----------------------
                         # SSL
                         # -----------------------
-                        if penalty_cont > 0:
-                            loss_cont = loss_module.compute_loss_micro(idxs=idxs)
-                            loss_cont_sums[j,split_num,env] += loss_cont.detach() # before penalty scaler
+                        if loss_weight > 0:
+                            loss = loss_module.compute_loss_micro(idxs=idxs)
+                            loss_aggregator[j,split_num,env] += loss.detach() # before penalty scaler
 
                             # compute gradients for this loss
                             grads = torch.autograd.grad(
-                                penalty_cont * loss_cont, # gradients must be multiplied by scaler
+                                loss_weight * loss, # gradients must be multiplied by scaler
                                 net.parameters(),
                                 retain_graph=True,  # keep graph for next loss
                                 allow_unused=True
@@ -540,16 +608,16 @@ def train_env(net, train_loader, train_optimizer, updated_split, batch_size, arg
 
                             # flatten and accumulate per parameter
                             for _j, g in enumerate(grads):
-                                losses_cont_grads[_j][j,split_num,env] += g.detach().view(-1)
+                                loss_grads[_j][j,split_num,env] += g.detach().view(-1)
 
-                        # IRM penalty
-                        if penalty_irm > 0:
-                            g_i = irm_calculator.gradients(idxs=idxs)
-                            g_sums[j,split_num,env] += g_i.detach() # irm penalty components before penalty scaler
+                        # penalty
+                        if penalty_weight > 0:
+                            penalty = penalty_calculator.penalty(idxs=idxs)
+                            penalty_aggregator[j,split_num,env] += penalty.detach() # penalty components before penalty scaler
 
                             # compute gradients for this loss
                             grads = torch.autograd.grad(
-                                penalty_irm * g_i,  # gradients must be multiplied by scaler
+                                penalty_weight * penalty,  # gradients must be multiplied by scaler
                                 net.parameters(),
                                 retain_graph=True,  # keep graph for next loss
                                 allow_unused=True
@@ -557,17 +625,21 @@ def train_env(net, train_loader, train_optimizer, updated_split, batch_size, arg
 
                             # flatten and accumulate per parameter
                             for _j, g in enumerate(grads):
-                                losses_irm_grads[_j][j,split_num,env] += g.detach().view(-1)
-                        # free memory of split
+                                penalty_grads[_j][j,split_num,env] += g.detach().view(-1)
+                        # free memory of split here
                     # end for env in range(args.env_num): 
                 # end for split_num, updated_split_each in enumerate(updated_split):
                 loss_module.post_micro_batch()
                 loss_module.prepare_for_free()
                 
                 # free memory of micro-batch
-                del batch_micro, indexs, loss_cont
-                if penalty_irm > 0:
-                    del g_i, grads, g
+                del batch_micro, indexs
+                if (loss_weight > 0) or (penalty_weight > 0):
+                    del grads, g
+                    if loss_weight > 0:
+                        del loss
+                    if penalty_weight > 0:
+                        del penalty
             # end for i in [i_ for i_ in range(len(mb_list)) if i_ % 2 == j]:
             torch.cuda.empty_cache()
         # end for j in range(idxs):
@@ -579,59 +651,28 @@ def train_env(net, train_loader, train_optimizer, updated_split, batch_size, arg
         if gradients_accumulation_step < gradients_accumulation_steps:
             continue
 
-        """
-        L = 1/Ntr * (nll + IRM)
-        nll = sum_e(nll_e)
-        IRM = sum_e(IRM_e)
-        nll_e = 1/Ne sum_i(nll_i(f(xi),yi))
-        IRM_e = g1 * g2 # two halves of Ni 
-        gi = 1/Ni d/ds sum_j(nll_j(s*f(xj),yj)) = 1/Ni sum_j(d/ds nll_j(s*f(xj),yj))
-        d/dTheta L = 1/Ntr * (d/dTheta nll + d/dTheta IRM)
-        d/dTheta nll = 1/Ne sum_j(d/dTheta nll_j(f(xj),yj))
-        d/dTheta IRM = sum_e(d/dTheta IRM_e)
-        d/dTheta IRM_e = d/dTheta (g1 * g2) = d/dTheta g1 * g2 + g1 * d/dTheta g2
-        d/dTheta gi = 1/Ni sum_j(d/dTheta d/ds nll_j(s*f(xj),yj))
-        """
-        
-        split_sz = half_split_sz.sum(dim=0, keepdim=True) # (1,J,K) # sizes of envs
+        split_sz = halves_sz.sum(dim=0, keepdim=True) # (1,J,K) # sizes of envs
         num_env = prod(split_sz.size())
 
         # Environments & original cont losses and gradients
-        loss_cont_env = loss_cont_sums.sum(dim=0, keepdim=True) / split_sz     # per env for macro-batch
-        if penalty_cont > 0:
+        loss_env = loss_aggregator.sum(dim=0, keepdim=True) / split_sz     # per env for macro-batch
+        if loss_weight > 0:
             for pind, p in enumerate(net.parameters()):
-                dCont_dTheta_env = losses_cont_grads[pind]     # per env sum of dCont/dTheta, shape (I,J,K,param_numel)
-                total_grad_flat = (dCont_dTheta_env / 
-                                   split_sz[..., None] / 
-                                   num_env
-                                  ).sum(dim=(0,1,2))        # shape (param_numel,)
-                if args.keep_cont:
-                    p.grad += total_grad_flat.view(p.shape) # reshape back to parameter shape
-                else:
-                    p.grad = total_grad_flat.view(p.shape)  # reshape back to parameter shape
+                dLoss_dTheta_env = loss_grads[pind]     # per env sum of dCont/dTheta, shape (I,J,K,param_numel)
+                total_grad_flat  = loss_calculator.loss_grads_finalize(dLoss_dTheta_env, loss_env, halves_sz)
+                p.grad          += total_grad_flat.view(p.shape) # reshape back to parameter shape
 
-        # IRM losses and gradients
-        gs = g_sums # always initialized
-        penalty_irm_env = (gs[0] / half_split_sz[0]) * (gs[1] / half_split_sz[1])  # per env for macro-batch
-        if penalty_irm > 0:
-            # IRM = gs1 * gs2, where gs1 and gs2 are gradients w.r.t. scaler of mean CE of halves of sample in a batch
-            # dIRM/dTheta = d(gs1 * gs2)/dTheta = dgs1/dTheta * gs2 + gs1 * dgs2/dTheta
+        # Penalty and its gradients
+        penalty_env = penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz)
+        if penalty_weight > 0:
             for pind, p in enumerate(net.parameters()):
-                dgs_dTheta_env = losses_irm_grads[pind]  # per env sum of dg_i/dTheta over macro-batch per parameter, shape (I,J,K,param_numel)
-                for i in range(2):
-                    j = (i + 1) % 2
-                    total_grad_flat = ((dgs_dTheta_env[i] / half_split_sz[i, ..., None]) * 
-                                       (gs[j, ..., None]  / half_split_sz[j, ..., None]) / 
-                                       num_env 
-                                      ).sum(dim=(0,1))  # shape (param_numel,)
-                    if args.keep_cont:
-                        p.grad += total_grad_flat.view(p.shape)  # reshape back to parameter shape
-                    else:
-                        p.grad = total_grad_flat.view(p.shape)   # reshape back to parameter shape
+                dLoss_dTheta_env = penalty_grads[pind]  # per env sum of dg_i/dTheta over macro-batch per parameter, shape (I,J,K,param_numel)               
+                total_grad_flat  = penalty_calculator.penalty_grads_finalize(dLoss_dTheta_env, penalty_env, halves_sz)                
+                p.grad          += total_grad_flat.view(p.shape)  # reshape back to parameter shape
             
-        loss_batch = ((penalty_keep_cont * loss_keep_cont)         + # loss_keep_cont is a scalar
-                      (penalty_irm       * penalty_irm_env.mean()) + 
-                      (penalty_cont      * loss_cont_env.mean())     # mean over envs, mean over macro-batch
+        loss_batch = ((loss_keep_weight * loss_keep_aggregator) + # loss_keep_aggregator is a scalar
+                      (penalty_weight   * penalty_env.mean())   + 
+                      (loss_weight      * loss_env.mean())        # mean over envs, mean over macro-batch
                      )
 
         # -----------------------
@@ -657,10 +698,10 @@ def train_env(net, train_loader, train_optimizer, updated_split, batch_size, arg
         train_optimizer.zero_grad(set_to_none=True)  # clear gradients at beginning of next gradients batch
 
         # total loss is sum of losses so far over entire batch aggregation period.
-        total_keep_cont_loss += (penalty_keep_cont * loss_keep_cont).item()    * this_batch_size * gradients_accumulation_steps
-        total_irm_loss       += (penalty_irm  * penalty_irm_env.mean()).item() * this_batch_size * gradients_accumulation_steps
-        total_cont_loss      += (penalty_cont * loss_cont_env.mean()).item()   * this_batch_size * gradients_accumulation_steps
-        total_loss           += loss_batch.item()                              * this_batch_size * gradients_accumulation_steps
+        total_keep_cont_loss += (loss_keep_weight * loss_keep_aggregator).item() * this_batch_size * gradients_accumulation_steps
+        total_irm_loss       += (penalty_weight   * penalty_env.mean()).item()   * this_batch_size * gradients_accumulation_steps
+        total_cont_loss      += (loss_weight      * loss_env.mean()).item()      * this_batch_size * gradients_accumulation_steps
+        total_loss           += loss_batch.item()                                * this_batch_size * gradients_accumulation_steps
 
         desc_str = f'Train Epoch: [{epoch}/{epochs}] [{trained_samples}/{total_samples}]' + \
                     ' Losses:' + \
@@ -670,7 +711,6 @@ def train_env(net, train_loader, train_optimizer, updated_split, batch_size, arg
                    f' IRM: {total_irm_loss/trained_samples:.4f}' + \
                    f' LR: {train_optimizer.param_groups[0]["lr"]:.4f} PW {penalty_weight:.4f}'
         desc_str += loss_module.get_debug_info_str()
-        
         train_bar.set_description(desc_str)
 
         if batch_index % 10 == 0:
@@ -682,21 +722,21 @@ def train_env(net, train_loader, train_optimizer, updated_split, batch_size, arg
                                         
         # Prepare for next iteration
         gradients_accumulation_step = 0
-        g_sums.zero_()
-        loss_keep_cont.zero_()
-        loss_cont_sums.zero_()
-        half_split_sz.zero_()
-        for par in losses_cont_grads:
+        penalty_aggregator.zero_()
+        loss_keep_aggregator.zero_()
+        loss_aggregator.zero_()
+        halves_sz.zero_()
+        for par in loss_grads:
             par.zero_()
-        for par in losses_irm_grads:
+        for par in penalty_grads:
             par.zero_()
-        del gs, penalty_irm_env, loss_cont_env, loss_batch
-        if (penalty_irm > 0) or (penalty_cont > 0):
+        del penalty_env, loss_env, loss_batch
+        if (penalty_weight > 0) or (loss_weight > 0):
             del total_grad_flat
-        if penalty_irm > 0:
+        if penalty_weight > 0:
             del dgs_dTheta_env
-        if penalty_cont > 0:
-            dCont_dTheta_env
+        if loss_weight > 0:
+            dLoss_dTheta_env
         torch.cuda.empty_cache()
 
         loss_module.post_batch()
