@@ -662,8 +662,8 @@ def train_env(net, train_loader, train_optimizer, updated_split, batch_size, arg
         penalty_env = penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz)
         if penalty_weight > 0:
             for pind, p in enumerate(net.parameters()):
-                dLoss_dTheta_env = penalty_grads[pind]  # per env sum of dg_i/dTheta over macro-batch per parameter, shape (I,J,K,param_numel)               
-                total_grad_flat  = penalty_calculator.penalty_grads_finalize(dLoss_dTheta_env, penalty_env, halves_sz)                
+                dPenalty_dTheta_env = penalty_grads[pind]  # per env sum of dg_i/dTheta over macro-batch per parameter, shape (I,J,K,param_numel)               
+                total_grad_flat  = penalty_calculator.penalty_grads_finalize(dPenalty_dTheta_env, penalty_env, halves_sz)                
                 p.grad          += total_grad_flat.view(p.shape)  # reshape back to parameter shape
             
         loss_batch = ((loss_keep_weight * loss_keep_aggregator) + # loss_keep_aggregator is a scalar
@@ -730,7 +730,7 @@ def train_env(net, train_loader, train_optimizer, updated_split, batch_size, arg
         if (penalty_weight > 0) or (loss_weight > 0):
             del total_grad_flat
         if penalty_weight > 0:
-            del dgs_dTheta_env
+            del dPenalty_dTheta_env
         if loss_weight > 0:
             dLoss_dTheta_env
         torch.cuda.empty_cache()
