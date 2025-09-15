@@ -332,7 +332,7 @@ class LossModule:
 
 
     def loss_grads_finalize(self, grads, loses, szs):
-        num_env = prod(szs.size()[1:]
+        num_env = prod(szs.size()[1:])
         total_grad_flat  = (  grads  
                             / szs[..., None] 
                             / num_env
