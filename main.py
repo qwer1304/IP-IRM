@@ -329,7 +329,7 @@ class LossModule:
         return ""
 
 
-    def loss_grads_finalize(grads, loses, szs):
+    def loss_grads_finalize(self, grads, loses, szs):
         total_grad_flat  = (dLoss_dTheta_env / 
                             split_sz[..., None] / 
                             num_env
