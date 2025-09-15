@@ -506,9 +506,9 @@ def train_env(net, train_loader, train_optimizer, updated_split, batch_size, arg
     loss_type = loss_type.lower()
 
     if loss_type == 'moco':
-        Loss_class = MoCoLossModule
+        LossModule = MoCoLossModule
     elif loss_type == 'simsiam':
-        Loss_class = SimSiamLossModule
+        LossModule = SimSiamLossModule
     else:
         raise ValueError(f"Unknown loss_type: {loss_type}")
 
