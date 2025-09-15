@@ -199,6 +199,62 @@ def microbatches(x, y, mb_size, min_size=2):
         if xb.size(0) < min_size:
             continue  # skip this tiny batch
         yield xb, yb
+
+class BaseCalculator:
+    def __init__(self, loss_module, *args, debug=False, device='cuda', **kwargs):
+        self.loss_module         = loss_module
+        self.debug               = debug
+
+    def penalty(self, idxs=None, **kwargs):
+        raise NotImplementedError
+        
+    def penalty_finalize(self, grads, szs):
+        raise NotImplementedError
+
+    def penalty_grads_finalize(self, grads, penalties, szs):
+        raise NotImplementedError
+
+    @staticmethod
+    def num_halves():
+        raise NotImplementedError
+
+class VRExCalculator(BaseCalculator):
+    """
+    Class for VREx calculation.
+    """
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def penalty(self, idxs=None, **kwargs):
+        # TODO: reuse previously computed loss instead of re-computing it
+        loss = self.loss_module.compute_loss_micro(idxs=idxs)
+        return loss
+        
+    def penalty_finalize(self, penalties, szs):
+        return penalties / szs # per env for macro-batch
+
+    def penalty_grads_finalize(self, grads, penalties, szs):
+        """
+        Given dPenalty/dTheta, Penalty per half, per env and their sizes calculate the combined gradient.
+        dV/dTheta = 2/E*sum_e((Loss_e - mu) * grad_e), where mu = 1/E*sum_e(Loss_e) 
+            grads:      dPenalty/dTheta per half, per env, unnormalized
+            penalties:  Penalty per half, per env, normalized
+            szs:        sizes of halves of environments
+        """
+        
+        num_env = prod(szs.size()[1:]) # E
+        mu      = penalties.mean()
+        x       = (2 * (penalties[..., None] - mu) 
+                     * (grads / szs[..., None]) 
+                     / num_envs
+                  ).sum(dim=(0,1,2)
+            
+        total_grad_flat = x
+        return total_grad_flat
+
+    @staticmethod
+    def num_halves():
+        return 1
         
 # ---------------------------
 # Base IRM Calculator
@@ -218,15 +274,14 @@ d/dTheta IRM_e = d/dTheta (g1 * g2) = d/dTheta g1 * g2 + g1 * d/dTheta g2
 d/dTheta gi = 1/Ni sum_j(d/dTheta d/ds nll_j(s*f(xj),yj))
 """
         
-class IRMCalculator:
+class IRMCalculator(BaseCalculator):
     """
     Base class for IRM calculation. Subclass this and implement
     `gradients_for_half` to return g_i for a half-batch.
     """
-    def __init__(self, loss_module, irm_temp=1.0, debug=False, device='cuda', **kwargs):
-        self.loss_module         = loss_module
+    def __init__(self, *args, irm_temp=1.0, **kwargs):
+        super().__init__(*args, **kwargs)
         self.irm_temp            = irm_temp
-        self.debug               = debug
 
     def penalty(self, idxs=None, **kwargs):
         """
@@ -236,10 +291,16 @@ class IRMCalculator:
         """
         raise NotImplementedError
         
-    def penalty_finalize(self, grads, szs):
-        return (grads[0] / szs[0]) * (grads[1] / szs[1])  # per env for macro-batch
+    def penalty_finalize(self, penalties, szs):
+        return (penalties[0] / szs[0]) * (penalties[1] / szs[1])  # per env for macro-batch, normalized
 
     def penalty_grads_finalize(self, grads, penalties, szs):
+        """
+        Given dPenalty/dTheta, Penalty per half, per env and their sizes calculate the combined gradient.
+            grads:      dPenalty/dTheta per half, per env, unnormalized
+            penalties:  Penalty per half, per env, normalized
+            szs:        sizes of halves of environments
+        """
         # IRM = gs1 * gs2, where gs1 and gs2 are gradients w.r.t. scaler of mean CE of halves of sample in a batch
         # dIRM/dTheta = d(gs1 * gs2)/dTheta = dgs1/dTheta * gs2 + gs1 * dgs2/dTheta
 
@@ -249,7 +310,7 @@ class IRMCalculator:
         for i in range(num_halves):
             j = (i + num_halves + 1) % num_halves
             x = (  (grads[i] / szs[i, ..., None])
-                 * (penalties[j, ..., None]  / szs[j, ..., None])
+                 * penalties[j, ..., None]
                  / num_env 
                 ).sum(dim=(0,1))  # shape (param_numel,)
             if i == 0:
@@ -327,9 +388,14 @@ class LossModule:
         return ""
 
 
-    def loss_grads_finalize(self, grads, loses, szs):
+    def loss_grads_finalize(self, penalties, losses, szs):
+        """
+            grads:  Penalty per half, per env, unnormalized
+            losses: Losses per half, per env, normalized
+            szs:    sizes of halves of environments
+        """
         num_env = prod(szs.size()[1:])
-        total_grad_flat  = (  grads  
+        total_grad_flat  = (  penalties  
                             / szs[..., None] 
                             / num_env
                            ).sum(dim=(0,1,2))        # shape (param_numel,)
@@ -651,7 +717,7 @@ def train_env(net, train_loader, train_optimizer, updated_split, batch_size, arg
 
         # Environments & original cont losses and gradients
         split_sz = halves_sz.sum(dim=0, keepdim=True) # (1,J,K) # sizes of envs
-        loss_env = loss_aggregator.sum(dim=0, keepdim=True) / split_sz     # per env for macro-batch
+        loss_env = loss_aggregator.sum(dim=0, keepdim=True) / split_sz     # per env for macro-batch, normalized
         if loss_weight > 0:
             for pind, p in enumerate(net.parameters()):
                 dLoss_dTheta_env = loss_grads[pind]     # per env sum of dCont/dTheta, shape (I,J,K,param_numel)
@@ -659,12 +725,12 @@ def train_env(net, train_loader, train_optimizer, updated_split, batch_size, arg
                 p.grad          += total_grad_flat.view(p.shape) # reshape back to parameter shape
 
         # Penalty and its gradients
-        penalty_env = penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz)
+        penalty_env = penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz) # normalized
         if penalty_weight > 0:
             for pind, p in enumerate(net.parameters()):
-                dPenalty_dTheta_env = penalty_grads[pind]  # per env sum of dg_i/dTheta over macro-batch per parameter, shape (I,J,K,param_numel)               
-                total_grad_flat  = penalty_calculator.penalty_grads_finalize(dPenalty_dTheta_env, penalty_env, halves_sz)                
-                p.grad          += total_grad_flat.view(p.shape)  # reshape back to parameter shape
+                dPenalty_dTheta_env = penalty_grads[pind]  # per env sum of dPenalty/dTheta over macro-batch per parameter, shape (I,J,K,param_numel)               
+                total_grad_flat     = penalty_calculator.penalty_grads_finalize(dPenalty_dTheta_env, penalty_env, halves_sz)                
+                p.grad             += total_grad_flat.view(p.shape)  # reshape back to parameter shape
             
         loss_batch = ((loss_keep_weight * loss_keep_aggregator) + # loss_keep_aggregator is a scalar
                       (penalty_weight   * penalty_env.mean())   + 
@@ -837,108 +903,6 @@ def get_feature_bank(net, memory_data_loader, args, progress=False, prefix="Test
 
     return feature_bank, feature_labels
     
-# test for one epoch, use weighted knn to find the most similar images' label to assign the test image
-def test(net, feature_bank, feature_labels, test_data_loader, args, progress=False, prefix="Test:"):
-    net.eval()
-       
-    total_top1, total_top5, total_num = 0.0, 0.0, 0
-    with torch.no_grad():
-        # loop test data to predict the label by weighted knn search
-        bar_format = '{l_bar}{bar:' + str(args.bar) + '}{r_bar}' #{bar:-' + str(args.bar) + 'b}'
-        
-        if progress:
-            test_bar = tqdm(test_data_loader,
-                total=len(test_data_loader),
-                ncols=args.ncols,               # total width available
-                dynamic_ncols=False,            # disable autosizing
-                bar_format=bar_format           # request bar width
-            )
-        else:
-           test_bar = test_data_loader
-    
-        transform = test_data_loader.dataset.transform
-        target_transform = test_data_loader.dataset.target_transform
-    
-        if args.extract_features:
-            test_data_loader.dataset.target_transform = None
-
-        feature_list = []
-        pred_labels_list = []
-        pred_scores_list = []
-        target_list = []
-        target_raw_list = []
-
-        for data, target in test_bar:
-            data, target = data.cuda(non_blocking=True), target.cuda(non_blocking=True)
-            
-            if transform is not None:
-                data = transform(data)
-
-            target_raw = target
-            if args.extract_features and target_transform is not None:
-                target = target_transform(target_raw).cuda(non_blocking=True)
-
-            feature, out = net(data)
-
-            total_num += data.size(0)
-            # compute cos similarity between each feature vector and feature bank ---> [B, N]
-            sim_matrix = torch.mm(feature, feature_bank) # places sim_matrix on cuda
-            # [B, K]
-            sim_weight, sim_indices = sim_matrix.topk(k=k, dim=-1)
-            # [B, K]
-            sim_labels = torch.gather(feature_labels.expand(data.size(0), -1), dim=-1, index=sim_indices)
-            sim_weight = (sim_weight / temperature).exp()
-
-            # counts for each class
-            one_hot_label = torch.zeros(data.size(0) * k, c, device=sim_labels.device)
-            # [B*K, C]
-            one_hot_label = one_hot_label.scatter(dim=-1, index=sim_labels.view(-1, 1).long(), value=1.0)
-            # weighted score ---> [B, C]
-            pred_scores = torch.sum(one_hot_label.view(data.size(0), -1, c) * sim_weight.unsqueeze(dim=-1), dim=1)
-
-            pred_labels = pred_scores.argsort(dim=-1, descending=True)
-            total_top1 += torch.sum((pred_labels[:, :1] == target.unsqueeze(dim=-1)).any(dim=-1).float()).item()
-            total_top5 += torch.sum((pred_labels[:, :5] == target.unsqueeze(dim=-1)).any(dim=-1).float()).item()
-            if progress:
-                test_bar.set_description('KNN {} Epoch: [{}/{}] Acc@1:{:.2f}% Acc@5:{:.2f}%'
-                                         .format(prefix, epoch, epochs, total_top1 / total_num * 100, total_top5 / total_num * 100))
-
-            # compute output
-            if args.extract_features:
-                feature_list.append(feature)
-                target_list.append(target)
-                target_raw_list.append(target_raw)
-                pred_labels_list.append(pred_labels)
-                pred_scores_list.append(pred_scores)
-
-        # end for data, _, target in test_bar
-
-        if feature_list:
-            feature = torch.cat(feature_list, dim=0)
-            target = torch.cat(target_list, dim=0)
-            target_raw = torch.cat(target_raw_list, dim=0)
-            pred_labels = torch.cat(pred_labels_list, dim=0)
-            pred_scores = torch.cat(pred_scores_list, dim=0)
-
-            # Save to file
-            prefix = "test" if "Test" in prefix else "val"
-            directory = f'results/{args.dataset}/{args.name}'
-            fp = os.path.join(directory, f"{prefix}_features_dump.pt")       
-            os.makedirs(os.path.dirname(fp), exist_ok=True)
-
-            torch.save({
-                'features':     feature,
-                'labels':       target,
-                'labels_raw':   target_raw,
-                'pred_labels':  pred_labels,
-                'pred_scores':  pred_scores,
-                'model_epoch':  epoch,
-                'n_classes':    args.class_num,
-            }, fp)
-            print(f"Dumped features into {fp}")
-
-    return total_top1 / total_num * 100, total_top5 / total_num * 100
-
 def save_checkpoint(state, is_best, args, filename='checkpoint.pth.tar', sync=True):
     filename_tmp = filename + ".tmp"
     torch.save(state, filename_tmp)
@@ -1012,6 +976,7 @@ def load_checkpoint(path, model, model_momentum, optimizer, device='cuda'):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train SimCLR')
     parser.add_argument('--ssl_type', default='MoCo', type=str, choices=['MoCo', 'SimSiam'], help='SSL type')    
+    parser.add_argument('--penalty_type', default='IRM', type=str, choices=['IRM', 'VREx'], help='Penalty type')        
     parser.add_argument('--feature_dim', default=128, type=int, help='Feature dim for latent vector')
     parser.add_argument('--temperature', default=0.5, type=float, help='Temperature used in softmax')
     parser.add_argument('--tau_plus', default=0.1, type=float, help='Positive class priorx')
@@ -1101,6 +1066,9 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
 
+    if args.baseline:
+        args.penalty_weight, args.penalty_cont = 0, 0
+        
     assert ((args.penalty_weight > 0) or (args.penalty_cont > 0)      or  (args.penalty_keep_cont > 0)) or \
            ((args.penalty_cont == 0) and (args.penalty_keep_cont > 0) and (args.penalty_iters == 0))
 
@@ -1339,33 +1307,30 @@ if __name__ == '__main__':
             train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, shuffle=True, 
                                 pin_memory=True, persistent_workers=tr_pw, drop_last=tr_dl)
 
-        if args.baseline:
-            # FIX ME train_loader !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-            train_loss = train(model, train_loader, optimizer, temperature, debiased, tau_plus, tr_bs, args)
-        else: # Minimize Step
-            upd_split = updated_split_all if args.retain_group else updated_split
+        # Minimize step
+        upd_split = updated_split_all if args.retain_group else updated_split
 
+        if args.ssl_type.lower() == 'moco':
+            kwargs = {'net_momentum': model_momentum, 'queue': queue, 'temperature': temperature}
+        elif args.ssl_type.lower() == 'simsiam':
+            kwargs = {}
 
-            if args.ssl_type.lower() == 'moco':
-                kwargs = {'net_momentum': model_momentum, 'queue': queue, 'temperature': temperature}
-            elif args.ssl_type.lower() == 'simsiam':
-                kwargs = {}
+        train_loss = train_env(model, train_loader, optimizer, upd_split, tr_bs, args, **kwargs)
 
-            train_loss = train_env(model, train_loader, optimizer, upd_split, tr_bs, args, **kwargs)
-
-            if epoch % args.maximize_iter == 0: # Maximize Step
-                train_loader = shutdown_loader(train_loader)
-                gc.collect()
-                if args.offline:
-                    upd_loader = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, prefetch_factor=u_pf, shuffle=False, 
-                        pin_memory=False, persistent_workers=u_pw)
-                else:
-                    upd_loader = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, prefetch_factor=u_pf, shuffle=True, pin_memory=True, 
-                        drop_last=True, persistent_workers=u_pw)
-                updated_split = train_update_split(model, upd_loader, updated_split, random_init=args.random_init, args=args)
-                upd_loader = shutdown_loader(upd_loader)
-                gc.collect()              # run Python's garbage collector
-                updated_split_all.append(updated_split)
+        if (epoch % args.maximize_iter == 0) and (not args.baseline):
+            # Maximize Step
+            train_loader = shutdown_loader(train_loader)
+            gc.collect()
+            if args.offline:
+                upd_loader = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, prefetch_factor=u_pf, shuffle=False, 
+                    pin_memory=False, persistent_workers=u_pw)
+            else:
+                upd_loader = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, prefetch_factor=u_pf, shuffle=True, pin_memory=True, 
+                    drop_last=True, persistent_workers=u_pw)
+            updated_split = train_update_split(model, upd_loader, updated_split, random_init=args.random_init, args=args)
+            upd_loader = shutdown_loader(upd_loader)
+            gc.collect()              # run Python's garbage collector
+            updated_split_all.append(updated_split)
 
         feature_bank, feature_labels = None, None
         if (epoch % args.test_freq == 0) or \
