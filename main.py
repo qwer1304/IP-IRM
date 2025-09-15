@@ -244,7 +244,7 @@ class IRMCalculator:
         # dIRM/dTheta = d(gs1 * gs2)/dTheta = dgs1/dTheta * gs2 + gs1 * dgs2/dTheta
 
         num_halves = self.num_halves()
-        num_env = prod(szs.size()[1:]
+        num_env = prod(szs.size()[1:])
 
         for i in range(num_halves):
             j = (i + num_halves + 1) % num_halves
