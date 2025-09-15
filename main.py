@@ -223,7 +223,7 @@ class IRMCalculator:
     Base class for IRM calculation. Subclass this and implement
     `gradients_for_half` to return g_i for a half-batch.
     """
-    def __init__(self, loss_module, num_halves, num_splits, num_envs, irm_temp=1.0, debug=False, device='cuda', **kwargs):
+    def __init__(self, loss_module, irm_temp=1.0, debug=False, device='cuda', **kwargs):
         self.loss_module         = loss_module
         self.irm_temp            = irm_temp
         self.debug               = debug
@@ -302,7 +302,7 @@ class LossModule:
     Base class for pluggable loss module.
     Subclass for MoCo, SimSiam, etc.
     """
-    def __init__(self, net, num_halves, num_splits, num_envs, device='cuda', **kwargs):
+    def __init__(self, net, device='cuda', **kwargs):
         self.net = net
 
     def pre_batch(self, batch_data):
@@ -512,8 +512,7 @@ def train_env(net, train_loader, train_optimizer, updated_split, batch_size, arg
     else:
         raise ValueError(f"Unknown loss_type: {loss_type}")
 
-    num_halves  = LossModule.num_halves()
-    loss_module = LossModule(net, num_halves, num_splits, args.env_num, **kwargs)
+    loss_module = LossModule(net, **kwargs)
 
     # IRM calculator selection
     if loss_type   == 'moco':
@@ -523,7 +522,8 @@ def train_env(net, train_loader, train_optimizer, updated_split, batch_size, arg
     else:
         raise ValueError(f"Unknown loss_type: {loss_type}")
 
-    penalty_calculator   = PenaltyCalculator(loss_module, num_halves, num_splits, args.env_num, irm_temp=args.irm_temp, debug=args.debug, **kwargs)
+    penalty_calculator   = PenaltyCalculator(loss_module, irm_temp=args.irm_temp, debug=args.debug, **kwargs)
+    num_halves  = PenaltyCalculator.num_halves()
 
     loss_aggregator      = torch.zeros((num_halves, num_splits, args.env_num), dtype=torch.float, device=device) 
     penalty_aggregator   = torch.zeros((num_halves, num_splits, args.env_num), dtype=torch.float, device=device) 
