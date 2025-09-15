@@ -246,7 +246,6 @@ class IRMCalculator:
         num_halves = self.num_halves()
         for i in range(num_halves):
             j = (i + num_halves - 1) % num_halves
-            if i == 0:
             x = (  (grads[i] / szs[i, ..., None])
                  * (penalties[j, ..., None]  / szs[j, ..., None])
                  / num_env 
