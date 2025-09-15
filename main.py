@@ -143,28 +143,28 @@ class VRExCalculator(BaseCalculator):
         
     def penalty_finalize(self, penalties, szs):
         """
-            penalties:  Penalty per half, per env, unnormalized
+            penalties:  Penalty per half, per env, unnormalized (1,num_splits,num_envs)
             szs:        sizes of halves of environments
         """
-        mu = (penalties / szs).mean()
+        mu = (penalties / szs).mean(dim=[0,2], keepdim=True) # (1,num_splits,1)
         
-        return (penalties / szs - mu)**2 # per env for macro-batch
+        return ((penalties / szs - mu)**2) # (1, num_splits, 1), per env for macro-batch
 
     def penalty_grads_finalize(self, grads, penalties, szs):
         """
         Given dPenalty/dTheta, Penalty per half, per env and their sizes calculate the combined gradient.
         dV/dTheta = 2/E*sum_e((Loss_e - mu) * grad_e), where mu = 1/E*sum_e(Loss_e) 
-            grads:      dPenalty/dTheta per half, per env, unnormalized
-            penalties:  Penalty per half, per env, normalized
+            grads:      dPenalty/dTheta per half, per env, unnormalized (1,num_splits,num_envs,parnums)
+            penalties:  Penalty per half, per env, normalized (1,num_splits,num_envs)
             szs:        sizes of halves of environments
         """
         
-        num_env = prod(szs.size()[1:]) # E
-        mu      = penalties.mean()
-        x       = (2 * (penalties[..., None] - mu) 
+        num_env = szs.size() # [1,num_splits,num_envs]
+        mu      = penalties.mean(dim=[0,2], keepdim=True) # (1,num_splits,1)
+        x       = (2 * (penalties[..., None] - mu[..., None]) 
                      * (grads / szs[..., None]) 
-                     / num_env
-                  ).sum(dim=(0,1,2))
+                     / num_env[..., None]
+                  ).sum(dim=(0,1,2)) # (parnums,)
             
         total_grad_flat = x
         return total_grad_flat
