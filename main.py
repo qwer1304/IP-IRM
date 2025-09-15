@@ -159,11 +159,12 @@ class VRExCalculator(BaseCalculator):
             szs:        sizes of halves of environments
         """
         
-        num_env = torch.tensor(szs.size(), device=szs.device) # [1,num_splits,num_envs]
+        num_env = torch.tensor(szs.size(), device=szs.device, dtype=grads.dtype)  # (3,)
+        num_env = num_env.view(1, -1, 1, 1) # (1,num_splits,1,1)
         mu      = penalties.mean(dim=[0,2], keepdim=True) # (1,num_splits,1)
         x       = (2 * (penalties[..., None] - mu[..., None]) 
                      * (grads / szs[..., None]) 
-                     / num_env[..., None]
+                     / num_env
                   ).sum(dim=(0,1,2)) # (parnums,)
             
         total_grad_flat = x
