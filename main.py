@@ -658,7 +658,7 @@ def train_env(net, train_loader, train_optimizer, updated_split, batch_size, arg
         if loss_weight > 0:
             for pind, p in enumerate(net.parameters()):
                 dLoss_dTheta_env = loss_grads[pind]     # per env sum of dCont/dTheta, shape (I,J,K,param_numel)
-                total_grad_flat  = loss_calculator.loss_grads_finalize(dLoss_dTheta_env, loss_env, halves_sz)
+                total_grad_flat  = loss_module.loss_grads_finalize(dLoss_dTheta_env, loss_env, halves_sz)
                 p.grad          += total_grad_flat.view(p.shape) # reshape back to parameter shape
 
         # Penalty and its gradients
