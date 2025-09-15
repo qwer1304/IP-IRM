@@ -237,7 +237,7 @@ class VRExCalculator(BaseCalculator):
         """
         mu = (penalties / szs).mean()
         
-        return (penalties - mu)**2 # per env for macro-batch
+        return (penalties / szs - mu)**2 # per env for macro-batch
 
     def penalty_grads_finalize(self, grads, penalties, szs):
         """
