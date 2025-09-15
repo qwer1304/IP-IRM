@@ -247,7 +247,7 @@ class VRExCalculator(BaseCalculator):
         x       = (2 * (penalties[..., None] - mu) 
                      * (grads / szs[..., None]) 
                      / num_envs
-                  ).sum(dim=(0,1,2)
+                  ).sum(dim=(0,1,2))
             
         total_grad_flat = x
         return total_grad_flat
