@@ -244,8 +244,10 @@ class IRMCalculator:
         # dIRM/dTheta = d(gs1 * gs2)/dTheta = dgs1/dTheta * gs2 + gs1 * dgs2/dTheta
 
         num_halves = self.num_halves()
+        num_env = prod(szs.size()[1:]
+
         for i in range(num_halves):
-            j = (i + num_halves - 1) % num_halves
+            j = (i + num_halves + 1) % num_halves
             x = (  (grads[i] / szs[i, ..., None])
                  * (penalties[j, ..., None]  / szs[j, ..., None])
                  / num_env 
@@ -330,8 +332,9 @@ class LossModule:
 
 
     def loss_grads_finalize(self, grads, loses, szs):
+        num_env = prod(szs.size()[1:]
         total_grad_flat  = (  grads  
-                            / split_sz[..., None] 
+                            / szs[..., None] 
                             / num_env
                            ).sum(dim=(0,1,2))        # shape (param_numel,)
         return total_grad_flat
@@ -650,10 +653,8 @@ def train_env(net, train_loader, train_optimizer, updated_split, batch_size, arg
         if gradients_accumulation_step < gradients_accumulation_steps:
             continue
 
-        split_sz = halves_sz.sum(dim=0, keepdim=True) # (1,J,K) # sizes of envs
-        num_env = prod(split_sz.size())
-
         # Environments & original cont losses and gradients
+        split_sz = halves_sz.sum(dim=0, keepdim=True) # (1,J,K) # sizes of envs
         loss_env = loss_aggregator.sum(dim=0, keepdim=True) / split_sz     # per env for macro-batch
         if loss_weight > 0:
             for pind, p in enumerate(net.parameters()):
