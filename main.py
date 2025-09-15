@@ -31,95 +31,6 @@ def get_negative_mask(batch_size):
     negative_mask = torch.cat((negative_mask, negative_mask), 0)
     return negative_mask
 
-
-def train(net, data_loader, train_optimizer, temperature, debiased, tau_plus, batch_size, args):
-    net.train()
-    
-    transform = data_loader.dataset.transform
-    target_transform = data_loader.dataset.target_transform
-    
-    gradients_accumulation_batch_size = args.gradients_accumulation_batch_size
-    loader_batch_size = batch_size
-    gpu_batch_size = args.micro_batch_size
-    
-    gradients_accumulation_steps = gradients_accumulation_batch_size // loader_batch_size 
-    gpu_accum_steps = ceil(loader_batch_size / gpu_batch_size) # better round up 
-    
-    gradients_accumulation_step = 0
-    total_samples = len(data_loader.dataset)
-    
-    total_loss, total_num = 0.0, 0
-    bar_format = '{l_bar}{bar:' + str(args.bar) + '}{r_bar}' #{bar:-' + str(args.bar) + 'b}'
-    train_bar = tqdm(data_loader,
-            total=len(data_loader),
-            ncols=args.ncols,               # total width available
-            dynamic_ncols=False,            # disable autosizing
-            bar_format=bar_format,          # request bar width
-            )
-    
-    train_optimizer.zero_grad()
-
-    for pos_, target, idx in train_bar:
-        
-        # Split into micro-batches
-        pos_chunks = pos_.chunk(gpu_accum_steps)
-        target_chunks = target.chunk(gpu_accum_steps)
-        idx_chunks = idx.chunk(gpu_accum_steps)
-
-        for pos_chunk, target_chunk, ids_chunk in zip(pos_chunks, target_chunks, idx_chunks):
-            pos_, target = pos_chunk.cuda(non_blocking=True), target_chunk
-            
-            if transform is not None:
-                pos_1 = transform(pos_)
-                pos_2 = transform(pos_)
-            if target_transform is not None:
-                target = target_transform(target)
-                
-            feature_1, out_1 = net(pos_1)
-            feature_2, out_2 = net(pos_2)
-
-            # neg score
-            out = torch.cat([out_1, out_2], dim=0)
-            neg = torch.exp(torch.mm(out, out.t().contiguous()) / temperature)
-            mask = get_negative_mask(args.micro_batch_size).cuda(non_blocking=True)
-            neg = neg.masked_select(mask).view(2 * args.micro_batch_size, -1)
-
-            # pos score
-            pos = torch.exp(torch.sum(out_1 * out_2, dim=-1) / temperature)
-            pos = torch.cat([pos, pos], dim=0)
-
-            # estimator g()
-            if debiased:
-                N = batch_size * 2 - 2
-                Ng = (-tau_plus * N * pos + neg.sum(dim = -1)) / (1 - tau_plus)
-                # constrain (optional)
-                Ng = torch.clamp(Ng, min = N * np.e**(-1 / temperature))
-            else:
-                Ng = neg.sum(dim=-1)
-
-            # contrastive loss
-            loss = (- torch.log(pos / (pos + Ng) )).mean()
-            loss = loss / gpu_accum_steps / gradients_accumulation_steps  # scale loss to account for accumulation
-
-            loss.backward()
-
-            total_num += pos_1_chunk.size(0)
-            total_loss += loss.item() * pos_1_chunk.size(0)
-
-            # free memory of micro-batch
-            del pos_chunk, target_chunk, idx_chunk, loss
-            torch.cuda.empty_cache()
-
-        gradients_accumulation_step += 1
-        if (gradients_accumulation_step * loader_batch_size) == gradients_accumulation_batch_size:
-            train_optimizer.step()
-            gradients_accumulation_step = 0
-            train_optimizer.zero_grad()  # clear gradients at beginning of next gradients batch
-
-        train_bar.set_description('Train Epoch: [{}/{}] Loss: {:.4f}'.format(epoch, epochs, total_loss / total_num))
-
-    return total_loss / total_num
-
 class FeatureQueue:
     def __init__(self, queue_size, dim, device=None, dtype=torch.float32):
         """
@@ -915,6 +826,109 @@ def get_feature_bank(net, memory_data_loader, args, progress=False, prefix="Test
         feature_labels = torch.tensor(labels, device=feature_bank.device)
 
     return feature_bank, feature_labels
+
+# test for one epoch, use weighted knn to find the most similar images' label to assign the test image
+def test(net, feature_bank, feature_labels, test_data_loader, args, progress=False, prefix="Test:"):
+    net.eval()
+       
+    total_top1, total_top5, total_num = 0.0, 0.0, 0
+    with torch.no_grad():
+        # loop test data to predict the label by weighted knn search
+        bar_format = '{l_bar}{bar:' + str(args.bar) + '}{r_bar}' #{bar:-' + str(args.bar) + 'b}'
+        
+        if progress:
+            test_bar = tqdm(test_data_loader,
+                total=len(test_data_loader),
+                ncols=args.ncols,               # total width available
+                dynamic_ncols=False,            # disable autosizing
+                bar_format=bar_format           # request bar width
+            )
+        else:
+           test_bar = test_data_loader
+    
+        transform = test_data_loader.dataset.transform
+        target_transform = test_data_loader.dataset.target_transform
+    
+        if args.extract_features:
+            test_data_loader.dataset.target_transform = None
+
+        feature_list = []
+        pred_labels_list = []
+        pred_scores_list = []
+        target_list = []
+        target_raw_list = []
+
+        for data, target in test_bar:
+            data, target = data.cuda(non_blocking=True), target.cuda(non_blocking=True)
+            
+            if transform is not None:
+                data = transform(data)
+
+            target_raw = target
+            if args.extract_features and target_transform is not None:
+                target = target_transform(target_raw).cuda(non_blocking=True)
+
+            feature, out = net(data)
+
+            total_num += data.size(0)
+            # compute cos similarity between each feature vector and feature bank ---> [B, N]
+            sim_matrix = torch.mm(feature, feature_bank) # places sim_matrix on cuda
+            # [B, K]
+            sim_weight, sim_indices = sim_matrix.topk(k=k, dim=-1)
+            # [B, K]
+            sim_labels = torch.gather(feature_labels.expand(data.size(0), -1), dim=-1, index=sim_indices)
+            sim_weight = (sim_weight / temperature).exp()
+
+            # counts for each class
+            one_hot_label = torch.zeros(data.size(0) * k, c, device=sim_labels.device)
+            # [B*K, C]
+            one_hot_label = one_hot_label.scatter(dim=-1, index=sim_labels.view(-1, 1).long(), value=1.0)
+            # weighted score ---> [B, C]
+            pred_scores = torch.sum(one_hot_label.view(data.size(0), -1, c) * sim_weight.unsqueeze(dim=-1), dim=1)
+
+            pred_labels = pred_scores.argsort(dim=-1, descending=True)
+            total_top1 += torch.sum((pred_labels[:, :1] == target.unsqueeze(dim=-1)).any(dim=-1).float()).item()
+            total_top5 += torch.sum((pred_labels[:, :5] == target.unsqueeze(dim=-1)).any(dim=-1).float()).item()
+            if progress:
+                test_bar.set_description('KNN {} Epoch: [{}/{}] Acc@1:{:.2f}% Acc@5:{:.2f}%'
+                                         .format(prefix, epoch, epochs, total_top1 / total_num * 100, total_top5 / total_num * 100))
+
+            # compute output
+            if args.extract_features:
+                feature_list.append(feature)
+                target_list.append(target)
+                target_raw_list.append(target_raw)
+                pred_labels_list.append(pred_labels)
+                pred_scores_list.append(pred_scores)
+
+        # end for data, _, target in test_bar
+
+        if feature_list:
+            feature = torch.cat(feature_list, dim=0)
+            target = torch.cat(target_list, dim=0)
+            target_raw = torch.cat(target_raw_list, dim=0)
+            pred_labels = torch.cat(pred_labels_list, dim=0)
+            pred_scores = torch.cat(pred_scores_list, dim=0)
+
+            # Save to file
+            prefix = "test" if "Test" in prefix else "val"
+            directory = f'results/{args.dataset}/{args.name}'
+            fp = os.path.join(directory, f"{prefix}_features_dump.pt")       
+            os.makedirs(os.path.dirname(fp), exist_ok=True)
+
+            torch.save({
+                'features':     feature,
+                'labels':       target,
+                'labels_raw':   target_raw,
+                'pred_labels':  pred_labels,
+                'pred_scores':  pred_scores,
+                'model_epoch':  epoch,
+                'n_classes':    args.class_num,
+            }, fp)
+            print(f"Dumped features into {fp}")
+
+    return total_top1 / total_num * 100, total_top5 / total_num * 100
+
     
 def save_checkpoint(state, is_best, args, filename='checkpoint.pth.tar', sync=True):
     filename_tmp = filename + ".tmp"
