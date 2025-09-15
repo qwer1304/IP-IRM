@@ -292,10 +292,6 @@ class SimSiamIRMCalculator(IRMCalculator):
         g_i = torch.autograd.grad(s*loss, s, create_graph=True)[0]
         return g_i
         
-    @staticmethod
-    def num_halves():
-        return 1
-
 # ---------------------------
 # Base Loss Module
 # ---------------------------
