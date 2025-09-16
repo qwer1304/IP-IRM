@@ -141,29 +141,29 @@ class VRExCalculator(BaseCalculator):
         
     def penalty_finalize(self, penalties, szs):
         """
-            penalties:  Penalty per half, per env, unnormalized (1,num_splits,num_envs)
+            penalties:  Penalty per half, per env, unnormalized (1,num_partitions,num_envs)
             szs:        sizes of halves of environments
         """
-        mu = (penalties / szs).mean(dim=[0,2], keepdim=True) # (1,num_splits,1)
+        mu = (penalties / szs).mean(dim=[0,2], keepdim=True) # (1,num_partitions,1)
         
-        return ((penalties / szs - mu)**2) # normalized per env for macro-batch, (1, num_splits, num_envs)
+        return ((penalties / szs - mu)**2) # normalized per env for macro-batch, (1, num_partitions, num_envs)
 
     def penalty_grads_finalize(self, grads, penalties, szs):
         """
         Given dPenalty/dTheta, Penalty per half, per env and their sizes calculate the combined gradient.
         dV/dTheta = 2/E*sum_e((Loss_e - mu) * grad_e), where mu = 1/E*sum_e(Loss_e) 
-            grads:      dPenalty/dTheta per half, per env, unnormalized (1,num_splits,num_envs,parnums)
-            penalties:  Penalty per half, normalized per env, (1,num_splits,num_envs)
+            grads:      dPenalty/dTheta per half, per env, unnormalized (1,num_partitions,num_envs,parnums)
+            penalties:  Penalty per half, normalized per env, (1,num_partitions,num_envs)
             szs:        sizes of halves of environments
         """
         
         num_env    = szs.size(2)
-        num_splits = szs.size(1)
-        mu      = penalties.mean(dim=[0,2], keepdim=True) # (1,num_splits,1)
+        num_partitions = szs.size(1)
+        mu      = penalties.mean(dim=[0,2], keepdim=True) # (1,num_partitions,1)
         x       = (2 * (penalties[..., None] - mu[..., None]) 
                      * (grads / szs[..., None]) 
                      / num_env
-                  ).sum(dim=(0,1,2)) / num_splits # (parnums,)
+                  ).sum(dim=(0,1,2)) / num_partitions # (parnums,)
             
         total_grad_flat = x
         return total_grad_flat
@@ -222,14 +222,14 @@ class IRMCalculator(BaseCalculator):
 
         num_halves = self.num_halves()
         num_env    = szs.size(2)
-        num_splits = szs.size(1)
+        num_partitions = szs.size(1)
 
         for i in range(num_halves):
             j = (i + num_halves + 1) % num_halves
             x = (  (grads[i] / szs[i, ..., None])
                  * penalties[j, ..., None]
                  / num_env 
-                ).sum(dim=(0,1)) / num_splits  # shape (param_numel,)
+                ).sum(dim=(0,1)) / num_partitions  # shape (param_numel,)
             if i == 0:
                 total_grad_flat = x
             else:
@@ -435,16 +435,16 @@ class SimSiamLossModule(LossModule):
         return loss
 
 # ssl training with IP-IRM
-def train_env(net, train_loader, train_optimizer, updated_split, batch_size, args, **kwargs):
+def train_env(net, train_loader, train_optimizer, updated_partition, batch_size, args, **kwargs):
     # Initialize dictionaries to store times
 
     net.train()
     
-    if isinstance(updated_split, list): # if retain previous partitions
+    if isinstance(updated_partition, list): # if retain previous partitions
         assert args.retain_group
     else:
-        updated_split = [updated_split]
-    num_splits = len(updated_split)
+        updated_partition = [updated_partition]
+    num_partitions = len(updated_partition)
     
     device = next(net.parameters()).device
 
@@ -516,10 +516,10 @@ def train_env(net, train_loader, train_optimizer, updated_split, batch_size, arg
     penalty_calculator   = PenaltyCalculator(loss_module, irm_temp=args.irm_temp, debug=args.debug, **kwargs)
     num_halves  = PenaltyCalculator.num_halves()
 
-    loss_aggregator      = torch.zeros((num_halves, num_splits, args.env_num), dtype=torch.float, device=device) 
-    penalty_aggregator   = torch.zeros((num_halves, num_splits, args.env_num), dtype=torch.float, device=device) 
+    loss_aggregator      = torch.zeros((num_halves, num_partitions, args.env_num), dtype=torch.float, device=device) 
+    penalty_aggregator   = torch.zeros((num_halves, num_partitions, args.env_num), dtype=torch.float, device=device) 
     loss_keep_aggregator = torch.tensor(0, dtype=torch.float, device=device) # scalar
-    halves_sz            = torch.zeros((num_halves, num_splits, args.env_num), dtype=torch.float, device=device) 
+    halves_sz            = torch.zeros((num_halves, num_partitions, args.env_num), dtype=torch.float, device=device) 
     # One buffer per parameter
     loss_grads = [  # dLoss / dTheta
         torch.zeros((*loss_aggregator.shape, p.numel()), dtype=p.dtype, device=p.device)
@@ -570,16 +570,16 @@ def train_env(net, train_loader, train_optimizer, updated_split, batch_size, arg
                     (loss * loss_keep_weight).backward(retain_graph=True) # gradients must be multiplied by scaler
                     loss_keep_aggregator += loss.detach() # before scaler
 
-                for split_num, updated_split_each in enumerate(updated_split):
+                for partition_num, updated_partition_each in enumerate(updated_partition):
                     for env in range(args.env_num):
 
-                        # split mb: 'idxs' are indices into 'indexs' that correspond to domain 'env' in 'updated_split_each'
-                        idxs = utils.assign_idxs(indexs, updated_split_each, env)
+                        # split mb: 'idxs' are indices into 'indexs' that correspond to domain 'env' in 'updated_partition_each'
+                        idxs = utils.assign_idxs(indexs, updated_partition_each, env)
                         
                         if (N := len(idxs)) == 0:
                             continue
                             
-                        halves_sz[j,split_num,env] += N # update number of elements in environment
+                        halves_sz[j,partition_num,env] += N # update number of elements in environment
 
                         # -----------------------
                         # SSL
@@ -587,7 +587,7 @@ def train_env(net, train_loader, train_optimizer, updated_split, batch_size, arg
                         if loss_weight > 0:
                             # compute unnormalized micro-batch loss
                             loss = loss_module.compute_loss_micro(idxs=idxs)
-                            loss_aggregator[j,split_num,env] += loss.detach() # unnormalized, before penalty scaler
+                            loss_aggregator[j,partition_num,env] += loss.detach() # unnormalized, before penalty scaler
 
                             # compute unnormalized gradients for this loss
                             grads = torch.autograd.grad(
@@ -599,12 +599,12 @@ def train_env(net, train_loader, train_optimizer, updated_split, batch_size, arg
 
                             # flatten and accumulate per parameter
                             for _j, g in enumerate(grads):
-                                loss_grads[_j][j,split_num,env] += g.detach().view(-1)
+                                loss_grads[_j][j,partition_num,env] += g.detach().view(-1)
 
                         # penalty
                         if penalty_weight > 0:
                             penalty = penalty_calculator.penalty(loss.detach(), idxs=idxs)
-                            penalty_aggregator[j,split_num,env] += penalty.detach() # unnormalized penalty components before penalty scaler
+                            penalty_aggregator[j,partition_num,env] += penalty.detach() # unnormalized penalty components before penalty scaler
 
                             # compute gradients for this loss
                             grads = torch.autograd.grad(
@@ -616,10 +616,10 @@ def train_env(net, train_loader, train_optimizer, updated_split, batch_size, arg
 
                             # flatten and accumulate per parameter
                             for _j, g in enumerate(grads):
-                                penalty_grads[_j][j,split_num,env] += g.detach().view(-1)
-                        # free memory of split here
+                                penalty_grads[_j][j,partition_num,env] += g.detach().view(-1)
+                        # free memory of partition here
                     # end for env in range(args.env_num): 
-                # end for split_num, updated_split_each in enumerate(updated_split):
+                # end for partition_num, updated_partition_each in enumerate(updated_partition):
                 loss_module.post_micro_batch()
                 loss_module.prepare_for_free()
                 
@@ -643,8 +643,8 @@ def train_env(net, train_loader, train_optimizer, updated_split, batch_size, arg
             continue
 
         # Environments & original cont losses and gradients
-        split_sz = halves_sz.sum(dim=0, keepdim=True) # (1,J,K) # sizes of envs
-        loss_env = loss_aggregator.sum(dim=0, keepdim=True) / split_sz     # per env for macro-batch, normalized per env
+        partition_sz = halves_sz.sum(dim=0, keepdim=True) # (1,J,K) # sizes of envs
+        loss_env = loss_aggregator.sum(dim=0, keepdim=True) / partition_sz     # per env for macro-batch, normalized per env
         if loss_weight > 0:
             for pind, p in enumerate(net.parameters()):
                 dLoss_dTheta_env = loss_grads[pind]     # per env sum of dCont/dTheta, shape (I,J,K,param_numel)
