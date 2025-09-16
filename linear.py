@@ -95,9 +95,13 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
         for batch_data in data_bar:
             data, target = batch_data[0], batch_data[1] # ommit index, if returned 
             # Split into micro-batches
-            data_chunks = data.chunk(gpu_accum_steps)
-            target_chunks = target.chunk(gpu_accum_steps)
-
+            if gpu_accum_steps > 1:
+                data_chunks = data.chunk(gpu_accum_steps)
+                target_chunks = target.chunk(gpu_accum_steps)
+            else:
+                data_chunks = data
+                target_chunks = target
+            
             for data_chunk, target_chunk in zip(data_chunks, target_chunks):
                 data, target = data_chunk.cuda(non_blocking=True), target_chunk.cuda(non_blocking=True)
 
@@ -144,7 +148,7 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
                     train_optimizer.zero_grad()  # clear gradients at beginning of next gradients batch
 
             data_bar.set_description('{} Epoch: [{}/{}] Loss: {:.4f} Acc@1: {:.2f}% Acc@5: {:.2f}%'
-                                     .format('Train' if is_train else 'Test', epoch, epochs, total_loss / total_num,
+                                     .format(dataset.capitalize(), epoch, epochs, total_loss / total_num,
                                              total_correct_1 / total_num * 100, total_correct_5 / total_num * 100))
         # end for data, target in data_bar:
 
