@@ -300,6 +300,10 @@ if __name__ == '__main__':
             pin_memory=True, persistent_workers=te_pw)
 
     num_class = len(train_data.classes) if args.dataset != "ImageNet" else args.class_num
+    
+    class FeatureQueue: # to make checkpoint load happy
+        def __init__(self, *args, **kwargs): pass
+        
     model = Net(num_class=num_class, pretrained_path=model_path, image_class=image_class, args=args).cuda()
     for param in model.f.parameters():
         param.requires_grad = False
