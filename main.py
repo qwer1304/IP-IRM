@@ -1237,7 +1237,8 @@ if __name__ == '__main__':
         queue = FeatureQueue(queue_size, feature_dim, device='cuda', dtype=torch.float32)
     elif args.ssl_type.lower() == 'simsiam':
         model_momentum = None
-        queue = None       
+        queue = None
+        momentum = None
 
     if args.opt == "Adam":
         optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
@@ -1341,7 +1342,7 @@ if __name__ == '__main__':
         upd_split = updated_split_all if args.retain_group else updated_split
 
         if args.ssl_type.lower() == 'moco':
-            kwargs = {'net_momentum': model_momentum, 'queue': queue, 'temperature': temperature}
+            kwargs = {'net_momentum': model_momentum, 'queue': queue, 'temperature': temperature, 'momentum': momentum}
         elif args.ssl_type.lower() == 'simsiam':
             kwargs = {}
 
