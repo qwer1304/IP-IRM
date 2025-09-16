@@ -694,7 +694,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         total_loss           += loss_batch.item()                                * this_batch_size * gradients_accumulation_steps
 
         desc_str = f'Train Epoch: [{epoch}/{epochs}] [{trained_samples}/{total_samples}]' + \
-                    ' {args.ssl_type}:' + \
+                   f' {args.ssl_type}:' + \
                    f' Total: {total_loss/trained_samples:.4f}' + \
                    f' First: {total_keep_cont_loss/trained_samples:.4f}' + \
                    f' Env: {total_cont_loss/trained_samples:.4f}' + \
