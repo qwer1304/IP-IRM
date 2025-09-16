@@ -99,8 +99,8 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
             data, target = batch_data[0], batch_data[1] # ommit index, if returned 
             # Split into micro-batches
             if gpu_accum_steps > 1:
-                data_chunks = data.chunk(gpu_accum_steps)
-                target_chunks = target.chunk(gpu_accum_steps)
+                data_chunks = data.split(gpu_batch_size)
+                target_chunks = target.split(gpu_batch_size)
             else:
                 data_chunks = (data,)
                 target_chunks = (target,)
@@ -148,8 +148,9 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
                     train_optimizer.step()
                     train_optimizer.zero_grad()  # clear gradients at beginning of next gradients batch
 
-            data_bar.set_description('{} Epoch: [{}/{}] Loss: {:.4f} Acc@1: {:.2f}% Acc@5: {:.2f}%'
-                                     .format(dataset.capitalize(), epoch, epochs, total_loss / total_num,
+            data_bar.set_description('{} Epoch: [{}/{}] [{}/{}] Loss: {:.4f} Acc@1: {:.2f}% Acc@5: {:.2f}%'
+                                     .format(dataset.capitalize(), epoch, epochs, total_num, len(data_loader.dataset),
+                                             total_loss / total_num,
                                              total_correct_1 / total_num * 100, total_correct_5 / total_num * 100))
         # end for data, target in data_bar:
 
@@ -294,9 +295,9 @@ if __name__ == '__main__':
             #exit()
 
         else:
-            train_data  = utils.Imagenet_idx(root=args.data + '/train', transform=train_transform, target_transform=target_transform, class_to_idx=class_to_idx)
-            test_data   = utils.Imagenet(root=args.data     + '/test',  transform=test_transform,  target_transform=target_transform, class_to_idx=class_to_idx)
-            val_data    = utils.Imagenet(root=args.data     + '/val',   transform=test_transform,  target_transform=target_transform, class_to_idx=class_to_idx)
+            train_data  = utils.Imagenet(root=args.data + '/train', transform=train_transform, target_transform=target_transform, class_to_idx=class_to_idx)
+            test_data   = utils.Imagenet(root=args.data + '/test',  transform=test_transform,  target_transform=target_transform, class_to_idx=class_to_idx)
+            val_data    = utils.Imagenet(root=args.data + '/val',   transform=test_transform,  target_transform=target_transform, class_to_idx=class_to_idx)
 
         train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, shuffle=True, pin_memory=True, 
             drop_last=True, persistent_workers=tr_pw)
