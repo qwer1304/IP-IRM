@@ -436,16 +436,16 @@ class SimSiamLossModule(LossModule):
         return loss
 
 # ssl training with IP-IRM
-def train_env(net, train_loader, train_optimizer, updated_partition, batch_size, args, **kwargs):
+def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, **kwargs):
     # Initialize dictionaries to store times
 
     net.train()
     
-    if isinstance(updated_partition, list): # if retain previous partitions
+    if isinstance(partitions, list): # if retain previous partitions
         assert args.retain_group
     else:
-        updated_partition = [updated_partition]
-    num_partitions = len(updated_partition)
+        partitions = [partitions]
+    num_partitions = len(partitions)
     
     device = next(net.parameters()).device
 
@@ -489,7 +489,7 @@ def train_env(net, train_loader, train_optimizer, updated_partition, batch_size,
     # default to MoCo if args.loss_type not provided
     loss_type = getattr(args, 'ssl_type', 'moco')
     loss_type = loss_type.lower()
-    penalty_type = getattr(args, 'penalty_type', 'moco')
+    penalty_type = getattr(args, 'penalty_type', 'irm')
     penalty_type = penalty_type.lower()
 
     if loss_type == 'moco':
@@ -571,11 +571,11 @@ def train_env(net, train_loader, train_optimizer, updated_partition, batch_size,
                     (loss * loss_keep_weight).backward(retain_graph=True) # gradients must be multiplied by scaler
                     loss_keep_aggregator += loss.detach() # before scaler
 
-                for partition_num, updated_partition_each in enumerate(updated_partition):
+                for partition_num, partition in enumerate(partitions):
                     for env in range(args.env_num):
 
-                        # split mb: 'idxs' are indices into 'indexs' that correspond to domain 'env' in 'updated_partition_each'
-                        idxs = utils.assign_idxs(indexs, updated_partition_each, env)
+                        # split mb: 'idxs' are indices into 'indexs' that correspond to domain 'env' in 'partition'
+                        idxs = utils.assign_idxs(indexs, partition, env)
                         
                         if (N := len(idxs)) == 0:
                             continue
@@ -620,7 +620,7 @@ def train_env(net, train_loader, train_optimizer, updated_partition, batch_size,
                                 penalty_grads[_j][j,partition_num,env] += g.detach().view(-1)
                         # free memory of partition here
                     # end for env in range(args.env_num): 
-                # end for partition_num, updated_partition_each in enumerate(updated_partition):
+                # end for partition_num, partition in enumerate(partitions):
                 loss_module.post_micro_batch()
                 loss_module.prepare_for_free()
                 
@@ -694,21 +694,23 @@ def train_env(net, train_loader, train_optimizer, updated_partition, batch_size,
         total_loss           += loss_batch.item()                                * this_batch_size * gradients_accumulation_steps
 
         desc_str = f'Train Epoch: [{epoch}/{epochs}] [{trained_samples}/{total_samples}]' + \
-                    ' Losses:' + \
+                    ' {args.ssl_type}:' + \
                    f' Total: {total_loss/trained_samples:.4f}' + \
-                   f' Keep: {total_keep_cont_loss/trained_samples:.4f}' + \
-                   f' Cont: {total_cont_loss/trained_samples:.4f}' + \
-                   f' Penalty: {total_irm_loss/trained_samples:.4g}' + \
+                   f' First: {total_keep_cont_loss/trained_samples:.4f}' + \
+                   f' Env: {total_cont_loss/trained_samples:.4f}' + \
+                   f' {args.penalty_type}: {total_irm_loss/trained_samples:.4g}' + \
                    f' LR: {train_optimizer.param_groups[0]["lr"]:.4f} PW {penalty_weight:.4f}'
         desc_str += loss_module.get_debug_info_str()
         train_bar.set_description(desc_str)
 
         if batch_index % 10 == 0:
-            utils.write_log('Train Epoch: [{:d}/{:d}] [{:d}/{:d}]  Losses: Total: {:.4f}  Keep: {:.4f} Cont: {:.4f} Penalty: {:.4g} LR: {:.4f}  PW {:.4f}'
+            utils.write_log('Train Epoch: [{:d}/{:d}] [{:d}/{:d}]  {args.ssl_type}: Total: {:.4f}  First: {:.4f} Env: {:.4f}'
                             .format(epoch, epochs, trained_samples, total_samples,
                                     total_loss/trained_samples, total_keep_cont_loss/trained_samples, 
-                                    total_cont_loss/trained_samples, total_irm_loss/trained_samples, 
-                                    train_optimizer.param_groups[0]['lr'], penalty_weight), log_file=log_file)
+                                    total_cont_loss/trained_samples) + 
+                            ' {args.penalty_type}: {:.4g} LR: {:.4f}  PW {:.4f}'
+                            .format(total_irm_loss/trained_samples, train_optimizer.param_groups[0]['lr'], penalty_weight), 
+                            log_file=log_file)
                                         
         # Prepare for next iteration
         gradients_accumulation_step = 0

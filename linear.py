@@ -258,31 +258,38 @@ if __name__ == '__main__':
     elif args.dataset == 'ImageNet':
         train_transform = utils.make_train_transform(image_size, randgray=not args.norandgray, normalize=args.image_class)
         test_transform = utils.make_test_transform(normalize=args.image_class)
-        wrap = args.extract_features
 
-        # descriptors of train data
-        train_desc  =   {'dataset': utils.Imagenet,
-                          'transform': train_transform,
-                          'target_transform': target_transform,
-                          'class_to_index': class_to_idx,
-                          'wrap': False, # for changeable target transform
-                          'target_pos': 2,
-                          'required_split': "in",
-                        }
-        # descriptors of test data
-        test_desc   =   {'dataset': utils.Imagenet,
-                          'transform': test_transform,
-                          'target_transform': target_transform,
-                          'class_to_index': class_to_idx,
-                          'wrap': wrap, # for changeable target transform
-                          'target_pos': 2,
-                          'required_split': "in",
-                        }
-        datas = prepare_datasets(args.data, args.train_envs, [train_desc], args.holdout_fraction, args.seed)
-        train_data = datas[0][0]
+        if False:
+            wrap = args.extract_features
+            # descriptors of train data
+            train_desc  =   {'dataset': utils.Imagenet_idx,
+                              'transform': train_transform,
+                              'target_transform': target_transform,
+                              'class_to_index': class_to_idx,
+                              'wrap': False, # for changeable target transform
+                              'required_split': "in",
+                            }
+            # descriptors of test data
+            test_desc   =   {'dataset': utils.Imagenet,
+                              'transform': test_transform,
+                              'target_transform': target_transform,
+                              'class_to_index': class_to_idx,
+                              'wrap': wrap, # for changeable target transform
+                              'required_split': "in",
+                            }
 
-        datas = prepare_datasets(args.data, args.test_envs, [test_desc], 1.0, args.seed)
-        test_data = datas[0][0]
+            datas = prepare_datasets(args.data, args.train_envs, [train_desc], args.holdout_fraction, args.seed)
+            train_data = datas[0][0]
+
+            datas = prepare_datasets(args.data, args.test_envs, [test_desc], 1.0, args.seed)
+            test_data = datas[0][0]
+
+            #traverse_objects(update_data)
+            #exit()
+
+        else:
+            train_data  = utils.Imagenet_idx(root=args.data + '/train', transform=train_transform, target_transform=target_transform, class_to_idx=class_to_idx)
+            test_data   = utils.Imagenet(root=args.data     + '/test',  transform=test_transform,  target_transform=target_transform, class_to_idx=class_to_idx)
 
         train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, shuffle=True, pin_memory=True, 
             drop_last=True, persistent_workers=tr_pw)
