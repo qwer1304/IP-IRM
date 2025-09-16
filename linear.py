@@ -118,10 +118,8 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
                 out, feature = net(data, normalize=True)
                 loss = loss_criterion(out, target)
 
-                loss = loss / gpu_accum_steps / loader_accum_steps  # scale loss to account for accumulation
-
                 if is_train:
-                    loss.backward() # adds gradients to accumulated ones
+                    (loss / gpu_accum_steps / loader_accum_steps).backward() # adds gradients to accumulated ones
             
                 total_num += data.size(0)
                 total_loss += loss.item() * data.size(0)
@@ -302,9 +300,9 @@ if __name__ == '__main__':
 
         train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, shuffle=True, pin_memory=True, 
             drop_last=True, persistent_workers=tr_pw)
-        test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
+        test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=True, 
             pin_memory=True, persistent_workers=te_pw)
-        val_loader = DataLoader(val_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
+        val_loader = DataLoader(val_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=True, 
             pin_memory=True, persistent_workers=te_pw)
 
     num_class = len(train_data.classes) if args.dataset != "ImageNet" else args.class_num
