@@ -114,6 +114,7 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
 
                 out, feature = net(data)
                 print()
+                print(batch_data[0].size(), batch_data[1].size()
                 print(data_chunks[0].size(), target_chunks[0].size(), data_chunk.size(), target_chunk.size(), out.size(), target.size())
                 print()
                 loss = loss_criterion(out, target)
