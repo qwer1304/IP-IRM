@@ -95,7 +95,7 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
         for batch_data in data_bar:
             data, target = batch_data[0], batch_data[1] # ommit index, if returned 
             # Split into micro-batches
-            if gpu_accum_steps > 1:
+            if gpu_accum_steps > 0:
                 data_chunks = data.chunk(gpu_accum_steps)
                 target_chunks = target.chunk(gpu_accum_steps)
             else:
