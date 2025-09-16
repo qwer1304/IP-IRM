@@ -357,7 +357,7 @@ class MoCoLossModule(LossModule):
         l_pos = torch.sum(out_q * out_k, dim=1, keepdim=True)
         l_neg = torch.matmul(out_q, self.queue.get((self.queue.queue_size - self.this_batch_size), advance=False).t())
         self.logits = torch.cat([l_pos, l_neg], dim=1)
-        self.labels = torch.zeros(self.logits.size(0), dtype=torch.long, device=logits.device)
+        self.labels = torch.zeros(self.logits.size(0), dtype=torch.long, device=self.logits.device)
         if self.debug:
             self.total_pos    += l_pos.mean().item() * l_pos.size(0)
             self.total_neg    += l_neg.mean().item() * l_pos.size(0)
