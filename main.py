@@ -136,9 +136,7 @@ class VRExCalculator(BaseCalculator):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    def penalty(self, idxs=None, **kwargs):
-        # TODO: reuse previously computed loss instead of re-computing it
-        loss = self.loss_module.compute_loss_micro(idxs=idxs)
+    def penalty(self, loss, *args, **kwargs):
         return loss
         
     def penalty_finalize(self, penalties, szs):
@@ -148,24 +146,24 @@ class VRExCalculator(BaseCalculator):
         """
         mu = (penalties / szs).mean(dim=[0,2], keepdim=True) # (1,num_splits,1)
         
-        return ((penalties / szs - mu)**2) # (1, num_splits, 1), per env for macro-batch
+        return ((penalties / szs - mu)**2) # normalized per env for macro-batch, (1, num_splits, num_envs)
 
     def penalty_grads_finalize(self, grads, penalties, szs):
         """
         Given dPenalty/dTheta, Penalty per half, per env and their sizes calculate the combined gradient.
         dV/dTheta = 2/E*sum_e((Loss_e - mu) * grad_e), where mu = 1/E*sum_e(Loss_e) 
             grads:      dPenalty/dTheta per half, per env, unnormalized (1,num_splits,num_envs,parnums)
-            penalties:  Penalty per half, per env, normalized (1,num_splits,num_envs)
+            penalties:  Penalty per half, normalized per env, (1,num_splits,num_envs)
             szs:        sizes of halves of environments
         """
         
-        num_env = torch.tensor(szs.size(), device=szs.device, dtype=grads.dtype)  # (3,)
-        num_env = num_env.view(1, -1, 1, 1) # (1,num_splits,1,1)
+        num_env    = szs.size(2)
+        num_splits = szs.size(1)
         mu      = penalties.mean(dim=[0,2], keepdim=True) # (1,num_splits,1)
         x       = (2 * (penalties[..., None] - mu[..., None]) 
                      * (grads / szs[..., None]) 
                      / num_env
-                  ).sum(dim=(0,1,2)) # (parnums,)
+                  ).sum(dim=(0,1,2)) / num_splits # (parnums,)
             
         total_grad_flat = x
         return total_grad_flat
@@ -201,7 +199,7 @@ class IRMCalculator(BaseCalculator):
         super().__init__(*args, **kwargs)
         self.irm_temp            = irm_temp
 
-    def penalty(self, idxs=None, **kwargs):
+    def penalty(self, *args, **kwargs):
         """
         Compute gradient w.r.t. scale for a half-batch.
         Must be implemented by subclass.
@@ -210,27 +208,28 @@ class IRMCalculator(BaseCalculator):
         raise NotImplementedError
         
     def penalty_finalize(self, penalties, szs):
-        return (penalties[0] / szs[0]) * (penalties[1] / szs[1])  # per env for macro-batch, normalized
+        return (penalties[0] / szs[0]) * (penalties[1] / szs[1])  # normalized per env for macro-batch 
 
     def penalty_grads_finalize(self, grads, penalties, szs):
         """
         Given dPenalty/dTheta, Penalty per half, per env and their sizes calculate the combined gradient.
             grads:      dPenalty/dTheta per half, per env, unnormalized
-            penalties:  Penalty per half, per env, normalized
+            penalties:  Penalty per half, normalized per env
             szs:        sizes of halves of environments
         """
         # IRM = gs1 * gs2, where gs1 and gs2 are gradients w.r.t. scaler of mean CE of halves of sample in a batch
         # dIRM/dTheta = d(gs1 * gs2)/dTheta = dgs1/dTheta * gs2 + gs1 * dgs2/dTheta
 
         num_halves = self.num_halves()
-        num_env = prod(szs.size()[1:])
+        num_env    = szs.size(2)
+        num_splits = szs.size(1)
 
         for i in range(num_halves):
             j = (i + num_halves + 1) % num_halves
             x = (  (grads[i] / szs[i, ..., None])
                  * penalties[j, ..., None]
                  / num_env 
-                ).sum(dim=(0,1))  # shape (param_numel,)
+                ).sum(dim=(0,1)) / num_splits  # shape (param_numel,)
             if i == 0:
                 total_grad_flat = x
             else:
@@ -249,7 +248,7 @@ class CE_IRMCalculator(IRMCalculator):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    def penalty(self, idxs=None, **kwargs):
+    def penalty(self, *args, idxs=None, **kwargs):
         device = self.loss_module.logits().device
         # one scalar (requires grad)
         s = torch.tensor(1.0, device=device, requires_grad=True)
@@ -262,12 +261,11 @@ class SimSiamIRMCalculator(IRMCalculator):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    def penalty(self, idxs=None):
+    def penalty(self, loss, **kwargs):
         device = self.loss_module.representations[0].device
         # one scalar (requires grad)
         s = torch.tensor(1.0, device=device, requires_grad=True)
         # Compute g_i in a SimSiam-specific way (e.g., L2 or cosine loss)
-        loss = self.loss_module.compute_loss_micro(idxs=idxs)
         g_i = torch.autograd.grad(s*loss, s, create_graph=True)[0]
         return g_i
         
@@ -306,14 +304,14 @@ class LossModule:
         return ""
 
 
-    def loss_grads_finalize(self, penalties, losses, szs):
+    def loss_grads_finalize(self, grads, losses, szs):
         """
-            grads:  Penalty per half, per env, unnormalized
-            losses: Losses per half, per env, normalized
+            grads:  Penalty per half, unnormalized per env
+            losses: Losses per half, normalized per env
             szs:    sizes of halves of environments
         """
         num_env = prod(szs.size()[1:])
-        total_grad_flat  = (  penalties  
+        total_grad_flat  = (  grads  
                             / szs[..., None] 
                             / num_env
                            ).sum(dim=(0,1,2))        # shape (param_numel,)
@@ -424,6 +422,9 @@ class SimSiamLossModule(LossModule):
         self.representations = (z1, z2, p1, p2)
 
     def compute_loss_micro(self, idxs=None, scale=1.0):
+        """
+        Computes unnormalized loss of a micro-batch
+        """
         z1, z2, p1, p2 = self.representations
         if idxs is None:
             idxs = torch.arange(z1.size(0), device=z1.device)
@@ -559,7 +560,7 @@ def train_env(net, train_loader, train_optimizer, updated_split, batch_size, arg
                 # SSL
                 # -----------------------
 
-                # compute micro-batch loss
+                # compute unnormalized micro-batch loss
                 loss = loss_module.compute_loss_micro()
 
                 if args.keep_cont and (loss_keep_weight > 0): # global loss @ 1st partition
@@ -584,10 +585,11 @@ def train_env(net, train_loader, train_optimizer, updated_split, batch_size, arg
                         # SSL
                         # -----------------------
                         if loss_weight > 0:
+                            # compute unnormalized micro-batch loss
                             loss = loss_module.compute_loss_micro(idxs=idxs)
-                            loss_aggregator[j,split_num,env] += loss.detach() # before penalty scaler
+                            loss_aggregator[j,split_num,env] += loss.detach() # unnormalized, before penalty scaler
 
-                            # compute gradients for this loss
+                            # compute unnormalized gradients for this loss
                             grads = torch.autograd.grad(
                                 loss_weight * loss, # gradients must be multiplied by scaler
                                 net.parameters(),
@@ -601,12 +603,12 @@ def train_env(net, train_loader, train_optimizer, updated_split, batch_size, arg
 
                         # penalty
                         if penalty_weight > 0:
-                            penalty = penalty_calculator.penalty(idxs=idxs)
-                            penalty_aggregator[j,split_num,env] += penalty.detach() # penalty components before penalty scaler
+                            penalty = penalty_calculator.penalty(loss.detach(), idxs=idxs)
+                            penalty_aggregator[j,split_num,env] += penalty.detach() # unnormalized penalty components before penalty scaler
 
                             # compute gradients for this loss
                             grads = torch.autograd.grad(
-                                penalty_weight * penalty,  # gradients must be multiplied by scaler
+                                penalty_weight * penalty,  # unnormalized gradients must be multiplied by scaler
                                 net.parameters(),
                                 retain_graph=True,  # keep graph for next loss
                                 allow_unused=True
@@ -642,7 +644,7 @@ def train_env(net, train_loader, train_optimizer, updated_split, batch_size, arg
 
         # Environments & original cont losses and gradients
         split_sz = halves_sz.sum(dim=0, keepdim=True) # (1,J,K) # sizes of envs
-        loss_env = loss_aggregator.sum(dim=0, keepdim=True) / split_sz     # per env for macro-batch, normalized
+        loss_env = loss_aggregator.sum(dim=0, keepdim=True) / split_sz     # per env for macro-batch, normalized per env
         if loss_weight > 0:
             for pind, p in enumerate(net.parameters()):
                 dLoss_dTheta_env = loss_grads[pind]     # per env sum of dCont/dTheta, shape (I,J,K,param_numel)
@@ -650,7 +652,7 @@ def train_env(net, train_loader, train_optimizer, updated_split, batch_size, arg
                 p.grad          += total_grad_flat.view(p.shape) # reshape back to parameter shape
 
         # Penalty and its gradients
-        penalty_env = penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz) # normalized
+        penalty_env = penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz) # normalized per env
         if penalty_weight > 0:
             for pind, p in enumerate(net.parameters()):
                 dPenalty_dTheta_env = penalty_grads[pind]  # per env sum of dPenalty/dTheta over macro-batch per parameter, shape (I,J,K,param_numel)               
@@ -658,7 +660,7 @@ def train_env(net, train_loader, train_optimizer, updated_split, batch_size, arg
                 p.grad             += total_grad_flat.view(p.shape)  # reshape back to parameter shape
             
         loss_batch = ((loss_keep_weight * loss_keep_aggregator) + # loss_keep_aggregator is a scalar
-                      (penalty_weight   * penalty_env.mean())   + 
+                      (penalty_weight   * penalty_env.mean())   + # mean over envs, mean over macro-batch
                       (loss_weight      * loss_env.mean())        # mean over envs, mean over macro-batch
                      )
 
