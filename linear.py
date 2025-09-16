@@ -2,6 +2,7 @@ import argparse
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from torchvision.datasets import STL10, CIFAR10, CIFAR100, ImageFolder
@@ -46,9 +47,11 @@ class Net(nn.Module):
                 print(msg.unexpected_keys, missing_keys)
             self.fc = model.module.fc
 
-    def forward(self, x):
+    def forward(self, x, normalize=False):
         x = self.f(x)
         feature = torch.flatten(x, start_dim=1)
+        if normalize:
+            feature = F.normalize(feature, dim=1)  # L2 norm
         out = self.fc(feature)
         return out, feature
 
@@ -112,7 +115,7 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
                 if transform is not None:
                     data = transform(data)
 
-                out, feature = net(data)
+                out, feature = net(data, normalize=True)
                 loss = loss_criterion(out, target)
 
                 loss = loss / gpu_accum_steps / loader_accum_steps  # scale loss to account for accumulation
