@@ -113,6 +113,9 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
                     data = transform(data)
 
                 out, feature = net(data)
+                print()
+                print(data_chunks[0].size(), target_chunks[0].size(), data_chunk.size(), target_chunk.size(), out.size(), target.size())
+                print()
                 loss = loss_criterion(out, target)
 
                 loss = loss / gpu_accum_steps / loader_accum_steps  # scale loss to account for accumulation
