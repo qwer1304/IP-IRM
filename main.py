@@ -603,7 +603,7 @@ def train_env(net, train_loader, train_optimizer, updated_partition, batch_size,
 
                         # penalty
                         if penalty_weight > 0:
-                            penalty = penalty_calculator.penalty(loss.detach(), idxs=idxs)
+                            penalty = penalty_calculator.penalty(loss, idxs=idxs)
                             penalty_aggregator[j,partition_num,env] += penalty.detach() # unnormalized penalty components before penalty scaler
 
                             # compute gradients for this loss
