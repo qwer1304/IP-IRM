@@ -567,7 +567,7 @@ def train_env(net, train_loader, train_optimizer, updated_partition, batch_size,
                 if args.keep_cont and (loss_keep_weight > 0): # global loss @ 1st partition
                     # This could be done w/o the split into two halves, but this streamlines the code w/o any harm
                     # Here we know that losses are over the whole macro-batch, so we can normalize up-front
-                    loss = loss / this_batch_size / gradients_accumulation_steps
+                    loss = loss / num_partitions / this_batch_size / gradients_accumulation_steps
                     (loss * loss_keep_weight).backward(retain_graph=True) # gradients must be multiplied by scaler
                     loss_keep_aggregator += loss.detach() # before scaler
 
