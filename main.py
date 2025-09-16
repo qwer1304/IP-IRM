@@ -353,6 +353,7 @@ class MoCoLossModule(LossModule):
             _, out_k = self.net_momentum(pos_k)
             if normalize:
                 out_k = F.normalize(out_k, dim=1)
+        self.out_k = out_k # save in state for queue update at end of batch
         
         l_pos = torch.sum(out_q * out_k, dim=1, keepdim=True)
         l_neg = torch.matmul(out_q, self.queue.get((self.queue.queue_size - self.this_batch_size), advance=False).t())
