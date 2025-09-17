@@ -792,7 +792,7 @@ def auto_split(net, update_loader, soft_split_all, temperature, irm_temp, loss_m
 
 
 # update split offline
-# out_1, out_2 are already post transform() and are in cuda
+# out_1, out_2 are already post transform() and are in cpu
 def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss_mode='v2', irm_mode='v1', irm_weight=10, constrain=False, 
             cons_relax=False, nonorm=False, log_file=None, batch_size=3096, num_workers=4, prefetch_factor=2, persistent_workers=True):
     # irm mode: v1 is original irm; v2 is variance

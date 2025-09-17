@@ -781,7 +781,7 @@ def train_update_split(net, update_loader, soft_split, random_init=False, args=N
         feature2 = torch.cat(feature_bank_2, 0)
         updated_split = utils.auto_split_offline(feature1, feature2, soft_split, temperature, args.irm_temp, loss_mode='v2', irm_mode=args.irm_mode,
                                          irm_weight=args.irm_weight_maxim, constrain=args.constrain, cons_relax=args.constrain_relax, nonorm=args.nonorm, 
-                                         log_file=log_file, batch_size=u_bs, num_workers=u_nw, prefetch_factor=u_pf, persistent_workers=u_pw)
+                                         log_file=log_file, batch_size=uo_bs, num_workers=uo_nw, prefetch_factor=uo_pf, persistent_workers=uo_pw)
     else:
         updated_split = utils.auto_split(net, update_loader, soft_split, temperature, args.irm_temp, loss_mode='v2', irm_mode=args.irm_mode,
                                      irm_weight=args.irm_weight_maxim, constrain=args.constrain, cons_relax=args.constrain_relax, 
@@ -1020,7 +1020,12 @@ if __name__ == '__main__':
                         help='Training minimization DataLoader pars')
     parser.add_argument('--dl_u', default=[3096, 4, 2, 1], nargs=4, type=str,
                         action=utils.ParseMixed, types=[int, int, int, bool],
-                        metavar='DataLoader pars [batch_size, number_workers, prefetch_factor, persistent_workers]', help='Training Maximization DataLoader pars')
+                        metavar='DataLoader pars [batch_size, number_workers, prefetch_factor, persistent_workers]', 
+                        help='Training Maximization Image DataLoader pars')
+    parser.add_argument('--dl_uo', default=[3096, 4, 2, 1], nargs=4, type=str,
+                        action=utils.ParseMixed, types=[int, int, int, bool],
+                        metavar='DataLoader pars [batch_size, number_workers, prefetch_factor, persistent_workers]', 
+                        help='Training Maximization Features DataLoader pars')
     parser.add_argument('--dl_te', default=[3096, 4, 2, 1], nargs=4, type=str,
                         action=utils.ParseMixed, types=[int, int, int, bool],
                         metavar='DataLoader pars [batch_size, number_workers, prefetch_factor, persistent_workers]', help='Testing/Validation/Memory DataLoader pars')
@@ -1110,7 +1115,7 @@ if __name__ == '__main__':
 
     feature_dim, temperature, tau_plus, k = args.feature_dim, args.temperature, args.tau_plus, args.k
     epochs, debiased,  = args.epochs,  args.debiased
-    dl_tr, dl_te, dl_u = args.dl_tr, args.dl_te, args.dl_u
+    dl_tr, dl_te, dl_u, dl_uo = args.dl_tr, args.dl_te, args.dl_u, args.dl_uo
     target_transform = eval(args.target_transform) if args.target_transform is not None else None
     class_to_idx = eval(args.class_to_idx) if args.class_to_idx is not None else None
     image_class, image_size = args.image_class, args.image_size
@@ -1125,6 +1130,7 @@ if __name__ == '__main__':
     tr_bs, tr_nw, tr_pf, tr_pw, tr_dl = dl_tr
     te_bs, te_nw, te_pf, te_pw = dl_te
     u_bs, u_nw, u_pf, u_pw = dl_u
+    uo_bs, uo_nw, uo_pf, uo_pw = dl_uo
     if args.dataset == 'STL':
         train_transform = utils.make_train_transform(normalize=args.image_class)
         test_transform = utils.make_test_transform(normalize=args.image_class)
