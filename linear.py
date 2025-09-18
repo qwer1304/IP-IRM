@@ -36,8 +36,8 @@ class Net(nn.Module):
 
         self.f = model.module.f
         
-        def rename_key_from_standard(k: str) -> str:
-            # Skip fc, since your model doesn’t use it
+        def rename_key_from_standard(k):
+            # Skip fc, since your model doesn't use it
             if k.startswith("fc."):
                 return None
 
