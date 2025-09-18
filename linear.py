@@ -321,6 +321,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     save_dir = 'downstream/{}/{}'.format(args.dataset, args.name)
+    print()
+    print(save_dir)
     
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
