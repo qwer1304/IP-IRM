@@ -36,9 +36,9 @@ class Net(nn.Module):
 
         self.f = model.module.f
         
-        def rename_key_from_standard(k):
+        def rename_key_from_standard(k, keepfc=False):
             # Skip fc, since your model doesn't use it
-            if k.startswith("module.fc."):
+            if (not keepfc) and k.startswith("module.fc."):
                 return None
 
             new_k = k
@@ -61,25 +61,22 @@ class Net(nn.Module):
         # convert pretrained dict
         converted_dict = {}
         for k, v in state_dict.items():
-            new_k = rename_key_from_standard(k)
+            new_k = rename_key_from_standard(k, keepfc=(args.evaluate == 'linear'))
             if new_k is not None:  # skip fc
                 converted_dict[new_k] = v
 
         state_dict = converted_dict
 
+        msg = model.load_state_dict(state_dict, strict=False)
+        missing_keys = [k for k in msg.missing_keys if 'g.' not in k]
+        if msg.unexpected_keys or missing_keys:
+            print(msg.unexpected_keys)
+            print(missing_keys)
         if args.evaluate is None or args.evaluate == 'knn':
-            msg = model.load_state_dict(state_dict, strict=False)
-            print(msg)
+            # If training or evaluating output from SSL
             # classifier
             self.fc = nn.Linear(2048, num_class, bias=True)
         else:
-            model.module.fc = nn.Linear(2048, num_class, bias=True)
-            msg = model.load_state_dict(state_dict, strict=False)
-            missing_keys = [k for k in msg.missing_keys if 'g.' not in k]
-            if msg.unexpected_keys or missing_keys:
-                print(msg.unexpected_keys)
-                print()
-                print(missing_keys)
             self.fc = model.module.fc
 
     def forward(self, x, normalize=False):
