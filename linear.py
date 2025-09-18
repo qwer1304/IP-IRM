@@ -39,8 +39,8 @@ class Net(nn.Module):
         new_state_dict = OrderedDict()
         for k, v in state_dict.items():
             # Remove "module.model." prefix
-            name = k.replace("module.model.", "")
-            name = name.replace("module.", "")                  
+            name = k.replace("module.model.", "module.")
+            #name = name.replace("module.", "")                  
             new_state_dict[name] = v
         state_dict = new_state_dict
         if args.evaluate is None or args.evaluate == 'knn':
