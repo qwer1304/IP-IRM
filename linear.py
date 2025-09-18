@@ -42,7 +42,7 @@ class Net(nn.Module):
                 return None
 
             prefix = "module."
-            new_k = k
+            new_k = prefix + k
             new_k = new_k.replace("conv1.",  "f.0.")
             new_k = new_k.replace("bn1.",    "f.1.")
             new_k = new_k.replace("layer1.", "f.4.")
