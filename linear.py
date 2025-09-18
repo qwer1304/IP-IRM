@@ -36,48 +36,51 @@ class Net(nn.Module):
 
         self.f = model.module.f
         
-        def rename_key_from_standard(k, keepfc=False):
+        def rename_key_from_standard(k):
             # Skip fc, since your model doesn't use it
-            if (not keepfc) and k.startswith("module.fc."):
+            if k.startswith("module.fc."):
                 return None
 
-            prefix = "module."
-            new_k = prefix + k
-            new_k = new_k.replace("conv1.",  "f.0.")
-            new_k = new_k.replace("bn1.",    "f.1.")
-            new_k = new_k.replace("layer1.", "f.4.")
-            new_k = new_k.replace("layer2.", "f.5.")
-            new_k = new_k.replace("layer3.", "f.6.")
-            new_k = new_k.replace("layer4.", "f.7.")
+            new_k = k
+            new_k = new_k.replace("module.conv1.", "module.f.0.")
+            new_k = new_k.replace("module.bn1.", "module.f.1.")
+            new_k = new_k.replace("module.layer1.", "module.f.4.")
+            new_k = new_k.replace("module.layer2.", "module.f.5.")
+            new_k = new_k.replace("module.layer3.", "module.f.6.")
+            new_k = new_k.replace("module.layer4.", "module.f.7.")
             return new_k
 
         new_state_dict = OrderedDict()
         for k, v in state_dict.items():
             # Remove "module.model." prefix
             name = k.replace("module.encoder_q.", "module.")
-            name = name.replace("module.", "")                  
+            #name = name.replace("module.", "")                  
             new_state_dict[name] = v
         state_dict = new_state_dict
         
         # convert pretrained dict
         converted_dict = {}
         for k, v in state_dict.items():
-            new_k = rename_key_from_standard(k, keepfc=(args.evaluate=='linear'))
+            new_k = rename_key_from_standard(k)
             if new_k is not None:  # skip fc
                 converted_dict[new_k] = v
 
         state_dict = converted_dict
 
-        msg = model.load_state_dict(state_dict, strict=False)
-        missing_keys = [k for k in msg.missing_keys if 'g.' not in k]
-        if msg.unexpected_keys or missing_keys:
-            print("Unexpected:", msg.unexpected_keys)
-            print("Missing:", missing_keys)
-        if args.evaluate == 'linear':
+        if args.evaluate is None or args.evaluate == 'knn':
+            msg = model.load_state_dict(state_dict, strict=False)
+            print(msg)
             # classifier
-            self.fc = model.fc
-        else:
             self.fc = nn.Linear(2048, num_class, bias=True)
+        else:
+            model.module.fc = nn.Linear(2048, num_class, bias=True)
+            msg = model.load_state_dict(state_dict, strict=False)
+            missing_keys = [k for k in msg.missing_keys if 'g.' not in k]
+            if msg.unexpected_keys or missing_keys:
+                print(msg.unexpected_keys)
+                print()
+                print(missing_keys)
+            self.fc = model.module.fc
 
     def forward(self, x, normalize=False):
         x = self.f(x)
