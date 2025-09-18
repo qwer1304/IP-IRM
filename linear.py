@@ -36,13 +36,31 @@ class Net(nn.Module):
 
         self.f = model.module.f
         
-        new_state_dict = OrderedDict()
-        for k, v in state_dict.items():
-            # Remove "module.model." prefix
-            name = k.replace("module.encoder_q.", "module.")
-            #name = name.replace("module.", "")                  
-            new_state_dict[name] = v
-        state_dict = new_state_dict
+        def rename_key_from_standard(k):
+            # add module. prefix
+            k = "module." + k
+        
+            # top-level conv/bn
+            k = k.replace("module.conv1.", "module.f.0.")
+            k = k.replace("module.bn1.", "module.f.1.")
+        
+            # resnet layers
+            k = k.replace("module.layer1.", "module.f.4.")
+            k = k.replace("module.layer2.", "module.f.5.")
+            k = k.replace("module.layer3.", "module.f.6.")
+            k = k.replace("module.layer4.", "module.f.7.")
+        
+            # fc head (if exists in pretrained, might not in your SSL model)
+            k = k.replace("module.fc.", "module.f.8.")
+        
+            return k
+
+        
+        converted_dict = {rename_key_from_standard(k): v for k, v in state_dict.items()}
+        state_dict = converted_dict
+        print()
+        print(state_dict.keys())
+
         if args.evaluate is None or args.evaluate == 'knn':
             msg = model.load_state_dict(state_dict, strict=False)
             print(msg)
