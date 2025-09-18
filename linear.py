@@ -236,7 +236,7 @@ def save_checkpoint(state, is_best, args, filename='checkpoint.pth.tar', sync=Tr
         os.fsync(dir_fd)
         os.close(dir_fd)
 
-def load_checkpoint(path, model, model_momentum, optimizer, device='cuda'):
+def load_checkpoint(path, model, optimizer, device='cuda'):
     print("=> loading checkpoint '{}'".format(path))
     checkpoint = torch.load(path, map_location=device, weights_only=False)
 
