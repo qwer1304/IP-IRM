@@ -17,8 +17,6 @@ import random
 import os
 import pyvips
 
-np.random.seed(0)
-
 import torch
 import re
 

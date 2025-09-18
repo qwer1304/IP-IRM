@@ -212,6 +212,62 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
         
     return total_loss / total_num, total_correct_1 / total_num * 100, total_correct_5 / total_num * 100
 
+def save_checkpoint(state, is_best, args, filename='checkpoint.pth.tar', sync=True):
+    filename_tmp = filename + ".tmp"
+    torch.save(state, filename_tmp)
+    os.replace(filename_tmp, filename)
+    if is_best:
+        best_filename = '{}/model_best.pth.tar'.format(os.path.dirname(filename))
+        best_filename_tmp = filename + ".tmp"
+        shutil.copyfile(filename, best_filename_tmp)
+        os.replace(best_filename_tmp, best_filename)
+    if sync:
+        # Sync file data
+        for p in [filename, best_filename] if is_best else [filename]:
+            fd = os.open(p, os.O_RDONLY)
+            os.fsync(fd)
+            os.close(fd)
+
+        # Sync the directory once (covers both files)
+        dir_fd = os.open(os.path.dirname(filename) or ".", os.O_RDONLY)
+        os.fsync(dir_fd)
+        os.close(dir_fd)
+
+def load_checkpoint(path, model, model_momentum, optimizer, device='cuda'):
+    print("=> loading checkpoint '{}'".format(path))
+    checkpoint = torch.load(path, map_location=device, weights_only=False)
+
+    # Restore training bookkeeping
+    start_epoch = checkpoint['epoch'] + 1
+    best_acc1 = checkpoint['best_acc1']
+    best_epoch = checkpoint['best_epoch']
+
+    # Restore models
+    msg_model = model.load_state_dict(checkpoint['state_dict'])
+    # Restore optimizer
+    optimizer.load_state_dict(checkpoint['optimizer']) # nothing ia returned
+    # Ensure optimizer state tensors are on the right device
+    for state in optimizer.state.values():
+        for k, v in state.items():
+            if torch.is_tensor(v):
+                state[k] = v.to(device)
+                
+    # Restore RNG states
+    rng_dict = checkpoint['rng_dict']
+    rng_state = rng_dict['rng_state']
+    if rng_state.device != torch.device('cpu'):
+        rng_state = rng_state.cpu()   
+    torch.set_rng_state(rng_state)
+    if rng_dict['cuda_rng_state'] is not None:
+        torch.cuda.set_rng_state_all([t.cpu() if t.device != torch.device('cpu') else t for t in rng_dict['cuda_rng_state']])
+    np.random.set_state(rng_dict['numpy_rng_state'])
+    random.setstate(rng_dict['python_rng_state'])
+
+    print(f"\tmodel load: {msg_model}")
+    print("<= loaded checkpoint '{}' (epoch {})"
+          .format(path, checkpoint['epoch']))
+
+    return model, optimizer, start_epoch, best_acc1, best_epoch
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Linear Evaluation')
@@ -249,11 +305,18 @@ if __name__ == '__main__':
     parser.add_argument('--norandgray', action="store_true", default=False, help='skip rand gray transform')
     parser.add_argument('--evaluate', type=str, default=None, choices=['knn', 'linear'], help='only evaluate')
     parser.add_argument('--extract_features', action="store_true", help="extract features for post processiin during evaluate")
+    
+    parser.add_argument('--resume', default='', type=str, metavar='PATH',
+                    help='path to latest checkpoint (default: none)')
+    parser.add_argument('--checkpoint_freq', default=3, type=int, metavar='N',
+                    help='checkpoint epoch freqeuncy')   
 
     args = parser.parse_args()
 
-    if not os.path.exists('downstream/{}/{}'.format(args.dataset, args.name)):
-        os.makedirs('downstream/{}/{}'.format(args.dataset, args.name))
+    save_dir = 'downstream/{}/{}'.format(args.dataset, args.name)
+    
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
 
     # seed
     utils.set_seed(args.seed)
@@ -355,6 +418,22 @@ if __name__ == '__main__':
     if args.dataset == 'ImageNet':
         results.update({'val_loss': [], 'val_acc@1': [], 'val_acc@5': []})
 
+    # optionally resume from a checkpoint
+    best_acc1 = 0
+    best_epoch = 0
+    resumed = False
+    if args.resume:
+        if os.path.isfile(args.resume):
+            (model, optimizer,
+             args.start_epoch, best_acc1, best_epoch,
+            ) = load_checkpoint(args.resume, model, optimizer)
+             # use current LR, not the one from checkpoint
+            for param_group in optimizer.param_groups:
+                param_group['lr'] = args.lr
+            resumed = True
+        else:
+            print("=> no checkpoint found at '{}'".format(args.resume))
+
     if args.evaluate:
         epoch = epochs
         train_loss, train_acc_1, train_acc_5 = train_val(model, train_loader, None, tr_bs, args, dataset="train")
@@ -362,7 +441,7 @@ if __name__ == '__main__':
         if args.dataset == 'ImageNet':
             val_loss, val_acc_1, val_acc_5 = train_val(model, val_loader, None, te_bs, args, dataset="val")
         if args.txt:
-            txt_write = open("downstream/{}/{}/{}".format(args.dataset, args.name, 'result.txt'), 'a')
+            txt_write = open("{}/{}".format(save_dir, 'result.txt'), 'a')
             txt_write.write('\ntest_loss: {}, test_acc@1: {}, test_acc@5: {}'.format(test_loss, test_acc_1, test_acc_5))
             if args.dataset == 'ImageNet':
                 txt_write.write('\nval_loss: {}, val_acc@1: {}, val_acc@5: {}'.format(val_loss, val_acc_1, val_acc_5))
@@ -372,12 +451,36 @@ if __name__ == '__main__':
             train_loss, train_acc_1, train_acc_5 = train_val(model, train_loader, optimizer, tr_bs, args, dataset="train")
             if args.dataset == 'ImageNet':
                 val_loss, val_acc_1, val_acc_5 = train_val(model, val_loader, None, te_bs, args, dataset="val")
+                is_best = val_acc_1 > best_acc1
+                if is_best:
+                    best_acc1 = val_acc_1
+                    best_epoch = epoch
+            else:
+                is_best = False
             test_loss, test_acc_1, test_acc_5 = train_val(model, test_loader, None, te_bs, args, dataset="test")
 
             if args.txt:
-                txt_write = open("downstream/{}/{}/{}".format(args.dataset, args.name, 'result.txt'), 'a')
+                txt_write = open("{}/{}".format(save_dir, 'result.txt'), 'a')
                 txt_write.write('\ntest_loss: {}, test_acc@1: {}, test_acc@5: {}'.format(test_loss, test_acc_1, test_acc_5))
                 if args.dataset == 'ImageNet':
                     txt_write.write('\nval_loss: {}, val_acc@1: {}, val_acc@5: {}'.format(val_loss, val_acc_1, val_acc_5))
 
-        torch.save(model.state_dict(), 'downstream/{}/{}/model_{}.pth'.format(args.dataset, args.name, epoch))
+            if (epoch % args.checkpoint_freq == 0) or (epoch == epochs):
+                cuda_rng_state = torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None
+
+                save_checkpoint({
+                    'epoch':                epoch,
+                    'state_dict':           model.state_dict(),
+                    'best_acc1':            best_acc1,
+                    'best_epoch':           best_epoch,
+                    'optimizer':            optimizer.state_dict(),
+                    "rng_dict": {
+                        "rng_state": torch.get_rng_state(),
+                        "cuda_rng_state": cuda_rng_state,
+                        "numpy_rng_state": np.random.get_state(),
+                        "python_rng_state": random.getstate(),
+                    },
+                }, is_best, args, filename='{}/checkpoint.pth.tar'.format(save_dir))
+                              
+        # end for epoch in range(1, epochs + 1):
+        torch.save(model.state_dict(), '{}/model_{}.pth'.format(save_dir, epoch))
