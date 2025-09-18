@@ -317,6 +317,8 @@ if __name__ == '__main__':
                     help='validation epoch freqeuncy')   
     parser.add_argument('--test_freq', default=None, type=int, metavar='N',
                     help='test epoch freqeuncy')   
+    parser.add_argument('--lr', default=0.001, type=float, help='LR')
+    parser.add_argument('--weight_decay', default=1e-6, type=float, help='weight decay')
 
     args = parser.parse_args()
 
@@ -420,7 +422,7 @@ if __name__ == '__main__':
         param.requires_grad = False
     model = nn.DataParallel(model)
 
-    optimizer = optim.Adam(model.module.fc.parameters(), lr=1e-3, weight_decay=1e-6)
+    optimizer = optim.Adam(model.module.fc.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     loss_criterion = nn.CrossEntropyLoss()
     results = {'train_loss': [], 'train_acc@1': [], 'train_acc@5': [],
                'test_loss': [], 'test_acc@1': [], 'test_acc@5': []}
