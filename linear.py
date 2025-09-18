@@ -55,6 +55,13 @@ class Net(nn.Module):
         
             return k
 
+        new_state_dict = OrderedDict()
+        for k, v in state_dict.items():
+            # Remove "module.model." prefix
+            name = k.replace("module.encoder_q.", "module.")
+            #name = name.replace("module.", "")                  
+            new_state_dict[name] = v
+        state_dict = new_state_dict
         
         converted_dict = {rename_key_from_standard(k): v for k, v in state_dict.items()}
         state_dict = converted_dict
