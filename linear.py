@@ -36,24 +36,24 @@ class Net(nn.Module):
 
         self.f = model.module.f
         
-        def rename_key_from_standard(k):
-            # add module. prefix
-            #k = "module." + k
-        
+        def rename_key_from_standard(k: str) -> str:
+            # Skip fc, since your model doesn’t use it
+            if k.startswith("fc."):
+                return None
+
+            new_k = "module." + k
+
             # top-level conv/bn
-            k = k.replace("module.conv1.", "module.f.0.")
-            k = k.replace("module.bn1.", "module.f.1.")
-        
-            # resnet layers
-            k = k.replace("module.layer1.", "module.f.4.")
-            k = k.replace("module.layer2.", "module.f.5.")
-            k = k.replace("module.layer3.", "module.f.6.")
-            k = k.replace("module.layer4.", "module.f.7.")
-        
-            # fc head (if exists in pretrained, might not in your SSL model)
-            k = k.replace("module.fc.", "module.f.8.")
-        
-            return k
+            new_k = new_k.replace("module.conv1.", "module.f.0.")
+            new_k = new_k.replace("module.bn1.", "module.f.1.")
+
+            # ResNet layers
+            new_k = new_k.replace("module.layer1.", "module.f.4.")
+            new_k = new_k.replace("module.layer2.", "module.f.5.")
+            new_k = new_k.replace("module.layer3.", "module.f.6.")
+            new_k = new_k.replace("module.layer4.", "module.f.7.")
+
+            return new_k
 
         new_state_dict = OrderedDict()
         for k, v in state_dict.items():
