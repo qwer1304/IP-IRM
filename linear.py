@@ -60,7 +60,7 @@ class Net(nn.Module):
         
         # convert pretrained dict
         converted_dict = {}
-        for k, v in pretrained_resnet.state_dict().items():
+        for k, v in state_dict().items():
             new_k = rename_key_from_standard(k)
             if new_k is not None:  # skip fc
                 converted_dict[new_k] = v
