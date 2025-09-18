@@ -6,6 +6,8 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from torchvision.datasets import STL10, CIFAR10, CIFAR100, ImageFolder
+import random
+import shutil
 import numpy as np
 from tqdm import tqdm
 import os
