@@ -65,8 +65,6 @@ class Net(nn.Module):
         
         converted_dict = {rename_key_from_standard(k): v for k, v in state_dict.items()}
         state_dict = converted_dict
-        print()
-        print(state_dict.keys())
 
         if args.evaluate is None or args.evaluate == 'knn':
             msg = model.load_state_dict(state_dict, strict=False)
