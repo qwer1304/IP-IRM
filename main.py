@@ -1301,10 +1301,10 @@ if __name__ == '__main__':
             updated_split = torch.randn((len(update_data), args.env_num), requires_grad=True, device="cuda")
             if args.offline:
                 upd_loader = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, prefetch_factor=u_pf, shuffle=False, 
-                    pin_memory=True, persistent_workers=u_pw)
+                    drop_last=False, pin_memory=True, persistent_workers=u_pw)
             else:
-                upd_loader = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, prefetch_factor=u_pf, shuffle=True, pin_memory=True, 
-                    drop_last=True, persistent_workers=u_pw)
+                upd_loader = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, prefetch_factor=u_pf, shuffle=True,
+                    drop_last=True, pin_memory=True, persistent_workers=u_pw)
         updated_split = train_update_split(model, upd_loader, updated_split, random_init=args.random_init, args=args)
         updated_split_all = [updated_split.clone().detach()]
         upd_loader = None
