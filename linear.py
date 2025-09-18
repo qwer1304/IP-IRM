@@ -198,7 +198,7 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
 
             # Save to file
             prefix = "test"
-            directory = f'downstream/{args.dataset}/{args.name}'
+            directory = f'downstream/{args.name}'
             fp = os.path.join(directory, f"{dataset}_features_dump.pt")       
             os.makedirs(os.path.dirname(fp), exist_ok=True)
 
@@ -320,7 +320,7 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    save_dir = 'downstream/{}/{}'.format(args.dataset, args.name)
+    save_dir = 'downstream/{}'.format(args.name)
     print()
     print(save_dir)
     
