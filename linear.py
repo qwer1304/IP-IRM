@@ -8,6 +8,7 @@ from torch.utils.data import DataLoader
 from torchvision.datasets import STL10, CIFAR10, CIFAR100, ImageFolder
 from tqdm import tqdm
 import os
+from collections import defaultdict, OrderedDict
 
 import utils
 from model import Model
