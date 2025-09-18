@@ -36,23 +36,18 @@ class Net(nn.Module):
 
         self.f = model.module.f
         
-        def rename_key_from_standard(k):
+        def rename_key_from_standard(k)
             # Skip fc, since your model doesn't use it
             if k.startswith("fc."):
                 return None
 
             new_k = k
-
-            # top-level conv/bn
             new_k = new_k.replace("module.conv1.", "module.f.0.")
             new_k = new_k.replace("module.bn1.", "module.f.1.")
-
-            # ResNet layers
             new_k = new_k.replace("module.layer1.", "module.f.4.")
             new_k = new_k.replace("module.layer2.", "module.f.5.")
             new_k = new_k.replace("module.layer3.", "module.f.6.")
             new_k = new_k.replace("module.layer4.", "module.f.7.")
-
             return new_k
 
         new_state_dict = OrderedDict()
@@ -63,7 +58,13 @@ class Net(nn.Module):
             new_state_dict[name] = v
         state_dict = new_state_dict
         
-        converted_dict = {rename_key_from_standard(k): v for k, v in state_dict.items()}
+        # convert pretrained dict
+        converted_dict = {}
+        for k, v in pretrained_resnet.state_dict().items():
+            new_k = rename_key_from_standard(k)
+            if new_k is not None:  # skip fc
+                converted_dict[new_k] = v
+
         state_dict = converted_dict
 
         if args.evaluate is None or args.evaluate == 'knn':
