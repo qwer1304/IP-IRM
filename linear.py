@@ -70,8 +70,8 @@ class Net(nn.Module):
         msg = model.load_state_dict(state_dict, strict=False)
         missing_keys = [k for k in msg.missing_keys if 'g.' not in k]
         if msg.unexpected_keys or missing_keys:
-            print(msg.unexpected_keys)
-            print(missing_keys)
+            print("Unexpected:", msg.unexpected_keys)
+            print("Missing:", missing_keys)
         if args.evaluate == 'linear':
             # classifier
             self.fc = model.fc
