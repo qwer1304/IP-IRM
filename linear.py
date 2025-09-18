@@ -310,6 +310,10 @@ if __name__ == '__main__':
                     help='path to latest checkpoint (default: none)')
     parser.add_argument('--checkpoint_freq', default=3, type=int, metavar='N',
                     help='checkpoint epoch freqeuncy')   
+    parser.add_argument('--val_freq', default=1, type=int, metavar='N',
+                    help='validation epoch freqeuncy')   
+    parser.add_argument('--test_freq', default=None, type=int, metavar='N',
+                    help='test epoch freqeuncy')   
 
     args = parser.parse_args()
 
@@ -449,7 +453,7 @@ if __name__ == '__main__':
     else:
         for epoch in range(1, epochs + 1):
             train_loss, train_acc_1, train_acc_5 = train_val(model, train_loader, optimizer, tr_bs, args, dataset="train")
-            if args.dataset == 'ImageNet':
+            if args.val_freq and ((epoch % args.val_freq == 0) or (epoch == epochs)) and (args.dataset == 'ImageNet'):
                 val_loss, val_acc_1, val_acc_5 = train_val(model, val_loader, None, te_bs, args, dataset="val")
                 is_best = val_acc_1 > best_acc1
                 if is_best:
@@ -457,12 +461,17 @@ if __name__ == '__main__':
                     best_epoch = epoch
             else:
                 is_best = False
-            test_loss, test_acc_1, test_acc_5 = train_val(model, test_loader, None, te_bs, args, dataset="test")
+                val_loss = None
+            if args.test_freq and ((epoch % args.test_freq == 0) or (epoch == epochs)): # eval knn every test_freq epochs
+                test_loss, test_acc_1, test_acc_5 = train_val(model, test_loader, None, te_bs, args, dataset="test")
+            else:
+                test_loss = None
 
-            if args.txt:
+            if (args.txt) and ((val_loss is not None) or (test_loss is not None)):
                 txt_write = open("{}/{}".format(save_dir, 'result.txt'), 'a')
-                txt_write.write('\ntest_loss: {}, test_acc@1: {}, test_acc@5: {}'.format(test_loss, test_acc_1, test_acc_5))
-                if args.dataset == 'ImageNet':
+                if test_loss is not None:
+                    txt_write.write('\ntest_loss: {}, test_acc@1: {}, test_acc@5: {}'.format(test_loss, test_acc_1, test_acc_5))
+                if val_loss is not None:
                     txt_write.write('\nval_loss: {}, val_acc@1: {}, val_acc@5: {}'.format(val_loss, val_acc_1, val_acc_5))
 
             if (epoch % args.checkpoint_freq == 0) or (epoch == epochs):
