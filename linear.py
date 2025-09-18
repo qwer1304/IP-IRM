@@ -41,6 +41,7 @@ class Net(nn.Module):
             if (not keepfc) and k.startswith("module.fc."):
                 return None
 
+            prefix = "module."
             new_k = k
             new_k = new_k.replace("conv1.",  "f.0.")
             new_k = new_k.replace("bn1.",    "f.1.")
