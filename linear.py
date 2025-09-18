@@ -41,7 +41,7 @@ class Net(nn.Module):
             if k.startswith("fc."):
                 return None
 
-            #new_k = "module." + k
+            new_k = k
 
             # top-level conv/bn
             new_k = new_k.replace("module.conv1.", "module.f.0.")
