@@ -38,7 +38,7 @@ class Net(nn.Module):
         
         def rename_key_from_standard(k):
             # add module. prefix
-            k = "module." + k
+            #k = "module." + k
         
             # top-level conv/bn
             k = k.replace("module.conv1.", "module.f.0.")
