@@ -1350,6 +1350,8 @@ if __name__ == '__main__':
         # Minimize step
         if not args.baseline:
             upd_split = updated_split_all if args.retain_group else updated_split
+        else:
+            upd_split = None
 
         if args.ssl_type.lower() == 'moco':
             kwargs = {'net_momentum': model_momentum, 'queue': queue, 'temperature': temperature, 'momentum': momentum}
