@@ -571,56 +571,57 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                     (loss * loss_keep_weight).backward(retain_graph=True) # gradients must be multiplied by scaler
                     loss_keep_aggregator += loss.detach() # before scaler
 
-                for partition_num, partition in enumerate(partitions):
-                    for env in range(args.env_num):
+                if not args.baseline:
+                    for partition_num, partition in enumerate(partitions):
+                        for env in range(args.env_num):
 
-                        # split mb: 'idxs' are indices into 'indexs' that correspond to domain 'env' in 'partition'
-                        idxs = utils.assign_idxs(indexs, partition, env)
-                        
-                        if (N := len(idxs)) == 0:
-                            continue
-                            
-                        halves_sz[j,partition_num,env] += N # update number of elements in environment
+                            # split mb: 'idxs' are indices into 'indexs' that correspond to domain 'env' in 'partition'
+                            idxs = utils.assign_idxs(indexs, partition, env)
 
-                        # -----------------------
-                        # SSL
-                        # -----------------------
-                        if loss_weight > 0:
-                            # compute unnormalized micro-batch loss
-                            loss = loss_module.compute_loss_micro(idxs=idxs)
-                            loss_aggregator[j,partition_num,env] += loss.detach() # unnormalized, before penalty scaler
+                            if (N := len(idxs)) == 0:
+                                continue
 
-                            # compute unnormalized gradients for this loss
-                            grads = torch.autograd.grad(
-                                loss_weight * loss, # gradients must be multiplied by scaler
-                                net.parameters(),
-                                retain_graph=True,  # keep graph for next loss
-                                allow_unused=True
-                            )
+                            halves_sz[j,partition_num,env] += N # update number of elements in environment
 
-                            # flatten and accumulate per parameter
-                            for _j, g in enumerate(grads):
-                                loss_grads[_j][j,partition_num,env] += g.detach().view(-1)
+                            # -----------------------
+                            # SSL
+                            # -----------------------
+                            if loss_weight > 0:
+                                # compute unnormalized micro-batch loss
+                                loss = loss_module.compute_loss_micro(idxs=idxs)
+                                loss_aggregator[j,partition_num,env] += loss.detach() # unnormalized, before penalty scaler
 
-                        # penalty
-                        if penalty_weight > 0:
-                            penalty = penalty_calculator.penalty(loss, idxs=idxs)
-                            penalty_aggregator[j,partition_num,env] += penalty.detach() # unnormalized penalty components before penalty scaler
+                                # compute unnormalized gradients for this loss
+                                grads = torch.autograd.grad(
+                                    loss_weight * loss, # gradients must be multiplied by scaler
+                                    net.parameters(),
+                                    retain_graph=True,  # keep graph for next loss
+                                    allow_unused=True
+                                )
 
-                            # compute gradients for this loss
-                            grads = torch.autograd.grad(
-                                penalty_weight * penalty,  # unnormalized gradients must be multiplied by scaler
-                                net.parameters(),
-                                retain_graph=True,  # keep graph for next loss
-                                allow_unused=True
-                            )
+                                # flatten and accumulate per parameter
+                                for _j, g in enumerate(grads):
+                                    loss_grads[_j][j,partition_num,env] += g.detach().view(-1)
 
-                            # flatten and accumulate per parameter
-                            for _j, g in enumerate(grads):
-                                penalty_grads[_j][j,partition_num,env] += g.detach().view(-1)
-                        # free memory of partition here
-                    # end for env in range(args.env_num): 
-                # end for partition_num, partition in enumerate(partitions):
+                            # penalty
+                            if penalty_weight > 0:
+                                penalty = penalty_calculator.penalty(loss, idxs=idxs)
+                                penalty_aggregator[j,partition_num,env] += penalty.detach() # unnormalized penalty components before penalty scaler
+
+                                # compute gradients for this loss
+                                grads = torch.autograd.grad(
+                                    penalty_weight * penalty,  # unnormalized gradients must be multiplied by scaler
+                                    net.parameters(),
+                                    retain_graph=True,  # keep graph for next loss
+                                    allow_unused=True
+                                )
+
+                                # flatten and accumulate per parameter
+                                for _j, g in enumerate(grads):
+                                    penalty_grads[_j][j,partition_num,env] += g.detach().view(-1)
+                            # free memory of partition here
+                        # end for env in range(args.env_num): 
+                    # end for partition_num, partition in enumerate(partitions):
                 loss_module.post_micro_batch()
                 loss_module.prepare_for_free()
                 
