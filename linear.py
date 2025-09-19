@@ -438,6 +438,7 @@ if __name__ == '__main__':
                 class_weights = class_weights / class_weights.sum()  # normalize if needed
             else:
                 class_weights = torch.ones(num_class)
+            class_weights = class_weights.cuda()
 
             test_data   = utils.Imagenet(root=args.data + '/test',  transform=test_transform,  target_transform=target_transform, class_to_idx=class_to_idx)
             val_data    = utils.Imagenet(root=args.data + '/val',   transform=test_transform,  target_transform=target_transform, class_to_idx=class_to_idx)
