@@ -39,8 +39,9 @@ def main(args):
 
                                     output_lab_dir = os.path.join(save_dir_train, label + '/')
                                     os.makedirs(output_lab_dir, exist_ok=True)
-                                    for fp in [files[i] for i in train_idx]:
-                                        shutil.copy(fp, output_lab_dir)
+                                    if (not args.min_size) or (train_num >= args.min_size): # enough samples to be considered
+                                        for fp in [files[i] for i in train_idx]:
+                                            shutil.copy(fp, output_lab_dir)
                                     output_lab_dir = os.path.join(save_dir_val, label + '/')
                                     os.makedirs(output_lab_dir, exist_ok=True)
                                     for fp in [files[i] for i in val_idx]:
@@ -87,6 +88,7 @@ if __name__ == "__main__":
 
     train_parser = subparsers.add_parser('train')
     train_parser.add_argument('--train_split', type=partial(bounded_type, min_val=0.0, max_val=1.0, cast_type=float), required=True)
+    train_parser.add_argument('--min_size', type=int, default=None, help='min size of training split; None means all')
 
     loo_parser = subparsers.add_parser('loo')
     loo_parser.add_argument('--val_domain', type=str, required=True)
