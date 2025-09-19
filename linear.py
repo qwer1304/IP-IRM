@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 from torchvision.datasets import STL10, CIFAR10, CIFAR100, ImageFolder
 import random
 import shutil
@@ -319,12 +319,11 @@ if __name__ == '__main__':
                     help='test epoch freqeuncy')   
     parser.add_argument('--lr', default=0.001, type=float, help='LR')
     parser.add_argument('--weight_decay', default=1e-6, type=float, help='weight decay')
+    parser.add_argument('--prune_sizes', action="store_true", help="prune training dataset to minority class size")
 
     args = parser.parse_args()
 
     save_dir = 'downstream/{}'.format(args.name)
-    print()
-    print(save_dir)
     
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
@@ -402,6 +401,19 @@ if __name__ == '__main__':
 
         else:
             train_data  = utils.Imagenet(root=args.data + '/train', transform=train_transform, target_transform=target_transform, class_to_idx=class_to_idx)
+            if args.prune_sizes:
+                def dataset_prune_sizes(dataset):
+                    targets = dataset.targets
+                    utargets, counts = np.unique(targets, return_counts=True)
+                    min_count = min(counts)
+                    masks = [targets==i for i in utargets]
+                    idxs = np.arange(len(targets))
+                    idxs = [idxs[m] for m in masks]
+                    idxs = [idxs[i][:min_count] for i in range(len(idxs))]
+                    idxs = np.concatenate(idxs)
+                    dataset = Subset(dataset, idxs)
+                    return dataset
+                train_data = dataset_prune_sizes(train_data)
             test_data   = utils.Imagenet(root=args.data + '/test',  transform=test_transform,  target_transform=target_transform, class_to_idx=class_to_idx)
             val_data    = utils.Imagenet(root=args.data + '/val',   transform=test_transform,  target_transform=target_transform, class_to_idx=class_to_idx)
 
