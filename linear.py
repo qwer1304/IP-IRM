@@ -437,6 +437,7 @@ if __name__ == '__main__':
                 class_weights = 1.0 / counts.float()
                 class_weights = class_weights / class_weights.sum()  # normalize if needed
             else:
+                num_class = len(train_data.classes) if args.dataset != "ImageNet" else args.class_num
                 class_weights = torch.ones(num_class)
             class_weights = class_weights.cuda()
 
