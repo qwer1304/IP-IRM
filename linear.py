@@ -420,6 +420,8 @@ if __name__ == '__main__':
                 def dataset_prune_sizes(dataset):
                     targets = dataset.targets
                     utargets, counts = np.unique(targets, return_counts=True)
+                    print()
+                    print(f'counts: {counts}')
                     min_count = min(counts)
                     masks = [targets==i for i in utargets]
                     idxs = np.arange(len(targets))
