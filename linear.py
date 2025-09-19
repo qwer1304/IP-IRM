@@ -402,6 +402,21 @@ if __name__ == '__main__':
         else:
             train_data  = utils.Imagenet(root=args.data + '/train', transform=train_transform, target_transform=target_transform, class_to_idx=class_to_idx)
             if args.prune_sizes:
+                class SubsetProxy(Subset):
+                    def __getattr__(self, name):
+                        # called only if attribute not found in self
+                        return getattr(self.dataset, name)
+
+                    def __setattr__(self, name, value):
+                        if name in {"dataset", "indices"}:
+                            super().__setattr__(name, value)
+                        else:
+                            # try to set on dataset if it exists
+                            if hasattr(self.dataset, name):
+                                setattr(self.dataset, name, value)
+                            else:
+                                super().__setattr__(name, value)
+                
                 def dataset_prune_sizes(dataset):
                     targets = dataset.targets
                     utargets, counts = np.unique(targets, return_counts=True)
@@ -411,7 +426,7 @@ if __name__ == '__main__':
                     idxs = [idxs[m] for m in masks]
                     idxs = [idxs[i][:min_count] for i in range(len(idxs))]
                     idxs = np.concatenate(idxs)
-                    dataset = Subset(dataset, idxs)
+                    dataset = SubsetProxy(dataset, idxs)
                     return dataset
                 train_data = dataset_prune_sizes(train_data)
             test_data   = utils.Imagenet(root=args.data + '/test',  transform=test_transform,  target_transform=target_transform, class_to_idx=class_to_idx)
