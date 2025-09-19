@@ -320,6 +320,7 @@ if __name__ == '__main__':
                     help='test epoch freqeuncy')   
     parser.add_argument('--lr', default=0.001, type=float, help='LR')
     parser.add_argument('--weight_decay', default=1e-6, type=float, help='weight decay')
+    parser.add_argument('--label_smoothing', default=0.0, type=float, help='label smoothing')
     parser.add_argument('--prune_sizes', action="store_true", help="prune training dataset to minority class size")
     parser.add_argument('--weighted_loss', action="store_true", help="weight each sample by its class size")
 
@@ -461,7 +462,7 @@ if __name__ == '__main__':
     model = nn.DataParallel(model)
 
     optimizer = optim.Adam(model.module.fc.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-    loss_criterion = nn.CrossEntropyLoss(weight=class_weights)
+    loss_criterion = nn.CrossEntropyLoss(weight=class_weights, label_smoothing=args.label_smoothing)
     results = {'train_loss': [], 'train_acc@1': [], 'train_acc@5': [],
                'test_loss': [], 'test_acc@1': [], 'test_acc@5': []}
     if args.dataset == 'ImageNet':
