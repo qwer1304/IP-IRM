@@ -499,7 +499,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
     else:
         raise ValueError(f"Unknown loss_type: {loss_type}")
 
-    loss_module = LossModule(net, **kwargs)
+    loss_module = LossModule(net, debug=args.debug, **kwargs)
 
     # IRM calculator selection
     if penalty_type == 'irm':
