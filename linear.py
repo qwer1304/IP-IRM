@@ -307,8 +307,9 @@ if __name__ == '__main__':
 
     parser.add_argument('--norandgray', action="store_true", default=False, help='skip rand gray transform')
     parser.add_argument('--evaluate', type=str, default=None, choices=['knn', 'linear'], help='only evaluate')
-    parser.add_argument('--extract_features', action="store_true", help="extract features for post processiin during evaluate")
-    
+    parser.add_argument('--extract_features', action="store_true", help="extract features for post processiin during evaluate")   
+    parser.add_argument('--prune_sizes', action="store_true", help="prune training dataset to minority class size")
+    parser.add_argument('--weighted_loss', action="store_true", help="weight each sample by its class size")
     parser.add_argument('--resume', default='', type=str, metavar='PATH',
                     help='path to latest checkpoint (default: none)')
     parser.add_argument('--checkpoint_freq', default=3, type=int, metavar='N',
