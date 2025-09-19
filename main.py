@@ -1348,7 +1348,8 @@ if __name__ == '__main__':
                                 pin_memory=True, persistent_workers=tr_pw, drop_last=tr_dl)
 
         # Minimize step
-        upd_split = updated_split_all if args.retain_group else updated_split
+        if not args.baseline:
+            upd_split = updated_split_all if args.retain_group else updated_split
 
         if args.ssl_type.lower() == 'moco':
             kwargs = {'net_momentum': model_momentum, 'queue': queue, 'temperature': temperature, 'momentum': momentum}
