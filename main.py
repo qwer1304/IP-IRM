@@ -645,22 +645,27 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             continue
 
         # Environments & original cont losses and gradients
-        partition_sz = halves_sz.sum(dim=0, keepdim=True) # (1,J,K) # sizes of envs
-        loss_env = loss_aggregator.sum(dim=0, keepdim=True) / partition_sz     # per env for macro-batch, normalized per env
         if loss_weight > 0:
+            partition_sz = halves_sz.sum(dim=0, keepdim=True) # (1,J,K) # sizes of envs
+            loss_env = loss_aggregator.sum(dim=0, keepdim=True) / partition_sz     # per env for macro-batch, normalized per env
             for pind, p in enumerate(net.parameters()):
                 dLoss_dTheta_env = loss_grads[pind]     # per env sum of dCont/dTheta, shape (I,J,K,param_numel)
                 total_grad_flat  = loss_module.loss_grads_finalize(dLoss_dTheta_env, loss_env, halves_sz)
                 p.grad          += total_grad_flat.view(p.shape) # reshape back to parameter shape
+        else:
+            loss_env = torch.tensor(0)
 
         # Penalty and its gradients
-        penalty_env = penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz) # normalized per env
         if penalty_weight > 0:
+            penalty_env = penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz) # normalized per env
             for pind, p in enumerate(net.parameters()):
                 dPenalty_dTheta_env = penalty_grads[pind]  # per env sum of dPenalty/dTheta over macro-batch per parameter, shape (I,J,K,param_numel)               
                 total_grad_flat     = penalty_calculator.penalty_grads_finalize(dPenalty_dTheta_env, penalty_env, halves_sz)                
                 p.grad             += total_grad_flat.view(p.shape)  # reshape back to parameter shape
             
+        else:
+            penalty_env = torch.tensor(0)
+
         loss_batch = ((loss_keep_weight * loss_keep_aggregator) + # loss_keep_aggregator is a scalar
                       (penalty_weight   * penalty_env.mean())   + # mean over envs, mean over macro-batch
                       (loss_weight      * loss_env.mean())        # mean over envs, mean over macro-batch
@@ -669,7 +674,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         # -----------------------
         # Step 3: optimizer step
         # -----------------------
-        if (args.penalty_iters > 0) and (epoch == args.penalty_iters):
+        if (args.penalty_iters > 0) and (epoch == args.penalty_iters) and (penalty_weight > 0):
             # Reset Adam, because it doesn't like the sharp jump in gradient
             # magnitudes that happens at this step.
 
