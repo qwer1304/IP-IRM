@@ -460,7 +460,7 @@ if __name__ == '__main__':
     model = nn.DataParallel(model)
 
     optimizer = optim.Adam(model.module.fc.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-    loss_criterion = nn.CrossEntropyLoss(weights=class_weights)
+    loss_criterion = nn.CrossEntropyLoss(weight=class_weights)
     results = {'train_loss': [], 'train_acc@1': [], 'train_acc@5': [],
                'test_loss': [], 'test_acc@1': [], 'test_acc@5': []}
     if args.dataset == 'ImageNet':
