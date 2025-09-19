@@ -83,7 +83,8 @@ class Net(nn.Module):
             self.fc = model.module.fc
 
     def forward(self, x, normalize=False):
-        x = self.f(x)
+        with torch.no_grad():
+            x = self.f(x)
         feature = torch.flatten(x, start_dim=1)
         if normalize:
             feature = F.normalize(feature, dim=1)  # L2 norm
@@ -457,8 +458,6 @@ if __name__ == '__main__':
         def __init__(self, *args, **kwargs): pass
         
     model = Net(num_class=num_class, pretrained_path=model_path, image_class=image_class, args=args).cuda()
-    for param in model.f.parameters():
-        param.requires_grad = False
     model = nn.DataParallel(model)
 
     optimizer = optim.Adam(model.module.fc.parameters(), lr=args.lr, weight_decay=args.weight_decay)
