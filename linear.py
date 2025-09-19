@@ -420,8 +420,6 @@ if __name__ == '__main__':
                 def dataset_prune_sizes(dataset):
                     targets = dataset.targets
                     utargets, counts = np.unique(targets, return_counts=True)
-                    print()
-                    print(f'counts: {counts}')
                     min_count = min(counts)
                     masks = [targets==i for i in utargets]
                     idxs = np.arange(len(targets))
@@ -431,6 +429,15 @@ if __name__ == '__main__':
                     dataset = SubsetProxy(dataset, idxs)
                     return dataset
                 train_data = dataset_prune_sizes(train_data)
+                
+            if args.weighted_loss:
+                labels = train_data.targets if isinstance(train_data.targets, torch.Tensor) else torch.tensor(train_data.targets)
+                counts = torch.bincount(labels)
+                class_weights = 1.0 / counts.float()
+                class_weights = class_weights / class_weights.sum()  # normalize if needed
+            else:
+                class_weights = torch.ones(num_class)
+
             test_data   = utils.Imagenet(root=args.data + '/test',  transform=test_transform,  target_transform=target_transform, class_to_idx=class_to_idx)
             val_data    = utils.Imagenet(root=args.data + '/val',   transform=test_transform,  target_transform=target_transform, class_to_idx=class_to_idx)
 
@@ -452,7 +459,7 @@ if __name__ == '__main__':
     model = nn.DataParallel(model)
 
     optimizer = optim.Adam(model.module.fc.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-    loss_criterion = nn.CrossEntropyLoss()
+    loss_criterion = nn.CrossEntropyLoss(weights=class_weights)
     results = {'train_loss': [], 'train_acc@1': [], 'train_acc@5': [],
                'test_loss': [], 'test_acc@1': [], 'test_acc@5': []}
     if args.dataset == 'ImageNet':
