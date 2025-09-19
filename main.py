@@ -653,7 +653,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 total_grad_flat  = loss_module.loss_grads_finalize(dLoss_dTheta_env, loss_env, halves_sz)
                 p.grad          += total_grad_flat.view(p.shape) # reshape back to parameter shape
         else:
-            loss_env = torch.tensor(0)
+            loss_env = torch.tensor(0, dtype=torch.float)
 
         # Penalty and its gradients
         if penalty_weight > 0:
@@ -664,7 +664,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 p.grad             += total_grad_flat.view(p.shape)  # reshape back to parameter shape
             
         else:
-            penalty_env = torch.tensor(0)
+            penalty_env = torch.tensor(0, dtype=torch.float)
 
         loss_batch = ((loss_keep_weight * loss_keep_aggregator) + # loss_keep_aggregator is a scalar
                       (penalty_weight   * penalty_env.mean())   + # mean over envs, mean over macro-batch
