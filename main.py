@@ -1299,43 +1299,44 @@ if __name__ == '__main__':
         test_acc_1, test_acc_5 = test(model, feauture_bank, feature_labels, test_loader, args, progress=True, prefix="Test:")
         exit()
 
-    # update partition for the first time
-    if not args.baseline and not resumed:
-        if args.dataset != "ImageNet":
-            updated_split = torch.randn((len(update_data), args.env_num), requires_grad=True, device="cuda")
-        else:
-            updated_split = torch.randn((len(update_data), args.env_num), requires_grad=True, device="cuda")
-            if args.offline:
-                upd_loader = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, prefetch_factor=u_pf, shuffle=False, 
-                    drop_last=False, pin_memory=True, persistent_workers=u_pw)
+    # update partition for the first time, if we need one
+    if not args.baseline:
+        if (not resumed) or (resumed and (updated_split is None) and ((args.penalty_cont > 0) or (args.penalty_weight > 0))):  
+            if args.dataset != "ImageNet":
+                updated_split = torch.randn((len(update_data), args.env_num), requires_grad=True, device="cuda")
             else:
-                upd_loader = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, prefetch_factor=u_pf, shuffle=True,
-                    drop_last=True, pin_memory=True, persistent_workers=u_pw)
-        updated_split = train_update_split(model, upd_loader, updated_split, random_init=args.random_init, args=args)
-        updated_split_all = [updated_split.clone().detach()]
-        upd_loader = None
-        gc.collect()              # run Python's garbage collector
+                updated_split = torch.randn((len(update_data), args.env_num), requires_grad=True, device="cuda")
+                if args.offline:
+                    upd_loader = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, prefetch_factor=u_pf, shuffle=False, 
+                        drop_last=False, pin_memory=True, persistent_workers=u_pw)
+                else:
+                    upd_loader = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, prefetch_factor=u_pf, shuffle=True,
+                        drop_last=True, pin_memory=True, persistent_workers=u_pw)
+            updated_split = train_update_split(model, upd_loader, updated_split, random_init=args.random_init, args=args)
+            updated_split_all = [updated_split.clone().detach()]
+            upd_loader = None
+            gc.collect()              # run Python's garbage collector
 
-        # Save a baseline checkpoint with initial split to allow skipping its initial creation
-        cuda_rng_state = torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None
+            # Save a baseline checkpoint with initial split to allow skipping its initial creation
+            cuda_rng_state = torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None
 
-        save_checkpoint({
-            'epoch':                0, # restore is from epoch+1
-            'state_dict':           model.state_dict(),
-            'best_acc1':            best_acc1,
-            'best_epoch':           best_epoch,
-            'optimizer':            optimizer.state_dict(),
-            'updated_split':        updated_split,
-            'updated_split_all':    updated_split_all,
-            'state_dict_momentum':  model_momentum.state_dict() if model_momentum else None,
-            'queue':                queue,
-            "rng_dict": {
-                "rng_state": torch.get_rng_state(),
-                "cuda_rng_state": cuda_rng_state,
-                "numpy_rng_state": np.random.get_state(),
-                "python_rng_state": random.getstate(),
-            },
-        }, False, args, filename='{}/{}/checkpoint_1st.pth.tar'.format(args.save_root, args.name))
+            save_checkpoint({
+                'epoch':                0, # restore is from epoch+1
+                'state_dict':           model.state_dict(),
+                'best_acc1':            best_acc1,
+                'best_epoch':           best_epoch,
+                'optimizer':            optimizer.state_dict(),
+                'updated_split':        updated_split,
+                'updated_split_all':    updated_split_all,
+                'state_dict_momentum':  model_momentum.state_dict() if model_momentum else None,
+                'queue':                queue,
+                "rng_dict": {
+                    "rng_state": torch.get_rng_state(),
+                    "cuda_rng_state": cuda_rng_state,
+                    "numpy_rng_state": np.random.get_state(),
+                    "python_rng_state": random.getstate(),
+                },
+            }, False, args, filename='{}/{}/checkpoint_1st.pth.tar'.format(args.save_root, args.name))
 
     train_loader = None
 
