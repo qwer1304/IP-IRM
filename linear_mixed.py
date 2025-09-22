@@ -203,8 +203,8 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
                     feature_mixed = feature_mixed.squeeze()
                     out = net.module.fc(feature_mixed)
                     def loss_mixup(y, logits):
-                        loss_a = criterion(logits, y[:, 0].long(), reduction='none')
-                        loss_b = criterion(logits, y[:, 1].long(), reduction='none')
+                        loss_a = loss_criterion(logits, y[:, 0].long(), reduction='none')
+                        loss_b = loss_criterion(logits, y[:, 1].long(), reduction='none')
                         return ((1 - y[:, 2]) * loss_a + y[:, 2] * loss_b).mean()
     
                     loss = loss_mixup(labels_mixed, out)
