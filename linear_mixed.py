@@ -131,9 +131,9 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
         data_keys=["input", "target"]         # specify which tensors to mix
     )
     """
-    mixup = K.RandomMixUpV2(keepdim=True)
+    mixup = K.RandomMixUpV2()
         
-    cutmix = K.RandomCutMixV2(use_correct_lambda=True)
+    cutmix = K.RandomCutMixV2()
     
     mix_list = K.container.AugmentationSequential(
         mixup,
@@ -141,6 +141,7 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
         data_keys=["input", "class"], 
         same_on_batch=False,
         random_apply=1,       # one mix randomly
+        keepdim=True,
 )
 
     loss_mixup_criterion = nn.CrossEntropyLoss(weight=class_weights, label_smoothing=args.label_smoothing, reduction='none')
