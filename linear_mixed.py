@@ -131,11 +131,18 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
         data_keys=["input", "target"]         # specify which tensors to mix
     )
     """
-    mixup = K.RandomMixUpV2(
-        keepdim=True,                         # output same shape as input
-        data_keys=["input", "class"]          # specify which tensors to mix
-    )
+    mixup = K.RandomMixUpV2(keepdim=True)
         
+    cutmix = K.RandomCutMixV2(use_correct_lambda=True)
+    
+    mix_list = K.container.AugmentationSequential(
+        mixup,
+        cutmix,
+        data_keys=["input", "class"] 
+        same_on_batch=False,
+        random_apply=1,       # one mix randomly
+)
+
     loss_mixup_criterion = nn.CrossEntropyLoss(weight=class_weights, label_smoothing=args.label_smoothing, reduction='none')
 
     with (torch.enable_grad() if is_train else torch.no_grad()):
@@ -202,7 +209,7 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
                     feature = torch.cat(feature_list, dim=0)
                     target = torch.cat(target_list, dim=0)
                     feature = feature.unsqueeze(1).unsqueeze(2)
-                    feature_mixed, labels_mixed = mixup(feature, target)
+                    feature_mixed, labels_mixed = mix_list(feature, target)
                     feature_mixed = feature_mixed.squeeze()
                     out = net.module.fc(feature_mixed)
                     def loss_mixup(y, logits):
