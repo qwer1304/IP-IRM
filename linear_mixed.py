@@ -136,7 +136,7 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
         data_keys=["input", "class"]          # specify which tensors to mix
     )
         
-    loss_mixup_criterion = nn.CrossEntropyLoss(weight=class_weights, label_smoothing=args.label_smoothing, reduction='None')
+    loss_mixup_criterion = nn.CrossEntropyLoss(weight=class_weights, label_smoothing=args.label_smoothing, reduction='none')
 
     with (torch.enable_grad() if is_train else torch.no_grad()):
         if args.extract_features:
