@@ -216,8 +216,6 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
                         loss_b = loss_mixup_criterion(logits, y[:, 1].long())
                         return ((1 - y[:, 2]) * loss_a + y[:, 2] * loss_b).mean()
     
-                    print()
-                    print(flip, feature_mixed.size(), labels_mixed.size())
                     loss = loss_mixup(labels_mixed, out)
                     loss.backward()
             
