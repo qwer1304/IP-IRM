@@ -121,24 +121,27 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
             dynamic_ncols=False,            # disable autosizing
             bar_format=bar_format,          # request bar width
             )
+
+    """
+    mixup = K.RandomMixUpV2(
+        lambda_val=torch.tensor([0.3, 0.7]),  # Beta distribution parameter, [min,max]
+        same_on_batch=False,                  # different lambda per sample
+        p=1.0,                                # apply to all samples
+        keepdim=False,                        # output same shape as input
+        data_keys=["input", "target"]         # specify which tensors to mix
+    )
+    """
+    mixup = K.RandomMixUpV2(
+        keepdim=True,                         # output same shape as input
+        data_keys=["input", "class"]          # specify which tensors to mix
+    )
+        
+    loss_mixup_criterion = nn.CrossEntropyLoss(weight=class_weights, label_smoothing=args.label_smoothing, reduction='None')
+
     with (torch.enable_grad() if is_train else torch.no_grad()):
         if args.extract_features:
             data_loader.dataset.target_transform = None
 
-        """
-        mixup = K.RandomMixUpV2(
-            lambda_val=torch.tensor([0.3, 0.7]),  # Beta distribution parameter, [min,max]
-            same_on_batch=False,                  # different lambda per sample
-            p=1.0,                                # apply to all samples
-            keepdim=False,                        # output same shape as input
-            data_keys=["input", "target"]         # specify which tensors to mix
-        )
-        """
-        mixup = K.RandomMixUpV2(
-            keepdim=True,                         # output same shape as input
-            data_keys=["input", "class"]          # specify which tensors to mix
-        )
-        
         feature_list = []
         pred_labels_list = []
         pred_scores_list = []
@@ -203,8 +206,8 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
                     feature_mixed = feature_mixed.squeeze()
                     out = net.module.fc(feature_mixed)
                     def loss_mixup(y, logits):
-                        loss_a = loss_criterion(logits, y[:, 0].long(), reduction='none')
-                        loss_b = loss_criterion(logits, y[:, 1].long(), reduction='none')
+                        loss_a = loss_mixup_criterion(logits, y[:, 0].long())
+                        loss_b = loss_mixup_criterion(logits, y[:, 1].long())
                         return ((1 - y[:, 2]) * loss_a + y[:, 2] * loss_b).mean()
     
                     loss = loss_mixup(labels_mixed, out)
