@@ -125,13 +125,19 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
         if args.extract_features:
             data_loader.dataset.target_transform = None
 
+        """
         mixup = K.RandomMixUpV2(
             lambda_val=torch.tensor([0.3, 0.7]),  # Beta distribution parameter, [min,max]
             same_on_batch=False,                  # different lambda per sample
             p=1.0,                                # apply to all samples
             keepdim=False,                        # output same shape as input
             data_keys=["input", "target"]         # specify which tensors to mix
-)        
+        )
+        """
+        mixup = K.RandomMixUpV2(
+            keepdim=True,                         # output same shape as input
+            data_keys=["input", "class"]          # specify which tensors to mix
+        )
         
         feature_list = []
         pred_labels_list = []
@@ -192,7 +198,7 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
                 if is_train:
                     feature = torch.cat(feature_list, dim=0)
                     target = torch.cat(target_list, dim=0)
-                    feature_mixed, labels_mixed = mixup({"input": feature, "target": target})
+                    feature_mixed, labels_mixed = mixup(feature, target})
                     out = net.fc(feature_mixed)
                     def loss_mixup(y, logits):
                         loss_a = criterion(logits, y[:, 0].long(), reduction='none')
