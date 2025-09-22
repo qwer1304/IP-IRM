@@ -142,6 +142,9 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
         if args.extract_features:
             data_loader.dataset.target_transform = None
 
+        feature_mix_list = []
+        target_mix_list = []
+
         feature_list = []
         pred_labels_list = []
         pred_scores_list = []
@@ -180,11 +183,13 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
                 total_correct_1 += torch.sum((prediction[:, 0:1] == target.unsqueeze(dim=-1)).any(dim=-1).float()).item()
                 total_correct_5 += torch.sum((prediction[:, 0:5] == target.unsqueeze(dim=-1)).any(dim=-1).float()).item()
 
-                feature_list.append(feature)
-                target_list.append(target)
+                feature_mix_list.append(feature)
+                target_mix_list.append(target)
 
                 # compute output
                 if args.extract_features:
+                    feature_list.append(feature)
+                    target_list.append(target)
                     target_raw_list.append(target_raw)
                     pred_labels_list.append(prediction)
                     pred_scores_list.append(out)
@@ -199,8 +204,8 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
             if (loader_step * loader_batch_size) == gradients_batch_size:
                 loader_step = 0
                 if is_train:
-                    feature = torch.cat(feature_list, dim=0)
-                    target = torch.cat(target_list, dim=0)
+                    feature = torch.cat(feature_mix_list, dim=0)
+                    target = torch.cat(target_mix_list, dim=0)
                     feature = feature.unsqueeze(1).unsqueeze(2)
                     flip = 0 if random.random() < 0.5 else 1
                     feature_mixed, labels_mixed = mix_list[flip](feature, target)
@@ -218,6 +223,7 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
             
                     train_optimizer.step()
                     train_optimizer.zero_grad()  # clear gradients at beginning of next gradients batch
+                    feature_mix_list, target_mix_list = [], []
 
             data_bar.set_description('{} Epoch: [{}/{}] [{}/{}] Loss: {:.4f} Acc@1: {:.2f}% Acc@5: {:.2f}%'
                                      .format(dataset.capitalize(), epoch, epochs, total_num, len(data_loader.dataset),
