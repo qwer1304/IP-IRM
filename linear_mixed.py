@@ -126,10 +126,10 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
             data_loader.dataset.target_transform = None
 
         mixup = K.RandomMixUpV2(
-            lambda_val=0.4,        # Beta distribution parameter; scalar or None for Beta(1,1)
-            same_on_batch=False,   # different lambda per sample
-            p=1.0,                 # apply to all samples
-            keepdim=False          # output same shape as input
+            lambda_val=torch.tensor([0.3, 0.7]),  # Beta distribution parameter, [min,max]
+            same_on_batch=False,                  # different lambda per sample
+            p=1.0,                                # apply to all samples
+            keepdim=False                         # output same shape as input
         )        
         
         feature_list = []
