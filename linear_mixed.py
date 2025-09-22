@@ -213,11 +213,11 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
                         feature = feat_chunks[i].unsqueeze(1).unsqueeze(2)
                         target = target_chunks[i]
                         feature_mixed, labels_mixed = mix_list[i](feature, target)
-                        feature_mixed, labels_mixed = feature_mixed.squeeze(), labels_mixed.squeeze()
+                        feature_mixed, labels_mixed = feature_mixed.squeeze(), labels_mixed.squeeze() # labels_mix is a tensor (B,3)
                         feature_mix_list.append(feature_mixed)
                         target_mix_list.append(labels_mixed)
                     feature_mixed = torch.cat(feature_mix_list, dim=0)
-                    labels_mixed = tuple(torch.cat(labels, dim=0) for labels in zip(*target_mix_list))
+                    labels_mixed = torch.cat(target_mix_list, dim=0)
                     out = net.module.fc(feature_mixed)
                     def loss_mixup(y, logits):
                         loss_a = loss_mixup_criterion(logits, y[:, 0].long())
