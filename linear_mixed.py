@@ -207,9 +207,9 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
                     feature = torch.cat(feature_mix_list, dim=0)
                     target = torch.cat(target_mix_list, dim=0)
                     feature_mix_list, target_mix_list = [], []
-                    feat_chunks = torch.chunk(feature, 2)
-                    target_chunks = torch.chunk(target, 2)
-                    for i in range(2):
+                    feat_chunks = torch.chunk(feature, len(mix_list))
+                    target_chunks = torch.chunk(target, len(mix_list))
+                    for i in range(len(mix_list)):
                         feature = feat_chunks[i].unsqueeze(1).unsqueeze(2)
                         target = target_chunks[i]
                         feature_mixed, labels_mixed = mix_list[i](feature, target)
