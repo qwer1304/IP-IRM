@@ -222,7 +222,7 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
                                              total_correct_1 / total_num * 100, total_correct_5 / total_num * 100))
         # end for data, target in data_bar:
 
-        if feature_list:
+        if args.extract_features:
             feature = torch.cat(feature_list, dim=0)
             target = torch.cat(target_list, dim=0)
             target_raw = torch.cat(target_raw_list, dim=0)
