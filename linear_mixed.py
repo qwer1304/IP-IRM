@@ -198,7 +198,7 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
                 if is_train:
                     feature = torch.cat(feature_list, dim=0)
                     target = torch.cat(target_list, dim=0)
-                    feature = feature.unsqueezeze(1).unsqueeze(2)
+                    feature = feature.unsqueeze(1).unsqueeze(2)
                     print()
                     print(feature.size(), target.size())
                     feature_mixed, labels_mixed = mixup(feature, target)
