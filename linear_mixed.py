@@ -140,7 +140,7 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
         cutmix,
         data_keys=["input", "class"], 
         same_on_batch=False,
-        random_apply=1,       # one mix randomly
+        random_apply=(1,1),       # one mix randomly
         keepdim=True,
 )
 
