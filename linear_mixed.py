@@ -206,10 +206,18 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
                 if is_train:
                     feature = torch.cat(feature_mix_list, dim=0)
                     target = torch.cat(target_mix_list, dim=0)
-                    feature = feature.unsqueeze(1).unsqueeze(2)
-                    flip = 0 if random.random() < 0.5 else 1
-                    feature_mixed, labels_mixed = mix_list[flip](feature, target)
-                    feature_mixed, labels_mixed = feature_mixed.squeeze(), labels_mixed.squeeze()
+                    feature_mix_list, target_mix_list = [], []
+                    feat_chunks = torch.chunk(feature, 2)
+                    target_chunks = torch.chunk(target, 2)
+                    for i in range(2):
+                        feature = feat_chunks[i].unsqueeze(1).unsqueeze(2)
+                        target = target_chunks[i]
+                        feature_mixed, labels_mixed = mix_list[i](feature, target)
+                        feature_mixed, labels_mixed = feature_mixed.squeeze(), labels_mixed.squeeze()
+                        feature_mix_list.append(feature_mixed)
+                        target_mix_list.append(labels_mixed)
+                    feature_mixed = torch.cat(feature_mix_list, dim=0)
+                    labels_mixed = tuple(torch.cat(labels, dim=0) for labels in zip(*target_mix_list))
                     out = net.module.fc(feature_mixed)
                     def loss_mixup(y, logits):
                         loss_a = loss_mixup_criterion(logits, y[:, 0].long())
