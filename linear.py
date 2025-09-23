@@ -224,7 +224,7 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
 
                         loss = loss_mixup(labels_mixed, out)
                     else:
-                        loss = loss_mixup_criterion(targets, out).mean()
+                        loss = loss_mixup_criterion(target, out).mean()
                     loss.backward()
             
                     train_optimizer.step()
