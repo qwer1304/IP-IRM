@@ -24,15 +24,13 @@ import torch.nn.functional as F
 import os
 
 class NetResnet(nn.Module):
-    def __init__(self, num_class, pretrained_path, args=None):
-        super(LinearProbe, self).__init__()
+    def __init__(self, num_class, pretrained_path, image_class='ImageNet', args=None):
+        super().__init__()
 
         device = "cuda" if torch.cuda.is_available() else "cpu"
 
-        # Load a ResNet50 backbone (no classifier head)
-        from torchvision.models import resnet50
-        backbone = resnet50(weights=None)
-        backbone.fc = nn.Identity()  # strip classification head
+        model = ModelResnet(image_class=image_class).to(device)
+        model = nn.DataParallel(model)
 
         # Load checkpoint
         assert pretrained_path is not None and os.path.isfile(pretrained_path)
@@ -53,14 +51,18 @@ class NetResnet(nn.Module):
                 k = k[len("module."):]
             new_state_dict[k] = v
 
-        msg = backbone.load_state_dict(new_state_dict, strict=False)
+        msg = model.f.load_state_dict(new_state_dict, strict=False)
         print("Missing keys (ignoring fc):", [k for k in msg.missing_keys if not k.startswith("fc.")])
         print("Unexpected keys:", msg.unexpected_keys)
 
-        self.f = nn.DataParallel(backbone).to(device)
+        self.f = model.module.f
 
-        # Linear probe head
-        self.fc = nn.Linear(2048, num_class, bias=True)
+        if args.evaluate is None or args.evaluate == 'knn':
+            # If training or evaluating output from SSL
+            # classifier
+            self.fc = nn.Linear(2048, num_class, bias=True)
+        else:
+            self.fc = model.module.fc
 
     def forward(self, x, normalize=False):
         with torch.no_grad():
@@ -77,7 +79,6 @@ class Net(nn.Module):
 
         # encoder
         model = Model(image_class=image_class).cuda()
-        model = Model().cuda()
         model = nn.DataParallel(model)
 
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
