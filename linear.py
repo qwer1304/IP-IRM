@@ -364,24 +364,11 @@ def load_checkpoint(path, model, optimizer=None, device='cuda'):
     best_acc1 = checkpoint.get('best_acc1', 0.0)
     best_epoch = checkpoint.get('best_epoch', -1)
 
-    # Prepare state_dict
-    if 'state_dict' in checkpoint:
-        state_dict = checkpoint['state_dict']
-    else:
-        state_dict = checkpoint
-
-    # Strip MoCo encoder_q prefix and module prefix
-    new_state_dict = {}
-    for k, v in state_dict.items():
-        if k.startswith("module.encoder_q."):
-            k = k[len("module.encoder_q."):]
-        if k.startswith("module."):
-            k = k[len("module."):]
-        new_state_dict[k] = v
+    state_dict = checkpoint['state_dict']
 
     # Load model
-    msg_model = model.load_state_dict(new_state_dict, strict=False)
-    print("Missing keys (ignoring linear head):", [k for k in msg_model.missing_keys if not k.startswith("fc.")])
+    msg_model = model.load_state_dict(state_dict, strict=False)
+    print("Missing keys:", msg_model.missing_keys)
     print("Unexpected keys:", msg_model.unexpected_keys)
 
     # Restore optimizer if provided
