@@ -29,12 +29,14 @@ class NetResnet(nn.Module):
 
         device = "cuda" if torch.cuda.is_available() else "cpu"
 
+        # f - resnet, fc - identity, g - projection head
         model = ModelResnet(image_class=image_class).to(device)
         model = nn.DataParallel(model)
 
         # Load checkpoint
         assert pretrained_path is not None and os.path.isfile(pretrained_path)
         print("=> loading pretrained checkpoint '{}'".format(pretrained_path))
+        # ssl or resume
         checkpoint = torch.load(pretrained_path, map_location=device, weights_only=False)
 
         if "state_dict" in checkpoint:
@@ -53,8 +55,11 @@ class NetResnet(nn.Module):
 
         msg = model.module.f.load_state_dict(new_state_dict, strict=False)
         print("Missing keys (ignoring fc):", [k for k in msg.missing_keys if not k.startswith("fc.")])
-        print("Unexpected keys:", msg.unexpected_keys)
-
+        if args.evaluate is None or args.evaluate == 'knn':
+            print("Unexpected keys (ignoring fc):", [k for k in msg.unexpected_keys if not k.startswith("fc.")])
+        else:
+            print("Unexpected keys:", msg.unexpected_keys)
+        
         self.f = model.module.f
 
         if args.evaluate is None or args.evaluate == 'knn':
