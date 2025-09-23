@@ -712,7 +712,7 @@ if __name__ == '__main__':
                 build_and_save_checkpoint(
                     model=model,
                     optimizer=optimizer,
-                    epoch=current_epoch,
+                    epoch=epoch,
                     best_acc1=best_acc1,
                     best_epoch=best_epoch,
                     cuda_rng_state=None,
