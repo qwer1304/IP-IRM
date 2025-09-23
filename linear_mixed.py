@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-from torch.utils.data import DataLoader, Subset
+from torch.utils.data import DataLoader, Subset, WeightedRandomSampler
 from torchvision.datasets import STL10, CIFAR10, CIFAR100, ImageFolder
 import random
 import shutil
@@ -376,6 +376,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--mixup', action="store_true", help="MixUp")
     parser.add_argument('--cutmix', action="store_true", help="CutMix")
+    parser.add_argument('--weighted_sampler', action="store_true", help="Class weighted sampler")
 
     args = parser.parse_args()
 
@@ -499,8 +500,25 @@ if __name__ == '__main__':
             test_data   = utils.Imagenet(root=args.data + '/test',  transform=test_transform,  target_transform=target_transform, class_to_idx=class_to_idx)
             val_data    = utils.Imagenet(root=args.data + '/val',   transform=test_transform,  target_transform=target_transform, class_to_idx=class_to_idx)
 
-        train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, shuffle=True, pin_memory=True, 
-            drop_last=True, persistent_workers=tr_pw)
+
+            if args.weighted_sampler:
+                # Count per-class frequency
+                class_counts = torch.bincount(train_data.targets)
+
+                # Compute inverse frequency weights
+                weights = 1.0 / class_counts.float()          # higher weight for rare classes
+                sample_weights = weights[labels]              # weight per sample
+
+                # Create sampler
+                sampler = WeightedRandomSampler(
+                    weights=sample_weights,
+                    num_samples=len(sample_weights),          # number of samples per epoch
+                    replacement=True                         # allow repeats of rare samples
+                )
+
+        kwargs = {'sampler': sampler} if args.weighted_sampler else {'shuffle': True}
+        train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, pin_memory=True, 
+            drop_last=True, persistent_workers=tr_pw, **kwargs)
         test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=True, 
             pin_memory=True, persistent_workers=te_pw)
         val_loader = DataLoader(val_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=True, 
