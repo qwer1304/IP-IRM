@@ -236,15 +236,13 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
                             feature_mixed[~mask], labels_cm = cutmix(feature[~mask], target[~mask])
                             labels_mixed[~mask] = labels_cm.squeeze()
 
-                        feature_mixed, labels_mixed = feature_mixed, labels_mixed # labels_mix is a tensor (B,3)
+                        feature_mixed, labels_mixed = feature_mixed.squeeze(), labels_mixed # labels_mix is a tensor (B,3)
                         out = net.module.fc(feature_mixed)
                         def loss_mixup(y, logits):
                             loss_a = loss_mixup_criterion(logits, y[:, 0].long())
                             loss_b = loss_mixup_criterion(logits, y[:, 1].long())
                             return ((1 - y[:, 2]) * loss_a + y[:, 2] * loss_b).mean()
 
-                        print()
-                        print(labels_mixed.size(), out.size())
                         loss = loss_mixup(labels_mixed, out)
                     else:
                         loss = loss_mixup_criterion(targets, out).mean()
