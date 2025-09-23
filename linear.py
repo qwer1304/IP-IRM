@@ -221,7 +221,7 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
 
                         loss = loss_mixup(labels_mixed, out)
                     else:
-                        out = net.module.fc(net.module.dropout(feature))
+                        out = net.module.fc(net.module.dropout(feature.squeeze()))
                         loss = loss_mixup_criterion(target, out).mean()
                     loss.backward()
             
