@@ -131,10 +131,13 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
         data_keys=["input", "target"]         # specify which tensors to mix
     )
     """
-    
-    mixup = K.RandomMixUpV2(data_keys=["input", "class"], same_on_batch=False, keepdim=True,)       
-    cutmix = K.RandomCutMixV2(data_keys=["input", "class"], same_on_batch=False, keepdim=True,)
-    mix_list = [mixup, cutmix]    
+    mix_list = []
+    if args.mixup:
+        mixup = K.RandomMixUpV2(data_keys=["input", "class"], same_on_batch=False, keepdim=True,)
+        mix_list.append(mixup)
+    if args.cutmix:
+        cutmix = K.RandomCutMixV2(data_keys=["input", "class"], same_on_batch=False, keepdim=True,)
+        mix_list.append(cutmix)
     
     loss_mixup_criterion = nn.CrossEntropyLoss(weight=class_weights, label_smoothing=args.label_smoothing, reduction='none')
 
@@ -370,6 +373,9 @@ if __name__ == '__main__':
     parser.add_argument('--label_smoothing', default=0.0, type=float, help='label smoothing')
     parser.add_argument('--prune_sizes', action="store_true", help="prune training dataset to minority class size")
     parser.add_argument('--weighted_loss', action="store_true", help="weight each sample by its class size")
+
+    parser.add_argument('--mixup', action="store_true", help="MixUp")
+    parser.add_argument('--cutmix', action="store_true", help="CutMix")
 
     args = parser.parse_args()
 
