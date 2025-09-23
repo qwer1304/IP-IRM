@@ -221,11 +221,11 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
                             thresh = 0.0
                         else:
                             thresh = 0.5
-                        mask = torch.rand(feature.size(0)) < thresh  # Boolean mask: True = Mixup, False = CutMix
+                        mask = torch.rand(feature.size(0), device=feature.device) < thresh  # Boolean mask: True = Mixup, False = CutMix
 
                         # Prepare output tensors
                         feature_mixed = torch.empty_like(feature)
-                        labels_mixed = torch.empty(target.size(0),3)
+                        labels_mixed = torch.empty(target.size(0),3, device=target.device)
 
                         # Apply Mixup to selected samples
                         if mask.any():
