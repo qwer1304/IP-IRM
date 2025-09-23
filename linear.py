@@ -51,7 +51,7 @@ class NetResnet(nn.Module):
                 k = k[len("module."):]
             new_state_dict[k] = v
 
-        msg = model.f.load_state_dict(new_state_dict, strict=False)
+        msg = model.module.f.load_state_dict(new_state_dict, strict=False)
         print("Missing keys (ignoring fc):", [k for k in msg.missing_keys if not k.startswith("fc.")])
         print("Unexpected keys:", msg.unexpected_keys)
 
