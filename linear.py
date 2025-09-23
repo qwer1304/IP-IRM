@@ -14,7 +14,7 @@ import os
 from collections import defaultdict, OrderedDict
 
 import utils
-from model import Model
+from model import Model, ModelResnet
 
 from prepare import prepare_datasets, traverse_objects
 
