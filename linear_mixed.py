@@ -80,9 +80,15 @@ class Net(nn.Module):
             print(missing_keys)
         if args.evaluate is None or args.evaluate == 'knn':
             # If training or evaluating output from SSL
-            # classifier
-            self.fc = nn.Linear(2048, num_class, bias=True)
-        else:
+            if args.dropout:
+                self.fc = nn.Sequential(nn.Dropout(args.dropout_prob),
+                                        nn.Linear(2048, num_class, bias=True)
+                                       )
+            else:
+                self.fc = nn.Sequential(nn.Identity(),
+                                        nn.Linear(2048, num_class, bias=True)
+                                       )
+        else: # resuming
             self.fc = model.module.fc
 
     def forward(self, x, normalize=False):
@@ -131,13 +137,10 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
         data_keys=["input", "target"]         # specify which tensors to mix
     )
     """
-    mix_list = []
     if args.mixup:
         mixup = K.RandomMixUpV2(data_keys=["input", "class"], same_on_batch=False, keepdim=True,)
-        mix_list.append(mixup)
     if args.cutmix:
         cutmix = K.RandomCutMixV2(data_keys=["input", "class"], same_on_batch=False, keepdim=True,)
-        mix_list.append(cutmix)
     
     loss_mixup_criterion = nn.CrossEntropyLoss(weight=class_weights, label_smoothing=args.label_smoothing, reduction='none')
 
@@ -209,25 +212,39 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
                 if is_train:
                     feature = torch.cat(feature_mix_list, dim=0)
                     target = torch.cat(target_mix_list, dim=0)
-                    feature_mix_list, target_mix_list = [], []
-                    feat_chunks = torch.chunk(feature, len(mix_list))
-                    target_chunks = torch.chunk(target, len(mix_list))
-                    for i in range(len(mix_list)):
-                        feature = feat_chunks[i].unsqueeze(1).unsqueeze(2)
-                        target = target_chunks[i]
-                        feature_mixed, labels_mixed = mix_list[i](feature, target)
+                    
+                    if args.mixup or args.cutmix:
+                        feature = feature.unsqueeze(1).unsqueeze(2) # extend to (B,C,W,H)
+                        if args.mixup and (not args.cutmix):
+                            thresh = 2.0
+                        elif (not args.mixup) and args.cutmix:
+                            thresh = 0.0
+                        else:
+                            thresh = 0.5
+                        mask = torch.rand(feature.size(0)) < thresh  # Boolean mask: True = Mixup, False = CutMix
+
+                        # Prepare output tensors
+                        feature_mixed = torch.empty_like(feature)
+                        labels_mixed = torch.empty_like(target)
+
+                        # Apply Mixup to selected samples
+                        if mask.any():
+                            feature_mixed[mask], labels_mixed[mask] = mixup(feature[mask], target[mask])
+
+                        # Apply CutMix to the rest
+                        if (~mask).any():
+                            feature_mixed[~mask], labels_mixed[~mask] = cutmix(feature[~mask], target[~mask])
+
                         feature_mixed, labels_mixed = feature_mixed.squeeze(), labels_mixed.squeeze() # labels_mix is a tensor (B,3)
-                        feature_mix_list.append(feature_mixed)
-                        target_mix_list.append(labels_mixed)
-                    feature_mixed = torch.cat(feature_mix_list, dim=0)
-                    labels_mixed = torch.cat(target_mix_list, dim=0)
-                    out = net.module.fc(feature_mixed)
-                    def loss_mixup(y, logits):
-                        loss_a = loss_mixup_criterion(logits, y[:, 0].long())
-                        loss_b = loss_mixup_criterion(logits, y[:, 1].long())
-                        return ((1 - y[:, 2]) * loss_a + y[:, 2] * loss_b).mean()
-    
-                    loss = loss_mixup(labels_mixed, out)
+                        out = net.module.fc(feature_mixed)
+                        def loss_mixup(y, logits):
+                            loss_a = loss_mixup_criterion(logits, y[:, 0].long())
+                            loss_b = loss_mixup_criterion(logits, y[:, 1].long())
+                            return ((1 - y[:, 2]) * loss_a + y[:, 2] * loss_b).mean()
+
+                        loss = loss_mixup(labels_mixed, out)
+                    else:
+                        loss = loss_mixup_criterion(targets, out).mean()
                     loss.backward()
             
                     train_optimizer.step()
@@ -377,6 +394,8 @@ if __name__ == '__main__':
     parser.add_argument('--mixup', action="store_true", help="MixUp")
     parser.add_argument('--cutmix', action="store_true", help="CutMix")
     parser.add_argument('--weighted_sampler', action="store_true", help="Class weighted sampler")
+    parser.add_argument('--dropout', action="store_true", help="Apply dropout before linear head")
+    parser.add_argument('--dropout_prob', type=float, default=0.2, help="Dropout prob")
 
     args = parser.parse_args()
 
