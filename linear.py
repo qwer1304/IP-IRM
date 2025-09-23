@@ -49,6 +49,8 @@ class NetResnet(nn.Module):
         for k, v in state_dict.items():
             if k.startswith("module.encoder_q."):
                 k = k[len("module.encoder_q."):]
+            if k.startswith("module.f."):
+                k = k[len("module.f."):]
             if k.startswith("module."):
                 k = k[len("module."):]
             new_state_dict[k] = v
