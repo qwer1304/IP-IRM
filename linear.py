@@ -159,9 +159,6 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
                 out, feature = net(data, normalize=True)
                 loss = loss_criterion(out, target)
 
-                if is_train:
-                    (loss / gpu_accum_steps / loader_accum_steps).backward() # adds gradients to accumulated ones
-            
                 total_num += data.size(0)
                 total_loss += loss.item() * data.size(0)
                 prediction = torch.argsort(out, dim=-1, descending=True)
@@ -224,6 +221,7 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
 
                         loss = loss_mixup(labels_mixed, out)
                     else:
+                        out = net.module.fc(net.module.dropout(feature))
                         loss = loss_mixup_criterion(target, out).mean()
                     loss.backward()
             
