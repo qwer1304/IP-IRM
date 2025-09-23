@@ -68,14 +68,9 @@ class NetResnet(nn.Module):
         
         self.f = model.module.f
 
-        if args.evaluate is None or args.evaluate == 'knn':
-            # If training or evaluating output from SSL
-            # classifier
-            self.dropout = nn.Dropout(args.dropout_prob) if args.dropout else nn.Identity()
-            self.fc = nn.Linear(2048, num_class, bias=True)
-        else:
-            self.dropout = model.module.dropout
-            self.fc = model.module.fc
+        # classifier
+        self.dropout = nn.Dropout(args.dropout_prob) if args.dropout else nn.Identity()
+        self.fc = nn.Linear(2048, num_class, bias=True)
 
     def forward(self, x, normalize=False):
         with torch.no_grad():
