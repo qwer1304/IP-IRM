@@ -13,7 +13,7 @@ from torch.utils.data import Dataset, DataLoader, Sampler
 from tqdm.auto import tqdm
 
 import utils
-from model import Model, SimSiam
+from model import Model, ModelResnet, SimSiam
 from prepare import prepare_datasets, traverse_objects
 import gc
 from math import ceil, prod
@@ -940,7 +940,6 @@ def test(net, feature_bank, feature_labels, test_data_loader, args, progress=Fal
             print(f"Dumped features into {fp}")
 
     return total_top1 / total_num * 100, total_top5 / total_num * 100
-
     
 def save_checkpoint(state, is_best, args, filename='checkpoint.pth.tar', sync=True):
     filename_tmp = filename + ".tmp"
@@ -963,7 +962,82 @@ def save_checkpoint(state, is_best, args, filename='checkpoint.pth.tar', sync=Tr
         os.fsync(dir_fd)
         os.close(dir_fd)
 
-def load_checkpoint(path, model, model_momentum, optimizer, device='cuda'):
+def load_checkpoint(path, model, model_momentum, optimizer, device="cuda"):
+    print("=> loading checkpoint '{}'".format(path))
+    checkpoint = torch.load(path, map_location=device, weights_only=False)
+
+    # Restore training bookkeeping (if present)
+    start_epoch = checkpoint.get("epoch", -1) + 1
+    best_acc1 = checkpoint.get("best_acc1", 0.0)
+    best_epoch = checkpoint.get("best_epoch", -1)
+    updated_split = checkpoint.get("updated_split", None)
+    updated_split_all = checkpoint.get("updated_split_all", None)
+
+    # Restore main model
+    msg_model = model.load_state_dict(checkpoint["state_dict"], strict=False)
+
+    # Restore momentum model if applicable
+    queue = None
+    if model_momentum is not None:
+        if "state_dict_momentum" in checkpoint and checkpoint["state_dict_momentum"] is not None:
+            msg_momentum = model_momentum.load_state_dict(
+                checkpoint["state_dict_momentum"], strict=False
+            )
+        else:
+            msg_momentum = "no momentum encoder in checkpoint"
+
+        if "queue" in checkpoint and checkpoint["queue"] is not None:
+            queue = checkpoint["queue"]
+        else:
+            queue = None
+    else:
+        msg_momentum = "momentum encoder not used"
+        queue = None
+
+    # Restore optimizer (if available)
+    if "optimizer" in checkpoint and checkpoint["optimizer"] is not None:
+        optimizer.load_state_dict(checkpoint["optimizer"])
+        # Move optimizer tensors to the correct device
+        for state in optimizer.state.values():
+            for k, v in state.items():
+                if torch.is_tensor(v):
+                    state[k] = v.to(device)
+
+    # Restore RNG states (if present)
+    rng_dict = checkpoint.get("rng_dict", None)
+    if rng_dict is not None:
+        rng_state = rng_dict.get("rng_state", None)
+        if rng_state is not None:
+            if rng_state.device != torch.device("cpu"):
+                rng_state = rng_state.cpu()
+            torch.set_rng_state(rng_state)
+
+        cuda_rng_state = rng_dict.get("cuda_rng_state", None)
+        if cuda_rng_state is not None:
+            torch.cuda.set_rng_state_all(
+                [t.cpu() if t.device != torch.device("cpu") else t for t in cuda_rng_state]
+            )
+
+        numpy_rng_state = rng_dict.get("numpy_rng_state", None)
+        if numpy_rng_state is not None:
+            np.random.set_state(numpy_rng_state)
+
+        python_rng_state = rng_dict.get("python_rng_state", None)
+        if python_rng_state is not None:
+            random.setstate(python_rng_state)
+
+    # Report what was loaded
+    print("\tmodel load: {}".format(msg_model))
+    if model_momentum is not None:
+        print("\tmomentum load: {}".format(msg_momentum))
+    if queue is not None:
+        print("\tqueue restored")
+
+    print("<= loaded checkpoint '{}' (epoch {})".format(path, checkpoint.get("epoch", -1)))
+
+    return model, model_momentum, optimizer, queue, start_epoch, best_acc1, best_epoch, updated_split, updated_split_all
+
+def load_checkpoint_old(path, model, model_momentum, optimizer, device='cuda'):
     print("=> loading checkpoint '{}'".format(path))
     checkpoint = torch.load(path, map_location=device, weights_only=False)
 
@@ -1236,7 +1310,8 @@ if __name__ == '__main__':
 
     # model setup and optimizer config
     if args.ssl_type.lower() == 'moco':
-        model = Model(feature_dim, image_class=image_class, state_dict=state_dict).cuda()
+        #model = Model(feature_dim, image_class=image_class, state_dict=state_dict).cuda()
+        model = ModelResNet(feature_dim, image_class=image_class, state_dict=state_dict).cuda()
     elif args.ssl_type.lower() == 'simsiam':
         model = SimSiam(feature_dim, image_class=image_class, state_dict=state_dict).cuda()
     else:

@@ -18,6 +18,59 @@ from model import Model
 
 from prepare import prepare_datasets, traverse_objects
 
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import os
+
+class NetResnet(nn.Module):
+    def __init__(self, num_class, pretrained_path, args=None):
+        super(LinearProbe, self).__init__()
+
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+
+        # Load a ResNet50 backbone (no classifier head)
+        from torchvision.models import resnet50
+        backbone = resnet50(weights=None)
+        backbone.fc = nn.Identity()  # strip classification head
+
+        # Load checkpoint
+        assert pretrained_path is not None and os.path.isfile(pretrained_path)
+        print("=> loading pretrained checkpoint '{}'".format(pretrained_path))
+        checkpoint = torch.load(pretrained_path, map_location=device, weights_only=False)
+
+        if "state_dict" in checkpoint:
+            state_dict = checkpoint["state_dict"]
+        else:
+            state_dict = checkpoint
+
+        # Handle MoCo checkpoints (strip encoder_q prefix)
+        new_state_dict = {}
+        for k, v in state_dict.items():
+            if k.startswith("module.encoder_q."):
+                k = k[len("module.encoder_q."):]
+            if k.startswith("module."):
+                k = k[len("module."):]
+            new_state_dict[k] = v
+
+        msg = backbone.load_state_dict(new_state_dict, strict=False)
+        print("Missing keys (ignoring fc):", [k for k in msg.missing_keys if not k.startswith("fc.")])
+        print("Unexpected keys:", msg.unexpected_keys)
+
+        self.f = nn.DataParallel(backbone).to(device)
+
+        # Linear probe head
+        self.fc = nn.Linear(2048, num_class, bias=True)
+
+    def forward(self, x, normalize=False):
+        with torch.no_grad():
+            feature = self.f(x)
+        feature = torch.flatten(feature, start_dim=1)
+        if normalize:
+            feature = F.normalize(feature, dim=1)
+        out = self.fc(feature)
+        return out, feature
+
 class Net(nn.Module):
     def __init__(self, num_class, pretrained_path, image_class='ImageNet', args=None):
         super(Net, self).__init__()
@@ -216,6 +269,55 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
         
     return total_loss / total_num, total_correct_1 / total_num * 100, total_correct_5 / total_num * 100
 
+def atomic_save(state, is_best, filename='checkpoint.pth.tar', sync=True):
+    """
+    Save a checkpoint atomically, optionally keeping a best model copy.
+    """
+    filename_tmp = filename + ".tmp"
+    torch.save(state, filename_tmp)
+    os.replace(filename_tmp, filename)
+
+    if is_best:
+        best_filename = os.path.join(os.path.dirname(filename), "model_best.pth.tar")
+        best_filename_tmp = best_filename + ".tmp"
+        shutil.copyfile(filename, best_filename_tmp)
+        os.replace(best_filename_tmp, best_filename)
+
+    if sync:
+        paths = [filename, best_filename] if is_best else [filename]
+        for p in paths:
+            fd = os.open(p, os.O_RDONLY)
+            os.fsync(fd)
+            os.close(fd)
+
+        dir_fd = os.open(os.path.dirname(filename) or ".", os.O_RDONLY)
+        os.fsync(dir_fd)
+        os.close(dir_fd)
+
+
+def build_and_save_checkpoint(model, optimizer, epoch, best_acc1, best_epoch,
+                              cuda_rng_state=None, save_dir=".", is_best=False):
+    """
+    Build checkpoint dictionary and save it using atomic_save.
+    """
+    state = {
+        "epoch": epoch,
+        "state_dict": model.state_dict(),
+        "best_acc1": best_acc1,
+        "best_epoch": best_epoch,
+        "optimizer": optimizer.state_dict() if optimizer is not None else None,
+        "rng_dict": {
+            "rng_state": torch.get_rng_state(),
+            "cuda_rng_state": cuda_rng_state,
+            "numpy_rng_state": np.random.get_state(),
+            "python_rng_state": random.getstate(),
+        },
+    }
+
+    filename = os.path.join(save_dir, "checkpoint.pth.tar")
+    atomic_save(state, is_best, filename=filename)
+
+
 def save_checkpoint(state, is_best, args, filename='checkpoint.pth.tar', sync=True):
     filename_tmp = filename + ".tmp"
     torch.save(state, filename_tmp)
@@ -237,7 +339,82 @@ def save_checkpoint(state, is_best, args, filename='checkpoint.pth.tar', sync=Tr
         os.fsync(dir_fd)
         os.close(dir_fd)
 
-def load_checkpoint(path, model, optimizer, device='cuda'):
+def load_checkpoint(path, model, optimizer=None, device='cuda'):
+    """
+    Load a checkpoint for linear probing or supervised training.
+
+    Handles:
+    - Vanilla ResNet50 checkpoints
+    - MoCo-v2 checkpoints (strips encoder_q prefix)
+    - Optional optimizer and RNG restoration
+    """
+    print("=> loading checkpoint '{}'".format(path))
+    checkpoint = torch.load(path, map_location=device, weights_only=False)
+
+    # Restore bookkeeping
+    start_epoch = checkpoint.get('epoch', -1) + 1
+    best_acc1 = checkpoint.get('best_acc1', 0.0)
+    best_epoch = checkpoint.get('best_epoch', -1)
+
+    # Prepare state_dict
+    if 'state_dict' in checkpoint:
+        state_dict = checkpoint['state_dict']
+    else:
+        state_dict = checkpoint
+
+    # Strip MoCo encoder_q prefix and module prefix
+    new_state_dict = {}
+    for k, v in state_dict.items():
+        if k.startswith("module.encoder_q."):
+            k = k[len("module.encoder_q."):]
+        if k.startswith("module."):
+            k = k[len("module."):]
+        new_state_dict[k] = v
+
+    # Load model
+    msg_model = model.load_state_dict(new_state_dict, strict=False)
+    print("Missing keys (ignoring linear head):", [k for k in msg_model.missing_keys if not k.startswith("fc.")])
+    print("Unexpected keys:", msg_model.unexpected_keys)
+
+    # Restore optimizer if provided
+    if optimizer is not None and 'optimizer' in checkpoint:
+        optimizer.load_state_dict(checkpoint['optimizer'])
+        # Move optimizer tensors to correct device
+        for state in optimizer.state.values():
+            for k, v in state.items():
+                if torch.is_tensor(v):
+                    state[k] = v.to(device)
+
+    # Restore RNG states if present
+    rng_dict = checkpoint.get('rng_dict', None)
+    if rng_dict is not None:
+        rng_state = rng_dict.get('rng_state', None)
+        if rng_state is not None:
+            if rng_state.device != torch.device('cpu'):
+                rng_state = rng_state.cpu()
+            torch.set_rng_state(rng_state)
+
+        cuda_rng_state = rng_dict.get('cuda_rng_state', None)
+        if cuda_rng_state is not None:
+            torch.cuda.set_rng_state_all(
+                [t.cpu() if t.device != torch.device('cpu') else t for t in cuda_rng_state]
+            )
+
+        numpy_rng_state = rng_dict.get('numpy_rng_state', None)
+        if numpy_rng_state is not None:
+            import numpy as np
+            np.random.set_state(numpy_rng_state)
+
+        python_rng_state = rng_dict.get('python_rng_state', None)
+        if python_rng_state is not None:
+            import random
+            random.setstate(python_rng_state)
+
+    print("<= loaded checkpoint '{}' (epoch {})".format(path, checkpoint.get('epoch', -1)))
+
+    return model, optimizer, start_epoch, best_acc1, best_epoch
+
+def load_checkpoint_old(path, model, optimizer, device='cuda'):
     print("=> loading checkpoint '{}'".format(path))
     checkpoint = torch.load(path, map_location=device, weights_only=False)
 
@@ -286,6 +463,7 @@ if __name__ == '__main__':
     parser.add_argument('--micro_batch_size', default=32, type=int, help='batch size on gpu')
     parser.add_argument('--gradients_batch_size', default=256, type=int, help='batch size of gradients accumulation')
     parser.add_argument('--epochs', type=int, default=100, help='Number of sweeps over the dataset to train')
+    parser.add_argument('--start_epoch', type=int, default=1, help='start epoch')
     parser.add_argument('--dataset', type=str, default='STL', choices=['STL', 'CIFAR10', 'CIFAR100', 'ImageNet'], help='experiment dataset')
     parser.add_argument('--data', metavar='DIR', help='path to dataset')
     parser.add_argument('--txt', action="store_true", default=False, help='save txt?')
@@ -458,7 +636,8 @@ if __name__ == '__main__':
     class FeatureQueue: # to make checkpoint load happy
         def __init__(self, *args, **kwargs): pass
         
-    model = Net(num_class=num_class, pretrained_path=model_path, image_class=image_class, args=args).cuda()
+    #model = Net(num_class=num_class, pretrained_path=model_path, image_class=image_class, args=args).cuda()
+    model = NetResnet(num_class=num_class, pretrained_path=model_path, image_class=image_class, args=args).cuda()
     model = nn.DataParallel(model)
 
     optimizer = optim.Adam(model.module.fc.parameters(), lr=args.lr, weight_decay=args.weight_decay)
@@ -497,7 +676,7 @@ if __name__ == '__main__':
                 txt_write.write('\nval_loss: {}, val_acc@1: {}, val_acc@5: {}'.format(val_loss, val_acc_1, val_acc_5))
     
     else:
-        for epoch in range(1, epochs + 1):
+        for epoch in range(args.start_epoch, epochs + 1):
             train_loss, train_acc_1, train_acc_5 = train_val(model, train_loader, optimizer, tr_bs, args, dataset="train")
             if args.val_freq and ((epoch % args.val_freq == 0) or (epoch == epochs)) and (args.dataset == 'ImageNet'):
                 val_loss, val_acc_1, val_acc_5 = train_val(model, val_loader, None, te_bs, args, dataset="val")
@@ -523,6 +702,19 @@ if __name__ == '__main__':
             if (epoch % args.checkpoint_freq == 0) or (epoch == epochs):
                 cuda_rng_state = torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None
 
+                # Example usage
+                build_and_save_checkpoint(
+                    model=model,
+                    optimizer=optimizer,
+                    epoch=current_epoch,
+                    best_acc1=best_acc1,
+                    best_epoch=best_epoch,
+                    cuda_rng_state=None,
+                    save_dir=save_dir,
+                    is_best=is_best
+                )
+
+                """
                 save_checkpoint({
                     'epoch':                epoch,
                     'state_dict':           model.state_dict(),
@@ -536,6 +728,7 @@ if __name__ == '__main__':
                         "python_rng_state": random.getstate(),
                     },
                 }, is_best, args, filename='{}/checkpoint.pth.tar'.format(save_dir))
+                """
                               
         # end for epoch in range(1, epochs + 1):
         torch.save(model.state_dict(), '{}/model_{}.pth'.format(save_dir, epoch))

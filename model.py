@@ -4,6 +4,50 @@ import torch.nn.functional as F
 from torchvision.models.resnet import resnet50
 
 
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torchvision.models import resnet50
+
+class ModelResnet(nn.Module):
+    def __init__(self, feature_dim=128, image_class='ImageNet', state_dict=None):
+        super().__init__()
+
+        # Backbone
+        self.f = resnet50(weights=None)
+
+        # Modify input layers for CIFAR/STL if needed
+        if image_class != 'ImageNet':
+            self.f.conv1 = nn.Conv2d(
+                3, 64, kernel_size=3, stride=1, padding=1, bias=False
+            )
+            self.f.maxpool = nn.Identity()
+
+        # Remove final classification head (fc)
+        dim_mlp = self.f.fc.in_features
+        self.f.fc = nn.Identity()
+
+        # Projection head for SSL
+        self.g = nn.Sequential(
+            nn.Linear(dim_mlp, 512, bias=False),
+            nn.BatchNorm1d(512),
+            nn.ReLU(inplace=True),
+            nn.Linear(512, feature_dim, bias=True),
+        )
+
+        # Load pretrained weights (if provided)
+        if state_dict is not None:
+            msg = self.f.load_state_dict(state_dict, strict=False)
+            print(msg)
+
+    def forward(self, x):
+        # Extract backbone features
+        feature = self.f(x)                      # [N, 2048] after avgpool & flatten
+        out = self.g(feature)                    # projection head
+
+        return F.normalize(feature, dim=-1), F.normalize(out, dim=-1)
+
+
 class Model(nn.Module):
     def __init__(self, feature_dim=128, image_class='ImageNet', state_dict=None):
         super(Model, self).__init__()
