@@ -503,7 +503,8 @@ if __name__ == '__main__':
 
             if args.weighted_sampler:
                 # Count per-class frequency
-                class_counts = torch.bincount(torch.tensor(train_data.targets))
+                labels = torch.tensor(train_data.targets)
+                class_counts = torch.bincount(labels)
 
                 # Compute inverse frequency weights
                 weights = 1.0 / class_counts.float()          # higher weight for rare classes
