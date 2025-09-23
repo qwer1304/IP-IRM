@@ -14,7 +14,7 @@ import os
 from collections import defaultdict, OrderedDict
 
 import utils
-from model import Model, ModelResnet
+from model import ModelResnet
 
 from prepare import prepare_datasets, traverse_objects
 
@@ -61,6 +61,7 @@ class NetResnet(nn.Module):
             print("Unexpected keys (ignoring fc):", [k for k in msg.unexpected_keys if not k.startswith("fc.")])
         else:
             print("Unexpected keys:", msg.unexpected_keys)
+        print("<= loaded pretrained checkpoint '{}'".format(pretrained_path))
         
         self.f = model.module.f
 
@@ -79,79 +80,6 @@ class NetResnet(nn.Module):
             feature = F.normalize(feature, dim=1)
         out = self.fc(feature)
         return out, feature
-
-class Net(nn.Module):
-    def __init__(self, num_class, pretrained_path, image_class='ImageNet', args=None):
-        super(Net, self).__init__()
-
-        # encoder
-        model = Model(image_class=image_class).cuda()
-        model = nn.DataParallel(model)
-
-        device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        msg = []
-        assert (pretrained_path is not None and os.path.isfile(pretrained_path))
-        print("=> loading pretrained checkpoint '{}'".format(pretrained_path))
-        checkpoint = torch.load(pretrained_path, map_location=device, weights_only=False)
-        if 'state_dict' in checkpoint.keys():
-            state_dict = checkpoint['state_dict']
-        else:
-            state_dict = checkpoint
-
-        self.f = model.module.f
-        
-        def rename_key_from_standard(k, keepfc=False):
-            # Skip fc, since your model doesn't use it
-            if (not keepfc) and k.startswith("module.fc."):
-                return None
-
-            new_k = k
-            new_k = new_k.replace("module.conv1.", "module.f.0.")
-            new_k = new_k.replace("module.bn1.", "module.f.1.")
-            new_k = new_k.replace("module.layer1.", "module.f.4.")
-            new_k = new_k.replace("module.layer2.", "module.f.5.")
-            new_k = new_k.replace("module.layer3.", "module.f.6.")
-            new_k = new_k.replace("module.layer4.", "module.f.7.")
-            return new_k
-
-        new_state_dict = OrderedDict()
-        for k, v in state_dict.items():
-            # Remove "module.model." prefix
-            name = k.replace("module.encoder_q.", "module.")
-            #name = name.replace("module.", "")                  
-            new_state_dict[name] = v
-        state_dict = new_state_dict
-        
-        # convert pretrained dict
-        converted_dict = {}
-        for k, v in state_dict.items():
-            new_k = rename_key_from_standard(k, keepfc=(args.evaluate == 'linear'))
-            if new_k is not None:  # skip fc
-                converted_dict[new_k] = v
-
-        state_dict = converted_dict
-
-        msg = model.load_state_dict(state_dict, strict=False)
-        missing_keys = [k for k in msg.missing_keys if 'g.' not in k]
-        if msg.unexpected_keys or missing_keys:
-            print(msg.unexpected_keys)
-            print(missing_keys)
-        if args.evaluate is None or args.evaluate == 'knn':
-            # If training or evaluating output from SSL
-            # classifier
-            self.fc = nn.Linear(2048, num_class, bias=True)
-        else:
-            self.fc = model.module.fc
-
-    def forward(self, x, normalize=False):
-        with torch.no_grad():
-            x = self.f(x)
-        feature = torch.flatten(x, start_dim=1)
-        if normalize:
-            feature = F.normalize(feature, dim=1)  # L2 norm
-        out = self.fc(feature)
-        return out, feature
-
 
 # train or test for one epoch
 def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test"):
@@ -325,28 +253,6 @@ def build_and_save_checkpoint(model, optimizer, epoch, best_acc1, best_epoch,
     filename = os.path.join(save_dir, "checkpoint.pth.tar")
     atomic_save(state, is_best, filename=filename)
 
-
-def save_checkpoint(state, is_best, args, filename='checkpoint.pth.tar', sync=True):
-    filename_tmp = filename + ".tmp"
-    torch.save(state, filename_tmp)
-    os.replace(filename_tmp, filename)
-    if is_best:
-        best_filename = '{}/model_best.pth.tar'.format(os.path.dirname(filename))
-        best_filename_tmp = filename + ".tmp"
-        shutil.copyfile(filename, best_filename_tmp)
-        os.replace(best_filename_tmp, best_filename)
-    if sync:
-        # Sync file data
-        for p in [filename, best_filename] if is_best else [filename]:
-            fd = os.open(p, os.O_RDONLY)
-            os.fsync(fd)
-            os.close(fd)
-
-        # Sync the directory once (covers both files)
-        dir_fd = os.open(os.path.dirname(filename) or ".", os.O_RDONLY)
-        os.fsync(dir_fd)
-        os.close(dir_fd)
-
 def load_checkpoint(path, model, optimizer=None, device='cuda'):
     """
     Load a checkpoint for linear probing or supervised training.
@@ -406,42 +312,6 @@ def load_checkpoint(path, model, optimizer=None, device='cuda'):
             random.setstate(python_rng_state)
 
     print("<= loaded checkpoint '{}' (epoch {})".format(path, checkpoint.get('epoch', -1)))
-
-    return model, optimizer, start_epoch, best_acc1, best_epoch
-
-def load_checkpoint_old(path, model, optimizer, device='cuda'):
-    print("=> loading checkpoint '{}'".format(path))
-    checkpoint = torch.load(path, map_location=device, weights_only=False)
-
-    # Restore training bookkeeping
-    start_epoch = checkpoint['epoch'] + 1
-    best_acc1 = checkpoint['best_acc1']
-    best_epoch = checkpoint['best_epoch']
-
-    # Restore models
-    msg_model = model.load_state_dict(checkpoint['state_dict'])
-    # Restore optimizer
-    optimizer.load_state_dict(checkpoint['optimizer']) # nothing ia returned
-    # Ensure optimizer state tensors are on the right device
-    for state in optimizer.state.values():
-        for k, v in state.items():
-            if torch.is_tensor(v):
-                state[k] = v.to(device)
-                
-    # Restore RNG states
-    rng_dict = checkpoint['rng_dict']
-    rng_state = rng_dict['rng_state']
-    if rng_state.device != torch.device('cpu'):
-        rng_state = rng_state.cpu()   
-    torch.set_rng_state(rng_state)
-    if rng_dict['cuda_rng_state'] is not None:
-        torch.cuda.set_rng_state_all([t.cpu() if t.device != torch.device('cpu') else t for t in rng_dict['cuda_rng_state']])
-    np.random.set_state(rng_dict['numpy_rng_state'])
-    random.setstate(rng_dict['python_rng_state'])
-
-    print(f"\tmodel load: {msg_model}")
-    print("<= loaded checkpoint '{}' (epoch {})"
-          .format(path, checkpoint['epoch']))
 
     return model, optimizer, start_epoch, best_acc1, best_epoch
 
@@ -631,7 +501,6 @@ if __name__ == '__main__':
     class FeatureQueue: # to make checkpoint load happy
         def __init__(self, *args, **kwargs): pass
         
-    #model = Net(num_class=num_class, pretrained_path=model_path, image_class=image_class, args=args).cuda()
     model = NetResnet(num_class=num_class, pretrained_path=model_path, image_class=image_class, args=args).cuda()
     model = nn.DataParallel(model)
 
@@ -708,22 +577,6 @@ if __name__ == '__main__':
                     save_dir=save_dir,
                     is_best=is_best
                 )
-
-                """
-                save_checkpoint({
-                    'epoch':                epoch,
-                    'state_dict':           model.state_dict(),
-                    'best_acc1':            best_acc1,
-                    'best_epoch':           best_epoch,
-                    'optimizer':            optimizer.state_dict(),
-                    "rng_dict": {
-                        "rng_state": torch.get_rng_state(),
-                        "cuda_rng_state": cuda_rng_state,
-                        "numpy_rng_state": np.random.get_state(),
-                        "python_rng_state": random.getstate(),
-                    },
-                }, is_best, args, filename='{}/checkpoint.pth.tar'.format(save_dir))
-                """
                               
         # end for epoch in range(1, epochs + 1):
         torch.save(model.state_dict(), '{}/model_{}.pth'.format(save_dir, epoch))
