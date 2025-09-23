@@ -80,15 +80,10 @@ class Net(nn.Module):
             print(missing_keys)
         if args.evaluate is None or args.evaluate == 'knn':
             # If training or evaluating output from SSL
-            if args.dropout:
-                self.fc = nn.Sequential(nn.Dropout(args.dropout_prob),
-                                        nn.Linear(2048, num_class, bias=True)
-                                       )
-            else:
-                self.fc = nn.Sequential(nn.Identity(),
-                                        nn.Linear(2048, num_class, bias=True)
-                                       )
+            self.fc =  nn.Linear(2048, num_class, bias=True)
+            self.dropout = nn.Dropout(args.dropout_prob) if args.dropout else nn.Identity()
         else: # resuming
+            self.dropout = model.module.dropout
             self.fc = model.module.fc
 
     def forward(self, x, normalize=False):
@@ -237,7 +232,7 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
                             labels_mixed[~mask] = labels_cm.squeeze()
 
                         feature_mixed, labels_mixed = feature_mixed.squeeze(), labels_mixed # labels_mix is a tensor (B,3)
-                        out = net.module.fc(feature_mixed)
+                        out = net.module.fc(net.module.dropout(feature_mixed))
                         def loss_mixup(y, logits):
                             loss_a = loss_mixup_criterion(logits, y[:, 0].long())
                             loss_b = loss_mixup_criterion(logits, y[:, 1].long())
