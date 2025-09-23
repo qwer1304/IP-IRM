@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-from torch.utils.data import DataLoader, Subset
+from torch.utils.data import DataLoader, Subset, WeightedRandomSampler
 from torchvision.datasets import STL10, CIFAR10, CIFAR100, ImageFolder
 import random
 import shutil
@@ -22,6 +22,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import os
+
+import kornia.augmentation as K
+
 
 class NetResnet(nn.Module):
     def __init__(self, num_class, pretrained_path, image_class='ImageNet', args=None):
@@ -68,8 +71,10 @@ class NetResnet(nn.Module):
         if args.evaluate is None or args.evaluate == 'knn':
             # If training or evaluating output from SSL
             # classifier
+            self.dropout = nn.Dropout(args.dropout_prob) if args.dropout else nn.Identity()
             self.fc = nn.Linear(2048, num_class, bias=True)
         else:
+            self.dropout = model.module.dropout
             self.fc = model.module.fc
 
     def forward(self, x, normalize=False):
@@ -107,9 +112,20 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
             dynamic_ncols=False,            # disable autosizing
             bar_format=bar_format,          # request bar width
             )
+
+    if args.mixup:
+        mixup = K.RandomMixUpV2(data_keys=["input", "class"], same_on_batch=False, keepdim=True,)
+    if args.cutmix:
+        cutmix = K.RandomCutMixV2(data_keys=["input", "class"], same_on_batch=False, keepdim=True,)
+    
+    loss_mixup_criterion = nn.CrossEntropyLoss(weight=class_weights, label_smoothing=args.label_smoothing, reduction='none')
+
     with (torch.enable_grad() if is_train else torch.no_grad()):
         if args.extract_features:
             data_loader.dataset.target_transform = None
+
+        feature_mix_list = []
+        target_mix_list = []
 
         feature_list = []
         pred_labels_list = []
@@ -152,7 +168,10 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
                 total_correct_1 += torch.sum((prediction[:, 0:1] == target.unsqueeze(dim=-1)).any(dim=-1).float()).item()
                 total_correct_5 += torch.sum((prediction[:, 0:5] == target.unsqueeze(dim=-1)).any(dim=-1).float()).item()
 
-                # compute output
+                feature_mix_list.append(feature)
+                target_mix_list.append(target)
+
+              # compute output
                 if args.extract_features:
                     feature_list.append(feature)
                     target_list.append(target)
@@ -170,8 +189,47 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
             if (loader_step * loader_batch_size) == gradients_batch_size:
                 loader_step = 0
                 if is_train:
+                    feature = torch.cat(feature_mix_list, dim=0)
+                    target = torch.cat(target_mix_list, dim=0)
+                    
+                    if args.mixup or args.cutmix:
+                        feature = feature.unsqueeze(1).unsqueeze(2) # extend to (B,C,W,H)
+                        if args.mixup and (not args.cutmix):
+                            thresh = 2.0
+                        elif (not args.mixup) and args.cutmix:
+                            thresh = 0.0
+                        else:
+                            thresh = 0.5
+                        mask = torch.rand(feature.size(0), device=feature.device) < thresh  # Boolean mask: True = Mixup, False = CutMix
+
+                        # Prepare output tensors
+                        feature_mixed = torch.empty_like(feature)
+                        labels_mixed = torch.empty(target.size(0),3, device=target.device)
+
+                        # Apply Mixup to selected samples
+                        if mask.any():
+                            feature_mixed[mask], labels_mixed[mask] = mixup(feature[mask], target[mask])
+
+                        # Apply CutMix to the rest
+                        if (~mask).any():
+                            feature_mixed[~mask], labels_cm = cutmix(feature[~mask], target[~mask])
+                            labels_mixed[~mask] = labels_cm.squeeze()
+
+                        feature_mixed, labels_mixed = feature_mixed.squeeze(), labels_mixed # labels_mix is a tensor (B,3)
+                        out = net.module.fc(net.module.dropout(feature_mixed))
+                        def loss_mixup(y, logits):
+                            loss_a = loss_mixup_criterion(logits, y[:, 0].long())
+                            loss_b = loss_mixup_criterion(logits, y[:, 1].long())
+                            return ((1 - y[:, 2]) * loss_a + y[:, 2] * loss_b).mean()
+
+                        loss = loss_mixup(labels_mixed, out)
+                    else:
+                        loss = loss_mixup_criterion(targets, out).mean()
+                    loss.backward()
+            
                     train_optimizer.step()
                     train_optimizer.zero_grad()  # clear gradients at beginning of next gradients batch
+                    feature_mix_list, target_mix_list = [], []
 
             data_bar.set_description('{} Epoch: [{}/{}] [{}/{}] Loss: {:.4f} Acc@1: {:.2f}% Acc@5: {:.2f}%'
                                      .format(dataset.capitalize(), epoch, epochs, total_num, len(data_loader.dataset),
@@ -367,6 +425,12 @@ if __name__ == '__main__':
     parser.add_argument('--prune_sizes', action="store_true", help="prune training dataset to minority class size")
     parser.add_argument('--weighted_loss', action="store_true", help="weight each sample by its class size")
 
+    parser.add_argument('--mixup', action="store_true", help="MixUp")
+    parser.add_argument('--cutmix', action="store_true", help="CutMix")
+    parser.add_argument('--weighted_sampler', action="store_true", help="Class weighted sampler")
+    parser.add_argument('--dropout', action="store_true", help="Apply dropout before linear head")
+    parser.add_argument('--dropout_prob', type=float, default=0.2, help="Dropout prob")
+
     args = parser.parse_args()
 
     save_dir = 'downstream/{}'.format(args.name)
@@ -489,8 +553,25 @@ if __name__ == '__main__':
             test_data   = utils.Imagenet(root=args.data + '/test',  transform=test_transform,  target_transform=target_transform, class_to_idx=class_to_idx)
             val_data    = utils.Imagenet(root=args.data + '/val',   transform=test_transform,  target_transform=target_transform, class_to_idx=class_to_idx)
 
-        train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, shuffle=True, pin_memory=True, 
-            drop_last=True, persistent_workers=tr_pw)
+            if args.weighted_sampler:
+                # Count per-class frequency
+                labels = torch.tensor(train_data.targets)
+                class_counts = torch.bincount(labels)
+
+                # Compute inverse frequency weights
+                weights = 1.0 / class_counts.float()          # higher weight for rare classes
+                sample_weights = weights[labels]              # weight per sample
+
+                # Create sampler
+                sampler = WeightedRandomSampler(
+                    weights=sample_weights,
+                    num_samples=len(sample_weights),          # number of samples per epoch
+                    replacement=True                         # allow repeats of rare samples
+                )
+
+        kwargs = {'sampler': sampler} if args.weighted_sampler else {'shuffle': True}
+        train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, pin_memory=True, 
+            drop_last=True, persistent_workers=tr_pw, **kwargs)
         test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=True, 
             pin_memory=True, persistent_workers=te_pw)
         val_loader = DataLoader(val_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=True, 
