@@ -166,6 +166,8 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
                 total_correct_5 += torch.sum((prediction[:, 0:5] == target.unsqueeze(dim=-1)).any(dim=-1).float()).item()
 
                 feature_mix_list.append(feature)
+                print()
+                print(f"target: {target.size()}, {target.dtype}")
                 target_mix_list.append(target)
 
               # compute output
@@ -188,7 +190,8 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
                 if is_train:
                     feature = torch.cat(feature_mix_list, dim=0)
                     target = torch.cat(target_mix_list, dim=0)
-                    
+                    print(f"target: {target.size()}, {target.dtype}")
+
                     if args.mixup or args.cutmix:
                         feature = feature.unsqueeze(1).unsqueeze(2) # extend to (B,C,W,H)
                         if args.mixup and (not args.cutmix):
