@@ -44,7 +44,7 @@ class ModelResnet(nn.Module):
                     k = k[len("encoder_q."):]
                 new_state_dict[k] = v
 
-            msg = model.module.f.load_state_dict(new_state_dict, strict=False)
+            msg = self.f.load_state_dict(new_state_dict, strict=False)
 
             print("\tMissing keys:", msg.missing_keys)
             print("\tUnexpected keys:", msg.unexpected_keys)
