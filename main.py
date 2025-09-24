@@ -1311,7 +1311,7 @@ if __name__ == '__main__':
     # model setup and optimizer config
     if args.ssl_type.lower() == 'moco':
         #model = Model(feature_dim, image_class=image_class, state_dict=state_dict).cuda()
-        model = ModelResNet(feature_dim, image_class=image_class, state_dict=state_dict).cuda()
+        model = ModelResnet(feature_dim, image_class=image_class, state_dict=state_dict).cuda()
     elif args.ssl_type.lower() == 'simsiam':
         model = SimSiam(feature_dim, image_class=image_class, state_dict=state_dict).cuda()
     else:
