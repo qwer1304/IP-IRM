@@ -373,14 +373,14 @@ class MoCoLossModule(LossModule):
     def targets(self, idxs=None):
         if idxs is None:
             idxs = torch.arange(self._logits.size(0), device=self._logits.device)
-        return self.labels_cont[idxs]
+        return self.labels[idxs]
 
     def compute_loss_micro(self, idxs=None, scale=1.0, temperature=None):
         if idxs is None:
             idxs = torch.arange(self._logits.size(0), device=self._logits.device)
         # sum over batch, per env handled by driver
         temperature = temperature or self.temperature
-        loss = F.cross_entropy(scale * self._logits[idxs] / temperature, self._labels[idxs], reduction='sum')
+        loss = F.cross_entropy(scale * self._logits[idxs] / temperature, self.labels[idxs], reduction='sum')
         return loss
 
     def post_micro_batch(self):
