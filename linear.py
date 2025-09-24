@@ -152,8 +152,6 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
                     data = transform(data)
 
                 out, feature = net(data, normalize=True)
-                print()
-                print(out.size(), target.size())
                 loss = loss_criterion(out, target)
 
                 total_num += data.size(0)
