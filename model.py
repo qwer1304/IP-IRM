@@ -46,8 +46,9 @@ class ModelResnet(nn.Module):
 
             msg = self.f.load_state_dict(new_state_dict, strict=False)
 
-            print("\tMissing keys:", msg.missing_keys)
-            print("\tUnexpected keys:", msg.unexpected_keys)
+            # Don't care about fc layer from pretrained
+            print("\tMissing keys (ignoring fc):", [k for k in msg.missing_keys if not k.startswith("fc.")])
+            print("\tUnexpected keys (ignoring fc):", [k for k in msg.unexpected_keys if not k.startswith("fc.")])
 
     def forward(self, x):
         # Extract backbone features
