@@ -40,16 +40,14 @@ class ModelResnet(nn.Module):
             # Handle MoCo checkpoints (strip encoder_q prefix)
             new_state_dict = {}
             for k, v in state_dict.items():
-                if k.startswith("encoder_q."):
-                    k = k[len("encoder_q."):]
+                if k.startswith("module.encoder_q."):
+                    k = k[len("module.encoder_q."):]
                 new_state_dict[k] = v
 
             msg = self.f.load_state_dict(new_state_dict, strict=False)
 
             print("\tMissing keys:", msg.missing_keys)
             print("\tUnexpected keys:", msg.unexpected_keys)
-
-            self.f = model.module.f
 
     def forward(self, x):
         # Extract backbone features
