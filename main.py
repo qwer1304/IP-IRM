@@ -357,8 +357,8 @@ class MoCoLossModule(LossModule):
         
         l_pos = torch.sum(out_q * out_k, dim=1, keepdim=True)
         l_neg = torch.matmul(out_q, self.queue.get((self.queue.queue_size - self.this_batch_size), advance=False).t())
-        self.logits = torch.cat([l_pos, l_neg], dim=1)
-        self.labels = torch.zeros(self.logits.size(0), dtype=torch.long, device=self.logits.device)
+        self._logits = torch.cat([l_pos, l_neg], dim=1)
+        self.labels = torch.zeros(self._logits.size(0), dtype=torch.long, device=self._logits.device)
         if self.debug:
             self.total_pos    += l_pos.mean().item() * l_pos.size(0)
             self.total_neg    += l_neg.mean().item() * l_pos.size(0)
@@ -367,20 +367,20 @@ class MoCoLossModule(LossModule):
         
     def logits(self, idxs=None):
         if idxs is None:
-            idxs = torch.arange(self.logits.size(0), device=self.logits.device)
-        return self.logits[idxs]
+            idxs = torch.arange(self._logits.size(0), device=self._logits.device)
+        return self._logits[idxs]
         
     def targets(self, idxs=None):
         if idxs is None:
-            idxs = torch.arange(self.logits.size(0), device=self.logits.device)
+            idxs = torch.arange(self._logits.size(0), device=self._logits.device)
         return self.labels_cont[idxs]
 
     def compute_loss_micro(self, idxs=None, scale=1.0, temperature=None):
         if idxs is None:
-            idxs = torch.arange(self.logits.size(0), device=self.logits.device)
+            idxs = torch.arange(self._logits.size(0), device=self._logits.device)
         # sum over batch, per env handled by driver
         temperature = temperature or self.temperature
-        loss = F.cross_entropy(scale * self.logits[idxs] / temperature, self.labels[idxs], reduction='sum')
+        loss = F.cross_entropy(scale * self._logits[idxs] / temperature, self._labels[idxs], reduction='sum')
         return loss
 
     def post_micro_batch(self):
@@ -1300,10 +1300,10 @@ if __name__ == '__main__':
         checkpoint = torch.load(args.pretrain_path, map_location=device, weights_only=False)
         if 'state_dict' in checkpoint.keys():
             state_dict = checkpoint['state_dict']
-            print(f"Epoch: {checkpoint['epoch']}")
+            print(f" Epoch: {checkpoint['epoch']}")
         else:
             state_dict = checkpoint
-            print("Epoch: N/A")
+            print(" Epoch: N/A")
     else:
         state_dict = None
         print('Using default model')
