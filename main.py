@@ -139,7 +139,7 @@ class VRExCalculator(BaseCalculator):
     def penalty(self, loss, *args, **kwargs):
         return loss
         
-    def penalty_finalize(self, penalties, szs):
+    def penalty_finalize(self, penalties, szs, **kwargs):
         """
             penalties:  Penalty per half, per env, unnormalized (1,num_partitions,num_envs)
             szs:        sizes of halves of environments
@@ -207,8 +207,13 @@ class IRMCalculator(BaseCalculator):
         """
         raise NotImplementedError
         
-    def penalty_finalize(self, penalties, szs):
-        return (penalties[0] / szs[0]) * (penalties[1] / szs[1])  # normalized per env for macro-batch 
+    def penalty_finalize(self, penalties, szs, keep_halves=False):
+        if not keep_halves:
+            return (penalties[0] / szs[0]) * (penalties[1] / szs[1])  # normalized per env for macro-batch 
+        else:
+            penalties[0] /= szs[0]
+            penalties[1] /= szs[1]
+            return penalties
 
     def penalty_grads_finalize(self, grads, penalties, szs):
         """
@@ -660,9 +665,12 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             penalty_env = penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz) # normalized per env
             for pind, p in enumerate(net.parameters()):
                 dPenalty_dTheta_env = penalty_grads[pind]  # per env sum of dPenalty/dTheta over macro-batch per parameter, shape (I,J,K,param_numel)
-                print()
-                print(dPenalty_dTheta_env.size(), penalty_calculator, penalty_calculator.num_halves())
-                total_grad_flat     = penalty_calculator.penalty_grads_finalize(dPenalty_dTheta_env, penalty_env, halves_sz)                
+                total_grad_flat     = \
+                    penalty_calculator.penalty_grads_finalize(
+                        dPenalty_dTheta_env, 
+                        penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz, keep_halves=True), 
+                        halves_sz
+                    )                
                 p.grad             += total_grad_flat.view(p.shape)  # reshape back to parameter shape
             
         else:
