@@ -1316,6 +1316,9 @@ if __name__ == '__main__':
         model = SimSiam(feature_dim, image_class=image_class, state_dict=state_dict).cuda()
     else:
         raise NotImplemented
+    if state_dict is not None:
+        print("<= loaded pretrained checkpoint '{}'".format(args.pretrain_path))
+
     model = nn.DataParallel(model)
 
     if args.ssl_type.lower() == 'moco':
