@@ -869,10 +869,10 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
             risk_constrain_all_list.append(constrain_loss.item())
             soft_split_print = soft_split_all[:1].clone().detach()
             if epoch > 0:
-                print('\rUpdating Env [%d/%d] [%d/%d]  Loss: %.2f  Cont_Risk: %.2f  Inv_Risk: %.2f  Cons_Risk: %.2f  Cnt: %d  Lr: %.4f  Inv_Mode: %s  Soft Split: [%s]'
+                print('\rUpdating Env [%d/%d] [%d/%d] Loss: %.2f Cont_Risk: %.2f Inv_Risk: %.2f Cons_Risk: %.2f Cnt: %d Lr: %.4f Inv_Mode: %s Soft Split: [%s]'
                       %(epoch, 100, training_num, len(trainloader.dataset), sum(risk_all_list)/len(risk_all_list), sum(risk_cont_all_list)/len(risk_cont_all_list), sum(risk_penalty_all_list)/len(risk_penalty_all_list),
                         sum(risk_constrain_all_list)/len(risk_constrain_all_list), cnt, pre_optimizer.param_groups[0]['lr'], irm_mode, 
-                        ", ".join("%.4f" % v for v in F.softmax(soft_split_print, dim=-1).tolist()),
+                        ", ".join("%.4f" % v for v in F.softmax(soft_split_print, dim=-1)[0].tolist()),
                        ), end='', flush=True)
 
         pre_scheduler.step()
