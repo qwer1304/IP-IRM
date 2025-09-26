@@ -682,10 +682,13 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         else:
             penalty_env = torch.tensor(0, dtype=torch.float)
 
-        cosine = torch.nn.functional.cosine_similarity(loss_gards, penalty_gards, dim=0) \
-                    if ((loss_weight>0) and (penalty_weight>0)) \
-                    else torch.tensor(0, dtype=torch.float) 
+        if (loss_weight>0) and (penalty_weight>0):
+            cosine = torch.nn.functional.cosine_similarity(loss_gards, penalty_gards, dim=0)
+            norms = penalty_gards.norm() / (loss_gards.norm() + 1e-12)
+        else:
+            cosine, norms = torch.tensor(0, dtype=torch.float), torch.tensor(0, dtype=torch.float) 
         cosine = cosine.item()
+        norms = norms.item()
 
         loss_batch = ((loss_keep_weight * loss_keep_aggregator) + # loss_keep_aggregator is a scalar
                       (penalty_weight   * penalty_env.mean())   + # mean over envs, mean over macro-batch
@@ -727,7 +730,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                    f' Env: {total_cont_loss/trained_samples:.4f}' + \
                    f' {args.penalty_type}: {total_irm_loss/trained_samples:.4g}' + \
                    f' LR: {train_optimizer.param_groups[0]["lr"]:.4f} PW {penalty_weight:.4f}' + \
-                   f' cos: {cosine}'
+                   f' cos: {cosine:.4f}, ||gp||/||gl||: {norms:.4f}'
         desc_str += loss_module.get_debug_info_str()
         train_bar.set_description(desc_str)
 
@@ -736,8 +739,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                             .format(epoch, epochs, trained_samples, total_samples,
                                     total_loss/trained_samples, total_keep_cont_loss/trained_samples, 
                                     total_cont_loss/trained_samples) + 
-                            ' {args.penalty_type}: {:.4g} LR: {:.4f} PW {:.4f} cos{:.4f}'
-                            .format(total_irm_loss/trained_samples, train_optimizer.param_groups[0]['lr'], penalty_weight, cosine), 
+                            ' {args.penalty_type}: {:.4g} LR: {:.4f} PW {:.4f} cos {:.4f} norms {:.4f}'
+                            .format(total_irm_loss/trained_samples, train_optimizer.param_groups[0]['lr'], penalty_weight, cosine, norms), 
                             log_file=log_file)
                                         
         # Prepare for next iteration
