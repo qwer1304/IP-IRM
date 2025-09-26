@@ -50,6 +50,8 @@ class NetResnet(nn.Module):
         # Handle MoCo checkpoints (strip encoder_q prefix)
         new_state_dict = {}
         for k, v in state_dict.items():
+            if k.startswith("module.g."): # drop projector if loading from IP-IRM
+                continue
             if k.startswith("module.encoder_q."):
                 k = k[len("module.encoder_q."):]
             if k.startswith("module.f."):
@@ -256,32 +258,6 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
         
     return total_loss / total_num, total_correct_1 / total_num * 100, total_correct_5 / total_num * 100
 
-def atomic_save(state, is_best, filename='checkpoint.pth.tar', sync=True):
-    """
-    Save a checkpoint atomically, optionally keeping a best model copy.
-    """
-    filename_tmp = filename + ".tmp"
-    torch.save(state, filename_tmp)
-    os.replace(filename_tmp, filename)
-
-    if is_best:
-        best_filename = os.path.join(os.path.dirname(filename), "model_best.pth.tar")
-        best_filename_tmp = best_filename + ".tmp"
-        shutil.copyfile(filename, best_filename_tmp)
-        os.replace(best_filename_tmp, best_filename)
-
-    if sync:
-        paths = [filename, best_filename] if is_best else [filename]
-        for p in paths:
-            fd = os.open(p, os.O_RDONLY)
-            os.fsync(fd)
-            os.close(fd)
-
-        dir_fd = os.open(os.path.dirname(filename) or ".", os.O_RDONLY)
-        os.fsync(dir_fd)
-        os.close(dir_fd)
-
-
 def build_and_save_checkpoint(model, optimizer, epoch, best_acc1, best_epoch,
                               cuda_rng_state=None, save_dir=".", is_best=False):
     """
@@ -302,7 +278,7 @@ def build_and_save_checkpoint(model, optimizer, epoch, best_acc1, best_epoch,
     }
 
     filename = os.path.join(save_dir, "checkpoint.pth.tar")
-    atomic_save(state, is_best, filename=filename)
+    utils.atomic_save(state, is_best, filename=filename)
 
 def load_checkpoint(path, model, optimizer=None, device='cuda'):
     """

@@ -869,10 +869,11 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
             risk_constrain_all_list.append(constrain_loss.item())
             soft_split_print = soft_split_all[:1].clone().detach()
             if epoch > 0:
-                print('\rUpdating Env [%d/%d] [%d/%d]  Loss: %.2f  Cont_Risk: %.2f  Inv_Risk: %.2f  Cons_Risk: %.2f  Cnt: %d  Lr: %.4f  Inv_Mode: %s  Soft Split: %s'
+                print('\rUpdating Env [%d/%d] [%d/%d]  Loss: %.2f  Cont_Risk: %.2f  Inv_Risk: %.2f  Cons_Risk: %.2f  Cnt: %d  Lr: %.4f  Inv_Mode: %s  Soft Split: [%s]'
                       %(epoch, 100, training_num, len(trainloader.dataset), sum(risk_all_list)/len(risk_all_list), sum(risk_cont_all_list)/len(risk_cont_all_list), sum(risk_penalty_all_list)/len(risk_penalty_all_list),
                         sum(risk_constrain_all_list)/len(risk_constrain_all_list), cnt, pre_optimizer.param_groups[0]['lr'], irm_mode, 
-                        F.softmax(soft_split_print, dim=-1).tolist()), end='', flush=True)
+                        ", ".join("%.4f" % v for v in F.softmax(soft_split_print, dim=-1).tolist()),
+                       ), end='', flush=True)
 
         pre_scheduler.step()
         avg_risk = sum(risk_all_list)/len(risk_all_list)
@@ -1086,3 +1087,44 @@ def make_test_transform(normalize='CIFAR'):
         K.Normalize(mean=norm_mean, std=norm_std)
     )
 
+def atomic_save(state, is_best, args, filename='checkpoint.pth.tar', sync=True):
+    filename_tmp = filename + ".tmp"
+    torch.save(state, filename_tmp)
+
+    try:
+        # kaggle sometimes silently fails to replace the file. remove it to make sure it's gone
+        if os.path.exists(filename):
+            os.remove(filename)
+        os.replace(filename_tmp, filename)
+    except Exception as e:
+        import sys, traceback
+        print(f"[SAVE ERROR] Failed replacing {filename}: {e}", file=sys.stderr)
+        traceback.print_exc()
+        raise
+
+    if is_best:
+        best_filename = '{}/{}/model_best.pth.tar'.format(args.save_root, args.name)
+        best_filename_tmp = filename + ".tmp"
+        shutil.copyfile(filename, best_filename_tmp)
+        try:
+            # kaggle sometimes silently fails to replace the file. remove it to make sure it's gone
+            if os.path.exists(best_filename):
+                os.remove(best_filename)
+            os.replace(best_filename_tmp, best_filename)
+        except Exception as e:
+            import sys, traceback
+            print(f"[SAVE ERROR] Failed replacing {best_filename}: {e}", file=sys.stderr)
+            traceback.print_exc()
+            raise
+
+    if sync:
+        # Sync file data
+        for p in [filename, best_filename] if is_best else [filename]:
+            fd = os.open(p, os.O_RDONLY)
+            os.fsync(fd)
+            os.close(fd)
+
+        # Sync the directory once (covers both files)
+        dir_fd = os.open(os.path.dirname(filename) or ".", os.O_RDONLY)
+        os.fsync(dir_fd)
+        os.close(dir_fd)

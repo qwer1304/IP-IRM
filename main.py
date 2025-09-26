@@ -8,12 +8,12 @@ import torch
 import torch.optim as optim
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.utils.data import Dataset, DataLoader, Sampler
+from torch.utils.data import Dataset, DataLoader
 
 from tqdm.auto import tqdm
 
 import utils
-from model import Model, ModelResnet, SimSiam
+from model import ModelResnet, SimSiam
 from prepare import prepare_datasets, traverse_objects
 import gc
 from math import ceil, prod
@@ -651,17 +651,21 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
 
         # Environments & original cont losses and gradients
         if loss_weight > 0:
+            grads = []
             partition_sz = halves_sz.sum(dim=0, keepdim=True) # (1,J,K) # sizes of envs
             loss_env = loss_aggregator.sum(dim=0, keepdim=True) / partition_sz     # per env for macro-batch, normalized per env
             for pind, p in enumerate(net.parameters()):
                 dLoss_dTheta_env = loss_grads[pind]     # per env sum of dCont/dTheta, shape (I,J,K,param_numel)
                 total_grad_flat  = loss_module.loss_grads_finalize(dLoss_dTheta_env, loss_env, halves_sz)
                 p.grad          += total_grad_flat.view(p.shape) # reshape back to parameter shape
+                grads.append(total_grad_flat.detach().clone())
+            loss_gards = torch.cat([g for g in grads if g is not None])
         else:
             loss_env = torch.tensor(0, dtype=torch.float)
 
         # Penalty and its gradients
         if penalty_weight > 0:
+            grads = []
             penalty_env = penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz) # normalized per env
             for pind, p in enumerate(net.parameters()):
                 dPenalty_dTheta_env = penalty_grads[pind]  # per env sum of dPenalty/dTheta over macro-batch per parameter, shape (I,J,K,param_numel)
@@ -672,9 +676,16 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                         halves_sz
                     )                
                 p.grad             += total_grad_flat.view(p.shape)  # reshape back to parameter shape
+                grads.append(total_grad_flat.detach().clone())
+            penalty_gards = torch.cat([g for g in grads if g is not None])
             
         else:
             penalty_env = torch.tensor(0, dtype=torch.float)
+
+        cosine = torch.nn.functional.cosine_similarity(loss_gards, penalty_gards, dim=0) \
+                    if ((loss_weight>0) and (penalty_weight>0)) \
+                    else torch.tensor(0, dtype=torch.float) 
+        cosine = cosine.item()
 
         loss_batch = ((loss_keep_weight * loss_keep_aggregator) + # loss_keep_aggregator is a scalar
                       (penalty_weight   * penalty_env.mean())   + # mean over envs, mean over macro-batch
@@ -715,17 +726,18 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                    f' First: {total_keep_cont_loss/trained_samples:.4f}' + \
                    f' Env: {total_cont_loss/trained_samples:.4f}' + \
                    f' {args.penalty_type}: {total_irm_loss/trained_samples:.4g}' + \
-                   f' LR: {train_optimizer.param_groups[0]["lr"]:.4f} PW {penalty_weight:.4f}'
+                   f' LR: {train_optimizer.param_groups[0]["lr"]:.4f} PW {penalty_weight:.4f}' + \
+                   f' cos: {cosine}'
         desc_str += loss_module.get_debug_info_str()
         train_bar.set_description(desc_str)
 
         if batch_index % 10 == 0:
-            utils.write_log('Train Epoch: [{:d}/{:d}] [{:d}/{:d}]  {args.ssl_type}: Total: {:.4f}  First: {:.4f} Env: {:.4f}'
+            utils.write_log('Train Epoch: [{:d}/{:d}] [{:d}/{:d}] {args.ssl_type}: Total: {:.4f} First: {:.4f} Env: {:.4f}'
                             .format(epoch, epochs, trained_samples, total_samples,
                                     total_loss/trained_samples, total_keep_cont_loss/trained_samples, 
                                     total_cont_loss/trained_samples) + 
-                            ' {args.penalty_type}: {:.4g} LR: {:.4f}  PW {:.4f}'
-                            .format(total_irm_loss/trained_samples, train_optimizer.param_groups[0]['lr'], penalty_weight), 
+                            ' {args.penalty_type}: {:.4g} LR: {:.4f} PW {:.4f} cos{:.4f}'
+                            .format(total_irm_loss/trained_samples, train_optimizer.param_groups[0]['lr'], penalty_weight, cosine), 
                             log_file=log_file)
                                         
         # Prepare for next iteration
@@ -938,7 +950,7 @@ def test(net, feature_bank, feature_labels, test_data_loader, args, progress=Fal
             fp = os.path.join(directory, f"{prefix}_features_dump.pt")       
             os.makedirs(os.path.dirname(fp), exist_ok=True)
 
-            torch.save({
+            state = {
                 'features':     feature,
                 'labels':       target,
                 'labels_raw':   target_raw,
@@ -946,32 +958,13 @@ def test(net, feature_bank, feature_labels, test_data_loader, args, progress=Fal
                 'pred_scores':  pred_scores,
                 'model_epoch':  epoch,
                 'n_classes':    args.class_num,
-            }, fp)
+            }
+
+            utils.atomic_save(state, False, args, filename=fp)
             print(f"Dumped features into {fp}")
 
     return total_top1 / total_num * 100, total_top5 / total_num * 100
     
-def save_checkpoint(state, is_best, args, filename='checkpoint.pth.tar', sync=True):
-    filename_tmp = filename + ".tmp"
-    torch.save(state, filename_tmp)
-    os.replace(filename_tmp, filename)
-    if is_best:
-        best_filename = '{}/{}/model_best.pth.tar'.format(args.save_root, args.name)
-        best_filename_tmp = filename + ".tmp"
-        shutil.copyfile(filename, best_filename_tmp)
-        os.replace(best_filename_tmp, best_filename)
-    if sync:
-        # Sync file data
-        for p in [filename, best_filename] if is_best else [filename]:
-            fd = os.open(p, os.O_RDONLY)
-            os.fsync(fd)
-            os.close(fd)
-
-        # Sync the directory once (covers both files)
-        dir_fd = os.open(os.path.dirname(filename) or ".", os.O_RDONLY)
-        os.fsync(dir_fd)
-        os.close(dir_fd)
-
 def load_checkpoint(path, model, model_momentum, optimizer, device="cuda"):
     print("=> loading checkpoint '{}'".format(path))
     checkpoint = torch.load(path, map_location=device, weights_only=False)
@@ -1044,55 +1037,6 @@ def load_checkpoint(path, model, model_momentum, optimizer, device="cuda"):
         print("\tqueue restored")
 
     print("<= loaded checkpoint '{}' (epoch {})".format(path, checkpoint.get("epoch", -1)))
-
-    return model, model_momentum, optimizer, queue, start_epoch, best_acc1, best_epoch, updated_split, updated_split_all
-
-def load_checkpoint_old(path, model, model_momentum, optimizer, device='cuda'):
-    print("=> loading checkpoint '{}'".format(path))
-    checkpoint = torch.load(path, map_location=device, weights_only=False)
-
-    # Restore training bookkeeping
-    start_epoch = checkpoint['epoch'] + 1
-    best_acc1 = checkpoint['best_acc1']
-    best_epoch = checkpoint['best_epoch']
-    updated_split = checkpoint['updated_split']
-    updated_split_all = checkpoint['updated_split_all']
-
-    # Restore models
-    msg_model = model.load_state_dict(checkpoint['state_dict'])
-    if model_momentum is not None:
-        if "queue" in checkpoint:
-            msg_momemntum = model_momentum.load_state_dict(checkpoint['state_dict_momentum'])
-            queue = checkpoint['queue']
-        else:
-            msg_momemntum = 'No momentum queue in checkpoint'
-    else:
-        model_momentum, queue = None, None
-    
-    # Restore optimizer
-    optimizer.load_state_dict(checkpoint['optimizer']) # nothing ia returned
-    # Ensure optimizer state tensors are on the right device
-    for state in optimizer.state.values():
-        for k, v in state.items():
-            if torch.is_tensor(v):
-                state[k] = v.to(device)
-                
-    # Restore RNG states
-    rng_dict = checkpoint['rng_dict']
-    rng_state = rng_dict['rng_state']
-    if rng_state.device != torch.device('cpu'):
-        rng_state = rng_state.cpu()   
-    torch.set_rng_state(rng_state)
-    if rng_dict['cuda_rng_state'] is not None:
-        torch.cuda.set_rng_state_all([t.cpu() if t.device != torch.device('cpu') else t for t in rng_dict['cuda_rng_state']])
-    np.random.set_state(rng_dict['numpy_rng_state'])
-    random.setstate(rng_dict['python_rng_state'])
-
-    print(f"\tmodel load: {msg_model}")
-    if queue is not None:
-        print(f"\tqueue load: {msg_momemntum}")
-    print("<= loaded checkpoint '{}' (epoch {})"
-          .format(path, checkpoint['epoch']))
 
     return model, model_momentum, optimizer, queue, start_epoch, best_acc1, best_epoch, updated_split, updated_split_all
 
@@ -1320,7 +1264,6 @@ if __name__ == '__main__':
 
     # model setup and optimizer config
     if args.ssl_type.lower() == 'moco':
-        #model = Model(feature_dim, image_class=image_class, state_dict=state_dict).cuda()
         model = ModelResnet(feature_dim, image_class=image_class, state_dict=state_dict).cuda()
     elif args.ssl_type.lower() == 'simsiam':
         model = SimSiam(feature_dim, image_class=image_class, state_dict=state_dict).cuda()
@@ -1408,7 +1351,7 @@ if __name__ == '__main__':
             # Save a baseline checkpoint with initial split to allow skipping its initial creation
             cuda_rng_state = torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None
 
-            save_checkpoint({
+            utils.atomic_save({
                 'epoch':                0, # restore is from epoch+1
                 'state_dict':           model.state_dict(),
                 'best_acc1':            best_acc1,
@@ -1517,7 +1460,7 @@ if __name__ == '__main__':
         if (epoch % args.checkpoint_freq == 0) or (epoch == epochs):
             cuda_rng_state = torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None
 
-            save_checkpoint({
+            utils.atomic_save({
                 'epoch':                epoch,
                 'state_dict':           model.state_dict(),
                 'best_acc1':            best_acc1,
