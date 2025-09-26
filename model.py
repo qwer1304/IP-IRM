@@ -4,6 +4,60 @@ import torch.nn.functional as F
 from torchvision.models.resnet import resnet50
 
 
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torchvision.models import resnet50
+
+class ModelResnet(nn.Module):
+    def __init__(self, feature_dim=128, image_class='ImageNet', state_dict=None):
+        super().__init__()
+
+        # Backbone
+        self.f = resnet50(weights=None)
+
+        # Modify input layers for CIFAR/STL if needed
+        if image_class != 'ImageNet':
+            self.f.conv1 = nn.Conv2d(
+                3, 64, kernel_size=3, stride=1, padding=1, bias=False
+            )
+            self.f.maxpool = nn.Identity()
+
+        # Remove final classification head (fc)
+        dim_mlp = self.f.fc.in_features
+        self.f.fc = nn.Identity()
+
+        # Projection head for SSL
+        self.g = nn.Sequential(
+            nn.Linear(dim_mlp, 512, bias=False),
+            nn.BatchNorm1d(512),
+            nn.ReLU(inplace=True),
+            nn.Linear(512, feature_dim, bias=True),
+        )
+
+        # Load pretrained weights (if provided)
+        if state_dict is not None:
+            # Handle MoCo checkpoints (strip encoder_q prefix)
+            new_state_dict = {}
+            for k, v in state_dict.items():
+                if k.startswith("module.encoder_q."):
+                    k = k[len("module.encoder_q."):]
+                new_state_dict[k] = v
+
+            msg = self.f.load_state_dict(new_state_dict, strict=False)
+
+            # Don't care about fc layer from pretrained
+            print("\tMissing keys (ignoring fc):", [k for k in msg.missing_keys if not k.startswith("fc.")])
+            print("\tUnexpected keys (ignoring fc):", [k for k in msg.unexpected_keys if not k.startswith("fc.")])
+
+    def forward(self, x):
+        # Extract backbone features
+        feature = self.f(x)                      # [N, 2048] after avgpool & flatten
+        out = self.g(feature)                    # projection head
+
+        return F.normalize(feature, dim=-1), F.normalize(out, dim=-1)
+
+
 class Model(nn.Module):
     def __init__(self, feature_dim=128, image_class='ImageNet', state_dict=None):
         super(Model, self).__init__()
@@ -107,25 +161,37 @@ class prediction_MLP(nn.Module):
 
 class SimSiam(nn.Module):
     def __init__(self, feature_dim=128, image_class='ImageNet', state_dict=None):
-        super(SimSiam, self).__init__()
+        super().__init__()
 
-        self.f = []
-        res50 = resnet50(weights=None) 
+        # Backbone
+        self.f = resnet50(weights=None)
+
+        # Modify input layers for CIFAR/STL if needed
+        if image_class != 'ImageNet':
+            self.f.conv1 = nn.Conv2d(
+                3, 64, kernel_size=3, stride=1, padding=1, bias=False
+            )
+            self.f.maxpool = nn.Identity()
+
+        # Remove final classification head (fc)
+        dim_mlp = self.f.fc.in_features
+        self.f.fc = nn.Identity()
+
+        # Load pretrained weights (if provided)
         if state_dict is not None:
-            msg = res50.load_state_dict(state_dict, strict=False)
-            print(msg)
+            # Handle MoCo checkpoints (strip encoder_q prefix)
+            new_state_dict = {}
+            for k, v in state_dict.items():
+                if k.startswith("module.encoder_q."):
+                    k = k[len("module.encoder_q."):]
+                new_state_dict[k] = v
 
-        for name, module in res50.named_children():
-            if image_class != 'ImageNet':  # STL, CIFAR
-                if name == 'conv1':
-                    module = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False)
-                if not isinstance(module, nn.Linear) and not isinstance(module, nn.MaxPool2d):
-                    self.f.append(module)
-            else:
-                if not isinstance(module, nn.Linear):
-                    self.f.append(module)
+            msg = self.f.load_state_dict(new_state_dict, strict=False)
 
-        self.f = nn.Sequential(*self.f) # backbone
+            # Don't care about fc layer from pretrained
+            print("\tMissing keys (ignoring fc):", [k for k in msg.missing_keys if not k.startswith("fc.")])
+            print("\tUnexpected keys (ignoring fc):", [k for k in msg.unexpected_keys if not k.startswith("fc.")])
+
 
         self.projector = projection_MLP(2048, hidden_dim=512, out_dim=feature_dim)
 

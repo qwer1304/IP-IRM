@@ -8,12 +8,12 @@ import torch
 import torch.optim as optim
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.utils.data import Dataset, DataLoader, Sampler
+from torch.utils.data import Dataset, DataLoader
 
 from tqdm.auto import tqdm
 
 import utils
-from model import Model, SimSiam
+from model import ModelResnet, SimSiam
 from prepare import prepare_datasets, traverse_objects
 import gc
 from math import ceil, prod
@@ -139,7 +139,7 @@ class VRExCalculator(BaseCalculator):
     def penalty(self, loss, *args, **kwargs):
         return loss
         
-    def penalty_finalize(self, penalties, szs):
+    def penalty_finalize(self, penalties, szs, **kwargs):
         """
             penalties:  Penalty per half, per env, unnormalized (1,num_partitions,num_envs)
             szs:        sizes of halves of environments
@@ -207,8 +207,13 @@ class IRMCalculator(BaseCalculator):
         """
         raise NotImplementedError
         
-    def penalty_finalize(self, penalties, szs):
-        return (penalties[0] / szs[0]) * (penalties[1] / szs[1])  # normalized per env for macro-batch 
+    def penalty_finalize(self, penalties, szs, keep_halves=False):
+        if not keep_halves:
+            return (penalties[0] / szs[0]) * (penalties[1] / szs[1])  # normalized per env for macro-batch 
+        else:
+            penalties[0] /= szs[0]
+            penalties[1] /= szs[1]
+            return penalties
 
     def penalty_grads_finalize(self, grads, penalties, szs):
         """
@@ -357,8 +362,8 @@ class MoCoLossModule(LossModule):
         
         l_pos = torch.sum(out_q * out_k, dim=1, keepdim=True)
         l_neg = torch.matmul(out_q, self.queue.get((self.queue.queue_size - self.this_batch_size), advance=False).t())
-        self.logits = torch.cat([l_pos, l_neg], dim=1)
-        self.labels = torch.zeros(self.logits.size(0), dtype=torch.long, device=self.logits.device)
+        self._logits = torch.cat([l_pos, l_neg], dim=1)
+        self.labels = torch.zeros(self._logits.size(0), dtype=torch.long, device=self._logits.device)
         if self.debug:
             self.total_pos    += l_pos.mean().item() * l_pos.size(0)
             self.total_neg    += l_neg.mean().item() * l_pos.size(0)
@@ -367,20 +372,20 @@ class MoCoLossModule(LossModule):
         
     def logits(self, idxs=None):
         if idxs is None:
-            idxs = torch.arange(self.logits.size(0), device=self.logits.device)
-        return self.logits[idxs]
+            idxs = torch.arange(self._logits.size(0), device=self._logits.device)
+        return self._logits[idxs]
         
     def targets(self, idxs=None):
         if idxs is None:
-            idxs = torch.arange(self.logits.size(0), device=self.logits.device)
-        return self.labels_cont[idxs]
+            idxs = torch.arange(self._logits.size(0), device=self._logits.device)
+        return self.labels[idxs]
 
     def compute_loss_micro(self, idxs=None, scale=1.0, temperature=None):
         if idxs is None:
-            idxs = torch.arange(self.logits.size(0), device=self.logits.device)
+            idxs = torch.arange(self._logits.size(0), device=self._logits.device)
         # sum over batch, per env handled by driver
         temperature = temperature or self.temperature
-        loss = F.cross_entropy(scale * self.logits[idxs] / temperature, self.labels[idxs], reduction='sum')
+        loss = F.cross_entropy(scale * self._logits[idxs] / temperature, self.labels[idxs], reduction='sum')
         return loss
 
     def post_micro_batch(self):
@@ -646,25 +651,44 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
 
         # Environments & original cont losses and gradients
         if loss_weight > 0:
+            grads = []
             partition_sz = halves_sz.sum(dim=0, keepdim=True) # (1,J,K) # sizes of envs
             loss_env = loss_aggregator.sum(dim=0, keepdim=True) / partition_sz     # per env for macro-batch, normalized per env
             for pind, p in enumerate(net.parameters()):
                 dLoss_dTheta_env = loss_grads[pind]     # per env sum of dCont/dTheta, shape (I,J,K,param_numel)
                 total_grad_flat  = loss_module.loss_grads_finalize(dLoss_dTheta_env, loss_env, halves_sz)
                 p.grad          += total_grad_flat.view(p.shape) # reshape back to parameter shape
+                grads.append(total_grad_flat.detach().clone())
+            loss_gards = torch.cat([g for g in grads if g is not None])
         else:
             loss_env = torch.tensor(0, dtype=torch.float)
 
         # Penalty and its gradients
         if penalty_weight > 0:
+            grads = []
             penalty_env = penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz) # normalized per env
             for pind, p in enumerate(net.parameters()):
-                dPenalty_dTheta_env = penalty_grads[pind]  # per env sum of dPenalty/dTheta over macro-batch per parameter, shape (I,J,K,param_numel)               
-                total_grad_flat     = penalty_calculator.penalty_grads_finalize(dPenalty_dTheta_env, penalty_env, halves_sz)                
+                dPenalty_dTheta_env = penalty_grads[pind]  # per env sum of dPenalty/dTheta over macro-batch per parameter, shape (I,J,K,param_numel)
+                total_grad_flat     = \
+                    penalty_calculator.penalty_grads_finalize(
+                        dPenalty_dTheta_env, 
+                        penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz, keep_halves=True), 
+                        halves_sz
+                    )                
                 p.grad             += total_grad_flat.view(p.shape)  # reshape back to parameter shape
+                grads.append(total_grad_flat.detach().clone())
+            penalty_gards = torch.cat([g for g in grads if g is not None])
             
         else:
             penalty_env = torch.tensor(0, dtype=torch.float)
+
+        if (loss_weight>0) and (penalty_weight>0):
+            cosine = torch.nn.functional.cosine_similarity(loss_gards, penalty_gards, dim=0)
+            norms = penalty_gards.norm() / (loss_gards.norm() + 1e-12)
+        else:
+            cosine, norms = torch.tensor(0, dtype=torch.float), torch.tensor(0, dtype=torch.float) 
+        cosine = cosine.item()
+        norms = norms.item()
 
         loss_batch = ((loss_keep_weight * loss_keep_aggregator) + # loss_keep_aggregator is a scalar
                       (penalty_weight   * penalty_env.mean())   + # mean over envs, mean over macro-batch
@@ -705,17 +729,18 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                    f' First: {total_keep_cont_loss/trained_samples:.4f}' + \
                    f' Env: {total_cont_loss/trained_samples:.4f}' + \
                    f' {args.penalty_type}: {total_irm_loss/trained_samples:.4g}' + \
-                   f' LR: {train_optimizer.param_groups[0]["lr"]:.4f} PW {penalty_weight:.4f}'
+                   f' LR: {train_optimizer.param_groups[0]["lr"]:.4f} PW {penalty_weight:.4f}' + \
+                   f' cos: {cosine:.4f}, ||gp||/||gl||: {norms:.4f}'
         desc_str += loss_module.get_debug_info_str()
         train_bar.set_description(desc_str)
 
         if batch_index % 10 == 0:
-            utils.write_log('Train Epoch: [{:d}/{:d}] [{:d}/{:d}]  {args.ssl_type}: Total: {:.4f}  First: {:.4f} Env: {:.4f}'
+            utils.write_log('Train Epoch: [{:d}/{:d}] [{:d}/{:d}] {args.ssl_type}: Total: {:.4f} First: {:.4f} Env: {:.4f}'
                             .format(epoch, epochs, trained_samples, total_samples,
                                     total_loss/trained_samples, total_keep_cont_loss/trained_samples, 
                                     total_cont_loss/trained_samples) + 
-                            ' {args.penalty_type}: {:.4g} LR: {:.4f}  PW {:.4f}'
-                            .format(total_irm_loss/trained_samples, train_optimizer.param_groups[0]['lr'], penalty_weight), 
+                            ' {args.penalty_type}: {:.4g} LR: {:.4f} PW {:.4f} cos {:.4f} norms {:.4f}'
+                            .format(total_irm_loss/trained_samples, train_optimizer.param_groups[0]['lr'], penalty_weight, cosine, norms), 
                             log_file=log_file)
                                         
         # Prepare for next iteration
@@ -928,7 +953,7 @@ def test(net, feature_bank, feature_labels, test_data_loader, args, progress=Fal
             fp = os.path.join(directory, f"{prefix}_features_dump.pt")       
             os.makedirs(os.path.dirname(fp), exist_ok=True)
 
-            torch.save({
+            state = {
                 'features':     feature,
                 'labels':       target,
                 'labels_raw':   target_raw,
@@ -936,79 +961,85 @@ def test(net, feature_bank, feature_labels, test_data_loader, args, progress=Fal
                 'pred_scores':  pred_scores,
                 'model_epoch':  epoch,
                 'n_classes':    args.class_num,
-            }, fp)
+            }
+
+            utils.atomic_save(state, False, args, filename=fp)
             print(f"Dumped features into {fp}")
 
     return total_top1 / total_num * 100, total_top5 / total_num * 100
-
     
-def save_checkpoint(state, is_best, args, filename='checkpoint.pth.tar', sync=True):
-    filename_tmp = filename + ".tmp"
-    torch.save(state, filename_tmp)
-    os.replace(filename_tmp, filename)
-    if is_best:
-        best_filename = '{}/{}/model_best.pth.tar'.format(args.save_root, args.name)
-        best_filename_tmp = filename + ".tmp"
-        shutil.copyfile(filename, best_filename_tmp)
-        os.replace(best_filename_tmp, best_filename)
-    if sync:
-        # Sync file data
-        for p in [filename, best_filename] if is_best else [filename]:
-            fd = os.open(p, os.O_RDONLY)
-            os.fsync(fd)
-            os.close(fd)
-
-        # Sync the directory once (covers both files)
-        dir_fd = os.open(os.path.dirname(filename) or ".", os.O_RDONLY)
-        os.fsync(dir_fd)
-        os.close(dir_fd)
-
-def load_checkpoint(path, model, model_momentum, optimizer, device='cuda'):
+def load_checkpoint(path, model, model_momentum, optimizer, device="cuda"):
     print("=> loading checkpoint '{}'".format(path))
     checkpoint = torch.load(path, map_location=device, weights_only=False)
 
-    # Restore training bookkeeping
-    start_epoch = checkpoint['epoch'] + 1
-    best_acc1 = checkpoint['best_acc1']
-    best_epoch = checkpoint['best_epoch']
-    updated_split = checkpoint['updated_split']
-    updated_split_all = checkpoint['updated_split_all']
+    # Restore training bookkeeping (if present)
+    start_epoch = checkpoint.get("epoch", -1) + 1
+    best_acc1 = checkpoint.get("best_acc1", 0.0)
+    best_epoch = checkpoint.get("best_epoch", -1)
+    updated_split = checkpoint.get("updated_split", None)
+    updated_split_all = checkpoint.get("updated_split_all", None)
 
-    # Restore models
-    msg_model = model.load_state_dict(checkpoint['state_dict'])
+    # Restore main model
+    msg_model = model.load_state_dict(checkpoint["state_dict"], strict=False)
+
+    # Restore momentum model if applicable
+    queue = None
     if model_momentum is not None:
-        if "queue" in checkpoint:
-            msg_momemntum = model_momentum.load_state_dict(checkpoint['state_dict_momentum'])
-            queue = checkpoint['queue']
+        if "state_dict_momentum" in checkpoint and checkpoint["state_dict_momentum"] is not None:
+            msg_momentum = model_momentum.load_state_dict(
+                checkpoint["state_dict_momentum"], strict=False
+            )
         else:
-            msg_momemntum = 'No momentum queue in checkpoint'
-    else:
-        model_momentum, queue = None, None
-    
-    # Restore optimizer
-    optimizer.load_state_dict(checkpoint['optimizer']) # nothing ia returned
-    # Ensure optimizer state tensors are on the right device
-    for state in optimizer.state.values():
-        for k, v in state.items():
-            if torch.is_tensor(v):
-                state[k] = v.to(device)
-                
-    # Restore RNG states
-    rng_dict = checkpoint['rng_dict']
-    rng_state = rng_dict['rng_state']
-    if rng_state.device != torch.device('cpu'):
-        rng_state = rng_state.cpu()   
-    torch.set_rng_state(rng_state)
-    if rng_dict['cuda_rng_state'] is not None:
-        torch.cuda.set_rng_state_all([t.cpu() if t.device != torch.device('cpu') else t for t in rng_dict['cuda_rng_state']])
-    np.random.set_state(rng_dict['numpy_rng_state'])
-    random.setstate(rng_dict['python_rng_state'])
+            msg_momentum = "no momentum encoder in checkpoint"
 
-    print(f"\tmodel load: {msg_model}")
+        if "queue" in checkpoint and checkpoint["queue"] is not None:
+            queue = checkpoint["queue"]
+        else:
+            queue = None
+    else:
+        msg_momentum = "momentum encoder not used"
+        queue = None
+
+    # Restore optimizer (if available)
+    if "optimizer" in checkpoint and checkpoint["optimizer"] is not None:
+        optimizer.load_state_dict(checkpoint["optimizer"])
+        # Move optimizer tensors to the correct device
+        for state in optimizer.state.values():
+            for k, v in state.items():
+                if torch.is_tensor(v):
+                    state[k] = v.to(device)
+
+    # Restore RNG states (if present)
+    rng_dict = checkpoint.get("rng_dict", None)
+    if rng_dict is not None:
+        rng_state = rng_dict.get("rng_state", None)
+        if rng_state is not None:
+            if rng_state.device != torch.device("cpu"):
+                rng_state = rng_state.cpu()
+            torch.set_rng_state(rng_state)
+
+        cuda_rng_state = rng_dict.get("cuda_rng_state", None)
+        if cuda_rng_state is not None:
+            torch.cuda.set_rng_state_all(
+                [t.cpu() if t.device != torch.device("cpu") else t for t in cuda_rng_state]
+            )
+
+        numpy_rng_state = rng_dict.get("numpy_rng_state", None)
+        if numpy_rng_state is not None:
+            np.random.set_state(numpy_rng_state)
+
+        python_rng_state = rng_dict.get("python_rng_state", None)
+        if python_rng_state is not None:
+            random.setstate(python_rng_state)
+
+    # Report what was loaded
+    print("\tmodel load: {}".format(msg_model))
+    if model_momentum is not None:
+        print("\tmomentum load: {}".format(msg_momentum))
     if queue is not None:
-        print(f"\tqueue load: {msg_momemntum}")
-    print("<= loaded checkpoint '{}' (epoch {})"
-          .format(path, checkpoint['epoch']))
+        print("\tqueue restored")
+
+    print("<= loaded checkpoint '{}' (epoch {})".format(path, checkpoint.get("epoch", -1)))
 
     return model, model_momentum, optimizer, queue, start_epoch, best_acc1, best_epoch, updated_split, updated_split_all
 
@@ -1226,21 +1257,24 @@ if __name__ == '__main__':
         checkpoint = torch.load(args.pretrain_path, map_location=device, weights_only=False)
         if 'state_dict' in checkpoint.keys():
             state_dict = checkpoint['state_dict']
-            print(f"Epoch: {checkpoint['epoch']}")
+            print(f" Epoch: {checkpoint['epoch']}")
         else:
             state_dict = checkpoint
-            print("Epoch: N/A")
+            print(" Epoch: N/A")
     else:
         state_dict = None
         print('Using default model')
 
     # model setup and optimizer config
     if args.ssl_type.lower() == 'moco':
-        model = Model(feature_dim, image_class=image_class, state_dict=state_dict).cuda()
+        model = ModelResnet(feature_dim, image_class=image_class, state_dict=state_dict).cuda()
     elif args.ssl_type.lower() == 'simsiam':
         model = SimSiam(feature_dim, image_class=image_class, state_dict=state_dict).cuda()
     else:
         raise NotImplemented
+    if state_dict is not None:
+        print("<= loaded pretrained checkpoint '{}'".format(args.pretrain_path))
+
     model = nn.DataParallel(model)
 
     if args.ssl_type.lower() == 'moco':
@@ -1320,7 +1354,7 @@ if __name__ == '__main__':
             # Save a baseline checkpoint with initial split to allow skipping its initial creation
             cuda_rng_state = torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None
 
-            save_checkpoint({
+            utils.atomic_save({
                 'epoch':                0, # restore is from epoch+1
                 'state_dict':           model.state_dict(),
                 'best_acc1':            best_acc1,
@@ -1429,7 +1463,7 @@ if __name__ == '__main__':
         if (epoch % args.checkpoint_freq == 0) or (epoch == epochs):
             cuda_rng_state = torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None
 
-            save_checkpoint({
+            utils.atomic_save({
                 'epoch':                epoch,
                 'state_dict':           model.state_dict(),
                 'best_acc1':            best_acc1,

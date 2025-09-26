@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-from torch.utils.data import DataLoader, Subset
+from torch.utils.data import DataLoader, Subset, WeightedRandomSampler
 from torchvision.datasets import STL10, CIFAR10, CIFAR100, ImageFolder
 import random
 import shutil
@@ -14,83 +14,74 @@ import os
 from collections import defaultdict, OrderedDict
 
 import utils
-from model import Model
+from model import ModelResnet
 
 from prepare import prepare_datasets, traverse_objects
 
-class Net(nn.Module):
-    def __init__(self, num_class, pretrained_path, image_class='ImageNet', args=None):
-        super(Net, self).__init__()
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import os
 
-        # encoder
-        model = Model(image_class=image_class).cuda()
-        model = Model().cuda()
+import kornia.augmentation as K
+
+
+class NetResnet(nn.Module):
+    def __init__(self, num_class, pretrained_path, image_class='ImageNet', args=None):
+        super().__init__()
+
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+
+        # f - resnet, fc - identity, g - projection head
+        model = ModelResnet(image_class=image_class).to(device)
         model = nn.DataParallel(model)
 
-        device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        msg = []
-        assert (pretrained_path is not None and os.path.isfile(pretrained_path))
+        # Load checkpoint
+        assert pretrained_path is not None and os.path.isfile(pretrained_path)
         print("=> loading pretrained checkpoint '{}'".format(pretrained_path))
+        # ssl or resume
         checkpoint = torch.load(pretrained_path, map_location=device, weights_only=False)
-        if 'state_dict' in checkpoint.keys():
-            state_dict = checkpoint['state_dict']
+
+        if "state_dict" in checkpoint:
+            state_dict = checkpoint["state_dict"]
         else:
             state_dict = checkpoint
 
-        self.f = model.module.f
-        
-        def rename_key_from_standard(k, keepfc=False):
-            # Skip fc, since your model doesn't use it
-            if (not keepfc) and k.startswith("module.fc."):
-                return None
-
-            new_k = k
-            new_k = new_k.replace("module.conv1.", "module.f.0.")
-            new_k = new_k.replace("module.bn1.", "module.f.1.")
-            new_k = new_k.replace("module.layer1.", "module.f.4.")
-            new_k = new_k.replace("module.layer2.", "module.f.5.")
-            new_k = new_k.replace("module.layer3.", "module.f.6.")
-            new_k = new_k.replace("module.layer4.", "module.f.7.")
-            return new_k
-
-        new_state_dict = OrderedDict()
+        # Handle MoCo checkpoints (strip encoder_q prefix)
+        new_state_dict = {}
         for k, v in state_dict.items():
-            # Remove "module.model." prefix
-            name = k.replace("module.encoder_q.", "module.")
-            #name = name.replace("module.", "")                  
-            new_state_dict[name] = v
-        state_dict = new_state_dict
-        
-        # convert pretrained dict
-        converted_dict = {}
-        for k, v in state_dict.items():
-            new_k = rename_key_from_standard(k, keepfc=(args.evaluate == 'linear'))
-            if new_k is not None:  # skip fc
-                converted_dict[new_k] = v
+            if k.startswith("module.g."): # drop projector if loading from IP-IRM
+                continue
+            if k.startswith("module.encoder_q."):
+                k = k[len("module.encoder_q."):]
+            if k.startswith("module.f."):
+                k = k[len("module.f."):]
+            if k.startswith("module."):
+                k = k[len("module."):]
+            new_state_dict[k] = v
 
-        state_dict = converted_dict
-
-        msg = model.load_state_dict(state_dict, strict=False)
-        missing_keys = [k for k in msg.missing_keys if 'g.' not in k]
-        if msg.unexpected_keys or missing_keys:
-            print(msg.unexpected_keys)
-            print(missing_keys)
+        msg = model.module.f.load_state_dict(new_state_dict, strict=False)
+        print("Missing keys (ignoring fc):", [k for k in msg.missing_keys if not k.startswith("fc.")])
         if args.evaluate is None or args.evaluate == 'knn':
-            # If training or evaluating output from SSL
-            # classifier
-            self.fc = nn.Linear(2048, num_class, bias=True)
+            print("Unexpected keys (ignoring fc):", [k for k in msg.unexpected_keys if not k.startswith("fc.")])
         else:
-            self.fc = model.module.fc
+            print("Unexpected keys:", msg.unexpected_keys)
+        print("<= loaded pretrained checkpoint '{}'".format(pretrained_path))
+        
+        self.f = model.module.f
+
+        # classifier
+        self.dropout = nn.Dropout(args.dropout_prob) if args.dropout else nn.Identity()
+        self.fc = nn.Linear(2048, num_class, bias=True)
 
     def forward(self, x, normalize=False):
         with torch.no_grad():
-            x = self.f(x)
-        feature = torch.flatten(x, start_dim=1)
+            feature = self.f(x)
+        feature = torch.flatten(feature, start_dim=1)
         if normalize:
-            feature = F.normalize(feature, dim=1)  # L2 norm
+            feature = F.normalize(feature, dim=1)
         out = self.fc(feature)
         return out, feature
-
 
 # train or test for one epoch
 def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test"):
@@ -118,9 +109,20 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
             dynamic_ncols=False,            # disable autosizing
             bar_format=bar_format,          # request bar width
             )
+
+    if args.mixup:
+        mixup = K.RandomMixUpV2(data_keys=["input", "class"], same_on_batch=False, keepdim=True,)
+    if args.cutmix:
+        cutmix = K.RandomCutMixV2(data_keys=["input", "class"], same_on_batch=False, keepdim=True,)
+    
+    loss_mixup_criterion = nn.CrossEntropyLoss(weight=class_weights, label_smoothing=args.label_smoothing, reduction='none')
+
     with (torch.enable_grad() if is_train else torch.no_grad()):
         if args.extract_features:
             data_loader.dataset.target_transform = None
+
+        feature_mix_list = []
+        target_mix_list = []
 
         feature_list = []
         pred_labels_list = []
@@ -154,16 +156,16 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
                 out, feature = net(data, normalize=True)
                 loss = loss_criterion(out, target)
 
-                if is_train:
-                    (loss / gpu_accum_steps / loader_accum_steps).backward() # adds gradients to accumulated ones
-            
                 total_num += data.size(0)
                 total_loss += loss.item() * data.size(0)
                 prediction = torch.argsort(out, dim=-1, descending=True)
                 total_correct_1 += torch.sum((prediction[:, 0:1] == target.unsqueeze(dim=-1)).any(dim=-1).float()).item()
                 total_correct_5 += torch.sum((prediction[:, 0:5] == target.unsqueeze(dim=-1)).any(dim=-1).float()).item()
 
-                # compute output
+                feature_mix_list.append(feature)
+                target_mix_list.append(target)
+
+              # compute output
                 if args.extract_features:
                     feature_list.append(feature)
                     target_list.append(target)
@@ -181,8 +183,48 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
             if (loader_step * loader_batch_size) == gradients_batch_size:
                 loader_step = 0
                 if is_train:
+                    feature = torch.cat(feature_mix_list, dim=0)
+                    target = torch.cat(target_mix_list, dim=0)
+
+                    if args.mixup or args.cutmix:
+                        feature = feature.unsqueeze(1).unsqueeze(2) # extend to (B,C,W,H)
+                        if args.mixup and (not args.cutmix):
+                            thresh = 2.0
+                        elif (not args.mixup) and args.cutmix:
+                            thresh = 0.0
+                        else:
+                            thresh = 0.5
+                        mask = torch.rand(feature.size(0), device=feature.device) < thresh  # Boolean mask: True = Mixup, False = CutMix
+
+                        # Prepare output tensors
+                        feature_mixed = torch.empty_like(feature)
+                        labels_mixed = torch.empty(target.size(0),3, device=target.device)
+
+                        # Apply Mixup to selected samples
+                        if mask.any():
+                            feature_mixed[mask], labels_mixed[mask] = mixup(feature[mask], target[mask])
+
+                        # Apply CutMix to the rest
+                        if (~mask).any():
+                            feature_mixed[~mask], labels_cm = cutmix(feature[~mask], target[~mask])
+                            labels_mixed[~mask] = labels_cm.squeeze()
+
+                        feature_mixed, labels_mixed = feature_mixed.squeeze(), labels_mixed # labels_mix is a tensor (B,3)
+                        out = net.module.fc(net.module.dropout(feature_mixed))
+                        def loss_mixup(y, logits):
+                            loss_a = loss_mixup_criterion(logits, y[:, 0].long())
+                            loss_b = loss_mixup_criterion(logits, y[:, 1].long())
+                            return ((1 - y[:, 2]) * loss_a + y[:, 2] * loss_b).mean()
+
+                        loss = loss_mixup(labels_mixed, out)
+                    else:
+                        out = net.module.fc(net.module.dropout(feature))
+                        loss = loss_mixup_criterion(out, target).mean()
+                    loss.backward()
+            
                     train_optimizer.step()
                     train_optimizer.zero_grad()  # clear gradients at beginning of next gradients batch
+                    feature_mix_list, target_mix_list = [], []
 
             data_bar.set_description('{} Epoch: [{}/{}] [{}/{}] Loss: {:.4f} Acc@1: {:.2f}% Acc@5: {:.2f}%'
                                      .format(dataset.capitalize(), epoch, epochs, total_num, len(data_loader.dataset),
@@ -216,60 +258,87 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
         
     return total_loss / total_num, total_correct_1 / total_num * 100, total_correct_5 / total_num * 100
 
-def save_checkpoint(state, is_best, args, filename='checkpoint.pth.tar', sync=True):
-    filename_tmp = filename + ".tmp"
-    torch.save(state, filename_tmp)
-    os.replace(filename_tmp, filename)
-    if is_best:
-        best_filename = '{}/model_best.pth.tar'.format(os.path.dirname(filename))
-        best_filename_tmp = filename + ".tmp"
-        shutil.copyfile(filename, best_filename_tmp)
-        os.replace(best_filename_tmp, best_filename)
-    if sync:
-        # Sync file data
-        for p in [filename, best_filename] if is_best else [filename]:
-            fd = os.open(p, os.O_RDONLY)
-            os.fsync(fd)
-            os.close(fd)
+def build_and_save_checkpoint(model, optimizer, epoch, best_acc1, best_epoch,
+                              cuda_rng_state=None, save_dir=".", is_best=False):
+    """
+    Build checkpoint dictionary and save it using atomic_save.
+    """
+    state = {
+        "epoch": epoch,
+        "state_dict": model.state_dict(),
+        "best_acc1": best_acc1,
+        "best_epoch": best_epoch,
+        "optimizer": optimizer.state_dict() if optimizer is not None else None,
+        "rng_dict": {
+            "rng_state": torch.get_rng_state(),
+            "cuda_rng_state": cuda_rng_state,
+            "numpy_rng_state": np.random.get_state(),
+            "python_rng_state": random.getstate(),
+        },
+    }
 
-        # Sync the directory once (covers both files)
-        dir_fd = os.open(os.path.dirname(filename) or ".", os.O_RDONLY)
-        os.fsync(dir_fd)
-        os.close(dir_fd)
+    filename = os.path.join(save_dir, "checkpoint.pth.tar")
+    utils.atomic_save(state, is_best, filename=filename)
 
-def load_checkpoint(path, model, optimizer, device='cuda'):
+def load_checkpoint(path, model, optimizer=None, device='cuda'):
+    """
+    Load a checkpoint for linear probing or supervised training.
+
+    Handles:
+    - Vanilla ResNet50 checkpoints
+    - MoCo-v2 checkpoints (strips encoder_q prefix)
+    - Optional optimizer and RNG restoration
+    """
     print("=> loading checkpoint '{}'".format(path))
     checkpoint = torch.load(path, map_location=device, weights_only=False)
 
-    # Restore training bookkeeping
-    start_epoch = checkpoint['epoch'] + 1
-    best_acc1 = checkpoint['best_acc1']
-    best_epoch = checkpoint['best_epoch']
+    # Restore bookkeeping
+    start_epoch = checkpoint.get('epoch', -1) + 1
+    best_acc1 = checkpoint.get('best_acc1', 0.0)
+    best_epoch = checkpoint.get('best_epoch', -1)
 
-    # Restore models
-    msg_model = model.load_state_dict(checkpoint['state_dict'])
-    # Restore optimizer
-    optimizer.load_state_dict(checkpoint['optimizer']) # nothing ia returned
-    # Ensure optimizer state tensors are on the right device
-    for state in optimizer.state.values():
-        for k, v in state.items():
-            if torch.is_tensor(v):
-                state[k] = v.to(device)
-                
-    # Restore RNG states
-    rng_dict = checkpoint['rng_dict']
-    rng_state = rng_dict['rng_state']
-    if rng_state.device != torch.device('cpu'):
-        rng_state = rng_state.cpu()   
-    torch.set_rng_state(rng_state)
-    if rng_dict['cuda_rng_state'] is not None:
-        torch.cuda.set_rng_state_all([t.cpu() if t.device != torch.device('cpu') else t for t in rng_dict['cuda_rng_state']])
-    np.random.set_state(rng_dict['numpy_rng_state'])
-    random.setstate(rng_dict['python_rng_state'])
+    state_dict = checkpoint['state_dict']
 
-    print(f"\tmodel load: {msg_model}")
-    print("<= loaded checkpoint '{}' (epoch {})"
-          .format(path, checkpoint['epoch']))
+    # Load model
+    msg_model = model.load_state_dict(state_dict, strict=False)
+    print("Missing keys:", msg_model.missing_keys)
+    print("Unexpected keys:", msg_model.unexpected_keys)
+
+    # Restore optimizer if provided
+    if optimizer is not None and 'optimizer' in checkpoint:
+        optimizer.load_state_dict(checkpoint['optimizer'])
+        # Move optimizer tensors to correct device
+        for state in optimizer.state.values():
+            for k, v in state.items():
+                if torch.is_tensor(v):
+                    state[k] = v.to(device)
+
+    # Restore RNG states if present
+    rng_dict = checkpoint.get('rng_dict', None)
+    if rng_dict is not None:
+        rng_state = rng_dict.get('rng_state', None)
+        if rng_state is not None:
+            if rng_state.device != torch.device('cpu'):
+                rng_state = rng_state.cpu()
+            torch.set_rng_state(rng_state)
+
+        cuda_rng_state = rng_dict.get('cuda_rng_state', None)
+        if cuda_rng_state is not None:
+            torch.cuda.set_rng_state_all(
+                [t.cpu() if t.device != torch.device('cpu') else t for t in cuda_rng_state]
+            )
+
+        numpy_rng_state = rng_dict.get('numpy_rng_state', None)
+        if numpy_rng_state is not None:
+            import numpy as np
+            np.random.set_state(numpy_rng_state)
+
+        python_rng_state = rng_dict.get('python_rng_state', None)
+        if python_rng_state is not None:
+            import random
+            random.setstate(python_rng_state)
+
+    print("<= loaded checkpoint '{}' (epoch {})".format(path, checkpoint.get('epoch', -1)))
 
     return model, optimizer, start_epoch, best_acc1, best_epoch
 
@@ -286,6 +355,7 @@ if __name__ == '__main__':
     parser.add_argument('--micro_batch_size', default=32, type=int, help='batch size on gpu')
     parser.add_argument('--gradients_batch_size', default=256, type=int, help='batch size of gradients accumulation')
     parser.add_argument('--epochs', type=int, default=100, help='Number of sweeps over the dataset to train')
+    parser.add_argument('--start_epoch', type=int, default=1, help='start epoch')
     parser.add_argument('--dataset', type=str, default='STL', choices=['STL', 'CIFAR10', 'CIFAR100', 'ImageNet'], help='experiment dataset')
     parser.add_argument('--data', metavar='DIR', help='path to dataset')
     parser.add_argument('--txt', action="store_true", default=False, help='save txt?')
@@ -323,6 +393,12 @@ if __name__ == '__main__':
     parser.add_argument('--label_smoothing', default=0.0, type=float, help='label smoothing')
     parser.add_argument('--prune_sizes', action="store_true", help="prune training dataset to minority class size")
     parser.add_argument('--weighted_loss', action="store_true", help="weight each sample by its class size")
+
+    parser.add_argument('--mixup', action="store_true", help="MixUp")
+    parser.add_argument('--cutmix', action="store_true", help="CutMix")
+    parser.add_argument('--weighted_sampler', action="store_true", help="Class weighted sampler")
+    parser.add_argument('--dropout', action="store_true", help="Apply dropout before linear head")
+    parser.add_argument('--dropout_prob', type=float, default=0.2, help="Dropout prob")
 
     args = parser.parse_args()
 
@@ -446,8 +522,25 @@ if __name__ == '__main__':
             test_data   = utils.Imagenet(root=args.data + '/test',  transform=test_transform,  target_transform=target_transform, class_to_idx=class_to_idx)
             val_data    = utils.Imagenet(root=args.data + '/val',   transform=test_transform,  target_transform=target_transform, class_to_idx=class_to_idx)
 
-        train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, shuffle=True, pin_memory=True, 
-            drop_last=True, persistent_workers=tr_pw)
+            if args.weighted_sampler:
+                # Count per-class frequency
+                labels = torch.tensor(train_data.targets)
+                class_counts = torch.bincount(labels)
+
+                # Compute inverse frequency weights
+                weights = 1.0 / class_counts.float()          # higher weight for rare classes
+                sample_weights = weights[labels]              # weight per sample
+
+                # Create sampler
+                sampler = WeightedRandomSampler(
+                    weights=sample_weights,
+                    num_samples=len(sample_weights),          # number of samples per epoch
+                    replacement=True                         # allow repeats of rare samples
+                )
+
+        kwargs = {'sampler': sampler} if args.weighted_sampler else {'shuffle': True}
+        train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, pin_memory=True, 
+            drop_last=True, persistent_workers=tr_pw, **kwargs)
         test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=True, 
             pin_memory=True, persistent_workers=te_pw)
         val_loader = DataLoader(val_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=True, 
@@ -458,7 +551,7 @@ if __name__ == '__main__':
     class FeatureQueue: # to make checkpoint load happy
         def __init__(self, *args, **kwargs): pass
         
-    model = Net(num_class=num_class, pretrained_path=model_path, image_class=image_class, args=args).cuda()
+    model = NetResnet(num_class=num_class, pretrained_path=model_path, image_class=image_class, args=args).cuda()
     model = nn.DataParallel(model)
 
     optimizer = optim.Adam(model.module.fc.parameters(), lr=args.lr, weight_decay=args.weight_decay)
@@ -497,7 +590,7 @@ if __name__ == '__main__':
                 txt_write.write('\nval_loss: {}, val_acc@1: {}, val_acc@5: {}'.format(val_loss, val_acc_1, val_acc_5))
     
     else:
-        for epoch in range(1, epochs + 1):
+        for epoch in range(args.start_epoch, epochs + 1):
             train_loss, train_acc_1, train_acc_5 = train_val(model, train_loader, optimizer, tr_bs, args, dataset="train")
             if args.val_freq and ((epoch % args.val_freq == 0) or (epoch == epochs)) and (args.dataset == 'ImageNet'):
                 val_loss, val_acc_1, val_acc_5 = train_val(model, val_loader, None, te_bs, args, dataset="val")
@@ -523,19 +616,17 @@ if __name__ == '__main__':
             if (epoch % args.checkpoint_freq == 0) or (epoch == epochs):
                 cuda_rng_state = torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None
 
-                save_checkpoint({
-                    'epoch':                epoch,
-                    'state_dict':           model.state_dict(),
-                    'best_acc1':            best_acc1,
-                    'best_epoch':           best_epoch,
-                    'optimizer':            optimizer.state_dict(),
-                    "rng_dict": {
-                        "rng_state": torch.get_rng_state(),
-                        "cuda_rng_state": cuda_rng_state,
-                        "numpy_rng_state": np.random.get_state(),
-                        "python_rng_state": random.getstate(),
-                    },
-                }, is_best, args, filename='{}/checkpoint.pth.tar'.format(save_dir))
+                # Example usage
+                build_and_save_checkpoint(
+                    model=model,
+                    optimizer=optimizer,
+                    epoch=epoch,
+                    best_acc1=best_acc1,
+                    best_epoch=best_epoch,
+                    cuda_rng_state=None,
+                    save_dir=save_dir,
+                    is_best=is_best
+                )
                               
         # end for epoch in range(1, epochs + 1):
         torch.save(model.state_dict(), '{}/model_{}.pth'.format(save_dir, epoch))
