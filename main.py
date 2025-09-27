@@ -282,7 +282,7 @@ class SimSiamIRMCalculator(IRMCalculator):
         # one scalar (requires grad)
         s = torch.tensor(1.0, device=device, requires_grad=True)
         # Compute g_i in a SimSiam-specific way (e.g., L2 or cosine loss)
-        g_i = torch.autograd.grad(s*loss, s, create_graph=True)[0]
+        g_i = torch.autograd.grad(s*loss, s, create_graph=True)[0].squeeze(0)
         return g_i
         
 # ---------------------------
