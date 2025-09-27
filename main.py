@@ -569,8 +569,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 # -----------------------
 
                 # compute unnormalized micro-batch loss
-                losses = loss_module.compute_loss_micro(reduction='none')
                 grad_outputs = torch.ones(1,batch_micro.size(0))
+                losses = loss_module.compute_loss_micro(reduction='none')
                 loss_grads = torch.autograd.grad(
                     losses,
                     tuple(net.parameters()),
@@ -579,15 +579,16 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                     grad_outputs=grad_outputs, 
                     is_grads_batched=True
                 )
-                penalties = penalty_calculator.penalty(losses)
-                penalty_grads = torch.autograd.grad(
-                    penalties,
-                    tuple(net.parameters()),
-                    retain_graph=True,  # keep graph for next loss
-                    allow_unused=True,
-                    grad_outputs=grad_outputs, 
-                    is_grads_batched=True
-                )
+                if penalty_weight > 0:
+                    penalties = penalty_calculator.penalty(losses)
+                    penalty_grads = torch.autograd.grad(
+                        penalties,
+                        tuple(net.parameters()),
+                        retain_graph=True,  # keep graph for next loss
+                        allow_unused=True,
+                        grad_outputs=grad_outputs, 
+                        is_grads_batched=True
+                    )
 
                 if args.keep_cont and (loss_keep_weight > 0): # global loss @ 1st partition
                     # This could be done w/o the split into two halves, but this streamlines the code w/o any harm
@@ -644,13 +645,13 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 loss_module.prepare_for_free()
                 
                 # free memory of micro-batch
-                del batch_micro, indexs
+                del batch_micro, indexs, losses, loss_gradients
                 if (loss_weight > 0) or (penalty_weight > 0):
                     del grads, g
                     if loss_weight > 0:
                         del loss
                     if penalty_weight > 0:
-                        del penalty
+                        del penalty, penalties, penalty_grads
             # end for i in [i_ for i_ in range(len(mb_list)) if i_ % 2 == j]:
             torch.cuda.empty_cache()
         # end for j in range(idxs):
