@@ -581,7 +581,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 # compute unnormalized micro-batch loss
                 grad_outputs = torch.ones(1, batch_micro.size(0), device=device)
                 losses = loss_module.compute_loss_micro(reduction='none')
-                loss_grads = torch.autograd.grad(
+                loss_grads = torch.autograd.grad( # tuple of per-parameter gradients. each gradient is (batch_size, *p.size())
                     losses,
                     tuple(net.parameters()),
                     retain_graph=True,  # keep graph for next loss
@@ -589,12 +589,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                     grad_outputs=grad_outputs, 
                     is_grads_batched=True
                 )
-                loss_grads = loss_grads[0]
                 if penalty_weight > 0:
                     penalties = penalty_calculator.penalty(losses, reduction='none')
-                    print()
-                    print(losses.size(), penalties.size(), grad_outputs.size())
-                    penalty_grads = torch.autograd.grad(
+                    penalty_grads = torch.autograd.grad( # tuple of per-parameter gradients. each gradient is (batch_size, *p.size())
                         penalties,
                         tuple(net.parameters()),
                         retain_graph=True,  # keep graph for next loss
@@ -609,6 +606,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                     loss = losses.sum() / num_partitions / this_batch_size / gradients_accumulation_steps
                     # compute unnormalized gradients for this loss
                     # grad_outputs: one per sample
+                    print()
+                    print(loss_grads.size())
                     for p, g in zip(net.parameters(), loss_grads):
                         # Sum over outer batch dimension (grad_outputs first dim)
                         p.grad = g.sum(dim=0).detach().clone() * loss_keep_weight  # detach to avoid messing autograd
@@ -634,25 +633,18 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                 loss = losses[idxs].sum(dim=0)
                                 loss_aggregator[j,partition_num,env] += loss.detach() # unnormalized, before penalty scaler
 
-                                # compute unnormalized gradients for this loss
-                                print()
-                                print(f"idxs: {idxs.size()}, {idxs.dtype}, {type(idxs)}, {loss_grads.size()}, {idxs.max()}")
-                                grads = loss_grads[idxs] 
-                                
                                 # flatten and accumulate per parameter
                                 for _j, g in enumerate(grads):
-                                    loss_grads[_j][j,partition_num,env] += g.detach().view(-1) * loss_weight
+                                    loss_grads[_j][j,partition_num,env] += g[idxs].sum(dim=0).detach().view(-1) * loss_weight
 
                             # penalty
                             if penalty_weight > 0:
                                 penalty = penalties[idxs].sum(dim=0)
                                 penalty_aggregator[j,partition_num,env] += penalty.detach() # unnormalized penalty components before penalty scaler
 
-                                # compute gradients for this loss
-                                grads = loss_grads[idx] 
                                 # flatten and accumulate per parameter
                                 for _j, g in enumerate(grads):
-                                    penalty_grads[_j][j,partition_num,env] += g.detach().view(-1) * penalty_weight
+                                    penalty_grads[_j][j,partition_num,env] += g[idxs].sum(dim=0).detach().view(-1) * penalty_weight
                             # free memory of partition here
                         # end for env in range(args.env_num): 
                     # end for partition_num, partition in enumerate(partitions):
