@@ -257,10 +257,10 @@ class CE_IRMCalculator(IRMCalculator):
         device = self.loss_module.logits().device
         # one scalar (requires grad)
         batch_size = self.loss_module.logits(idxs=idxs).size(0)
-        s = torch.ones(batch_size, 1, device=device, requires_grad=True)  # one s per sample
+        s = torch.ones(batch_size, device=device, requires_grad=True)  # one s per sample
         # Compute g_i in a CE-specific way
 
-        losses = self.loss_module.compute_loss_micro(idxs=idxs, scale=s, temperature=self.irm_temp, **kwargs)
+        losses = self.loss_module.compute_loss_micro(idxs=idxs, scale=s.unsqueeze(1), temperature=self.irm_temp, **kwargs)
         grad_outputs = torch.ones(1, losses.size(0), device=device)
         print('penalty', losses.size(), s.size(), grad_outputs.size())
         g_i = torch.autograd.grad(
