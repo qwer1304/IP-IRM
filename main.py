@@ -609,7 +609,10 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                     # grad_outputs: one per sample
                     for p, g in zip(net.parameters(), loss_grads_samples):
                         # Sum over outer batch dimension (grad_outputs first dim)
-                        p.grad = g.squeeze(0).sum(dim=0).detach().clone() * loss_keep_weight  # detach to avoid messing autograd
+                        g1 = g.squeeze(0)
+                        g2 = g1.sum(dim=0)
+                        print("g", g.size(), g1.size(), g2.size())
+                        p.grad = g2.detach().clone() * loss_keep_weight  # detach to avoid messing autograd
                     loss_keep_aggregator += loss.detach() # before scaler
 
                 if not args.baseline:
