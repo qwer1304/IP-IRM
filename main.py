@@ -258,7 +258,7 @@ class CE_IRMCalculator(IRMCalculator):
         # one scalar (requires grad)
         s = torch.tensor(1.0, device=device, requires_grad=True)
         # Compute g_i in a CE-specific way
-        loss = self.loss_module.compute_loss_micro(idxs=idxs, scale=s, temperature=self.irm_temp)
+        loss = self.loss_module.compute_loss_micro(idxs=idxs, scale=s, temperature=self.irm_temp, **kwargs)
         g_i = torch.autograd.grad(loss, s, create_graph=True)[0]
         return g_i
 
@@ -580,7 +580,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                     is_grads_batched=True
                 )
                 if penalty_weight > 0:
-                    penalties = penalty_calculator.penalty(losses)
+                    penalties = penalty_calculator.penalty(losses, reduction='none')
                     print()
                     print(losses.size(), penalties.size(), grad_outputs.size())
                     penalty_grads = torch.autograd.grad(
