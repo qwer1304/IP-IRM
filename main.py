@@ -591,6 +591,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 )
                 print()
                 print("loss_grad_samples")
+                print(losses.size(0), grad_outputs.size(0))
                 print([x.size(0) for x in loss_grads_samples]) 
                 if penalty_weight > 0:
                     penalties = penalty_calculator.penalty(losses, reduction='none')
