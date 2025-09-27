@@ -268,7 +268,7 @@ class CE_IRMCalculator(IRMCalculator):
             grad_outputs=grad_outputs, 
             is_grads_batched=True
         )
-        return g_i
+        return g_i[0]
 
 class SimSiamIRMCalculator(IRMCalculator):
     def __init__(self, *args, **kwargs):
