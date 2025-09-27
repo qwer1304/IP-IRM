@@ -355,8 +355,8 @@ class MoCoLossModule(LossModule):
 
     def pre_micro_batch(self, pos, normalize=True, params=None):
         pos = pos.view(1)           # shape (1,)
-        pos_q = self.x1[pos].squeeze(0)
-        pos_k = self.x2[pos].squeeze(0)
+        pos_q = self.x1[pos]
+        pos_k = self.x2[pos]
 
         if params is None:
             _, out_q = self.net(pos_q)
@@ -431,8 +431,8 @@ class SimSiamLossModule(LossModule):
 
     def pre_micro_batch(self, x, normalize=True, params=None):
         x = x.view(1)           # shape (1,)
-        x1 = self.x1[x].squeeze(0)
-        x2 = self.x2[x].squeeze(0)
+        x1 = self.x1[x]
+        x2 = self.x2[x]
 
         if params is None:
             _, z1 = self.net(x1)
