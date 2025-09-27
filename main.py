@@ -287,6 +287,10 @@ class LossModule:
     def __init__(self, net, device='cuda', **kwargs):
         self.net = net
 
+    def augment_view(self, x, transform):
+        self.x1 = transform(x)
+        self.x2 = transform(x)
+
     def pre_batch(self, batch_data):
         pass
 
@@ -349,10 +353,9 @@ class MoCoLossModule(LossModule):
         self.this_batch_size = len(batch_data)
         self.queue.get(self.this_batch_size) # advance read pointer
 
-    def pre_micro_batch(self, pos, transform, normalize=True, params=None):
-        with torch.no_grad():  # generate pos_q and pos_k deterministically here
-            pos_q = transform(pos)
-            pos_k = transform(pos)        
+    def pre_micro_batch(self, pos, normalize=True, params=None):
+        pos_q = self.x1[pos]
+        pos_k = self.x2[pos]
 
         if params is None:
             _, out_q = self.net(pos_q)
@@ -425,10 +428,9 @@ class SimSiamLossModule(LossModule):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    def pre_micro_batch(self, pos, transform, normalize=True, params=None):
-        with torch.no_grad():
-            x1 = transform(pos)
-            x2 = transform(pos)
+    def pre_micro_batch(self, x, normalize=True, params=None):
+        x1 = self.x1[x]
+        x2 = self.x2[x]
 
         if params is None:
             _, z1 = self.net(x1)
@@ -597,11 +599,12 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 # vectorize over batch
                 params = tuple(net.parameters())     # tuple of tensors
                 # vectorize over batch dimension
+                loss_module.augment_view(batch_micro, transform=transform) # stores is self.x1, self.x2
                 (losses_grads, penalties_grads), (losses_values, penalties_values) = vmap(
                     gradval_fn,
                     in_dims=(None, 0, None, None),  # params fixed, batch batched, loss_module and penalty_calculator fixed
                     randomness="different"
-                )(params, batch_micro, loss_module, penalty_calculator, transform=transform)
+                )(params, batch_micro, loss_module, penalty_calculator)
 
                 # losses_values = per-sample losses
                 # losses_grads  = per-sample grads
