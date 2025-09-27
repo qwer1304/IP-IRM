@@ -581,7 +581,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 # compute unnormalized micro-batch loss
                 grad_outputs = torch.ones(1, batch_micro.size(0), device=device)
                 losses = loss_module.compute_loss_micro(reduction='none')
-                loss_grads = torch.autograd.grad( # tuple of per-parameter gradients. each gradient is (batch_size, *p.size())
+                loss_grads_samples = torch.autograd.grad( # tuple of per-parameter gradients. each gradient is (batch_size, *p.size())
                     losses,
                     tuple(net.parameters()),
                     retain_graph=True,  # keep graph for next loss
@@ -591,7 +591,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 )
                 if penalty_weight > 0:
                     penalties = penalty_calculator.penalty(losses, reduction='none')
-                    penalty_grads = torch.autograd.grad( # tuple of per-parameter gradients. each gradient is (batch_size, *p.size())
+                    penalty_grads_samples = torch.autograd.grad( # tuple of per-parameter gradients. each gradient is (batch_size, *p.size())
                         penalties,
                         tuple(net.parameters()),
                         retain_graph=True,  # keep graph for next loss
@@ -606,7 +606,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                     loss = losses.sum() / num_partitions / this_batch_size / gradients_accumulation_steps
                     # compute unnormalized gradients for this loss
                     # grad_outputs: one per sample
-                    for p, g in zip(net.parameters(), loss_grads):
+                    for p, g in zip(net.parameters(), loss_grads_samples):
                         # Sum over outer batch dimension (grad_outputs first dim)
                         p.grad = g.sum(dim=0).detach().clone() * loss_keep_weight  # detach to avoid messing autograd
                     loss_keep_aggregator += loss.detach() # before scaler
@@ -632,7 +632,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                 loss_aggregator[j,partition_num,env] += loss.detach() # unnormalized, before penalty scaler
 
                                 # flatten and accumulate per parameter
-                                for _j, g in enumerate(grads):
+                                for _j, g in enumerate(loss_grads_samples):
                                     loss_grads[_j][j,partition_num,env] += g[idxs].sum(dim=0).detach().view(-1) * loss_weight
 
                             # penalty
@@ -641,7 +641,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                 penalty_aggregator[j,partition_num,env] += penalty.detach() # unnormalized penalty components before penalty scaler
 
                                 # flatten and accumulate per parameter
-                                for _j, g in enumerate(grads):
+                                for _j, g in enumerate(penalty_grads_samples):
                                     penalty_grads[_j][j,partition_num,env] += g[idxs].sum(dim=0).detach().view(-1) * penalty_weight
                             # free memory of partition here
                         # end for env in range(args.env_num): 
@@ -650,13 +650,13 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 loss_module.prepare_for_free()
                 
                 # free memory of micro-batch
-                del batch_micro, indexs, losses, loss_gradients
+                del batch_micro, indexs, losses, loss_grads_samples
                 if (loss_weight > 0) or (penalty_weight > 0):
                     del grads, g
                     if loss_weight > 0:
                         del loss
                     if penalty_weight > 0:
-                        del penalty, penalties, penalty_grads
+                        del penalty, penalties, penalty_grads_samples
             # end for i in [i_ for i_ in range(len(mb_list)) if i_ % 2 == j]:
             torch.cuda.empty_cache()
         # end for j in range(idxs):
