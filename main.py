@@ -453,7 +453,6 @@ class SimSiamLossModule(LossModule):
         loss = 0.5 * (loss_dir1 + loss_dir2)
         return loss
 
-
 def loss_and_penalty_wrapper(params, batch, loss_module, penalty_calculator, **kwargs):
     # --- compute per-sample loss ---
     loss_module.pre_micro_batch(batch, params=params, **kwargs)
@@ -464,7 +463,7 @@ def loss_and_penalty_wrapper(params, batch, loss_module, penalty_calculator, **k
     # --- compute per-sample penalty ---
     penalties = penalty_calculator.penalty(losses, params=params, **kwargs)
     
-    return losses, penalties
+    return (losses, penalties)
 
 # ssl training with IP-IRM
 def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, **kwargs):
@@ -564,10 +563,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
 
     train_optimizer.zero_grad(set_to_none=True) # clear gradients at the beginning 
 
-    # 1. Wrapper for per-sample loss gradient
-    loss_grad_fn = grad_and_value(lambda p, b: loss_module.compute_loss_micro()) # returns (grads, loss)
-    # 2. Wrapper for per-sample penalty gradient
-    penalty_grad_fn = grad_and_value(lambda p, b: penalty_calculator.penalty(loss_module.compute_loss_micro(), params=p)) # returns (grads, penalty)
+    # Wrapper for per-sample loss gradient; grad_and_value computes gradients w.r.t params
+    gradval_fn = grad_and_value(loss_and_penalty_wrapper)
 
     for batch_index, data_env in enumerate(train_bar):
 
@@ -597,9 +594,11 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 # -----------------------
                 # vectorize over batch
                 params = tuple(net.parameters())     # tuple of tensors
-                # vectorize over batch
-                losses_grads, losses_values = vmap(loss_grad_fn, in_dims=(None, 0))(params, batch_micro)
-                penalties_grads, penalties_values = vmap(penalty_grad_fn, in_dims=(None, 0))(params, batch_micro)
+                # vectorize over batch dimension
+                (losses_grads, penalties_grads), (losses_values, penalties_values) = vmap(
+                    gradval_fn,
+                    in_dims=(None, 0, None, None)  # params fixed, batch batched, loss_module and penalty_calculator fixed
+                )(params, batch_micro, loss_module, penalty_calculator)
 
                 # losses_values = per-sample losses
                 # losses_grads  = per-sample grads
