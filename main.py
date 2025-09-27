@@ -261,7 +261,7 @@ class CE_IRMCalculator(IRMCalculator):
 
         losses = self.loss_module.compute_loss_micro(idxs=idxs, scale=s, temperature=self.irm_temp, **kwargs)
         print()
-        print(losses.size(), **kwargs)
+        print(losses.size(), [k,v for k,v in enumerate(kwargs)])
         grad_outputs = torch.ones(1, losses.size(0), device=device)
         g_i = torch.autograd.grad(
             losses,
