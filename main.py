@@ -589,6 +589,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                     grad_outputs=grad_outputs, 
                     is_grads_batched=True
                 )
+                print()
+                print("loss_grad_samples")
+                print([x.size(0) for x in loss_grads_samples]) 
                 if penalty_weight > 0:
                     penalties = penalty_calculator.penalty(losses, reduction='none')
                     penalty_grads_samples = torch.autograd.grad( # tuple of per-parameter gradients. each gradient is (batch_size, *p.size())
