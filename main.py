@@ -581,6 +581,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 )
                 if penalty_weight > 0:
                     penalties = penalty_calculator.penalty(losses)
+                    print()
+                    print(losses.size(), penalties.size(), grad_outputs.size())
                     penalty_grads = torch.autograd.grad(
                         penalties,
                         tuple(net.parameters()),
