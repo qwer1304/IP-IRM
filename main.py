@@ -256,7 +256,7 @@ class CE_IRMCalculator(IRMCalculator):
     def penalty(self, *args, idxs=None, **kwargs):
         device = self.loss_module.logits().device
         # one scalar (requires grad)
-        s = torch.tensor(1.0, device=device, requires_grad=True)
+        s = torch.ones(64, device=device, requires_grad=True)  # one s per sample
         # Compute g_i in a CE-specific way
 
         losses = self.loss_module.compute_loss_micro(idxs=idxs, scale=s, temperature=self.irm_temp, **kwargs)
@@ -394,7 +394,7 @@ class MoCoLossModule(LossModule):
             idxs = torch.arange(self._logits.size(0), device=self._logits.device)
         # sum over batch, per env handled by driver
         temperature = temperature or self.temperature
-        loss = F.cross_entropy(scale * self._logits[idxs] / temperature, self.labels[idxs], reduction=reduction)
+        loss = F.cross_entropy(scale[idxs] * self._logits[idxs] / temperature, self.labels[idxs], reduction=reduction)
         return loss
 
     def post_micro_batch(self):
