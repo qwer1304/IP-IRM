@@ -380,12 +380,12 @@ class MoCoLossModule(LossModule):
             idxs = torch.arange(self._logits.size(0), device=self._logits.device)
         return self.labels[idxs]
 
-    def compute_loss_micro(self, idxs=None, scale=1.0, temperature=None):
+    def compute_loss_micro(self, idxs=None, scale=1.0, temperature=None, reduction='sum'):
         if idxs is None:
             idxs = torch.arange(self._logits.size(0), device=self._logits.device)
         # sum over batch, per env handled by driver
         temperature = temperature or self.temperature
-        loss = F.cross_entropy(scale * self._logits[idxs] / temperature, self.labels[idxs], reduction='sum')
+        loss = F.cross_entropy(scale * self._logits[idxs] / temperature, self.labels[idxs], reduction=reduction)
         return loss
 
     def post_micro_batch(self):
@@ -427,7 +427,7 @@ class SimSiamLossModule(LossModule):
         p2 = self.net.module.predictor(z2)
         self.representations = (z1, z2, p1, p2)
 
-    def compute_loss_micro(self, idxs=None, scale=1.0):
+    def compute_loss_micro(self, idxs=None, scale=1.0, reduction='sum'):
         """
         Computes unnormalized loss of a micro-batch
         """
@@ -435,9 +435,11 @@ class SimSiamLossModule(LossModule):
         if idxs is None:
             idxs = torch.arange(z1.size(0), device=z1.device)
         # symmetric SimSiam loss (neg cosine, average two directions)
-        loss_dir1 = - F.cosine_similarity(scale * p1[idxs], z2[idxs].detach(), dim=-1).sum()
-        loss_dir2 = - F.cosine_similarity(scale * p2[idxs], z1[idxs].detach(), dim=-1).sum()
+        loss_dir1 = - F.cosine_similarity(scale * p1[idxs], z2[idxs].detach(), dim=-1)
+        loss_dir2 = - F.cosine_similarity(scale * p2[idxs], z1[idxs].detach(), dim=-1)
         loss = 0.5 * (loss_dir1 + loss_dir2)
+        if reduction == 'sum':
+            loss = loss.sum()
         return loss
 
 # ssl training with IP-IRM
@@ -567,13 +569,35 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 # -----------------------
 
                 # compute unnormalized micro-batch loss
-                loss = loss_module.compute_loss_micro()
+                losses = loss_module.compute_loss_micro(reduction='none')
+                grad_outputs = torch.ones(1,batch_micro.size(0))
+                loss_grads = torch.autograd.grad(
+                    losses,
+                    tuple(net.parameters()),
+                    retain_graph=True,  # keep graph for next loss
+                    allow_unused=True,
+                    grad_outputs=grad_outputs, 
+                    is_grads_batched=True
+                )
+                penalties = penalty_calculator.penalty(losses)
+                penalty_grads = torch.autograd.grad(
+                    penalties,
+                    tuple(net.parameters()),
+                    retain_graph=True,  # keep graph for next loss
+                    allow_unused=True,
+                    grad_outputs=grad_outputs, 
+                    is_grads_batched=True
+                )
 
                 if args.keep_cont and (loss_keep_weight > 0): # global loss @ 1st partition
                     # This could be done w/o the split into two halves, but this streamlines the code w/o any harm
                     # Here we know that losses are over the whole macro-batch, so we can normalize up-front
-                    loss = loss / num_partitions / this_batch_size / gradients_accumulation_steps
-                    (loss * loss_keep_weight).backward(retain_graph=True) # gradients must be multiplied by scaler
+                    loss = losses.sum() / num_partitions / this_batch_size / gradients_accumulation_steps
+                    # compute unnormalized gradients for this loss
+                    # grad_outputs: one per sample
+                    for p, g in zip(net.parameters(), loss_grads):
+                        # Sum over outer batch dimension (grad_outputs first dim)
+                        p.grad = g.sum(dim=0).detach().clone() * loss_keep_weight  # detach to avoid messing autograd
                     loss_keep_aggregator += loss.detach() # before scaler
 
                 if not args.baseline:
@@ -593,37 +617,26 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                             # -----------------------
                             if loss_weight > 0:
                                 # compute unnormalized micro-batch loss
-                                loss = loss_module.compute_loss_micro(idxs=idxs)
+                                loss = losses[idxs].sum(dim=0)
                                 loss_aggregator[j,partition_num,env] += loss.detach() # unnormalized, before penalty scaler
 
                                 # compute unnormalized gradients for this loss
-                                grads = torch.autograd.grad(
-                                    loss_weight * loss, # gradients must be multiplied by scaler
-                                    net.parameters(),
-                                    retain_graph=True,  # keep graph for next loss
-                                    allow_unused=True
-                                )
-
+                                grads = loss_grads[idx] 
+                                
                                 # flatten and accumulate per parameter
                                 for _j, g in enumerate(grads):
-                                    loss_grads[_j][j,partition_num,env] += g.detach().view(-1)
+                                    loss_grads[_j][j,partition_num,env] += g.detach().view(-1) * loss_weight
 
                             # penalty
                             if penalty_weight > 0:
-                                penalty = penalty_calculator.penalty(loss, idxs=idxs)
+                                penalty = penalties[idxs].sum(dim=0)
                                 penalty_aggregator[j,partition_num,env] += penalty.detach() # unnormalized penalty components before penalty scaler
 
                                 # compute gradients for this loss
-                                grads = torch.autograd.grad(
-                                    penalty_weight * penalty,  # unnormalized gradients must be multiplied by scaler
-                                    net.parameters(),
-                                    retain_graph=True,  # keep graph for next loss
-                                    allow_unused=True
-                                )
-
+                                grads = loss_grads[idx] 
                                 # flatten and accumulate per parameter
                                 for _j, g in enumerate(grads):
-                                    penalty_grads[_j][j,partition_num,env] += g.detach().view(-1)
+                                    penalty_grads[_j][j,partition_num,env] += g.detach().view(-1) * penalty_weight
                             # free memory of partition here
                         # end for env in range(args.env_num): 
                     # end for partition_num, partition in enumerate(partitions):
