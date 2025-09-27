@@ -606,8 +606,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                     loss = losses.sum() / num_partitions / this_batch_size / gradients_accumulation_steps
                     # compute unnormalized gradients for this loss
                     # grad_outputs: one per sample
-                    print()
-                    print(loss_grads.size())
                     for p, g in zip(net.parameters(), loss_grads):
                         # Sum over outer batch dimension (grad_outputs first dim)
                         p.grad = g.sum(dim=0).detach().clone() * loss_keep_weight  # detach to avoid messing autograd
