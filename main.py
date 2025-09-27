@@ -22,9 +22,7 @@ import traceback
 import sys
 import time
 
-from functorch import vmap, grad, grad_and_value
-from torch.func import functional_call
-
+from torch.func import functional_call, vmap, grad, grad_and_value
 
 def get_negative_mask(batch_size):
     negative_mask = torch.ones((batch_size, 2 * batch_size), dtype=bool)
