@@ -22,6 +22,10 @@ import traceback
 import sys
 import time
 
+from functorch import vmap, grad, grad_and_value
+from torch.func import functional_call
+
+
 def get_negative_mask(batch_size):
     negative_mask = torch.ones((batch_size, 2 * batch_size), dtype=bool)
     for i in range(batch_size):
@@ -347,17 +351,22 @@ class MoCoLossModule(LossModule):
         self.this_batch_size = len(batch_data)
         self.queue.get(self.this_batch_size) # advance read pointer
 
-    def pre_micro_batch(self, pos, transform, normalize=True):
+    def pre_micro_batch(self, pos, transform, normalize=True, params=None):
         pos_q = transform(pos)
         pos_k = transform(pos)
 
-        _, out_q = self.net(pos_q)
+        if params is None:
+            _, out_q = self.net(pos_q)
+        else:
+            _, out_q = functional_call(self.net, params, (pos_q,))
         if normalize:
             out_q = F.normalize(out_q, dim=1)
+
         with torch.no_grad():
             _, out_k = self.net_momentum(pos_k)
             if normalize:
                 out_k = F.normalize(out_k, dim=1)
+
         self.out_k = out_k # save in state for queue update at end of batch
         
         l_pos = torch.sum(out_q * out_k, dim=1, keepdim=True)
@@ -417,15 +426,21 @@ class SimSiamLossModule(LossModule):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    def pre_micro_batch(self, pos, transform, normalize=True):
+    def pre_micro_batch(self, pos, transform, normalize=True, params=None):
         x1 = transform(pos)
         x2 = transform(pos)
 
-        _, z1 = self.net(x1)
-        _, z2 = self.net(x2)
-        p1 = self.net.module.predictor(z1)
-        p2 = self.net.module.predictor(z2)
-        self.representations = (z1, z2, p1, p2)
+        if params is None:
+            _, z1 = self.net(x1)
+            _, z2 = self.net(x2)
+            p1 = self.net.module.predictor(z1)
+            p2 = self.net.module.predictor(z2)
+        else:
+            _, z1 = functional_call(self.net, params, (x1,))
+            _, z2 = functional_call(self.net, params, (x2,))
+            p1 = functional_call(self.net.module.predictor, params, (z1,))
+            p2 = functional_call(self.net.module.predictor, params, (z2,))
+            self.representations = (z1, z2, p1, p2)
 
     def compute_loss_micro(self, idxs=None, scale=1.0):
         """
@@ -439,6 +454,19 @@ class SimSiamLossModule(LossModule):
         loss_dir2 = - F.cosine_similarity(scale * p2[idxs], z1[idxs].detach(), dim=-1).sum()
         loss = 0.5 * (loss_dir1 + loss_dir2)
         return loss
+
+
+def loss_and_penalty_wrapper(params, batch, loss_module, penalty_calculator, **kwargs):
+    # --- compute per-sample loss ---
+    loss_module.pre_micro_batch(batch, params=params, **kwargs)
+    
+    # per-sample losses
+    losses = loss_module.compute_loss_micro()
+    
+    # --- compute per-sample penalty ---
+    penalties = penalty_calculator.penalty(losses, params=params, **kwargs)
+    
+    return losses, penalties
 
 # ssl training with IP-IRM
 def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, **kwargs):
@@ -538,6 +566,11 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
 
     train_optimizer.zero_grad(set_to_none=True) # clear gradients at the beginning 
 
+    # 1. Wrapper for per-sample loss gradient
+    loss_grad_fn = grad_and_value(lambda p, b: loss_module.compute_loss_micro()) # returns (grads, loss)
+    # 2. Wrapper for per-sample penalty gradient
+    penalty_grad_fn = grad_and_value(lambda p, b: penalty_calculator.penalty(loss_module.compute_loss_micro(), params=p)) # returns (grads, penalty)
+
     for batch_index, data_env in enumerate(train_bar):
 
         data_batch, indexs_batch = data_env[0], data_env[-1] # 'data_batch' is an batch of images, 'indexs_batch' is their corresponding indices 
@@ -560,20 +593,42 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                     MoCo:    generate two views, get their embeddings from respective encoders, normalize them, etc
                     SimSiam: generate two views, get their projections and predictions, etc
                 """
-                loss_module.pre_micro_batch(batch_micro, transform=transform, normalize=True)
 
                 # -----------------------
                 # SSL
                 # -----------------------
+                # vectorize over batch
+                params = tuple(net.parameters())     # tuple of tensors
+                # vectorize over batch
+                losses_grads, losses_values = vmap(loss_grad_fn, in_dims=(None, 0))(params, batch_micro)
+                penalties_grads, penalties_values = vmap(penalty_grad_fn, in_dims=(None, 0))(params, batch_micro)
+
+                # losses_values = per-sample losses
+                # losses_grads  = per-sample grads
+                # penalties_values = per-sample penalties
+                # penalties_grads = per-sample penalty grads
+
+                """
+                loss_module.pre_micro_batch(batch_micro, transform=transform, normalize=True)
 
                 # compute unnormalized micro-batch loss
                 loss = loss_module.compute_loss_micro()
-
+                """
+                
                 if args.keep_cont and (loss_keep_weight > 0): # global loss @ 1st partition
                     # This could be done w/o the split into two halves, but this streamlines the code w/o any harm
                     # Here we know that losses are over the whole macro-batch, so we can normalize up-front
+                    loss = losses_values.sum()
                     loss = loss / num_partitions / this_batch_size / gradients_accumulation_steps
-                    (loss * loss_keep_weight).backward(retain_graph=True) # gradients must be multiplied by scaler
+                    
+                    # handle gradients
+                    # sum over batch
+                    grads_sum = {k: g.sum(dim=0) * loss_keep_weight for k, g in losses_grads.items()}
+                    # copy into net
+                    for name, param in net.named_parameters():
+                        param.grad = grads_sum[name].clone()                   
+                    #(loss * loss_keep_weight).backward(retain_graph=True) # gradients must be multiplied by scaler
+
                     loss_keep_aggregator += loss.detach() # before scaler
 
                 if not args.baseline:
@@ -593,16 +648,20 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                             # -----------------------
                             if loss_weight > 0:
                                 # compute unnormalized micro-batch loss
-                                loss = loss_module.compute_loss_micro(idxs=idxs)
+                                #loss = loss_module.compute_loss_micro(idxs=idxs)
+                                loss = losses_values[idxs].sum()
                                 loss_aggregator[j,partition_num,env] += loss.detach() # unnormalized, before penalty scaler
 
                                 # compute unnormalized gradients for this loss
+                                grads = losses_grads[idxs].sum(dim=0) * loss_weight 
+                                """
                                 grads = torch.autograd.grad(
                                     loss_weight * loss, # gradients must be multiplied by scaler
                                     net.parameters(),
                                     retain_graph=True,  # keep graph for next loss
                                     allow_unused=True
                                 )
+                                """
 
                                 # flatten and accumulate per parameter
                                 for _j, g in enumerate(grads):
@@ -610,16 +669,20 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
 
                             # penalty
                             if penalty_weight > 0:
-                                penalty = penalty_calculator.penalty(loss, idxs=idxs)
+                                penalty = penalties_values[idxs].sum()
+                                #penalty = penalty_calculator.penalty(loss, idxs=idxs)
                                 penalty_aggregator[j,partition_num,env] += penalty.detach() # unnormalized penalty components before penalty scaler
 
                                 # compute gradients for this loss
+                                grads = penalties_grads[idxs].sum(dim=0) * penalty_weight 
+                                """
                                 grads = torch.autograd.grad(
                                     penalty_weight * penalty,  # unnormalized gradients must be multiplied by scaler
                                     net.parameters(),
                                     retain_graph=True,  # keep graph for next loss
                                     allow_unused=True
                                 )
+                                """
 
                                 # flatten and accumulate per parameter
                                 for _j, g in enumerate(grads):
@@ -631,13 +694,14 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 loss_module.prepare_for_free()
                 
                 # free memory of micro-batch
-                del batch_micro, indexs
+                del batch_micro, indexs, losses_grads, losses_values
+
                 if (loss_weight > 0) or (penalty_weight > 0):
                     del grads, g
                     if loss_weight > 0:
                         del loss
                     if penalty_weight > 0:
-                        del penalty
+                        del penalty, penalties_grads, penalties_values 
             # end for i in [i_ for i_ in range(len(mb_list)) if i_ % 2 == j]:
             torch.cuda.empty_cache()
         # end for j in range(idxs):
