@@ -633,6 +633,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
 
                                 # flatten and accumulate per parameter
                                 for _j, g in enumerate(loss_grads_samples):
+                                    print()
+                                    print("loss_grads_samples", _j, g.size(0), idxs.max())
                                     loss_grads[_j][j,partition_num,env] += g[idxs].sum(dim=0).detach().view(-1) * loss_weight
 
                             # penalty
