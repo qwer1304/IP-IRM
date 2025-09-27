@@ -258,8 +258,16 @@ class CE_IRMCalculator(IRMCalculator):
         # one scalar (requires grad)
         s = torch.tensor(1.0, device=device, requires_grad=True)
         # Compute g_i in a CE-specific way
-        loss = self.loss_module.compute_loss_micro(idxs=idxs, scale=s, temperature=self.irm_temp, **kwargs)
-        g_i = torch.autograd.grad(loss, s, create_graph=True)[0]
+
+        grad_outputs = torch.ones(1, batch_micro.size(0), device=device)
+        losses = self.loss_module.compute_loss_micro(idxs=idxs, scale=s, temperature=self.irm_temp, **kwargs)
+        g_i = torch.autograd.grad(
+            losses,
+            s,
+            create_graph=True,  # keep graph for next loss
+            grad_outputs=grad_outputs, 
+            is_grads_batched=True
+        )
         return g_i
 
 class SimSiamIRMCalculator(IRMCalculator):
