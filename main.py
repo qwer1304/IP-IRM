@@ -270,8 +270,6 @@ class CE_IRMCalculator(IRMCalculator):
             is_grads_batched=True
         )
         g_i = g_i[0].squeeze(0)
-        print()
-        print(f"g_i: {len(g_i)}, {g_i.size()}")
         return g_i
 
 class SimSiamIRMCalculator(IRMCalculator):
@@ -636,7 +634,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                 loss_aggregator[j,partition_num,env] += loss.detach() # unnormalized, before penalty scaler
 
                                 # compute unnormalized gradients for this loss
-                                grads = loss_grads[idx] 
+                                grads = loss_grads[idxs] 
                                 
                                 # flatten and accumulate per parameter
                                 for _j, g in enumerate(grads):
