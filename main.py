@@ -598,7 +598,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 (losses_grads, penalties_grads), (losses_values, penalties_values) = vmap(
                     gradval_fn,
                     in_dims=(None, 0, None, None)  # params fixed, batch batched, loss_module and penalty_calculator fixed
-                )(params, batch_micro, loss_module, penalty_calculator)
+                )(params, batch_micro, loss_module, penalty_calculator, transform=transform)
 
                 # losses_values = per-sample losses
                 # losses_grads  = per-sample grads
