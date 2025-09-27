@@ -354,8 +354,9 @@ class MoCoLossModule(LossModule):
         self.queue.get(self.this_batch_size) # advance read pointer
 
     def pre_micro_batch(self, pos, normalize=True, params=None):
-        pos_q = self.x1[pos]
-        pos_k = self.x2[pos]
+        pos = pos.view(1)           # shape (1,)
+        pos_q = self.x1[pos].squeeze(0)
+        pos_k = self.x2[pos].squeeze(0)
 
         if params is None:
             _, out_q = self.net(pos_q)
@@ -429,8 +430,9 @@ class SimSiamLossModule(LossModule):
         super().__init__(*args, **kwargs)
 
     def pre_micro_batch(self, x, normalize=True, params=None):
-        x1 = self.x1[x]
-        x2 = self.x2[x]
+        x = x.view(1)           # shape (1,)
+        x1 = self.x1[x].squeeze(0)
+        x2 = self.x2[x].squeeze(0)
 
         if params is None:
             _, z1 = self.net(x1)
