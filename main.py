@@ -589,6 +589,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                     grad_outputs=grad_outputs, 
                     is_grads_batched=True
                 )
+                loss_grads = loss_grads[0]
                 if penalty_weight > 0:
                     penalties = penalty_calculator.penalty(losses, reduction='none')
                     print()
