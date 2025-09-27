@@ -634,6 +634,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                 loss_aggregator[j,partition_num,env] += loss.detach() # unnormalized, before penalty scaler
 
                                 # compute unnormalized gradients for this loss
+                                print()
+                                print(f"idxs: {idxs.size()}, {idxs.dtype}, {type(idxs)}, {grads.size()}")
                                 grads = loss_grads[idxs] 
                                 
                                 # flatten and accumulate per parameter
