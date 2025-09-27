@@ -459,7 +459,7 @@ class SimSiamLossModule(LossModule):
 
 def loss_and_penalty_wrapper(params, batch, loss_module, penalty_calculator, **kwargs):
     # --- compute per-sample loss ---
-    loss_module.pre_micro_batch(batch, params=params, **kwargs)
+    loss_module.pre_micro_batch(batch.long(), params=params, **kwargs)
     
     # per-sample losses
     losses = loss_module.compute_loss_micro()
@@ -604,7 +604,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                     gradval_fn,
                     in_dims=(None, 0, None, None),  # params fixed, batch batched, loss_module and penalty_calculator fixed
                     randomness="different"
-                )(params, batch_micro, loss_module, penalty_calculator)
+                )(params, torch.arange(batch_micro.size(0)), loss_module, penalty_calculator)
 
                 # losses_values = per-sample losses
                 # losses_grads  = per-sample grads
