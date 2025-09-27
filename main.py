@@ -569,7 +569,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 # -----------------------
 
                 # compute unnormalized micro-batch loss
-                grad_outputs = torch.ones(1,batch_micro.size(0))
+                grad_outputs = torch.ones(1, batch_micro.size(0), device=device)
                 losses = loss_module.compute_loss_micro(reduction='none')
                 loss_grads = torch.autograd.grad(
                     losses,
