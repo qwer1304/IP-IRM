@@ -260,8 +260,6 @@ class CE_IRMCalculator(IRMCalculator):
         # Compute g_i in a CE-specific way
 
         losses = self.loss_module.compute_loss_micro(idxs=idxs, scale=s, temperature=self.irm_temp, **kwargs)
-        print()
-        print(losses.size(), kwargs['reduction'])
         grad_outputs = torch.ones(1, losses.size(0), device=device)
         g_i = torch.autograd.grad(
             losses,
@@ -270,7 +268,7 @@ class CE_IRMCalculator(IRMCalculator):
             grad_outputs=grad_outputs, 
             is_grads_batched=True
         )
-        print(type(g_i), g_i[0].size(0))
+        print(type(g_i), g_i)
         return g_i[0]
 
 class SimSiamIRMCalculator(IRMCalculator):
