@@ -259,8 +259,8 @@ class CE_IRMCalculator(IRMCalculator):
         s = torch.tensor(1.0, device=device, requires_grad=True)
         # Compute g_i in a CE-specific way
 
-        grad_outputs = torch.ones(1, batch_micro.size(0), device=device)
         losses = self.loss_module.compute_loss_micro(idxs=idxs, scale=s, temperature=self.irm_temp, **kwargs)
+        grad_outputs = torch.ones(1, losses.size(0), device=device)
         g_i = torch.autograd.grad(
             losses,
             s,
