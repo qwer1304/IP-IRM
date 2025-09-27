@@ -350,8 +350,9 @@ class MoCoLossModule(LossModule):
         self.queue.get(self.this_batch_size) # advance read pointer
 
     def pre_micro_batch(self, pos, transform, normalize=True, params=None):
-        pos_q = transform(pos)
-        pos_k = transform(pos)
+        with torch.no_grad():  # generate pos_q and pos_k deterministically here
+            pos_q = transform(pos)
+            pos_k = transform(pos)        
 
         if params is None:
             _, out_q = self.net(pos_q)
@@ -425,8 +426,9 @@ class SimSiamLossModule(LossModule):
         super().__init__(*args, **kwargs)
 
     def pre_micro_batch(self, pos, transform, normalize=True, params=None):
-        x1 = transform(pos)
-        x2 = transform(pos)
+        with torch.no_grad():
+            x1 = transform(pos)
+            x2 = transform(pos)
 
         if params is None:
             _, z1 = self.net(x1)
