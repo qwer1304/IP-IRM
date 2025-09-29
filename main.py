@@ -218,12 +218,11 @@ class IRMCalculator(BaseCalculator):
         # dIRM/dTheta = d(gs1 * gs2)/dTheta = dgs1/dTheta * gs2 + gs1 * dgs2/dTheta
 
         num_partitions, num_env = szs.size()
-        num_halves              = 2
-
-        for i in range(num_halves):
-            j = (i + num_halves + 1) % num_halves
-            x = (  (grads[i] / szs[i, ..., None])
-                 * penalties[j, ..., None]
+        
+        for i in range(2):
+            j = 1 if (i == 0) else 0
+            x = (  (grads[..., i::2] / szs[..., i::2, None])
+                 * penalties[..., j::2, None]
                  / num_env 
                 ).sum(dim=(0,1)) / num_partitions  # shape (param_numel,)
             if i == 0:
