@@ -718,12 +718,15 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             penalty_env = penalty_calculator.penalty_finalize(penalty_aggregator, splits_sz) # normalized per env
             for pind, p in enumerate(net.parameters()):
                 dPenalty_dTheta_env = penalty_grads[pind]  # per env sum of dPenalty/dTheta over macro-batch per parameter, shape (I,J,K,param_numel)
+                xx = penalty_calculator.penalty_finalize(penalty_aggregator, splits_sz, keep_halves=True)
                 total_grad_flat     = \
                     penalty_calculator.penalty_grads_finalize(
                         dPenalty_dTheta_env, 
-                        penalty_calculator.penalty_finalize(penalty_aggregator, splits_sz, keep_halves=True), 
+                        xx, 
                         splits_sz
-                    )                
+                    ) 
+                print()
+                print(dPenalty_dTheta_env.size(), xx.size(), total_grad_flat.size())
                 p.grad             += total_grad_flat.view(p.shape)  # reshape back to parameter shape
                 grads.append(total_grad_flat.detach().clone())
             penalty_grads_flat = torch.cat([g for g in grads if g is not None])
