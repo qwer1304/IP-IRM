@@ -649,6 +649,10 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 # compute all needed grads
                 # 'grads_all' is a tuple w/ an entry per parameter.
                 # each entry is a tensor w/ 1st dim = 'grad_outputs.size(0)' and other dims matching the parameter
+                print()
+                print(f"autograd: diff_this {differentiate_this.size()}, grad_outputs {grad_outputs.size()}," + 
+                      f" num_samples {num_samples}, iprm_reps {num_iprm_repeates}, base_reps {num_baseline_repeates}, reps {num_repeats}, num_grads {num_grads}")
+
                 grads_all = torch.autograd.grad(
                     differentiate_this,
                     tuple(net.parameters()),
