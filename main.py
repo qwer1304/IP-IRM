@@ -678,7 +678,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 if not args.baseline:
                     for _split in range((num_grads - num_baseline_repeates) // num_split_repeates):
                         partition_num, env = _split // args.env_num, _split % args.env_num 
-                        linear_index = _split
+                        linear_idx = _split
                         if loss_weight > 0:
                             # flatten and accumulate per parameter
                             # 'grads_all' is a tuple w/ an entry per parameter.
@@ -689,8 +689,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                 grads = g[linear_idx]
                                 loss_grads[_j][j,partition_num,env] += grads.detach().view(-1)
                             linear_idx += num_partitions * args.env_num # prepare for penalty grads
-                        print()
-                        print(_split, linear_idx, num_partitions, args.env_num, num_split_repeates)
                         # penalty
                         if penalty_weight > 0:
                             # flatten and accumulate per parameter
