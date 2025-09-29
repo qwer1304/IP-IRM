@@ -660,27 +660,35 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 )
 
                 if args.keep_cont and (loss_keep_weight > 0): # global loss @ 1st partition
+                    # 'grads_all' is a tuple w/ an entry per parameter.
+                    # each entry is a tensor w/ 1st dim = 'grad_outputs.size(0)' and other dims matching the parameter
                     for p, g in zip(net.parameters(), grads_all):
                         grads = g[-1] # loss_cont is always the last in the batch
+                        if g is None:
+                            continue
                         p.grad += grads.detach().clone() 
 
                 if not args.baseline:
-                    linear_idx = torch.arange(partition_num * args.env_num, dtype=torch.int, device=device)
-                    for _split in range(num_split_repeates):
-                        partition_num, env = _split // args.env_num, _split % args.env_num
-                        offset = 0
+                    for _split in range((num_grads - num_baseline_repeates) // num_split_repeates):
+                        partition_num, env = _split // args.env_num, _split % args.env_num 
+                        linear_index = _split
                         if loss_weight > 0:
                             # flatten and accumulate per parameter
+                            # 'grads_all' is a tuple w/ an entry per parameter.
+                            # each entry is a tensor w/ 1st dim = 'grad_outputs.size(0)' and other dims matching the parameter
                             for _j, g in enumerate(grads_all):
-                                grads = g[offset:offset+_split]
+                                if g is None:
+                                    continue
+                                grads = g[linear_idx]
                                 loss_grads[_j][j,partition_num,env] += grads.detach().view(-1)
-                                offset += num_samples
+                            linear_idx += num_partitions * args.env_num # prepare for penalty grads
                         # penalty
                         if penalty_weight > 0:
                             # flatten and accumulate per parameter
                             for _j, g in enumerate(penalty_grads_samples):
-                                grads = g[offset:offset+_split]
-                                penalty_grads[_j][j,partition_num,env] += grads.detach().view(-1)
+                                if g is not None:
+                                    grads = g[linear_idx]
+                                    penalty_grads[_j][j,partition_num,env] += grads.detach().view(-1)
                 # end if not args.baseline:
                 loss_module.post_micro_batch()
                 loss_module.prepare_for_free()
