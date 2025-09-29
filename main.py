@@ -125,6 +125,10 @@ class BaseCalculator:
     def penalty_grads_finalize(self, grads, penalties, szs):
         raise NotImplementedError
 
+    @staticmethod
+    def num_halves():
+        raise NotImplementedError
+
 class VRExCalculator(BaseCalculator):
     """
     Class for VREx calculation.
@@ -146,23 +150,28 @@ class VRExCalculator(BaseCalculator):
 
     def penalty_grads_finalize(self, grads, penalties, szs):
         """
-        Given dPenalty/dTheta, Penalty per env and their sizes calculate the combined gradient.
+        Given dPenalty/dTheta, Penalty per half, per env and their sizes calculate the combined gradient.
         dV/dTheta = 2/E*sum_e((Loss_e - mu) * grad_e), where mu = 1/E*sum_e(Loss_e) 
-            grads:      dPenalty/dTheta per per env, unnormalized (num_partitions,num_envs,parnums)
-            penalties:  Penalty per env, normalized per env, (num_partitions,num_envs)
-            szs:        sizes of environments
+            grads:      dPenalty/dTheta per half, per env, unnormalized (1,num_partitions,num_envs,parnums)
+            penalties:  Penalty per half, normalized per env, (1,num_partitions,num_envs)
+            szs:        sizes of halves of environments
         """
         
-        num_partitions, num_env    = szs.size()
-        mu      = penalties.mean(dim=1, keepdim=True) # (num_partitions,1)
+        num_env    = szs.size(2)
+        num_partitions = szs.size(1)
+        mu      = penalties.mean(dim=[0,2], keepdim=True) # (1,num_partitions,1)
         x       = (2 * (penalties[..., None] - mu[..., None]) 
                      * (grads / szs[..., None]) 
                      / num_env
-                  ).sum(dim=(0,1)) / num_partitions # (parnums,)
+                  ).sum(dim=(0,1,2)) / num_partitions # (parnums,)
             
         total_grad_flat = x
         return total_grad_flat
 
+    @staticmethod
+    def num_halves():
+        return 1
+        
 # ---------------------------
 # Base IRM Calculator
 # ---------------------------
@@ -199,12 +208,11 @@ class IRMCalculator(BaseCalculator):
         raise NotImplementedError
         
     def penalty_finalize(self, penalties, szs, keep_halves=False):
-        L = (penalties.size(-1) // 2) * 2 # even
         if not keep_halves:
-            return penalties[..., :L:2] / szs[..., :L:2] * penalties[..., 1:L:2] / szs[..., 1:L:2] # normalized per env for macro-batch 
+            return (penalties[0] / szs[0]) * (penalties[1] / szs[1])  # normalized per env for macro-batch 
         else:
-            penalties[..., ::2] /= szs[..., ::2]
-            penalties[..., 1::2] /= szs[..., 1::2]
+            penalties[0] /= szs[0]
+            penalties[1] /= szs[1]
             return penalties
 
     def penalty_grads_finalize(self, grads, penalties, szs):
@@ -217,12 +225,14 @@ class IRMCalculator(BaseCalculator):
         # IRM = gs1 * gs2, where gs1 and gs2 are gradients w.r.t. scaler of mean CE of halves of sample in a batch
         # dIRM/dTheta = d(gs1 * gs2)/dTheta = dgs1/dTheta * gs2 + gs1 * dgs2/dTheta
 
-        num_partitions, num_env = szs.size()
-        
-        for i in range(2):
-            j = 1 if (i == 0) else 0
-            x = (  (grads[..., i::2] / szs[..., i::2, None])
-                 * penalties[..., j::2, None]
+        num_halves = self.num_halves()
+        num_env    = szs.size(2)
+        num_partitions = szs.size(1)
+
+        for i in range(num_halves):
+            j = (i + num_halves + 1) % num_halves
+            x = (  (grads[i] / szs[i, ..., None])
+                 * penalties[j, ..., None]
                  / num_env 
                 ).sum(dim=(0,1)) / num_partitions  # shape (param_numel,)
             if i == 0:
@@ -231,6 +241,10 @@ class IRMCalculator(BaseCalculator):
                 total_grad_flat += x
 
         return total_grad_flat
+
+    @staticmethod
+    def num_halves():
+        return 2
 
 # ---------------------------
 # CE-based IRM (for MoCo)
@@ -307,15 +321,15 @@ class LossModule:
 
     def loss_grads_finalize(self, grads, losses, szs):
         """
-            grads:  Penalty per env, unnormalized per env
-            losses: Losses per env, normalized per env
-            szs:    sizes of environments
+            grads:  Penalty per half, unnormalized per env
+            losses: Losses per half, normalized per env
+            szs:    sizes of halves of environments
         """
-        num_env = prod(szs.size())
+        num_env = prod(szs.size()[1:])
         total_grad_flat  = (  grads  
                             / szs[..., None] 
                             / num_env
-                           ).sum(dim=(0,1))        # shape (param_numel,)
+                           ).sum(dim=(0,1,2))        # shape (param_numel,)
         return total_grad_flat
 
 # ---------------------------
@@ -518,11 +532,12 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         raise ValueError(f"Unknown penalty_type: {penalty_type}")
 
     penalty_calculator   = PenaltyCalculator(loss_module, irm_temp=args.irm_temp, debug=args.debug, **kwargs)
+    num_halves  = PenaltyCalculator.num_halves()
 
-    loss_aggregator      = torch.zeros((num_partitions, args.env_num), dtype=torch.float, device=device) 
-    penalty_aggregator   = torch.zeros((num_partitions, args.env_num), dtype=torch.float, device=device) 
+    loss_aggregator      = torch.zeros((num_halves, num_partitions, args.env_num), dtype=torch.float, device=device) 
+    penalty_aggregator   = torch.zeros((num_halves, num_partitions, args.env_num), dtype=torch.float, device=device) 
     loss_keep_aggregator = torch.tensor(0, dtype=torch.float, device=device) # scalar
-    splits_sz            = torch.zeros((num_partitions, args.env_num), dtype=torch.float, device=device) 
+    halves_sz            = torch.zeros((num_halves, num_partitions, args.env_num), dtype=torch.float, device=device) 
     # One buffer per parameter
     loss_grads = [  # dLoss / dTheta
         torch.zeros((*loss_aggregator.shape, p.numel()), dtype=p.dtype, device=p.device)
@@ -547,150 +562,154 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         # -----------------------
         mb_list = list(microbatches(data_batch, indexs_batch, gpu_batch_size))
 
-        for i, (batch_micro, indexs) in enumerate(mb_list): # loop over micro-batches
-            batch_micro         = batch_micro.cuda(non_blocking=True)
-            indexs              = indexs.cuda(non_blocking=True)
+        for j in range(num_halves): # over halves of micro-batches
+            for i in [i_ for i_ in range(len(mb_list)) if i_ % num_halves == j]: # loop over micro-batches
+                batch_micro, indexs = mb_list[i]
+                batch_micro         = batch_micro.cuda(non_blocking=True)
+                indexs              = indexs.cuda(non_blocking=True)
 
-            num_samples           = len(batch_micro)
-            num_split_repeates    = int(not args.baseline) * (int(loss_weight>0) + int(penalty_weight>0))
-            num_baseline_repeates = int(loss_keep_weight>0) * int(args.keep_cont)                                  
-            num_repeats           = num_split_repeates + num_baseline_repeates
-            num_grads             = num_partitions * args.env_num * num_split_repeates + num_baseline_repeates
-            grad_outputs          = torch.zeros((num_grads, num_samples*num_repeats), dtype=torch.float, device=device) 
-            differentiate_this    = []
+                num_samples           = len(batch_micro)
+                num_split_repeates    = int(not args.baseline) * (int(loss_weight>0) + int(penalty_weight>0))
+                num_baseline_repeates = int(loss_keep_weight>0) * int(args.keep_cont)                                  
+                num_repeats           = num_split_repeates + num_baseline_repeates
+                num_grads             = num_partitions * args.env_num * num_split_repeates + num_baseline_repeates
+                grad_outputs          = torch.zeros((num_grads, num_samples*num_repeats), dtype=torch.float, device=device) 
+                differentiate_this    = []
 
-            """
-            prepare for micro-batch in loss-sepcific way:
-                MoCo:    generate two views, get their embeddings from respective encoders, normalize them, etc
-                SimSiam: generate two views, get their projections and predictions, etc
-            """
-            loss_module.pre_micro_batch(batch_micro, transform=transform, normalize=True)
+                """
+                prepare for micro-batch in loss-sepcific way:
+                    MoCo:    generate two views, get their embeddings from respective encoders, normalize them, etc
+                    SimSiam: generate two views, get their projections and predictions, etc
+                """
+                loss_module.pre_micro_batch(batch_micro, transform=transform, normalize=True)
 
-            # -----------------------
-            # SSL
-            # -----------------------
+                # -----------------------
+                # SSL
+                # -----------------------
 
-            # compute unnormalized micro-batch loss
-            losses_samples = loss_module.compute_loss_micro(reduction='none')
-            if loss_weight > 0:
-                differentiate_this.append(losses_samples)
-            if penalty_weight > 0:
-                penalties_samples = penalty_calculator.penalty(losses_samples, reduction='none')
-                differentiate_this.append(penalties_samples)
+                # compute unnormalized micro-batch loss
+                losses_samples = loss_module.compute_loss_micro(reduction='none')
+                if loss_weight > 0:
+                    differentiate_this.append(losses_samples)
+                if penalty_weight > 0:
+                    penalties_samples = penalty_calculator.penalty(losses_samples, reduction='none')
+                    differentiate_this.append(penalties_samples)
 
-            if not args.baseline:
-                for partition_num, partition in enumerate(partitions):
-                    for env in range(args.env_num):
+                if not args.baseline:
+                    for partition_num, partition in enumerate(partitions):
+                        for env in range(args.env_num):
 
-                        # split mb: 'idxs' are indices into 'indexs' that correspond to domain 'env' in 'partition'
-                        idxs = utils.assign_idxs(indexs, partition, env)
+                            # split mb: 'idxs' are indices into 'indexs' that correspond to domain 'env' in 'partition'
+                            idxs = utils.assign_idxs(indexs, partition, env)
 
-                        if (N := len(idxs)) == 0:
-                            continue
+                            if (N := len(idxs)) == 0:
+                                continue
 
-                        splits_sz[partition_num,env] += N # update number of elements in environment
+                            halves_sz[j,partition_num,env] += N # update number of elements in environment
+                            
+                            # losses
+                            if loss_weight > 0:
+                                # compute unnormalized micro-batch loss
+                                loss = losses_samples[idxs].sum(dim=0)
+                                loss_aggregator[j,partition_num,env] += loss.detach() # unnormalized, before penalty scaler
+                            if penalty_weight > 0:
+                                penalty = penalties_samples[idxs].sum(dim=0)
+                                penalty_aggregator[j,partition_num,env] += penalty.detach() # unnormalized penalty components before penalty scaler
 
-                        # losses
-                        if loss_weight > 0:
-                            # compute unnormalized micro-batch loss
-                            loss = losses_samples[idxs].sum(dim=0)
-                            loss_aggregator[partition_num,env] += loss.detach() # unnormalized, before penalty scaler
-                        if penalty_weight > 0:
-                            penalty = penalties_samples[idxs].sum(dim=0)
-                            penalty_aggregator[partition_num,env] += penalty.detach() # unnormalized penalty components before penalty scaler
+                            # gradients
+                            linear_idx = torch.tensor(partition_num*args.env_num + env, dtype=torch.int, device=device)
+                            offset = 0
+                            mask = torch.zeros(num_samples, dtype=torch.float, device=device)
+                            mask[idxs] = 1.0
+                            if loss_weight>0:
+                                grad_outputs[linear_idx][offset:offset+num_samples] = mask * loss_weight
+                                linear_idx += num_partitions * args.env_num
+                                offset += num_samples
+                            if penalty_weight>0:
+                                grad_outputs[linear_idx][offset:offset+num_samples] = mask * penalty_weight
+                                offset += num_samples
+                        # end for env in range(args.env_num):
+                    # end for partition_num, partition in enumerate(partitions):
+                # end if not args.baseline:
 
-                        # gradients
-                        linear_idx = torch.tensor(partition_num*args.env_num + env, dtype=torch.int, device=device)
-                        offset = 0
-                        mask = torch.zeros(num_samples, dtype=torch.float, device=device)
-                        mask[idxs] = 1.0
-                        if loss_weight>0:
-                            grad_outputs[linear_idx][offset:offset+num_samples] = mask * loss_weight
-                            linear_idx += num_partitions * args.env_num
-                            offset += num_samples
-                        if penalty_weight>0:
-                            grad_outputs[linear_idx][offset:offset+num_samples] = mask * penalty_weight
-                            offset += num_samples
-                    # end for env in range(args.env_num):
-                # end for partition_num, partition in enumerate(partitions):
-            # end if not args.baseline:
+                if args.keep_cont and (loss_keep_weight > 0): # global loss @ 1st partition
+                    # This could be done w/o the split into two halves, but this streamlines the code w/o any harm
+                    # Here we know that losses are over the whole macro-batch, so we can normalize up-front
+                    loss = losses_samples.sum() / num_partitions / this_batch_size / gradients_accumulation_steps
+                    # compute unnormalized gradients for this loss
+                    # grad_outputs: one per sample
+                    loss_keep_aggregator += loss.detach() # after scaler
 
-            if args.keep_cont and (loss_keep_weight > 0): # global loss @ 1st partition
-                # This could be done w/o the split into two halves, but this streamlines the code w/o any harm
-                # Here we know that losses are over the whole macro-batch, so we can normalize up-front
-                loss = losses_samples.sum() / num_partitions / this_batch_size / gradients_accumulation_steps
-                # compute unnormalized gradients for this loss
-                # grad_outputs: one per sample
-                loss_keep_aggregator += loss.detach() # after scaler
+                if args.keep_cont and (loss_keep_weight>0):
+                    grad_outputs[-1][offset:offset+num_samples]  = 1.0 * loss_keep_weight / num_partitions / this_batch_size / gradients_accumulation_steps
+                    differentiate_this.append(losses_samples)
 
-            if args.keep_cont and (loss_keep_weight>0):
-                grad_outputs[-1][offset:offset+num_samples]  = 1.0 * loss_keep_weight / num_partitions / this_batch_size / gradients_accumulation_steps
-                differentiate_this.append(losses_samples)
+                differentiate_this = torch.cat(differentiate_this, dim=0)
 
-            differentiate_this = torch.cat(differentiate_this, dim=0)
-
-            # compute all needed grads
-            # 'grads_all' is a tuple w/ an entry per parameter.
-            # each entry is a tensor w/ 1st dim = 'grad_outputs.size(0)' and other dims matching the parameter
-
-            grads_all = torch.autograd.grad(
-                differentiate_this,
-                tuple(net.parameters()),
-                retain_graph=True,  # keep graph for next loss
-                allow_unused=True,
-                grad_outputs=grad_outputs, 
-                is_grads_batched=True
-            )
-
-            if args.keep_cont and (loss_keep_weight > 0): # global loss @ 1st partition
+                # compute all needed grads
                 # 'grads_all' is a tuple w/ an entry per parameter.
                 # each entry is a tensor w/ 1st dim = 'grad_outputs.size(0)' and other dims matching the parameter
 
-                for p, g in zip(net.parameters(), grads_all):
-                    grads = g[-1]   # shape matches p
-                    if grads is None:
-                        continue
+                grads_all = torch.autograd.grad(
+                    differentiate_this,
+                    tuple(net.parameters()),
+                    retain_graph=True,  # keep graph for next loss
+                    allow_unused=True,
+                    grad_outputs=grad_outputs, 
+                    is_grads_batched=True
+                )
 
-                    if p.grad is None:
-                        # first time: allocate grad buffer with same shape, device, dtype
-                        p.grad = grads.detach().clone()
-                    else:
-                        # subsequent passes: accumulate
-                        p.grad += grads.detach()
+                if args.keep_cont and (loss_keep_weight > 0): # global loss @ 1st partition
+                    # 'grads_all' is a tuple w/ an entry per parameter.
+                    # each entry is a tensor w/ 1st dim = 'grad_outputs.size(0)' and other dims matching the parameter
 
-            if not args.baseline:
-                for _split in range((num_grads - num_baseline_repeates) // num_split_repeates):
-                    partition_num, env = _split // args.env_num, _split % args.env_num 
-                    linear_idx = _split
-                    if loss_weight > 0:
-                        # flatten and accumulate per parameter
-                        # 'grads_all' is a tuple w/ an entry per parameter.
-                        # each entry is a tensor w/ 1st dim = 'grad_outputs.size(0)' and other dims matching the parameter
-                        for _j, g in enumerate(grads_all):
-                            if g is None:
-                                continue
-                            grads = g[linear_idx]
-                            loss_grads[_j][partition_num,env] += grads.detach().view(-1)
-                        linear_idx += num_partitions * args.env_num # prepare for penalty grads
-                    # penalty
-                    if penalty_weight > 0:
-                        # flatten and accumulate per parameter
-                        for _j, g in enumerate(grads_all):
-                            if g is None:
-                                continue
-                            grads = g[linear_idx]
-                            penalty_grads[_j][partition_num,env] += grads.detach().view(-1)
-            # end if not args.baseline:
-            loss_module.post_micro_batch()
-            loss_module.prepare_for_free()
+                    for p, g in zip(net.parameters(), grads_all):
+                        grads = g[-1]   # shape matches p
+                        if grads is None:
+                            continue
 
-            # free memory of half micro-batch
-            del batch_micro, indexs, losses_samples, grads, g, grads_all, differentiate_this, loss
-            if loss_weight > 0:
-                pass
-            if penalty_weight > 0:
-                del penalties_samples, penalty
-        # end for i, (batch_micro, indexs) in enumerate(mb_list):
+                        if p.grad is None:
+                            # first time: allocate grad buffer with same shape, device, dtype
+                            p.grad = grads.detach().clone()
+                        else:
+                            # subsequent passes: accumulate
+                            p.grad += grads.detach()
+
+                if not args.baseline:
+                    for _split in range((num_grads - num_baseline_repeates) // num_split_repeates):
+                        partition_num, env = _split // args.env_num, _split % args.env_num 
+                        linear_idx = _split
+                        if loss_weight > 0:
+                            # flatten and accumulate per parameter
+                            # 'grads_all' is a tuple w/ an entry per parameter.
+                            # each entry is a tensor w/ 1st dim = 'grad_outputs.size(0)' and other dims matching the parameter
+                            for _j, g in enumerate(grads_all):
+                                if g is None:
+                                    continue
+                                grads = g[linear_idx]
+                                loss_grads[_j][j,partition_num,env] += grads.detach().view(-1)
+                            linear_idx += num_partitions * args.env_num # prepare for penalty grads
+                        # penalty
+                        if penalty_weight > 0:
+                            # flatten and accumulate per parameter
+                            for _j, g in enumerate(grads_all):
+                                if g is None:
+                                    continue
+                                grads = g[linear_idx]
+                                penalty_grads[_j][j,partition_num,env] += grads.detach().view(-1)
+                # end if not args.baseline:
+                loss_module.post_micro_batch()
+                loss_module.prepare_for_free()
+                
+                # free memory of half micro-batch
+                del batch_micro, indexs, losses_samples, grads, g, grads_all, differentiate_this, loss
+                if loss_weight > 0:
+                    pass
+                if penalty_weight > 0:
+                    del penalties_samples, penalty
+            # end for i in [i_ for i_ in range(len(mb_list)) if i_ % 2 == j]:
+            torch.cuda.empty_cache()
+        # end for j in range(idxs):
         torch.cuda.empty_cache()
 
         trained_samples += this_batch_size # total number of samples processed so far
@@ -702,10 +721,11 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         # Environments & original cont losses and gradients
         if loss_weight > 0:
             grads = []
-            loss_env = loss_aggregator / splits_sz     # per env for macro-batch, normalized per env
+            partition_sz = halves_sz.sum(dim=0, keepdim=True) # (1,J,K) # sizes of envs
+            loss_env = loss_aggregator.sum(dim=0, keepdim=True) / partition_sz     # per env for macro-batch, normalized per env
             for pind, p in enumerate(net.parameters()):
                 dLoss_dTheta_env = loss_grads[pind]     # per env sum of dCont/dTheta, shape (I,J,K,param_numel)
-                total_grad_flat  = loss_module.loss_grads_finalize(dLoss_dTheta_env, loss_env, splits_sz)
+                total_grad_flat  = loss_module.loss_grads_finalize(dLoss_dTheta_env, loss_env, halves_sz)
                 p.grad          += total_grad_flat.view(p.shape) # reshape back to parameter shape
                 grads.append(total_grad_flat.detach().clone())
             loss_grads_flat = torch.cat([g for g in grads if g is not None])
@@ -715,18 +735,15 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         # Penalty and its gradients
         if penalty_weight > 0:
             grads = []
-            penalty_env = penalty_calculator.penalty_finalize(penalty_aggregator, splits_sz) # normalized per env
+            penalty_env = penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz) # normalized per env
             for pind, p in enumerate(net.parameters()):
                 dPenalty_dTheta_env = penalty_grads[pind]  # per env sum of dPenalty/dTheta over macro-batch per parameter, shape (I,J,K,param_numel)
-                xx = penalty_calculator.penalty_finalize(penalty_aggregator, splits_sz, keep_halves=True)
                 total_grad_flat     = \
                     penalty_calculator.penalty_grads_finalize(
                         dPenalty_dTheta_env, 
-                        xx, 
-                        splits_sz
-                    ) 
-                print()
-                print(dPenalty_dTheta_env.size(), xx.size(), total_grad_flat.size())
+                        penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz, keep_halves=True), 
+                        halves_sz
+                    )                
                 p.grad             += total_grad_flat.view(p.shape)  # reshape back to parameter shape
                 grads.append(total_grad_flat.detach().clone())
             penalty_grads_flat = torch.cat([g for g in grads if g is not None])
@@ -800,7 +817,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         penalty_aggregator.zero_()
         loss_keep_aggregator.zero_()
         loss_aggregator.zero_()
-        splits_sz.zero_()
+        halves_sz.zero_()
         for par in loss_grads: # over list
             par.zero_()
         for par in penalty_grads: # over list
