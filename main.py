@@ -734,7 +734,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 p.grad          += total_grad_flat.view(p.shape) # reshape back to parameter shape
                 grads.append(total_grad_flat.detach().clone())
             print(f"loss grads: {type(grads)}")
-            loss_gards = torch.cat([g for g in grads if g is not None])
+            loss_grads_flat = torch.cat([g for g in grads if g is not None])
         else:
             loss_env = torch.tensor(0, dtype=torch.float)
 
@@ -753,14 +753,14 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 p.grad             += total_grad_flat.view(p.shape)  # reshape back to parameter shape
                 grads.append(total_grad_flat.detach().clone())
             print(f"penalty grads: {type(grads)}")
-            penalty_grads = torch.cat([g for g in grads if g is not None])
+            penalty_grads_flat = torch.cat([g for g in grads if g is not None])
             
         else:
             penalty_env = torch.tensor(0, dtype=torch.float)
 
         if (loss_weight>0) and (penalty_weight>0):
-            cosine = torch.nn.functional.cosine_similarity(loss_gards, penalty_grads, dim=0)
-            norms = penalty_grads.norm() / (loss_gards.norm() + 1e-12)
+            cosine = torch.nn.functional.cosine_similarity(loss_grads_flat, penalty_grads_flat, dim=0)
+            norms = penalty_grads_flat.norm() / (loss_grads_flat.norm() + 1e-12)
         else:
             cosine, norms = torch.tensor(0, dtype=torch.float), torch.tensor(0, dtype=torch.float) 
         cosine = cosine.item()
@@ -825,23 +825,17 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         loss_keep_aggregator.zero_()
         loss_aggregator.zero_()
         halves_sz.zero_()
-        print("after zero_ 1")
-        print(type(loss_grads))
-        #loss_grads.zero_()
-        for par in loss_grads:
+        for par in loss_grads: # over list
             par.zero_()
-        print("after zero_ 2")
-        print(type(penalty_grads))
-        for par in penalty_grads:
+        for par in penalty_grads: # over list
             par.zero_()
-        print("after zero_ 3")
         del penalty_env, loss_env, loss_batch
         if (penalty_weight > 0) or (loss_weight > 0):
             del total_grad_flat
         if penalty_weight > 0:
-            del dPenalty_dTheta_env
+            del dPenalty_dTheta_env, penalty_grads_flat
         if loss_weight > 0:
-            dLoss_dTheta_env
+            dLoss_dTheta_env, loss_grads_flat
         torch.cuda.empty_cache()
 
         print("before post_batch")
