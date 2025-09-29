@@ -829,14 +829,18 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         loss_aggregator.zero_()
         halves_sz.zero_()
         print("after zero_ 1")
+        loss_grads.zero_()
+        """
         for par in loss_grads:
             par.zero_()
+        """
         print("after zero_ 2")
+        penalty_grads.zero_()
         """
         for par in penalty_grads:
             par.zero_()
-        print("after zero_ 3")
         """
+        print("after zero_ 3")
         del penalty_env, loss_env, loss_batch
         if (penalty_weight > 0) or (loss_weight > 0):
             del total_grad_flat
