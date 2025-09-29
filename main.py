@@ -623,12 +623,11 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                   f" num_samples {num_samples}, split_reps {num_split_repeates}, base_reps {num_baseline_repeates}, reps {num_repeats}, num_grads {num_grads}")
                             if loss_weight>0:
                                 grad_outputs[linear_idx][offset:offset+num_samples] = mask * loss_weight
-                                linear_idx += 1
+                                linear_idx += num_partitions * args.env_num
                                 offset += num_samples
                                 differentiate_this.append(losses_samples)
                             if penalty_weight>0:
                                 grad_outputs[linear_idx][offset:offset+num_samples] = mask * penalty_weight
-                                linear_idx += 1
                                 offset += num_samples
                                 differentiate_this.append(penalties_samples)
                             print(f"autograd0.1 offset {offset}, linear_idx {linear_idx}, diff_this {len(differentiate_this)}")
