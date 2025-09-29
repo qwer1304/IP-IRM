@@ -666,6 +666,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                         grads = g[-1] # loss_cont is always the last in the batch
                         if g is None:
                             continue
+                        print(p.grad, grads)
                         p.grad += grads.detach().clone() 
 
                 if not args.baseline:
