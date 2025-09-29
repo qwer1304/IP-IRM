@@ -733,7 +733,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 total_grad_flat  = loss_module.loss_grads_finalize(dLoss_dTheta_env, loss_env, halves_sz)
                 p.grad          += total_grad_flat.view(p.shape) # reshape back to parameter shape
                 grads.append(total_grad_flat.detach().clone())
-            print(f"loss grads: {type(grads}")
+            print(f"loss grads: {type(grads)}")
             loss_gards = torch.cat([g for g in grads if g is not None])
         else:
             loss_env = torch.tensor(0, dtype=torch.float)
