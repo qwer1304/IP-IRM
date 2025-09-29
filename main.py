@@ -125,10 +125,6 @@ class BaseCalculator:
     def penalty_grads_finalize(self, grads, penalties, szs):
         raise NotImplementedError
 
-    @staticmethod
-    def num_halves():
-        raise NotImplementedError
-
 class VRExCalculator(BaseCalculator):
     """
     Class for VREx calculation.
@@ -150,28 +146,23 @@ class VRExCalculator(BaseCalculator):
 
     def penalty_grads_finalize(self, grads, penalties, szs):
         """
-        Given dPenalty/dTheta, Penalty per half, per env and their sizes calculate the combined gradient.
+        Given dPenalty/dTheta, Penalty per env and their sizes calculate the combined gradient.
         dV/dTheta = 2/E*sum_e((Loss_e - mu) * grad_e), where mu = 1/E*sum_e(Loss_e) 
-            grads:      dPenalty/dTheta per half, per env, unnormalized (1,num_partitions,num_envs,parnums)
-            penalties:  Penalty per half, normalized per env, (1,num_partitions,num_envs)
-            szs:        sizes of halves of environments
+            grads:      dPenalty/dTheta per per env, unnormalized (num_partitions,num_envs,parnums)
+            penalties:  Penalty per env, normalized per env, (num_partitions,num_envs)
+            szs:        sizes of environments
         """
         
-        num_env    = szs.size(2)
-        num_partitions = szs.size(1)
-        mu      = penalties.mean(dim=[0,2], keepdim=True) # (1,num_partitions,1)
+        num_partitions, num_env    = szs.size()
+        mu      = penalties.mean(dim=1, keepdim=True) # (num_partitions,1)
         x       = (2 * (penalties[..., None] - mu[..., None]) 
                      * (grads / szs[..., None]) 
                      / num_env
-                  ).sum(dim=(0,1,2)) / num_partitions # (parnums,)
+                  ).sum(dim=(0,1)) / num_partitions # (parnums,)
             
         total_grad_flat = x
         return total_grad_flat
 
-    @staticmethod
-    def num_halves():
-        return 1
-        
 # ---------------------------
 # Base IRM Calculator
 # ---------------------------
@@ -242,10 +233,6 @@ class IRMCalculator(BaseCalculator):
                 total_grad_flat += x
 
         return total_grad_flat
-
-    @staticmethod
-    def num_halves():
-        return 2
 
 # ---------------------------
 # CE-based IRM (for MoCo)
@@ -322,15 +309,15 @@ class LossModule:
 
     def loss_grads_finalize(self, grads, losses, szs):
         """
-            grads:  Penalty per half, unnormalized per env
-            losses: Losses per half, normalized per env
-            szs:    sizes of halves of environments
+            grads:  Penalty per env, unnormalized per env
+            losses: Losses per env, normalized per env
+            szs:    sizes of environments
         """
-        num_env = prod(szs.size()[1:])
+        num_env = prod(szs.size())
         total_grad_flat  = (  grads  
                             / szs[..., None] 
                             / num_env
-                           ).sum(dim=(0,1,2))        # shape (param_numel,)
+                           ).sum(dim=(0,1))        # shape (param_numel,)
         return total_grad_flat
 
 # ---------------------------
