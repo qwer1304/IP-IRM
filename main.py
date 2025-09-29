@@ -829,12 +829,12 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         loss_aggregator.zero_()
         halves_sz.zero_()
         print("after zero_ 1")
-        loss_grads.zero_()
-        """
+        print(type(loss_grads))
+        #loss_grads.zero_()
         for par in loss_grads:
             par.zero_()
-        """
         print("after zero_ 2")
+        print(type(penalty_grads))
         penalty_grads.zero_()
         """
         for par in penalty_grads:
