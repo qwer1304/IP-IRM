@@ -589,8 +589,11 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
 
                 # compute unnormalized micro-batch loss
                 losses_samples = loss_module.compute_loss_micro(reduction='none')
+                if loss_weight > 0:
+                    differentiate_this.append(losses_samples)
                 if penalty_weight > 0:
                     penalties_samples = penalty_calculator.penalty(losses_samples, reduction='none')
+                    differentiate_this.append(penalties_samples)
 
                 if not args.baseline:
                     for partition_num, partition in enumerate(partitions):
@@ -625,11 +628,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                 grad_outputs[linear_idx][offset:offset+num_samples] = mask * loss_weight
                                 linear_idx += num_partitions * args.env_num
                                 offset += num_samples
-                                differentiate_this.append(losses_samples)
                             if penalty_weight>0:
                                 grad_outputs[linear_idx][offset:offset+num_samples] = mask * penalty_weight
                                 offset += num_samples
-                                differentiate_this.append(penalties_samples)
                             print(f"autograd0.1 offset {offset}, linear_idx {linear_idx}, diff_this {len(differentiate_this)}")
                         # end for env in range(args.env_num):
                     # end for partition_num, partition in enumerate(partitions):
