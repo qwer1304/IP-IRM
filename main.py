@@ -548,7 +548,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         for p in net.parameters()
     ]
 
-    train_optimizer.zero_grad(set_to_none=False) # clear gradients at the beginning 
+    train_optimizer.zero_grad(set_to_none=True) # clear gradients at the beginning 
 
     for batch_index, data_env in enumerate(train_bar):
 
@@ -662,11 +662,19 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 if args.keep_cont and (loss_keep_weight > 0): # global loss @ 1st partition
                     # 'grads_all' is a tuple w/ an entry per parameter.
                     # each entry is a tensor w/ 1st dim = 'grad_outputs.size(0)' and other dims matching the parameter
+
+
                     for p, g in zip(net.parameters(), grads_all):
-                        grads = g[-1] # loss_cont is always the last in the batch
-                        if g is None:
+                        grads = g[-1]   # shape matches p
+                        if grads is None:
                             continue
-                        p.grad += grads.detach().clone() 
+
+                        if p.grad is None:
+                            # first time: allocate grad buffer with same shape, device, dtype
+                            p.grad = grads.detach().clone()
+                        else:
+                            # subsequent passes: accumulate
+                            p.grad += grads.detach()
 
                 if not args.baseline:
                     for _split in range((num_grads - num_baseline_repeates) // num_split_repeates):
