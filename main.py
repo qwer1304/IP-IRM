@@ -621,9 +621,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                             offset = 0
                             mask = torch.zeros(num_samples, dtype=torch.float, device=device)
                             mask[idxs] = 1.0
-                            print()
-                            print(f"autograd0.0: grad_outputs {grad_outputs.size()}, mask {mask.size()}, offset {offset}, linear_idx {linear_idx}," + 
-                                  f" num_samples {num_samples}, split_reps {num_split_repeates}, base_reps {num_baseline_repeates}, reps {num_repeats}, num_grads {num_grads}")
                             if loss_weight>0:
                                 grad_outputs[linear_idx][offset:offset+num_samples] = mask * loss_weight
                                 linear_idx += num_partitions * args.env_num
@@ -653,9 +650,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 # compute all needed grads
                 # 'grads_all' is a tuple w/ an entry per parameter.
                 # each entry is a tensor w/ 1st dim = 'grad_outputs.size(0)' and other dims matching the parameter
-                print()
-                print(f"autograd: diff_this {differentiate_this.size()}, grad_outputs {grad_outputs.size()}," + 
-                      f" num_samples {num_samples}, split_reps {num_split_repeates}, base_reps {num_baseline_repeates}, reps {num_repeats}, num_grads {num_grads}")
 
                 grads_all = torch.autograd.grad(
                     differentiate_this,
