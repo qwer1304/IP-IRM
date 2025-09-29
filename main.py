@@ -573,7 +573,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 num_baseline_repeates = int(loss_keep_weight>0) * int(args.keep_cont)                                  
                 num_repeats          = num_iprm_repeates + num_baseline_repeates
                 num_grads            = num_partitions * args.env_num * num_iprm_repeates + num_baseline_repeates
-                grad_outputs         = torch.zeros((num_grads, num_samples), dtype=torch.float, device=device) 
+                grad_outputs         = torch.zeros((num_grads, num_samples*num_repeats), dtype=torch.float, device=device) 
                 differentiate_this   = []
 
                 """
@@ -618,9 +618,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                             offset = 0
                             mask = torch.zeros(num_samples, dtype=torch.float, device=device)
                             mask[idxs] = 1.0
-                            print()
-                            print(f"autograd0: grad_outputs {grad_outputs.size()}, mask {mask.size()}, offset {offset}," + 
-                                  f" num_samples {num_samples}, iprm_reps {num_iprm_repeates}, base_reps {num_baseline_repeates}, reps {num_repeats}, num_grads {num_grads}")
                             if loss_weight>0:
                                 grad_outputs[linear_idx][offset:offset+num_samples] = mask * loss_weight
                                 linear_idx += partition_num * args.env_num
