@@ -689,6 +689,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                 grads = g[linear_idx]
                                 loss_grads[_j][j,partition_num,env] += grads.detach().view(-1)
                             linear_idx += num_partitions * args.env_num # prepare for penalty grads
+                        print()
+                        print(_split, linear_idx, num_partitions, args.env_num, num_split_repeates)
                         # penalty
                         if penalty_weight > 0:
                             # flatten and accumulate per parameter
