@@ -833,12 +833,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             dLoss_dTheta_env, loss_grads_flat
         torch.cuda.empty_cache()
 
-        print("before post_batch")
         loss_module.post_batch()
-        print(f"end of batch {batch_index}")
     # end for batch_index, data_env in enumerate(train_bar):
-    print("out of loop")
-
     return total_loss / trained_samples
 
 def train_update_split(net, update_loader, soft_split, random_init=False, args=None):
