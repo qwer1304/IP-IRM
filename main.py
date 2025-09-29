@@ -590,7 +590,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 # compute unnormalized micro-batch loss
                 losses_samples = loss_module.compute_loss_micro(reduction='none')
                 if penalty_weight > 0:
-                    penalties_samples = penalty_calculator.penalty(losses, reduction='none')
+                    penalties_samples = penalty_calculator.penalty(losses_samples, reduction='none')
 
                 if not args.baseline:
                     mask = torch.zeros(num_samples*num_repeats, dtype=torch.float, device=device)
