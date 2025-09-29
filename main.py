@@ -548,7 +548,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         for p in net.parameters()
     ]
 
-    train_optimizer.zero_grad() # clear gradients at the beginning 
+    train_optimizer.zero_grad(set_to_none=False) # clear gradients at the beginning 
 
     for batch_index, data_env in enumerate(train_bar):
 
@@ -666,7 +666,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                         grads = g[-1] # loss_cont is always the last in the batch
                         if g is None:
                             continue
-                        print(p.grad, grads)
                         p.grad += grads.detach().clone() 
 
                 if not args.baseline:
