@@ -593,8 +593,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                     penalties_samples = penalty_calculator.penalty(losses_samples, reduction='none')
 
                 if not args.baseline:
-                    linear_idx = torch.arange(partition_num * args.env_num, dtype=torch.int, device=device)
-                    offset = 0
                     for partition_num, partition in enumerate(partitions):
                         for env in range(args.env_num):
 
@@ -616,6 +614,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                 penalty_aggregator[j,partition_num,env] += penalty.detach() # unnormalized penalty components before penalty scaler
 
                             # gradients
+                            linear_idx = torch.arange(partition_num * args.env_num, dtype=torch.int, device=device)
+                            offset = 0
                             mask = torch.zeros(num_samples*num_repeats, dtype=torch.float, device=device)
                             mask[idxs] = 1.0
                             if loss_weight>0:
