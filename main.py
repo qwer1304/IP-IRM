@@ -663,7 +663,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                     # 'grads_all' is a tuple w/ an entry per parameter.
                     # each entry is a tensor w/ 1st dim = 'grad_outputs.size(0)' and other dims matching the parameter
 
-
                     for p, g in zip(net.parameters(), grads_all):
                         grads = g[-1]   # shape matches p
                         if grads is None:
@@ -693,10 +692,11 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                         # penalty
                         if penalty_weight > 0:
                             # flatten and accumulate per parameter
-                            for _j, g in enumerate(penalty_grads_samples):
-                                if g is not None:
-                                    grads = g[linear_idx]
-                                    penalty_grads[_j][j,partition_num,env] += grads.detach().view(-1)
+                            for _j, g in enumerate(grads_all):
+                                if g is None:
+                                    continue
+                                grads = g[linear_idx]
+                                penalty_grads[_j][j,partition_num,env] += grads.detach().view(-1)
                 # end if not args.baseline:
                 loss_module.post_micro_batch()
                 loss_module.prepare_for_free()
