@@ -792,6 +792,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         train_optimizer.step()
         print(" end step")
         train_optimizer.zero_grad(set_to_none=True)  # clear gradients at beginning of next gradients batch
+        print("after zero grad")
 
         # total loss is sum of losses so far over entire batch aggregation period.
         total_keep_cont_loss += (loss_keep_weight * loss_keep_aggregator).item() * this_batch_size * gradients_accumulation_steps
@@ -809,6 +810,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                    f' cos: {cosine:.4f}, ||gp||/||gl||: {norms:.4f}'
         desc_str += loss_module.get_debug_info_str()
         train_bar.set_description(desc_str)
+        print("after set description")
 
         if batch_index % 10 == 0:
             utils.write_log('Train Epoch: [{:d}/{:d}] [{:d}/{:d}] {args.ssl_type}: Total: {:.4f} First: {:.4f} Env: {:.4f}'
@@ -819,16 +821,20 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                             .format(total_irm_loss/trained_samples, train_optimizer.param_groups[0]['lr'], penalty_weight, cosine, norms), 
                             log_file=log_file)
                                         
+        print("after write log")
         # Prepare for next iteration
         gradients_accumulation_step = 0
         penalty_aggregator.zero_()
         loss_keep_aggregator.zero_()
         loss_aggregator.zero_()
         halves_sz.zero_()
+        print("after zero_ 1")
         for par in loss_grads:
             par.zero_()
+        print("after zero_ 2")
         for par in penalty_grads:
             par.zero_()
+        print("after zero_ 3")
         del penalty_env, loss_env, loss_batch
         if (penalty_weight > 0) or (loss_weight > 0):
             del total_grad_flat
@@ -838,6 +844,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             dLoss_dTheta_env
         torch.cuda.empty_cache()
 
+        print("before post_batch")
         loss_module.post_batch()
         print(f"end of batch {batch_index}")
     # end for batch_index, data_env in enumerate(train_bar):
