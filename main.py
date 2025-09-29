@@ -217,9 +217,8 @@ class IRMCalculator(BaseCalculator):
         # IRM = gs1 * gs2, where gs1 and gs2 are gradients w.r.t. scaler of mean CE of halves of sample in a batch
         # dIRM/dTheta = d(gs1 * gs2)/dTheta = dgs1/dTheta * gs2 + gs1 * dgs2/dTheta
 
-        num_halves = self.num_halves()
-        num_env    = szs.size(2)
-        num_partitions = szs.size(1)
+        num_partitions, num_env = szs.size()
+        num_halves              = 2
 
         for i in range(num_halves):
             j = (i + num_halves + 1) % num_halves
