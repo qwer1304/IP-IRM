@@ -752,7 +752,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                     )                
                 p.grad             += total_grad_flat.view(p.shape)  # reshape back to parameter shape
                 grads.append(total_grad_flat.detach().clone())
-            print(f"penalty grads: {type(grads}")
+            print(f"penalty grads: {type(grads)}")
             penalty_grads = torch.cat([g for g in grads if g is not None])
             
         else:
