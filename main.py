@@ -548,7 +548,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         for p in net.parameters()
     ]
 
-    train_optimizer.zero_grad(set_to_none=True) # clear gradients at the beginning 
+    train_optimizer.zero_grad() # clear gradients at the beginning 
 
     for batch_index, data_env in enumerate(train_bar):
 
