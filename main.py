@@ -568,13 +568,13 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 batch_micro         = batch_micro.cuda(non_blocking=True)
                 indexs              = indexs.cuda(non_blocking=True)
 
-                num_samples          = len(batch_micro)
-                num_iprm_repeates    = int(not args.baseline) * (int(loss_weight>0) + int(penalty_weight>0))
+                num_samples           = len(batch_micro)
+                num_split_repeates    = int(not args.baseline) * (int(loss_weight>0) + int(penalty_weight>0))
                 num_baseline_repeates = int(loss_keep_weight>0) * int(args.keep_cont)                                  
-                num_repeats          = num_iprm_repeates + num_baseline_repeates
-                num_grads            = num_partitions * args.env_num * num_iprm_repeates + num_baseline_repeates
-                grad_outputs         = torch.zeros((num_grads, num_samples*num_repeats), dtype=torch.float, device=device) 
-                differentiate_this   = []
+                num_repeats           = num_split_repeates + num_baseline_repeates
+                num_grads             = num_partitions * args.env_num * num_split_repeates + num_baseline_repeates
+                grad_outputs          = torch.zeros((num_grads, num_samples*num_repeats), dtype=torch.float, device=device) 
+                differentiate_this    = []
 
                 """
                 prepare for micro-batch in loss-sepcific way:
@@ -614,13 +614,13 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                 penalty_aggregator[j,partition_num,env] += penalty.detach() # unnormalized penalty components before penalty scaler
 
                             # gradients
-                            linear_idx = torch.arange(partition_num * args.env_num, dtype=torch.int, device=device)
+                            linear_idx = torch.tensor(partition_num*args.env_num + env, dtype=torch.int, device=device)
                             offset = 0
                             mask = torch.zeros(num_samples, dtype=torch.float, device=device)
                             mask[idxs] = 1.0
                             print()
                             print(f"autograd0: grad_outputs {grad_outputs.size()}, mask {mask.size()}, offset {offset}," + 
-                                  f" num_samples {num_samples}, iprm_reps {num_iprm_repeates}, base_reps {num_baseline_repeates}, reps {num_repeats}, num_grads {num_grads}")
+                                  f" num_samples {num_samples}, iprm_reps {num_split_repeates}, base_reps {num_baseline_repeates}, reps {num_repeats}, num_grads {num_grads}")
                             if loss_weight>0:
                                 grad_outputs[linear_idx][offset:offset+num_samples] = mask * loss_weight
                                 linear_idx += partition_num * args.env_num
@@ -654,7 +654,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 # each entry is a tensor w/ 1st dim = 'grad_outputs.size(0)' and other dims matching the parameter
                 print()
                 print(f"autograd: diff_this {differentiate_this.size()}, grad_outputs {grad_outputs.size()}," + 
-                      f" num_samples {num_samples}, iprm_reps {num_iprm_repeates}, base_reps {num_baseline_repeates}, reps {num_repeats}, num_grads {num_grads}")
+                      f" num_samples {num_samples}, iprm_reps {num_split_repeates}, base_reps {num_baseline_repeates}, reps {num_repeats}, num_grads {num_grads}")
 
                 grads_all = torch.autograd.grad(
                     differentiate_this,
@@ -672,7 +672,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
 
                 if not args.baseline:
                     linear_idx = torch.arange(partition_num * args.env_num, dtype=torch.int, device=device)
-                    for _split in range(num_iprm_repeates):
+                    for _split in range(num_split_repeates):
                         partition_num, env = _split // args.env_num, _split % args.env_num
                         offset = 0
                         if loss_weight > 0:
