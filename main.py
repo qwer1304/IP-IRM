@@ -551,8 +551,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
     train_optimizer.zero_grad(set_to_none=True) # clear gradients at the beginning 
 
     for batch_index, data_env in enumerate(train_bar):
-        print()
-        print(f"Start batch {batch_index}")
 
         data_batch, indexs_batch = data_env[0], data_env[-1] # 'data_batch' is an batch of images, 'indexs_batch' is their corresponding indices 
         this_batch_size = len(indexs_batch) # for the case drop_last=False
@@ -566,7 +564,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
 
         for j in range(num_halves): # over halves of micro-batches
             for i in [i_ for i_ in range(len(mb_list)) if i_ % num_halves == j]: # loop over micro-batches
-                print(f"batch {batch_index}, half {j}, mb {i}")
                 batch_micro, indexs = mb_list[i]
                 batch_micro         = batch_micro.cuda(non_blocking=True)
                 indexs              = indexs.cuda(non_blocking=True)
@@ -653,7 +650,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 # 'grads_all' is a tuple w/ an entry per parameter.
                 # each entry is a tensor w/ 1st dim = 'grad_outputs.size(0)' and other dims matching the parameter
 
-                print("start autograd", end="")
                 grads_all = torch.autograd.grad(
                     differentiate_this,
                     tuple(net.parameters()),
@@ -662,7 +658,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                     grad_outputs=grad_outputs, 
                     is_grads_batched=True
                 )
-                print(" end autograd")
 
                 if args.keep_cont and (loss_keep_weight > 0): # global loss @ 1st partition
                     # 'grads_all' is a tuple w/ an entry per parameter.
