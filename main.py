@@ -570,7 +570,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
 
                 num_samples          = len(batch_micro)
                 num_iprm_repeates    = int(not args.baseline) * (int(loss_weight>0) + int(penalty_weight>0))
-                num_baseline_repeates = int(loss_keep_weight>0) * int(args.keep_cont))                                  
+                num_baseline_repeates = int(loss_keep_weight>0) * int(args.keep_cont)                                  
                 num_repeats          = num_iprm_repeates + num_baseline_repeates
                 num_grads            = num_partitions * args.env_num * num_iprm_repeates + num_baseline_repates
                 grad_outputs         = torch.zeros((num_grads, num_samples), dtype=torch.float, device=device) 
