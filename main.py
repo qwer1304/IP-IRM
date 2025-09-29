@@ -619,8 +619,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                             mask = torch.zeros(num_samples, dtype=torch.float, device=device)
                             mask[idxs] = 1.0
                             print()
-                            print(f"autograd0: grad_outputs {grad_outputs.size()}, mask {mask.size()}, offset {offset}," + 
-                                  f" num_samples {num_samples}, iprm_reps {num_split_repeates}, base_reps {num_baseline_repeates}, reps {num_repeats}, num_grads {num_grads}")
+                            print(f"autograd0: grad_outputs {grad_outputs.size()}, mask {mask.size()}, offset {offset}, linear_idx {linear_idx}," + 
+                                  f" num_samples {num_samples}, split_reps {num_split_repeates}, base_reps {num_baseline_repeates}, reps {num_repeats}, num_grads {num_grads}")
                             if loss_weight>0:
                                 grad_outputs[linear_idx][offset:offset+num_samples] = mask * loss_weight
                                 linear_idx += partition_num * args.env_num
@@ -644,7 +644,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                     loss_keep_aggregator += loss.detach() # after scaler
 
                 if args.keep_cont and (loss_keep_weight>0):
-                    grad_outputs[linear_idx][offset:offset+num_samples]  = 1.0 * loss_keep_weight / num_partitions / this_batch_size / gradients_accumulation_steps
+                    grad_outputs[-1][offset:offset+num_samples]  = 1.0 * loss_keep_weight / num_partitions / this_batch_size / gradients_accumulation_steps
                     differentiate_this.append(losses_samples)
 
                 differentiate_this = torch.cat(differentiate_this, dim=0)
