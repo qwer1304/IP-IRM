@@ -616,7 +616,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                             # gradients
                             linear_idx = torch.arange(partition_num * args.env_num, dtype=torch.int, device=device)
                             offset = 0
-                            mask = torch.zeros(num_samples*num_repeats, dtype=torch.float, device=device)
+                            mask = torch.zeros(num_samples, dtype=torch.float, device=device)
                             mask[idxs] = 1.0
                             print()
                             print(f"autograd0: grad_outputs {grad_outputs.size()}, mask {mask.size()}, offset {offset}," + 
