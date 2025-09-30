@@ -764,7 +764,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             penalty_env = torch.tensor(0, dtype=torch.float)
 
         # ema
-        ema_data = {'loss_env': loss_env.sum(), 'penalty_env': penalty_env, 'loss_keep': loss_keep_aggregator}
+        ema_data = {'loss_env': loss_env.mean(), 'penalty_env': penalty_env.mean(), 'loss_keep': loss_keep_aggregator.mean()}
         emas = ema.update(ema_data)
         
         # Orginal gradients already normalized
