@@ -753,10 +753,24 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         if gradients_accumulation_step < gradients_accumulation_steps:
             continue
 
+        if loss_weight > 0:
+            partition_sz = halves_sz.sum(dim=0, keepdim=True) # (1,J,K) # sizes of envs in macro-batch
+            loss_env = loss_aggregator.sum(dim=0, keepdim=True) / partition_sz  # per env for macro-batch, normalized per env
+        else:
+            loss_env = torch.tensor(0, dtype=torch.float)
+        if penalty_weight > 0:
+            penalty_env = penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz) # normalized per env for macro-batch
+        else:
+            penalty_env = torch.tensor(0, dtype=torch.float)
+
+        # ema
+        ema_data = {'loss_env': loss_env.sum(), 'penalty_env': penalty_env, 'loss_keep': loss_keep_aggregator}
+        emas = ema.update(ema_data)
+        
         # Orginal gradients already normalized
         if args.keep_cont and (loss_keep_weight>0):
             for pind, p in enumerate(net.parameters()):
-                total_grad_flat  = loss_keep_grads[pind]     # dCont/dTheta, shape (param_numel,)
+                total_grad_flat  = loss_keep_grads[pind] / emas['loss_keep']     # dCont/dTheta, shape (param_numel,)
                 if p.grad is None:
                     p.grad   = total_grad_flat.view(p.shape)
                 else:
@@ -765,19 +779,15 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         # Environments losses and gradients
         if loss_weight > 0:
             grads = []
-            partition_sz = halves_sz.sum(dim=0, keepdim=True) # (1,J,K) # sizes of envs in macro-batch
-            loss_env = loss_aggregator.sum(dim=0, keepdim=True) / partition_sz  # per env for macro-batch, normalized per env
             for pind, p in enumerate(net.parameters()):
                 dLoss_dTheta_env = loss_grads[pind]     # per env sum of dCont/dTheta, shape (I,J,K,param_numel)
-                total_grad_flat  = loss_module.loss_grads_finalize(dLoss_dTheta_env, loss_env, halves_sz)
+                total_grad_flat  = loss_module.loss_grads_finalize(dLoss_dTheta_env, loss_env, halves_sz) / emas['loss_env']
                 if p.grad is None:
                     p.grad   = total_grad_flat.view(p.shape)
                 else:
                     p.grad  += total_grad_flat.view(p.shape) # reshape back to parameter shape
                 grads.append(total_grad_flat.detach().clone())
             loss_grads_flat = torch.cat([g for g in grads if g is not None])
-        else:
-            loss_env = torch.tensor(0, dtype=torch.float)
 
         # Penalty and its gradients
         if penalty_weight > 0:
@@ -790,15 +800,13 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                         dPenalty_dTheta_env, 
                         penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz, keep_halves=True), 
                         halves_sz
-                    )                
+                    ) / emas['penalty_env']               
                 if p.grad is None:
                     p.grad   = total_grad_flat.view(p.shape)
                 else:
                     p.grad  += total_grad_flat.view(p.shape) # reshape back to parameter shape
                 grads.append(total_grad_flat.detach().clone())
             penalty_grads_flat = torch.cat([g for g in grads if g is not None])           
-        else:
-            penalty_env = torch.tensor(0, dtype=torch.float)
 
         if (loss_weight>0) and (penalty_weight>0):
             cosine = torch.nn.functional.cosine_similarity(loss_grads_flat, penalty_grads_flat, dim=0)
@@ -1256,10 +1264,12 @@ if __name__ == '__main__':
     parser.add_argument('--SGD_momentum', default=0.9, type=float, help='LR')
     parser.add_argument('--weight_decay', default=1e-6, type=float, help='weight decay')
     
+    parser.add_argument('--ema', action="store_true", help="adjust gradients w/ EMA")
 
     # args parse
     args = parser.parse_args()
 
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
     if args.baseline:
         args.penalty_weight, args.penalty_cont = 0, 0
@@ -1371,7 +1381,6 @@ if __name__ == '__main__':
         
     # pretrain model
     if args.pretrain_path is not None and os.path.isfile(args.pretrain_path):
-        device = 'cuda' if torch.cuda.is_available() else 'cpu'
         msg = []
         print("=> loading pretrained checkpoint '{}'".format(args.pretrain_path), end="")
         checkpoint = torch.load(args.pretrain_path, map_location=device, weights_only=False)
@@ -1403,7 +1412,7 @@ if __name__ == '__main__':
             p.requires_grad = False
         momentum = args.momentum              # momentum for model_momentum
         queue_size = args.queue_size
-        queue = FeatureQueue(queue_size, feature_dim, device='cuda', dtype=torch.float32)
+        queue = FeatureQueue(queue_size, feature_dim, device=device, dtype=torch.float32)
     elif args.ssl_type.lower() == 'simsiam':
         model_momentum = None
         queue = None
@@ -1415,6 +1424,9 @@ if __name__ == '__main__':
         optimizer = optim.SGD(model.parameters(), lr=args.lr, weight_decay=args.weight_decay, momentum=args.SGD_momentum)
     c = len(memory_data.classes) if args.dataset != "ImageNet" else args.class_num
     print('# Classes: {}'.format(c))
+
+
+    ema = utils.MovingAverage(0.99, oneminusema_correction=True) if args.ema else lambda x: torch.tensor(1.0, dtype=torch.float, device=device)
 
     # optionally resume from a checkpoint
     best_acc1 = 0
@@ -1457,9 +1469,9 @@ if __name__ == '__main__':
     if not args.baseline:
         if (not resumed) or (resumed and (updated_split is None) and ((args.penalty_cont > 0) or (args.penalty_weight > 0))):  
             if args.dataset != "ImageNet":
-                updated_split = torch.randn((len(update_data), args.env_num), requires_grad=True, device="cuda")
+                updated_split = torch.randn((len(update_data), args.env_num), requires_grad=True, device=device)
             else:
-                updated_split = torch.randn((len(update_data), args.env_num), requires_grad=True, device="cuda")
+                updated_split = torch.randn((len(update_data), args.env_num), requires_grad=True, device=device)
                 if args.offline:
                     upd_loader = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, prefetch_factor=u_pf, shuffle=False, 
                         drop_last=False, pin_memory=True, persistent_workers=u_pw)

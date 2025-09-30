@@ -1141,3 +1141,32 @@ def increasing_weight(pars, penalty_target, penalty_iters, epoch, epochs):
     print(f"penalty_warmup {penalty_warmup}, penalty_target {penalty_target}, penalty_iters {penalty_iters}, epoch {epoch}," +
           f" epochs {epochs}, speed {speed:.2f}, power {power:.4f}, w {w:.4f}, penalty_weight {penalty_weight:.4f}")
     return penalty_weight
+
+class MovingAverage:
+
+    def __init__(self, ema, oneminusema_correction=True):
+        self.ema = ema
+        self.ema_data = {}
+        self._updates = 0
+        self._oneminusema_correction = oneminusema_correction
+
+    def update(self, dict_data):
+        ema_dict_data = {}
+        for name, data in dict_data.items():
+            data = data.view(1, -1)
+            if self._updates == 0:
+                previous_data = torch.zeros_like(data)
+            else:
+                previous_data = self.ema_data[name]
+
+            ema_data = self.ema * previous_data + (1 - self.ema) * data
+            if self._oneminusema_correction:
+                # correction by 1/(1 - self.ema)
+                # so that the gradients amplitude backpropagated in data is independent of self.ema
+                ema_dict_data[name] = ema_data / (1 - self.ema)
+            else:
+                ema_dict_data[name] = ema_data
+            self.ema_data[name] = ema_data.clone().detach()
+
+        self._updates += 1
+        return ema_dict_data
