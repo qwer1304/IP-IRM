@@ -1439,7 +1439,7 @@ if __name__ == '__main__':
             (model, model_momentum, optimizer, queue,
              args.start_epoch, best_acc1, best_epoch,
              updated_split, updated_split_all, ema_) = load_checkpoint(args.resume, model, model_momentum, optimizer)
-             is ema_ is not None:
+             if ema_ is not None:
                 ema = ema_
              # use current LR, not the one from checkpoint
             for param_group in optimizer.param_groups:
