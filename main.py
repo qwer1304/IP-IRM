@@ -753,6 +753,15 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         if gradients_accumulation_step < gradients_accumulation_steps:
             continue
 
+        # Orginal gradients already normalized
+        if args.keep_cont and (loss_keep_weight>0):
+            for pind, p in enumerate(net.parameters()):
+                total_grad_flat  = loss_keep_grads[pind]     # dCont/dTheta, shape (param_numel,)
+                if p.grad is None:
+                    p.grad   = total_grad_flat.view(p.shape)
+                else:
+                    p.grad  += total_grad_flat.view(p.shape) # reshape back to parameter shape
+
         # Environments losses and gradients
         if loss_weight > 0:
             grads = []
@@ -761,7 +770,10 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             for pind, p in enumerate(net.parameters()):
                 dLoss_dTheta_env = loss_grads[pind]     # per env sum of dCont/dTheta, shape (I,J,K,param_numel)
                 total_grad_flat  = loss_module.loss_grads_finalize(dLoss_dTheta_env, loss_env, halves_sz)
-                p.grad          += total_grad_flat.view(p.shape) # reshape back to parameter shape
+                if p.grad is None:
+                    p.grad   = total_grad_flat.view(p.shape)
+                else:
+                    p.grad  += total_grad_flat.view(p.shape) # reshape back to parameter shape
                 grads.append(total_grad_flat.detach().clone())
             loss_grads_flat = torch.cat([g for g in grads if g is not None])
         else:
@@ -779,18 +791,14 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                         penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz, keep_halves=True), 
                         halves_sz
                     )                
-                p.grad             += total_grad_flat.view(p.shape)  # reshape back to parameter shape
+                if p.grad is None:
+                    p.grad   = total_grad_flat.view(p.shape)
+                else:
+                    p.grad  += total_grad_flat.view(p.shape) # reshape back to parameter shape
                 grads.append(total_grad_flat.detach().clone())
             penalty_grads_flat = torch.cat([g for g in grads if g is not None])           
         else:
             penalty_env = torch.tensor(0, dtype=torch.float)
-
-        # Orginal gradients already normalized
-        if args.keep_cont and (loss_keep_weight>0):
-            for pind, p in enumerate(net.parameters()):
-                total_grad_flat  = loss_keep_grads[pind]     # dCont/dTheta, shape (param_numel,)
-                p.grad          += total_grad_flat.view(p.shape) # reshape back to parameter shape
-                grads.append(total_grad_flat.detach().clone())
 
         if (loss_weight>0) and (penalty_weight>0):
             cosine = torch.nn.functional.cosine_similarity(loss_grads_flat, penalty_grads_flat, dim=0)
