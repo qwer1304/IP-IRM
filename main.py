@@ -157,9 +157,8 @@ class VRExCalculator(BaseCalculator):
             szs:        sizes of halves of environments
         """
         
-        num_env    = szs.size(2)
-        num_partitions = szs.size(1)
-        mu      = penalties.mean(dim=[0,2], keepdim=True) # (1,num_partitions,1)
+        _, num_partitions, num_env    = szs.size()
+        mu      = penalties.mean(dim=[0,2], keepdim=True) # (1,num_env,1)
         x       = (2 * (penalties[..., None] - mu[..., None]) 
                      * (grads / szs[..., None]) 
                      / num_env
@@ -225,9 +224,7 @@ class IRMCalculator(BaseCalculator):
         # IRM = gs1 * gs2, where gs1 and gs2 are gradients w.r.t. scaler of mean CE of halves of sample in a batch
         # dIRM/dTheta = d(gs1 * gs2)/dTheta = dgs1/dTheta * gs2 + gs1 * dgs2/dTheta
 
-        num_halves = self.num_halves()
-        num_env    = szs.size(2)
-        num_partitions = szs.size(1)
+        num_halves, num_partitions, num_env = szs.size()
 
         for i in range(num_halves):
             j = (i + num_halves + 1) % num_halves
@@ -260,6 +257,7 @@ class CE_IRMCalculator(IRMCalculator):
         s = torch.ones(batch_size, device=device, requires_grad=True)  # one s per sample
         # Compute g_i in a CE-specific way
 
+        # scaler (s) multiplies a tensor (B,logits), so need to unsqueeze dim=1
         losses = self.loss_module.compute_loss_micro(idxs=idxs, scale=s.unsqueeze(1), temperature=self.irm_temp, **kwargs)
         grad_outputs = torch.ones(1, losses.size(0), device=device)
         g_i = torch.autograd.grad(
@@ -269,6 +267,9 @@ class CE_IRMCalculator(IRMCalculator):
             grad_outputs=grad_outputs, 
             is_grads_batched=True
         )
+        # g_i is a tuple w/ entries corresponding to gradients w.r.t each parameter (here - s)
+        # each entry is a tensor w/ dim=0 corresponding to each row in 'grad_outputs'
+        # select 1st parameter (s) and squeeze out the dim dimension (which is 1)
         g_i = g_i[0].squeeze(0)
         return g_i
 
@@ -276,13 +277,25 @@ class SimSiamIRMCalculator(IRMCalculator):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    def penalty(self, loss, **kwargs):
+    def penalty(self, losses, **kwargs):
         device = self.loss_module.representations[0].device
         # one scalar (requires grad)
-        s = torch.tensor(1.0, device=device, requires_grad=True)
-        # Compute g_i in a SimSiam-specific way (e.g., L2 or cosine loss)
-        # FIX ME !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        g_i = torch.autograd.grad(s*loss, s, create_graph=True)
+        batch_size = self.loss_module.logits(idxs=idxs).size(0)
+        s = torch.ones(batch_size, device=device, requires_grad=True)  # one s per sample
+        # Compute g_i in a CE-specific way
+
+        g_i = torch.autograd.grad(
+            losses * s, # losses is a tensor of scalars
+            s,
+            create_graph=True,  # keep graph for next loss
+            grad_outputs=grad_outputs, 
+            is_grads_batched=True
+        )
+        # g_i is a tuple w/ entries corresponding to gradients w.r.t each parameter (here - s)
+        # each entry is a tensor w/ dim=0 corresponding to each row in 'grad_outputs'
+        # select 1st parameter (s) and squeeze out the dim dimension (which is 1)
+        g_i = g_i[0].squeeze(0)
+        return g_i
         
 # ---------------------------
 # Base Loss Module
@@ -325,7 +338,7 @@ class LossModule:
             losses: Losses per half, normalized per env
             szs:    sizes of halves of environments
         """
-        num_env = prod(szs.size()[1:])
+        num_env = prod(szs.size())
         total_grad_flat  = (  grads  
                             / szs[..., None] 
                             / num_env
@@ -735,8 +748,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         # Environments & original cont losses and gradients
         if loss_weight > 0:
             grads = []
-            partition_sz = halves_sz.sum(dim=0, keepdim=True) # (1,J,K) # sizes of envs
-            loss_env = loss_aggregator.sum(dim=0, keepdim=True) / partition_sz     # per env for macro-batch, normalized per env
+            partition_sz = halves_sz.sum(dim=0, keepdim=True) # (1,J,K) # sizes of envs in macro-batch
+            loss_env = loss_aggregator.sum(dim=0, keepdim=True) / partition_sz  # per env for macro-batch, normalized per env
             for pind, p in enumerate(net.parameters()):
                 dLoss_dTheta_env = loss_grads[pind]     # per env sum of dCont/dTheta, shape (I,J,K,param_numel)
                 total_grad_flat  = loss_module.loss_grads_finalize(dLoss_dTheta_env, loss_env, halves_sz)
@@ -749,7 +762,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         # Penalty and its gradients
         if penalty_weight > 0:
             grads = []
-            penalty_env = penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz) # normalized per env
+            penalty_env = penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz) # normalized per env for macro-batch
             for pind, p in enumerate(net.parameters()):
                 dPenalty_dTheta_env = penalty_grads[pind]  # per env sum of dPenalty/dTheta over macro-batch per parameter, shape (I,J,K,param_numel)
                 total_grad_flat     = \
@@ -773,9 +786,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         cosine = cosine.item()
         norms = norms.item()
 
-        loss_batch = ((loss_keep_weight * loss_keep_aggregator) + # loss_keep_aggregator is a scalar
-                      (penalty_weight   * penalty_env.mean())   + # mean over envs, mean over macro-batch
-                      (loss_weight      * loss_env.mean())        # mean over envs, mean over macro-batch
+        loss_batch = ((loss_keep_weight * loss_keep_aggregator) + # loss_keep_aggregator is a scalar normalized over macro-batch
+                      (penalty_weight   * penalty_env.mean())   + # mean over envs normalized over macro-batch
+                      (loss_weight      * loss_env.mean())        # mean over envs normalized over macro-batch
                      )
 
         # -----------------------
