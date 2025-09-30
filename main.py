@@ -1215,8 +1215,8 @@ if __name__ == '__main__':
     parser.add_argument('--penalty_cont', default=1.0, type=float, help='cont penalty weight')
     parser.add_argument('--penalty_keep_cont', default=1.0, type=float, help='cont keep penalty weight')
     parser.add_argument('--penalty_iters', default=0, type=int, help='penalty weight start iteration')
-    parser.add_argument('--increasing_weight', nargs=4, type=float, default=None, help='increasing penalty weight', 
-            metavar='penalty_warmup, scale, speed, eps')
+    parser.add_argument('--increasing_weight', nargs=5, type=float, default=None, help='increasing penalty weight', 
+            metavar='penalty_warmup, scale, speed, eps, debug')
     parser.add_argument('--env_num', default=2, type=int, help='num of the environments')
 
     parser.add_argument('--maximize_iter', default=30, type=int, help='when maximize iteration')

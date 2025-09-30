@@ -1132,14 +1132,15 @@ def atomic_save(state, is_best, args, filename='checkpoint.pth.tar', sync=True):
 def increasing_weight(pars, penalty_target, penalty_iters, epoch, epochs):
     if epoch < penalty_iters:
         return penalty_warmup
-    penalty_warmup, scale, speed, eps = pars
+    penalty_warmup, scale, speed, eps, debug = pars
     # Exponential growth starting at small epsilon to avoid zero multiplication
     power = (epoch - penalty_iters) * speed
     w = penalty_warmup + eps * (scale ** power)
     penalty_weight = min(w, penalty_target)
-    print()
-    print(f"penalty_warmup {penalty_warmup}, penalty_target {penalty_target}, penalty_iters {penalty_iters}, epoch {epoch}," +
-          f" epochs {epochs}, speed {speed:.2f}, power {power:.4f}, w {w:.4f}, penalty_weight {penalty_weight:.4f}")
+    if debug > 0:
+        print()
+        print(f"penalty_warmup {penalty_warmup}, penalty_target {penalty_target}, penalty_iters {penalty_iters}, epoch {epoch}," +
+              f" epochs {epochs}, speed {speed:.2f}, power {power:.4f}, w {w:.4f}, penalty_weight {penalty_weight:.4f}")
     return penalty_weight
 
 class MovingAverage:
