@@ -1145,7 +1145,7 @@ def increasing_weight(pars, penalty_target, penalty_iters, epoch, epochs):
 
 class MovingAverage:
 
-    def __init__(self, ema, oneminusema_correction=True):
+    def __init__(self, ema, oneminusema_correction=True, active=False):
         self.ema = ema
         self.ema_data = {}
         self._updates = 0
@@ -1155,19 +1155,22 @@ class MovingAverage:
         ema_dict_data = {}
         for name, data in dict_data.items():
             data = data.view(1, -1)
-            if self._updates == 0:
-                previous_data = torch.zeros_like(data)
-            else:
-                previous_data = self.ema_data[name]
+            if active:
+                if self._updates == 0:
+                    previous_data = torch.zeros_like(data)
+                else:
+                    previous_data = self.ema_data[name]
 
-            ema_data = self.ema * previous_data + (1 - self.ema) * data
-            if self._oneminusema_correction:
-                # correction by 1/(1 - self.ema)
-                # so that the gradients amplitude backpropagated in data is independent of self.ema
-                ema_dict_data[name] = ema_data / (1 - self.ema)
+                ema_data = self.ema * previous_data + (1 - self.ema) * data
+                if self._oneminusema_correction:
+                    # correction by 1/(1 - self.ema)
+                    # so that the gradients amplitude backpropagated in data is independent of self.ema
+                    ema_dict_data[name] = ema_data / (1 - self.ema)
+                else:
+                    ema_dict_data[name] = ema_data
+                self.ema_data[name] = ema_data.clone().detach()
             else:
-                ema_dict_data[name] = ema_data
-            self.ema_data[name] = ema_data.clone().detach()
-
-        self._updates += 1
+                 ema_dict_data[name] = torch.ones_like(data)
+        if active:
+            self._updates += 1
         return ema_dict_data

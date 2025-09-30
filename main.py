@@ -1426,7 +1426,7 @@ if __name__ == '__main__':
     print('# Classes: {}'.format(c))
 
 
-    ema = utils.MovingAverage(0.99, oneminusema_correction=True) if args.ema else lambda x: torch.tensor(1.0, dtype=torch.float, device=device)
+    ema = utils.MovingAverage(0.99, oneminusema_correction=True, active=args.ema)
 
     # optionally resume from a checkpoint
     best_acc1 = 0
