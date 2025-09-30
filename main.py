@@ -532,6 +532,12 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         raise ValueError(f"Unknown penalty_type: {penalty_type}")
 
     penalty_calculator   = PenaltyCalculator(loss_module, irm_temp=args.irm_temp, debug=args.debug, **kwargs)
+    """
+    We made an attempt to get rid of halving the micro-batches of the whole batch into two subsets. 
+    Turns out this cannot be done because losses and gradients are aggregated over micro-batches, 
+    but aggregations over halves are needed for IRM and it's impossible to recover back the halves 
+    from full aggregators.
+    """
     num_halves  = PenaltyCalculator.num_halves()
 
     loss_aggregator      = torch.zeros((num_halves, num_partitions, args.env_num), dtype=torch.float, device=device) 
@@ -571,7 +577,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 num_samples           = len(batch_micro)
                 num_split_repeates    = int(not args.baseline) * (int(loss_weight>0) + int(penalty_weight>0))
                 num_baseline_repeates = int(loss_keep_weight>0) * int(args.keep_cont)                                  
-                num_repeats           = num_split_repeates + num_baseline_repeates
+                num_repeats           = min(num_split_repeates, num_baseline_repeates)
                 num_grads             = num_partitions * args.env_num * num_split_repeates + num_baseline_repeates
                 grad_outputs          = torch.zeros((num_grads, num_samples*num_repeats), dtype=torch.float, device=device) 
                 differentiate_this    = []
@@ -641,6 +647,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                     loss_keep_aggregator += loss.detach() # after scaler
 
                 if args.keep_cont and (loss_keep_weight>0):
+                    offset = 0 # use losses
                     grad_outputs[-1][offset:offset+num_samples]  = 1.0 * loss_keep_weight / num_partitions / this_batch_size / gradients_accumulation_steps
                     differentiate_this.append(losses_samples)
 
