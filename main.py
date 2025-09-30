@@ -483,7 +483,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
     target_transform = train_loader.dataset.target_transform
 
     if args.increasing_weight:
-        penalty_weight = utils.increasing_weight(0, args.penalty_weight, args.penalty_iters, epoch, args.epochs)
+        penalty_weight = utils.increasing_weight(args.increasing_weight, args.penalty_weight, args.penalty_iters, epoch, args.epochs)
     elif args.penalty_iters < 200:
         penalty_weight = args.penalty_weight if epoch >= args.penalty_iters else 0.
     else:
@@ -1207,7 +1207,8 @@ if __name__ == '__main__':
     parser.add_argument('--penalty_cont', default=1.0, type=float, help='cont penalty weight')
     parser.add_argument('--penalty_keep_cont', default=1.0, type=float, help='cont keep penalty weight')
     parser.add_argument('--penalty_iters', default=0, type=int, help='penalty weight start iteration')
-    parser.add_argument('--increasing_weight', action="store_true", default=False, help='increasing the penalty weight?')
+    parser.add_argument('--increasing_weight', nargs=4, type=float, default=None, help='increasing penalty weight', 
+            metavar='penalty_warmup, scale, k, eps')
     parser.add_argument('--env_num', default=2, type=int, help='num of the environments')
 
     parser.add_argument('--maximize_iter', default=30, type=int, help='when maximize iteration')

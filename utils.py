@@ -1129,12 +1129,12 @@ def atomic_save(state, is_best, args, filename='checkpoint.pth.tar', sync=True):
         os.fsync(dir_fd)
         os.close(dir_fd)
    
-def increasing_weight(penalty_warmup, penalty_target, penalty_iters, epoch, epochs, scale=1.05):
+def increasing_weight(pars, penalty_target, penalty_iters, epoch, epochs):
     if epoch < penalty_iters:
         return penalty_warmup
+    penalty_warmup, scale, k, eps = pars
     # Exponential growth starting at small epsilon to avoid zero multiplication
-    eps = 1e-6
-    power = (epoch - penalty_iters) * 1.9
+    power = (epoch - penalty_iters) * k
     w = penalty_warmup + eps * (scale ** power)
     penalty_weight = min(w, penalty_target)
     print()
