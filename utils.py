@@ -1087,7 +1087,7 @@ def make_test_transform(normalize='CIFAR'):
         K.Normalize(mean=norm_mean, std=norm_std)
     )
 
-def atomic_save(state, is_best, args, filename='checkpoint.pth.tar', sync=True):
+def atomic_save(state, is_best, filename='checkpoint.pth.tar', sync=True):
     filename_tmp = filename + ".tmp"
     torch.save(state, filename_tmp)
 
@@ -1103,7 +1103,8 @@ def atomic_save(state, is_best, args, filename='checkpoint.pth.tar', sync=True):
         raise
 
     if is_best:
-        best_filename = '{}/{}/model_best.pth.tar'.format(args.save_root, args.name)
+        dir_path = os.path.dirname(filename)
+        best_filename = '{}/model_best.pth.tar'.format(dir_path)
         best_filename_tmp = filename + ".tmp"
         shutil.copyfile(filename, best_filename_tmp)
         try:

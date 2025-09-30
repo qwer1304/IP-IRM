@@ -1090,7 +1090,7 @@ def test(net, feature_bank, feature_labels, test_data_loader, args, progress=Fal
                 'n_classes':    args.class_num,
             }
 
-            utils.atomic_save(state, False, args, filename=fp)
+            utils.atomic_save(state, False, filename=fp)
             print(f"Dumped features into {fp}")
 
     return total_top1 / total_num * 100, total_top5 / total_num * 100
@@ -1507,7 +1507,7 @@ if __name__ == '__main__':
                     "python_rng_state": random.getstate(),
                 },
                 'ema':                  ema,
-            }, False, args, filename='{}/{}/checkpoint_1st.pth.tar'.format(args.save_root, args.name))
+            }, False, filename='{}/{}/checkpoint_1st.pth.tar'.format(args.save_root, args.name))
 
     train_loader = None
 
@@ -1617,4 +1617,4 @@ if __name__ == '__main__':
                     "python_rng_state": random.getstate(),
                 },
                 'ema':                  ema,
-            }, is_best, args, filename='{}/{}/checkpoint.pth.tar'.format(args.save_root, args.name))
+            }, is_best, filename='{}/{}/checkpoint.pth.tar'.format(args.save_root, args.name))

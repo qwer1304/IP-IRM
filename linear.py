@@ -259,7 +259,7 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
     return total_loss / total_num, total_correct_1 / total_num * 100, total_correct_5 / total_num * 100
 
 def build_and_save_checkpoint(model, optimizer, epoch, best_acc1, best_epoch,
-                              cuda_rng_state=None, save_dir=".", is_best=False):
+                              cuda_rng_state=None, save_dir=".", is_best=False, args=None):
     """
     Build checkpoint dictionary and save it using atomic_save.
     """
@@ -625,7 +625,8 @@ if __name__ == '__main__':
                     best_epoch=best_epoch,
                     cuda_rng_state=None,
                     save_dir=save_dir,
-                    is_best=is_best
+                    is_best=is_best,
+                    args=args
                 )
                               
         # end for epoch in range(1, epochs + 1):
