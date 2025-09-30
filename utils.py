@@ -1134,7 +1134,7 @@ def increasing_weight(penalty_warmup, penalty_target, penalty_iters, epoch, epoc
         return penalty_warmup
     # Exponential growth starting at small epsilon to avoid zero multiplication
     eps = 1e-6
-    power = epoch - penalty_iters
+    power = (epoch - penalty_iters) * 1.9
     w = penalty_warmup + eps * (scale ** power)
     penalty_weight = min(w, penalty_target)
     print()
