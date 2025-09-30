@@ -658,14 +658,14 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 if args.keep_cont and (loss_keep_weight > 0): # global loss @ 1st partition
                     # This could be done w/o the split into two halves, but this streamlines the code w/o any harm
                     # Here we know that losses are over the whole macro-batch, so we can normalize up-front
-                    loss = losses_samples.sum() / num_partitions / this_batch_size / gradients_accumulation_steps
+                    loss = losses_samples.sum()  / this_batch_size / gradients_accumulation_steps
                     # compute unnormalized gradients for this loss
                     # grad_outputs: one per sample
-                    loss_keep_aggregator += loss.detach() # after scaler
+                    loss_keep_aggregator += loss.detach() # before scaler
 
                 if args.keep_cont and (loss_keep_weight>0):
                     offset = 0 # use losses
-                    grad_outputs[-1][offset:offset+num_samples]  = 1.0 * loss_keep_weight / num_partitions / this_batch_size / gradients_accumulation_steps
+                    grad_outputs[-1][offset:offset+num_samples]  = 1.0 * loss_keep_weight / this_batch_size / gradients_accumulation_steps
                     # don't need to add to losses to be differentiated b/c it uses the same losses
                     # differentiate_this.append(losses_samples)
 
@@ -1208,7 +1208,7 @@ if __name__ == '__main__':
     parser.add_argument('--penalty_keep_cont', default=1.0, type=float, help='cont keep penalty weight')
     parser.add_argument('--penalty_iters', default=0, type=int, help='penalty weight start iteration')
     parser.add_argument('--increasing_weight', nargs=4, type=float, default=None, help='increasing penalty weight', 
-            metavar='penalty_warmup, scale, k, eps')
+            metavar='penalty_warmup, scale, speed, eps')
     parser.add_argument('--env_num', default=2, type=int, help='num of the environments')
 
     parser.add_argument('--maximize_iter', default=30, type=int, help='when maximize iteration')
