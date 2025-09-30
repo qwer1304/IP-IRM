@@ -1105,6 +1105,8 @@ def load_checkpoint(path, model, model_momentum, optimizer, device="cuda"):
     best_epoch = checkpoint.get("best_epoch", -1)
     updated_split = checkpoint.get("updated_split", None)
     updated_split_all = checkpoint.get("updated_split_all", None)
+    ema = checkpoint.get("ema", None)
+
 
     # Restore main model
     msg_model = model.load_state_dict(checkpoint["state_dict"], strict=False)
@@ -1168,7 +1170,7 @@ def load_checkpoint(path, model, model_momentum, optimizer, device="cuda"):
 
     print("<= loaded checkpoint '{}' (epoch {})".format(path, checkpoint.get("epoch", -1)))
 
-    return model, model_momentum, optimizer, queue, start_epoch, best_acc1, best_epoch, updated_split, updated_split_all
+    return model, model_momentum, optimizer, queue, start_epoch, best_acc1, best_epoch, updated_split, updated_split_all, ema
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train SimCLR')
@@ -1436,7 +1438,9 @@ if __name__ == '__main__':
         if os.path.isfile(args.resume):
             (model, model_momentum, optimizer, queue,
              args.start_epoch, best_acc1, best_epoch,
-             updated_split, updated_split_all) = load_checkpoint(args.resume, model, model_momentum, optimizer)
+             updated_split, updated_split_all, ema_) = load_checkpoint(args.resume, model, model_momentum, optimizer)
+             is ema_ is not None:
+                ema = ema_
              # use current LR, not the one from checkpoint
             for param_group in optimizer.param_groups:
                 param_group['lr'] = args.lr
@@ -1497,11 +1501,12 @@ if __name__ == '__main__':
                 'state_dict_momentum':  model_momentum.state_dict() if model_momentum else None,
                 'queue':                queue,
                 "rng_dict": {
-                    "rng_state": torch.get_rng_state(),
-                    "cuda_rng_state": cuda_rng_state,
-                    "numpy_rng_state": np.random.get_state(),
+                    "rng_state":        torch.get_rng_state(),
+                    "cuda_rng_state":   cuda_rng_state,
+                    "numpy_rng_state":  np.random.get_state(),
                     "python_rng_state": random.getstate(),
                 },
+                'ema':                  ema,
             }, False, args, filename='{}/{}/checkpoint_1st.pth.tar'.format(args.save_root, args.name))
 
     train_loader = None
@@ -1606,9 +1611,10 @@ if __name__ == '__main__':
                 'state_dict_momentum':  model_momentum.state_dict() if model_momentum else None,
                 'queue':                queue,
                 "rng_dict": {
-                    "rng_state": torch.get_rng_state(),
-                    "cuda_rng_state": cuda_rng_state,
-                    "numpy_rng_state": np.random.get_state(),
+                    "rng_state":        torch.get_rng_state(),
+                    "cuda_rng_state":   cuda_rng_state,
+                    "numpy_rng_state":  np.random.get_state(),
                     "python_rng_state": random.getstate(),
                 },
+                'ema':                  ema,
             }, is_best, args, filename='{}/{}/checkpoint.pth.tar'.format(args.save_root, args.name))
