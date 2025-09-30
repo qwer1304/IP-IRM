@@ -770,7 +770,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         # Orginal gradients already normalized
         if args.keep_cont and (loss_keep_weight>0):
             for pind, p in enumerate(net.parameters()):
-                total_grad_flat  = loss_keep_grads[pind] / emas['loss_keep']     # dCont/dTheta, shape (param_numel,)
+                total_grad_flat  = loss_keep_grads[pind] / emas['loss_keep'].squeeze()     # dCont/dTheta, shape (param_numel,)
                 if p.grad is None:
                     p.grad   = total_grad_flat.view(p.shape)
                 else:
@@ -781,9 +781,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             grads = []
             for pind, p in enumerate(net.parameters()):
                 dLoss_dTheta_env = loss_grads[pind]     # per env sum of dCont/dTheta, shape (I,J,K,param_numel)
-                total_grad_flat  = loss_module.loss_grads_finalize(dLoss_dTheta_env, loss_env, halves_sz) / emas['loss_env']
-                print()
-                print(total_grad_flat.size(), emas['loss_env'].size())
+                total_grad_flat  = loss_module.loss_grads_finalize(dLoss_dTheta_env, loss_env, halves_sz) / emas['loss_env'].squeeze()
                 if p.grad is None:
                     p.grad   = total_grad_flat.view(p.shape)
                 else:
@@ -802,7 +800,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                         dPenalty_dTheta_env, 
                         penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz, keep_halves=True), 
                         halves_sz
-                    ) / emas['penalty_env']               
+                    ) / emas['penalty_env'].squeeze()               
                 if p.grad is None:
                     p.grad   = total_grad_flat.view(p.shape)
                 else:
