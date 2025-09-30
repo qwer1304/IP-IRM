@@ -483,7 +483,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
     target_transform = train_loader.dataset.target_transform
 
     if args.increasing_weight:
-        penalty_weight = utils.increasing_weight(0, args.penalty_weight, epoch, args.epochs)
+        penalty_weight = utils.increasing_weight(0, args.penalty_weight, args.penalty_iters, epoch, args.epochs)
     elif args.penalty_iters < 200:
         penalty_weight = args.penalty_weight if epoch >= args.penalty_iters else 0.
     else:
