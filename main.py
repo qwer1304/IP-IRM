@@ -566,6 +566,10 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         torch.zeros((*penalty_aggregator.shape, p.numel()), dtype=p.dtype, device=p.device)
         for p in net.parameters()
     ]
+    loss_keep_grads = [  # dLoss / dTheta
+        torch.zeros(p.numel(), dtype=p.dtype, device=p.device)
+        for p in net.parameters()
+    ]
 
     train_optimizer.zero_grad(set_to_none=True) # clear gradients at the beginning 
 
@@ -690,17 +694,14 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                     # 'grads_all' is a tuple w/ an entry per parameter.
                     # each entry is a tensor w/ 1st dim = 'grad_outputs.size(0)' and other dims matching the parameter
 
-                    for p, g in zip(net.parameters(), grads_all):
-                        grads = g[-1]   # shape matches p
-                        if grads is None:
-                            continue
 
-                        if p.grad is None:
-                            # first time: allocate grad buffer with same shape, device, dtype
-                            p.grad = grads.detach().clone()
-                        else:
-                            # subsequent passes: accumulate
-                            p.grad += grads.detach()
+                    # flatten and accumulate per parameter
+                    # 'grads_all' is a tuple w/ an entry per parameter.
+                    # each entry is a tensor w/ 1st dim = 'grad_outputs.size(0)' and other dims matching the parameter
+                    for p, g in zip(net.parameters(), grads_all[-1]): # last row corresponds to loss_cont
+                        if g is None:
+                            continue
+                        loss_keep_grads[p] += g.detach().view(-1)
 
                 if not args.baseline:
                     for _split in range((num_grads - num_baseline_repeates) // num_split_repeates):
@@ -714,6 +715,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                 if g is None:
                                     continue
                                 grads = g[linear_idx]
+                                if grads is None:
+                                    continue
                                 loss_grads[_j][j,partition_num,env] += grads.detach().view(-1)
                             linear_idx += num_partitions * args.env_num # prepare for penalty grads
                         # penalty
@@ -723,6 +726,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                 if g is None:
                                     continue
                                 grads = g[linear_idx]
+                                if grads is None:
+                                    continue
                                 penalty_grads[_j][j,partition_num,env] += grads.detach().view(-1)
                 # end if not args.baseline:
                 loss_module.post_micro_batch()
@@ -745,7 +750,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         if gradients_accumulation_step < gradients_accumulation_steps:
             continue
 
-        # Environments & original cont losses and gradients
+        # Environments losses and gradients
         if loss_weight > 0:
             grads = []
             partition_sz = halves_sz.sum(dim=0, keepdim=True) # (1,J,K) # sizes of envs in macro-batch
@@ -773,10 +778,16 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                     )                
                 p.grad             += total_grad_flat.view(p.shape)  # reshape back to parameter shape
                 grads.append(total_grad_flat.detach().clone())
-            penalty_grads_flat = torch.cat([g for g in grads if g is not None])
-            
+            penalty_grads_flat = torch.cat([g for g in grads if g is not None])           
         else:
             penalty_env = torch.tensor(0, dtype=torch.float)
+
+        # Orginal gradients already normalized
+        if args.keep_cont and (loss_keep_weight>0):
+            for pind, p in enumerate(net.parameters()):
+                total_grad_flat  = loss_keep_grads[pind]     # dCont/dTheta, shape (param_numel,)
+                p.grad          += total_grad_flat.view(p.shape) # reshape back to parameter shape
+                grads.append(total_grad_flat.detach().clone())
 
         if (loss_weight>0) and (penalty_weight>0):
             cosine = torch.nn.functional.cosine_similarity(loss_grads_flat, penalty_grads_flat, dim=0)
@@ -848,6 +859,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         for par in loss_grads: # over list
             par.zero_()
         for par in penalty_grads: # over list
+            par.zero_()
+        for par in loss_keep_grads: # over list
             par.zero_()
         del penalty_env, loss_env, loss_batch
         if (penalty_weight > 0) or (loss_weight > 0):
