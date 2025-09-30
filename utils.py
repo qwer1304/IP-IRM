@@ -1136,4 +1136,8 @@ def increasing_weight(penalty_warmup, penalty_target, penalty_iters, epoch, epoc
     eps = 1e-6
     power = epoch - penalty_iters
     w = penalty_warmup + eps * (scale ** power)
-    return min(w, penalty_target)
+    penalty_weight = min(w, penalty_target)
+    print()
+    print(f"penalty_warmup {penalty_warmup}, penalty_target {penalty_target}, penalty_iters {penalty_iters}, epoch {epoch}," +
+          f" epochs {epochs}, power {power}, w {w}, penalty_weight {penalty_weight}")
+    return penalty_weight
