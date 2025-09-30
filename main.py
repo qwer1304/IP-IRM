@@ -698,10 +698,13 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                     # flatten and accumulate per parameter
                     # 'grads_all' is a tuple w/ an entry per parameter.
                     # each entry is a tensor w/ 1st dim = 'grad_outputs.size(0)' and other dims matching the parameter
-                    for p, g in zip(net.parameters(), grads_all[-1]): # last row corresponds to loss_cont
+                    for _j, g in enumerate(grads_all):
                         if g is None:
                             continue
-                        loss_keep_grads[p] += g.detach().view(-1)
+                        grads = g[-1] # loss keep is always last
+                        if grads is None:
+                            continue
+                        loss_keep_grads[_j] += grads.detach().view(-1)
 
                 if not args.baseline:
                     for _split in range((num_grads - num_baseline_repeates) // num_split_repeates):
