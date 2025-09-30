@@ -1150,12 +1150,13 @@ class MovingAverage:
         self.ema_data = {}
         self._updates = 0
         self._oneminusema_correction = oneminusema_correction
+        self.active = active
 
     def update(self, dict_data):
         ema_dict_data = {}
         for name, data in dict_data.items():
             data = data.view(1, -1)
-            if active:
+            if self.active:
                 if self._updates == 0:
                     previous_data = torch.zeros_like(data)
                 else:
@@ -1171,6 +1172,6 @@ class MovingAverage:
                 self.ema_data[name] = ema_data.clone().detach()
             else:
                  ema_dict_data[name] = torch.ones_like(data)
-        if active:
+        if self.active:
             self._updates += 1
         return ema_dict_data
