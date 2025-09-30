@@ -15,6 +15,8 @@ from torch.utils.data import Dataset, DataLoader, Sampler
 from torch.utils import data
 import random
 import os
+import shutil
+
 import pyvips
 
 import torch
