@@ -649,7 +649,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 if args.keep_cont and (loss_keep_weight>0):
                     offset = 0 # use losses
                     grad_outputs[-1][offset:offset+num_samples]  = 1.0 * loss_keep_weight / num_partitions / this_batch_size / gradients_accumulation_steps
-                    differentiate_this.append(losses_samples)
+                    # don't need to add to losses to be differentiated b/c it uses the same losses
+                    # differentiate_this.append(losses_samples)
 
                 differentiate_this = torch.cat(differentiate_this, dim=0)
 
@@ -657,9 +658,11 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 # 'grads_all' is a tuple w/ an entry per parameter.
                 # each entry is a tensor w/ 1st dim = 'grad_outputs.size(0)' and other dims matching the parameter
 
+                """
                 print()
                 print(f"num_samples {num_samples}, num_split_repeates {num_split_repeates}, num_baseline_repeates {num_baseline_repeates}," +                                  
                       f"num_repeats {num_repeats}, num_grads {num_grads}, grad_outputs {grad_outputs.size()}, differentiate_this {differentiate_this.size()}")
+                """
 
                 grads_all = torch.autograd.grad(
                     differentiate_this,
