@@ -846,8 +846,11 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             cosine = torch.nn.functional.cosine_similarity((loss_keep_grads_flat + loss_grads_flat), penalty_grads_flat, dim=0)           
         else:
             dot, cosine = torch.tensor(0, dtype=torch.float), torch.tensor(0, dtype=torch.float)
-        dot, cosine, loss_grad_norm, penalty_grad_norm, grad_norm_ratio, penalty_grad_scaler = \
-                    dot.item(), cosine.item(), loss_grad_norm.item(), penalty_grad_norm.item(), grad_norm_ratio.item(), penalty_grad_scaler.item()
+        dot, cosine, loss_keep_grad_norm, loss_grad_norm, penalty_grad_norm, grad_norm_ratio, penalty_grad_scaler = \
+                    dot.item(), cosine.item(), loss_keep_grad_norm.item(), loss_grad_norm.item(), \
+                    penalty_grad_norm.item(), grad_norm_ratio.item(), penalty_grad_scaler.item()
+        loss_grad_norm_sq = loss_grad_norm ** 2 + loss_keep_grad_norm ** 2
+        penalty_grad_norm_sq = penalty_grad_norm ** 2
 
         loss_batch = ((loss_keep_weight * loss_keep_aggregator) + # loss_keep_aggregator is a scalar normalized over macro-batch
                       (penalty_weight   * penalty_env.mean())   + # mean over envs normalized over macro-batch
@@ -889,7 +892,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                    f' Env: {total_cont_loss/trained_samples:.4f}' + \
                    f' {args.penalty_type}: {total_irm_loss/trained_samples:.4g}' + \
                    f' LR: {train_optimizer.param_groups[0]["lr"]:.4f} PW {penalty_weight:.4f}' + \
-                   f' dot: {dot:.4g}, cos: {cosine:.4f}, ng_l: {loss_grad_norm:.2g} ng_p: {penalty_grad_norm:.2g}' + \
+                   f' dot: {dot:.4g}, cos: {cosine:.4f}, ng_l^2: {loss_grad_norm_sq:.4g} ng_p^2: {penalty_grad_norm_sq:.4g}' + \
                    f' ng_l/ng_p: {grad_norm_ratio:.4f}, gp_sc: {penalty_grad_scaler:.4f}'
         desc_str += loss_module.get_debug_info_str()
         train_bar.set_description(desc_str)
@@ -899,9 +902,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                             .format(epoch, epochs, trained_samples, total_samples,
                                     total_loss/trained_samples, total_keep_cont_loss/trained_samples, 
                                     total_cont_loss/trained_samples) + 
-                            ' {args.penalty_type}: {:.4g} LR: {:.4f} PW {:.4f} dot {:.4g} cos {:.4f} ng_l: {:.2g} ng_p: {:.2g} ng_l/ng_p {:.4f} gp_sc{:.4f}'
+                            ' {args.penalty_type}: {:.4g} LR: {:.4f} PW {:.4f} dot {:.4g} cos {:.4f} ng_l^2: {:.4g} ng_p^2: {:.4g} ng_l/ng_p {:.4f} gp_sc{:.4f}'
                             .format(total_irm_loss/trained_samples, train_optimizer.param_groups[0]['lr'], penalty_weight, dot, cosine, 
-                                    loss_grad_norm, penalty_grad_norm, grad_norm_ratio, penalty_grad_scaler), 
+                                    loss_grad_norm_sq, penalty_grad_norm_sq, grad_norm_ratio, penalty_grad_scaler), 
                             log_file=log_file)
                                         
         # Prepare for next iteration
