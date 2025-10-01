@@ -709,7 +709,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                         loss_keep_grads[_j] += grads
 
                 if not args.baseline:
-                    for _split in range((num_grads - num_baseline_repeates) // num_split_repeates):
+                    for _split in range((num_grads - num_baseline_repeates) // max(1,num_split_repeates)):
                         partition_num, env = _split // args.env_num, _split % args.env_num 
                         linear_idx = _split
                         if loss_weight > 0:
