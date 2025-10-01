@@ -830,7 +830,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             cosine = torch.nn.functional.cosine_similarity((loss_keep_grads_flat + loss_grads_flat), penalty_grads_flat, dim=0)
         else:
             cosine = torch.tensor(0, dtype=torch.float)
-        cosine, loss_grads_norm, penalty_grads_norm, penalty_grad_scaler = cosine.item(), loss_grads_norm.item(), penalty_grads_norm.item(), penalty_grad_scaler.item()
+        cosine, loss_grad_norm, penalty_grad_norm, penalty_grad_scaler = cosine.item(), loss_grad_norm.item(), penalty_grad_norm.item(), penalty_grad_scaler.item()
 
         loss_batch = ((loss_keep_weight * loss_keep_aggregator) + # loss_keep_aggregator is a scalar normalized over macro-batch
                       (penalty_weight   * penalty_env.mean())   + # mean over envs normalized over macro-batch
@@ -872,7 +872,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                    f' Env: {total_cont_loss/trained_samples:.4f}' + \
                    f' {args.penalty_type}: {total_irm_loss/trained_samples:.4g}' + \
                    f' LR: {train_optimizer.param_groups[0]["lr"]:.4f} PW {penalty_weight:.4f}' + \
-                   f' cos: {cosine:.4f}, ng_p: {penalty_grads_norm:.2g} ng_l: {loss_grads_norm:.2g} ng_l/ng_p: {penalty_grad_scaler:.4f}'
+                   f' cos: {cosine:.4f}, ng_p: {penalty_grad_norm:.2g} ng_l: {loss_grad_norm:.2g} ng_l/ng_p: {penalty_grad_scaler:.4f}'
         desc_str += loss_module.get_debug_info_str()
         train_bar.set_description(desc_str)
 
@@ -883,7 +883,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                     total_cont_loss/trained_samples) + 
                             ' {args.penalty_type}: {:.4g} LR: {:.4f} PW {:.4f} cos {:.4f} ng_p: {:.2g} ng_l: {:.2g} ng_l/ng_p {:.4f}'
                             .format(total_irm_loss/trained_samples, train_optimizer.param_groups[0]['lr'], penalty_weight, cosine, 
-                                    penalty_grads_norm, loss_grads_norm, penalty_grad_scaler), 
+                                    penalty_grad_norm, loss_grad_norm, penalty_grad_scaler), 
                             log_file=log_file)
                                         
         # Prepare for next iteration
