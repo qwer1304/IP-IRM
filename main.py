@@ -1296,7 +1296,7 @@ if __name__ == '__main__':
     parser.add_argument('--weight_decay', default=1e-6, type=float, help='weight decay')
     
     parser.add_argument('--ema', action="store_true", help="adjust gradients w/ EMA")
-    parser.add_argument('--scale_penalty_grad', type=flot, default=None, help="scale penalty grad norm to match that of loss * this")
+    parser.add_argument('--scale_penalty_grad', type=float, default=None, help="scale penalty grad norm to match that of loss * this")
 
     # args parse
     args = parser.parse_args()
