@@ -821,7 +821,10 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             # for keep_weight = loss_weight = 1, weight_keep = 1/penalty_weight, weight_loss = 1/penalty_weight
             # scaler = 1/penalty_weight * [(norm_keep + norm_loss) / norm_penalty]_true = [(norm_keep + norm_loss) / norm_penalty]_measured
             # hence [(norm_keep + norm_loss) / norm_penalty]_true = [(norm_keep + norm_loss) / norm_penalty]_measured * penalty_weight
-            penalty_grad_scaler = (loss_keep_grad_norm + loss_grad_norm) / (penalty_grad_norm + 1e-12) if args.scale_penalty_grad else torch.tensor(1., dtype=torch.float, device=device)
+            if args.scale_penalty_grad:
+                penalty_grad_scaler = (loss_keep_grad_norm + loss_grad_norm) / (penalty_grad_norm + 1e-12) * args.scale_penalty_grad
+            else:
+                penalty_grad_scaler = torch.tensor(1., dtype=torch.float, device=device)
         else:
             penalty_grad_norm = torch.tensor(0., dtype=torch.float, device=device)
             penalty_grad_scaler = torch.tensor(1., dtype=torch.float, device=device)
@@ -1293,7 +1296,7 @@ if __name__ == '__main__':
     parser.add_argument('--weight_decay', default=1e-6, type=float, help='weight decay')
     
     parser.add_argument('--ema', action="store_true", help="adjust gradients w/ EMA")
-    parser.add_argument('--scale_penalty_grad', action="store_true", help="scale penalty grad norm to match that of loss")
+    parser.add_argument('--scale_penalty_grad', type=flot, default=None, help="scale penalty grad norm to match that of loss * this")
 
     # args parse
     args = parser.parse_args()
