@@ -1178,3 +1178,6 @@ class MovingAverage:
         if self.active:
             self._updates += 1
         return ema_dict_data
+
+    def set_active(self, active):
+        self.active = active
