@@ -834,8 +834,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         if args.scale_penalty_grad and (dot < 0):
             if S2 <= S1:
                 eps = 1e-6
-                den = penalty_grad_norm_sq + dot
-                penalty_grad_scaler = (S1 - eps) if (den > 0) else (S2 + eps)
+                s_bal = (loss_grad_norm_sq - dot) / (penalty_grad_norm_sq - dot + 1e-30)
+                penalty_grad_scaler = torch.clamp(s_bal, S2 + eps, S1 - eps)   # clamp into feasible interval
                     
         # Penalty and its gradients
         if penalty_weight > 0:
