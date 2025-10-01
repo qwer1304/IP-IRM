@@ -664,7 +664,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                     # grad_outputs: one per sample
                     loss_keep_aggregator += loss # before scaler
 
-                if args.keep_cont and (loss_keep_weight>0):
                     offset = 0 # use losses
                     grad_outputs[-1][offset:offset+num_samples]  = 1.0 * loss_keep_weight / this_batch_size / gradients_accumulation_steps
                     # don't need to add to losses to be differentiated b/c it uses the same losses
@@ -741,7 +740,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 loss_module.prepare_for_free()
                 
                 # free memory of micro-batch
-                del batch_micro, indexs, losses_samples, grads, g, grads_all, differentiate_this, loss
+                del batch_micro, indexs, losses_samples, grads, g, grads_all, differentiate_this
+                if (loss_weight > 0) or (args.keep_cont and (loss_keep_weight > 0)):
+                    del loss
                 if loss_weight > 0:
                     pass
                 if penalty_weight > 0:
