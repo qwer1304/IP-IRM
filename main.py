@@ -847,7 +847,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         else:
             dot, cosine = torch.tensor(0, dtype=torch.float), torch.tensor(0, dtype=torch.float)
         dot, cosine, loss_grad_norm, penalty_grad_norm, grad_norm_ratio, penalty_grad_scaler = \
-                    dot.item*), cosine.item(), loss_grad_norm.item(), penalty_grad_norm.item(), grad_norm_ratio.item(), penalty_grad_scaler.item()
+                    dot.item(), cosine.item(), loss_grad_norm.item(), penalty_grad_norm.item(), grad_norm_ratio.item(), penalty_grad_scaler.item()
 
         loss_batch = ((loss_keep_weight * loss_keep_aggregator) + # loss_keep_aggregator is a scalar normalized over macro-batch
                       (penalty_weight   * penalty_env.mean())   + # mean over envs normalized over macro-batch
