@@ -613,7 +613,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
 
                 # compute unnormalized micro-batch loss
                 losses_samples = loss_module.compute_loss_micro(reduction='none')
-                if loss_weight > 0:
+                if (loss_weight > 0) or (args.keep_cont and (loss_keep_weight > 0)):
                     differentiate_this.append(losses_samples)
                 if penalty_weight > 0:
                     penalties_samples = penalty_calculator.penalty(losses_samples, reduction='none')
@@ -839,7 +839,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
 
         if (loss_weight>0) and (penalty_weight>0):
             penalty_grads_flat = torch.cat([g.detach().clone() for g in penalty_grads_flat if g is not None])           
-            cosine = torch.nn.functional.cosine_similarity((loss_keep_grads_flat + loss_grads_flat), penalty_grads_flat, dim=0)
+            cosine = torch.nn.functional.cosine_similarity((loss_keep_grads_flat + loss_grads_flat), penalty_grads_flat, dim=0)           
         else:
             cosine = torch.tensor(0, dtype=torch.float)
         cosine, loss_grad_norm, penalty_grad_norm, penalty_grad_scaler = cosine.item(), loss_grad_norm.item(), penalty_grad_norm.item(), penalty_grad_scaler.item()
