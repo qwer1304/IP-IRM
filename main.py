@@ -705,7 +705,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                         grads = g[-1] # loss keep is always last
                         if grads is None:
                             continue
-                        grads = grads.grads.detach().view(-1)
+                        grads = grads.detach().view(-1)
                         loss_keep_grads[_j] += grads
 
                 if not args.baseline:
@@ -722,7 +722,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                 grads = g[linear_idx]
                                 if grads is None:
                                     continue
-                                grads = grads.grads.detach().view(-1)
+                                grads = grads.detach().view(-1)
                                 loss_grads[_j][j,partition_num,env] += grads
                             linear_idx += num_partitions * args.env_num # prepare for penalty grads
                         # penalty
@@ -734,7 +734,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                 grads = g[linear_idx]
                                 if grads is None:
                                     continue
-                                grads = grads.grads.detach().view(-1)
+                                grads = grads.detach().view(-1)
                                 penalty_grads[_j][j,partition_num,env] += grads
                 # end if not args.baseline:
                 loss_module.post_micro_batch()
