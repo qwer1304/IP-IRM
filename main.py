@@ -810,11 +810,12 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
 
         if (loss_weight>0) and (penalty_weight>0):
             cosine = torch.nn.functional.cosine_similarity(loss_grads_flat, penalty_grads_flat, dim=0)
-            norms = penalty_grads_flat.norm() / (loss_grads_flat.norm() + 1e-12)
+            loss_grads_norm, penalty_grads_norm = loss_grads_flat.norm(), penalty_grads_flat.norm()
+            norms_ratio = penalty_grads_norm / (loss_grads_norm + 1e-12)
         else:
-            cosine, norms = torch.tensor(0, dtype=torch.float), torch.tensor(0, dtype=torch.float) 
-        cosine = cosine.item()
-        norms = norms.item()
+            loss_grads_norm, penalty_grads_norm = torch.tensor(0, dtype=torch.float), torch.tensor(0, dtype=torch.float)
+            cosine, norms_ratio = torch.tensor(0, dtype=torch.float), torch.tensor(0, dtype=torch.float) 
+        cosine, loss_grads_norm, penalty_grads_norm, norms_ratio = cosine.item(), loss_grads_norm.item(), penalty_grads_norm.item(), norms_ratio.item()
 
         loss_batch = ((loss_keep_weight * loss_keep_aggregator) + # loss_keep_aggregator is a scalar normalized over macro-batch
                       (penalty_weight   * penalty_env.mean())   + # mean over envs normalized over macro-batch
@@ -824,7 +825,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         # -----------------------
         # Step 3: optimizer step
         # -----------------------
-        if (args.penalty_iters > 0) and (epoch == args.penalty_iters) and (penalty_weight > 0):
+        if (args.penalty_iters > 0) and (epoch == args.penalty_iters) and (penalty_weight > 0) and (not args.increasing_weight):
             # Reset Adam, because it doesn't like the sharp jump in gradient
             # magnitudes that happens at this step.
 
@@ -856,7 +857,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                    f' Env: {total_cont_loss/trained_samples:.4f}' + \
                    f' {args.penalty_type}: {total_irm_loss/trained_samples:.4g}' + \
                    f' LR: {train_optimizer.param_groups[0]["lr"]:.4f} PW {penalty_weight:.4f}' + \
-                   f' cos: {cosine:.4f}, ||gp||/||gl||: {norms:.4f}'
+                   f' cos: {cosine:.4f}, ng_p: {penalty_grads_norm:.2g} ng_l: {loss_grads_norm:.2g} ng_p/ng_l: {norms_ratio:.4f}'
         desc_str += loss_module.get_debug_info_str()
         train_bar.set_description(desc_str)
 
@@ -865,8 +866,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                             .format(epoch, epochs, trained_samples, total_samples,
                                     total_loss/trained_samples, total_keep_cont_loss/trained_samples, 
                                     total_cont_loss/trained_samples) + 
-                            ' {args.penalty_type}: {:.4g} LR: {:.4f} PW {:.4f} cos {:.4f} norms {:.4f}'
-                            .format(total_irm_loss/trained_samples, train_optimizer.param_groups[0]['lr'], penalty_weight, cosine, norms), 
+                            ' {args.penalty_type}: {:.4g} LR: {:.4f} PW {:.4f} cos {:.4f} ng_p: {:.2g} ng_l: {:.2g} ng_p/ng_l {:.4f}'
+                            .format(total_irm_loss/trained_samples, train_optimizer.param_groups[0]['lr'], penalty_weight, cosine, 
+                                    penalty_grads_norm, loss_grads_norm, norms_ratio), 
                             log_file=log_file)
                                         
         # Prepare for next iteration
