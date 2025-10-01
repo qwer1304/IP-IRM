@@ -764,21 +764,27 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             penalty_env = torch.tensor(0, dtype=torch.float)
 
         # ema
+        """
         ema_data = {'loss_env': loss_env.mean(), 'penalty_env': penalty_env.mean(), 'loss_keep': loss_keep_aggregator.mean()}
         emas = ema.update(ema_data)
-        
+        """
+
+        # normalize gradient norms
+
         # Orginal gradients already normalized
         if args.keep_cont and (loss_keep_weight>0):
             for pind, p in enumerate(net.parameters()):
-                total_grad_flat  = loss_keep_grads[pind] / emas['loss_keep'].squeeze()     # dCont/dTheta, shape (param_numel,)
+                total_grad_flat  = loss_keep_grads[pind]    # dCont/dTheta, shape (param_numel,)
                 if p.grad is None:
                     p.grad   = total_grad_flat.view(p.shape)
                 else:
                     p.grad  += total_grad_flat.view(p.shape) # reshape back to parameter shape
-
-        # Environments losses and gradients
+        loss_keep_grads_flat = torch.cat([g.detach().clone() for g in loss_keep_grads if g is not None])
+        loss_keep_grad_norm = loss_keep_grads_flat.norm() # can be 0
+        
+        # Environments gradients
         if loss_weight > 0:
-            grads = []
+            loss_grads_flat = []
             for pind, p in enumerate(net.parameters()):
                 dLoss_dTheta_env = loss_grads[pind]     # per env sum of dCont/dTheta, shape (I,J,K,param_numel)
                 total_grad_flat  = loss_module.loss_grads_finalize(dLoss_dTheta_env, loss_env, halves_sz) / emas['loss_env'].squeeze()
@@ -786,36 +792,45 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                     p.grad   = total_grad_flat.view(p.shape)
                 else:
                     p.grad  += total_grad_flat.view(p.shape) # reshape back to parameter shape
-                grads.append(total_grad_flat.detach().clone())
-            loss_grads_flat = torch.cat([g for g in grads if g is not None])
+                loss_grads_flat.append(total_grad_flat)
+            loss_grads_flat = torch.cat([g.detach().clone() for g in loss_grads_flat if g is not None])
+            loss_grad_norm = loss_grads_flat.norm()
+        else:
+            loss_grad_norm = torch.tensor(0, dtype=torch.float, device=device)
 
-        # Penalty and its gradients
         if penalty_weight > 0:
-            grads = []
+            penalty_grads_flat = []
             penalty_env = penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz) # normalized per env for macro-batch
-            for pind, p in enumerate(net.parameters()):
+            for pind range(len(penalty_grads)):
                 dPenalty_dTheta_env = penalty_grads[pind]  # per env sum of dPenalty/dTheta over macro-batch per parameter, shape (I,J,K,param_numel)
                 total_grad_flat     = \
                     penalty_calculator.penalty_grads_finalize(
                         dPenalty_dTheta_env, 
                         penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz, keep_halves=True), 
                         halves_sz
-                    ) / emas['penalty_env'].squeeze()               
+                    )              
+                penalty_grads_flat.append(total_grad_flat.detach().clone())
+            grads_flat = torch.cat([g.detach().clone() for g in penalty_grads_flat if g is not None])           
+            penalty_grad_norm = grads_flat.norm()
+            penalty_grad_scaler = (loss_keep_grad_norm + loss_grad_norm) / (penalty_grad_norm + 1e-12)
+        else:
+            penalty_grad_norm = torch.tensor(0, dtype=torch.float, device=device)
+            penalty_grad_scaler = 1.0
+            
+        # Penalty and its gradients
+        if penalty_weight > 0:
+            for pind, p in enumerate(net.parameters()):
                 if p.grad is None:
-                    p.grad   = total_grad_flat.view(p.shape)
+                    p.grad   = penalty_grads_flat[pind].view(p.shape) * penalty_grad_scaler
                 else:
-                    p.grad  += total_grad_flat.view(p.shape) # reshape back to parameter shape
-                grads.append(total_grad_flat.detach().clone())
-            penalty_grads_flat = torch.cat([g for g in grads if g is not None])           
+                    p.grad  += penalty_grads_flat[pind].view(p.shape) * penalty_grad_scaler # reshape back to parameter shape
 
         if (loss_weight>0) and (penalty_weight>0):
-            cosine = torch.nn.functional.cosine_similarity(loss_grads_flat, penalty_grads_flat, dim=0)
-            loss_grads_norm, penalty_grads_norm = loss_grads_flat.norm(), penalty_grads_flat.norm()
-            norms_ratio = penalty_grads_norm / (loss_grads_norm + 1e-12)
+            penalty_grads_flat = torch.cat([g.detach().clone() for g in penalty_grads_flat if g is not None])           
+            cosine = torch.nn.functional.cosine_similarity((loss_keep_grads_flat + loss_grads_flat), penalty_grads_flat, dim=0)
         else:
-            loss_grads_norm, penalty_grads_norm = torch.tensor(0, dtype=torch.float), torch.tensor(0, dtype=torch.float)
-            cosine, norms_ratio = torch.tensor(0, dtype=torch.float), torch.tensor(0, dtype=torch.float) 
-        cosine, loss_grads_norm, penalty_grads_norm, norms_ratio = cosine.item(), loss_grads_norm.item(), penalty_grads_norm.item(), norms_ratio.item()
+            cosine = torch.tensor(0, dtype=torch.float)
+        cosine, loss_grads_norm, penalty_grads_norm, penalty_grad_scaler = cosine.item(), loss_grads_norm.item(), penalty_grads_norm.item(), penalty_grad_scaler.item()
 
         loss_batch = ((loss_keep_weight * loss_keep_aggregator) + # loss_keep_aggregator is a scalar normalized over macro-batch
                       (penalty_weight   * penalty_env.mean())   + # mean over envs normalized over macro-batch
@@ -857,7 +872,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                    f' Env: {total_cont_loss/trained_samples:.4f}' + \
                    f' {args.penalty_type}: {total_irm_loss/trained_samples:.4g}' + \
                    f' LR: {train_optimizer.param_groups[0]["lr"]:.4f} PW {penalty_weight:.4f}' + \
-                   f' cos: {cosine:.4f}, ng_p: {penalty_grads_norm:.2g} ng_l: {loss_grads_norm:.2g} ng_p/ng_l: {norms_ratio:.4f}'
+                   f' cos: {cosine:.4f}, ng_p: {penalty_grads_norm:.2g} ng_l: {loss_grads_norm:.2g} ng_l/ng_p: {penalty_grad_scaler:.4f}'
         desc_str += loss_module.get_debug_info_str()
         train_bar.set_description(desc_str)
 
@@ -866,9 +881,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                             .format(epoch, epochs, trained_samples, total_samples,
                                     total_loss/trained_samples, total_keep_cont_loss/trained_samples, 
                                     total_cont_loss/trained_samples) + 
-                            ' {args.penalty_type}: {:.4g} LR: {:.4f} PW {:.4f} cos {:.4f} ng_p: {:.2g} ng_l: {:.2g} ng_p/ng_l {:.4f}'
+                            ' {args.penalty_type}: {:.4g} LR: {:.4f} PW {:.4f} cos {:.4f} ng_p: {:.2g} ng_l: {:.2g} ng_l/ng_p {:.4f}'
                             .format(total_irm_loss/trained_samples, train_optimizer.param_groups[0]['lr'], penalty_weight, cosine, 
-                                    penalty_grads_norm, loss_grads_norm, norms_ratio), 
+                                    penalty_grads_norm, loss_grads_norm, penalty_grad_scaler), 
                             log_file=log_file)
                                         
         # Prepare for next iteration
