@@ -889,7 +889,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                    f' Env: {total_cont_loss/trained_samples:.4f}' + \
                    f' {args.penalty_type}: {total_irm_loss/trained_samples:.4g}' + \
                    f' LR: {train_optimizer.param_groups[0]["lr"]:.4f} PW {penalty_weight:.4f}' + \
-                   f' dot: {dot:.4f}, cos: {cosine:.4f}, ng_l: {loss_grad_norm:.2g} ng_p: {penalty_grad_norm:.2g}' + \
+                   f' dot: {dot:.4g}, cos: {cosine:.4f}, ng_l: {loss_grad_norm:.2g} ng_p: {penalty_grad_norm:.2g}' + \
                    f' ng_l/ng_p: {grad_norm_ratio:.4f}, gp_sc: {penalty_grad_scaler:.4f}'
         desc_str += loss_module.get_debug_info_str()
         train_bar.set_description(desc_str)
@@ -899,7 +899,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                             .format(epoch, epochs, trained_samples, total_samples,
                                     total_loss/trained_samples, total_keep_cont_loss/trained_samples, 
                                     total_cont_loss/trained_samples) + 
-                            ' {args.penalty_type}: {:.4g} LR: {:.4f} PW {:.4f} dot {:.4f} cos {:.4f} ng_l: {:.2g} ng_p: {:.2g} ng_l/ng_p {:.4f} gp_sc{:.4f}'
+                            ' {args.penalty_type}: {:.4g} LR: {:.4f} PW {:.4f} dot {:.4g} cos {:.4f} ng_l: {:.2g} ng_p: {:.2g} ng_l/ng_p {:.4f} gp_sc{:.4f}'
                             .format(total_irm_loss/trained_samples, train_optimizer.param_groups[0]['lr'], penalty_weight, dot, cosine, 
                                     loss_grad_norm, penalty_grad_norm, grad_norm_ratio, penalty_grad_scaler), 
                             log_file=log_file)
