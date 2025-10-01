@@ -833,7 +833,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         penalty_grad_scaler = torch.tensor(1., dtype=torch.float, device=device) # default
         if args.scale_penalty_grad and (dot < 0):
             if S2 <= S1:
-                penalty_grad_scaler = (S1 + S2) / 2
+                eps = 1e-6
+                den = penalty_grad_norm_sq + dot
+                penalty_grad_scaler = (S1 - eps) if (den > 0) else (S2 + eps)
                     
         # Penalty and its gradients
         if penalty_weight > 0:
