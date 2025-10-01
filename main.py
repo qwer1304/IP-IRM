@@ -1443,7 +1443,7 @@ if __name__ == '__main__':
              updated_split, updated_split_all, ema_) = load_checkpoint(args.resume, model, model_momentum, optimizer)
             if ema_ is not None: # exists in checkpoint
                 ema = ema_
-             ema.set_active(args.ema) # set to what the user has currently set
+            ema.set_active(args.ema) # set to what the user has currently set
             # use current LR, not the one from checkpoint
             for param_group in optimizer.param_groups:
                 param_group['lr'] = args.lr
