@@ -768,8 +768,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         else:
             penalty_env = torch.tensor(0, dtype=torch.float)
 
-        loss_keep_grads_flat = torch.cat([g.detach().clone() for g in loss_keep_grads if g is not None])
-        loss_keep_grad_norm = loss_keep_grads_flat.norm() # can be 0
+        l_keep_grads_flat = torch.cat([g.detach().clone() for g in loss_keep_grads if g is not None])
+        loss_keep_grad_norm = l_keep_grads_flat.norm() # can be 0
         
         # Environments gradients
         if loss_weight > 0:
@@ -801,7 +801,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
 
         if ((loss_weight>0) or (args.keep_cont and (loss_keep_weight>0))) and (penalty_weight>0):
             dot = (l_keep_grads_flat + l_grads_flat).dot(p_grads_flat)
-            cosine = torch.nn.functional.cosine_similarity((loss_keep_grads_flat + loss_grads_flat), p_grads_flat, dim=0)           
+            cosine = torch.nn.functional.cosine_similarity((l_keep_grads_flat + l_grads_flat), p_grads_flat, dim=0)           
         else:
             dot, cosine = torch.tensor(0, dtype=torch.float), torch.tensor(0, dtype=torch.float)
 
@@ -932,7 +932,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         if penalty_weight > 0:
             del dPenalty_dTheta_env, penalty_grads_flat, p_grads_flat
         if loss_weight > 0:
-            dLoss_dTheta_env, loss_grads_flat
+            dLoss_dTheta_env, loss_grads_flat, l_grads_flat 
+        del l_keep_grads_flat
         torch.cuda.empty_cache()
 
         loss_module.post_batch()
