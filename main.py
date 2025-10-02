@@ -768,14 +768,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         else:
             penalty_env = torch.tensor(0, dtype=torch.float)
 
-        # ema
-        """
-        ema_data = {'loss_env': loss_env.mean(), 'penalty_env': penalty_env.mean(), 'loss_keep': loss_keep_aggregator.mean()}
-        emas = ema.update(ema_data)
-        """
-
-        # normalize gradient norms - norms inlude multiplication by their respective scaler
-
         # Orginal gradients already normalized
         if args.keep_cont and (loss_keep_weight>0):
             for pind, p in enumerate(net.parameters()):
@@ -837,6 +829,11 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 s_bal = (loss_grad_norm_sq - dot) / (penalty_grad_norm_sq - dot + 1e-30)
                 penalty_grad_scaler = torch.clamp(s_bal, S2 + eps, S1 - eps)   # clamp into feasible interval
                     
+        # ema
+        ema_data = {'scaler': penalty_grad_scaler}
+        emas = ema.update(ema_data)
+        penalty_grad_scaler = emas['scaler']
+
         # Penalty and its gradients
         if penalty_weight > 0:
             for pind, p in enumerate(net.parameters()):
@@ -1464,7 +1461,7 @@ if __name__ == '__main__':
     print('# Classes: {}'.format(c))
 
 
-    ema = utils.MovingAverage(0.99, oneminusema_correction=True, active=args.ema)
+    ema = utils.MovingAverage(0.95, oneminusema_correction=False, active=args.ema)
 
     # optionally resume from a checkpoint
     best_acc1 = 0
