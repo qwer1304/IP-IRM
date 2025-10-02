@@ -807,6 +807,12 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
 
         loss_grad_norm_sq = loss_grad_norm ** 2 + loss_keep_grad_norm ** 2
         penalty_grad_norm_sq = penalty_grad_norm ** 2
+
+        # ema
+        ema_data = {'loss_grad': loss_grad_norm_sq, 'penalty_grad': penalty_grad_norm_sq, 'dot': dot}
+        emas = ema.update(ema_data)
+        loss_grad_norm_sq, penalty_grad_norm_sq, dot = ema_data['loss_grad'].squeeze(), ema_data['penalty_grad'].squeeze(), ema_data['dot'].squeeze()
+
         S1 = loss_grad_norm_sq / (dot.abs() + 1e-30)
         S2 = dot.abs() / (penalty_grad_norm_sq + 1e-30)
         
@@ -818,12 +824,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 eps = 1e-6
                 s_bal = (loss_grad_norm_sq - dot) / (penalty_grad_norm_sq - dot + 1e-30)
                 penalty_grad_scaler = torch.clamp(s_bal, S2 + eps, S1 - eps)   # clamp into feasible interval
-                    
-                # ema
-                ema_data = {'scaler': penalty_grad_scaler}
-                emas = ema.update(ema_data)
-                penalty_grad_scaler = emas['scaler'].squeeze() # value is (1,N)
-                penalty_grad_scaler = torch.clamp(penalty_grad_scaler, S2 + eps, S1 - eps)   # clamp into feasible interval
 
         penalty_grad_scaler_orig = penalty_grad_scaler
         if penalty_grad_scaler > 1.0:
@@ -831,31 +831,16 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             loss_grad_scaler /= penalty_grad_scaler
             penalty_grad_scaler = torch.tensor(1., dtype=torch.float, device=device)
             
-        # Orginal gradients already normalized
-        if args.keep_cont and (loss_keep_weight>0):
-            for pind, p in enumerate(net.parameters()):
-                total_grad_flat  = loss_keep_grads[pind]    # dCont/dTheta, shape (param_numel,)
-                if p.grad is None:
-                    p.grad   = total_grad_flat.view(p.shape) * loss_keep_grad_scaler
-                else:
-                    p.grad  += total_grad_flat.view(p.shape) * loss_keep_grad_scaler # reshape back to parameter shape
-
-        # Environments gradients
-        if loss_weight > 0:
-            for pind, p in enumerate(net.parameters()):
-                if p.grad is None:
-                    p.grad   = loss_grads_flat[pind].view(p.shape) * loss_grad_scaler
-                else:
-                    p.grad  += loss_grads_flat[pind].view(p.shape) * loss_grad_scaler
-
-        # Penalty and its gradients
-        if penalty_weight > 0:
-            for pind, p in enumerate(net.parameters()):
-                if p.grad is None:
-                    p.grad   = penalty_grads_flat[pind].view(p.shape) * penalty_grad_scaler
-                else:
-                    p.grad  += penalty_grads_flat[pind].view(p.shape) * penalty_grad_scaler # reshape back to parameter shape
-
+        for pind, p in enumerate(net.parameters()):
+            total_grad_flat = (  loss_keep_grads[pind]    * loss_keep_grad_scaler
+                               + loss_grads_flat[pind]    * loss_grad_scaler
+                               + penalty_grads_flat[pind] * penalty_grad_scaler
+                              )
+            if p.grad is None:
+                p.grad  = total_grad_flat.view(p.shape)
+            else:
+                p.grad += total_grad_flat.view(p.shape)                
+        
         dot, cosine, loss_keep_grad_norm, loss_grad_norm, penalty_grad_norm, penalty_grad_scaler, loss_grad_norm_sq, penalty_grad_norm_sq = \
                     dot.item(), cosine.item(), loss_keep_grad_norm.item(), loss_grad_norm.item(), \
                     penalty_grad_norm.item(), penalty_grad_scaler.item(), loss_grad_norm_sq.item(), penalty_grad_norm_sq.item()
@@ -900,7 +885,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                    f' Env {total_cont_loss/trained_samples:.4f}' + \
                    f' {args.penalty_type} {total_irm_loss/trained_samples:.4g}' + \
                    f' LR {train_optimizer.param_groups[0]["lr"]:.4f} PW {penalty_weight:.4f}' + \
-                   f' dot {dot:.4g} cos: {cosine:.4f} ngl^2 {loss_grad_norm_sq:.4g} ngp^2 {penalty_grad_norm_sq:.4g}' + \
+                   f' dot {dot:.4g} cos {cosine:.4f} ngl^2 {loss_grad_norm_sq:.4g} ngp^2 {penalty_grad_norm_sq:.4g}' + \
                    f' gp_sc {penalty_grad_scaler_orig:.4f}'
         desc_str += loss_module.get_debug_info_str()
         train_bar.set_description(desc_str)
