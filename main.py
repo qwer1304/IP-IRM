@@ -824,7 +824,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             if (ngp2 + dot) * (ngl2 + dot) < 0: # different signs, (cases b, c)
                 T = torch.abs(ngl2 + dot) / torch.abs(ngp2 + dot + 1e-30)
             else: # same signs, (cases a, d)
-                T = torch.tensor(0.0)  # no hard requirement 
+                T = torch.tensor(0.0, device=device)  # no hard requirement 
                 
             S1 = torch.clamp(ngl2 / (d + 1e-30), max=S1_cap)
 
