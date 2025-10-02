@@ -811,20 +811,28 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         # ema
         ema_data = {'loss_grad': loss_grad_norm_sq, 'penalty_grad': penalty_grad_norm_sq, 'dot': dot}
         emas = ema.update(ema_data)
-        loss_grad_norm_sq, penalty_grad_norm_sq, dot = ema_data['loss_grad'].squeeze(), ema_data['penalty_grad'].squeeze(), ema_data['dot'].squeeze()
+        loss_grad_norm_sq_ema, penalty_grad_norm_sq_ema, dot_ema = ema_data['loss_grad'].squeeze(), ema_data['penalty_grad'].squeeze(), ema_data['dot'].squeeze()
 
-        S1 = loss_grad_norm_sq / (dot.abs() + 1e-30)
-        S2 = dot.abs() / (penalty_grad_norm_sq + 1e-30)
-        
+        def get_s_S1_S2(lg_sq, pg_sq, dot, eps=1e-6):
+            S1 = lg_sq / (dot.abs() + 1e-30)
+            S2 = dot.abs() / (pg_sq + 1e-30)
+            s_bal = (lg_sq - dot) / (pg_sq - dot + 1e-30)
+            return s_bal, S1, S2
+            
         loss_keep_grad_scaler = torch.tensor(1., dtype=torch.float, device=device) # default
         loss_grad_scaler = torch.tensor(1., dtype=torch.float, device=device) # default
         penalty_grad_scaler = torch.tensor(1., dtype=torch.float, device=device) # default
-        if args.scale_penalty_grad and (dot < 0):
-            if S2 <= S1:
-                eps = 1e-6
-                s_bal = (loss_grad_norm_sq - dot) / (penalty_grad_norm_sq - dot + 1e-30)
-                penalty_grad_scaler = torch.clamp(s_bal, S2 + eps, S1 - eps)   # clamp into feasible interval
 
+        if args.scale_penalty_grad and (dot < 0):
+            eps                   = 1e-6
+            s_bal,     S1,     S2 = get_s_S1_S2(loss_grad_norm_sq,     penalty_grad_norm_sq,     dot,     eps=eps)
+            s_bal_ema, _,      _  = get_s_S1_S2(loss_grad_norm_sq_ema, penalty_grad_norm_sq_ema, dot_ema, eps=eps)
+
+            if S2 <= S1:
+                # soft-project EMA into instant interval
+                s_soft              = torch.clamp(s_bal_ema, S2 + eps, S1 - eps)
+                penalty_grad_scaler = 0.85 * s_bal_ema + 0.15 * s_soft        
+        
         penalty_grad_scaler_orig = penalty_grad_scaler
         if penalty_grad_scaler > 1.0:
             loss_keep_grad_scaler /= penalty_grad_scaler
