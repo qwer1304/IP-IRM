@@ -829,10 +829,11 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 s_bal = (loss_grad_norm_sq - dot) / (penalty_grad_norm_sq - dot + 1e-30)
                 penalty_grad_scaler = torch.clamp(s_bal, S2 + eps, S1 - eps)   # clamp into feasible interval
                     
-        # ema
-        ema_data = {'scaler': penalty_grad_scaler}
-        emas = ema.update(ema_data)
-        penalty_grad_scaler = emas['scaler'].squeeze() # value is (1,N)
+                # ema
+                ema_data = {'scaler': penalty_grad_scaler}
+                emas = ema.update(ema_data)
+                penalty_grad_scaler = emas['scaler'].squeeze() # value is (1,N)
+                penalty_grad_scaler = torch.clamp(penalty_grad_scaler, S2 + eps, S1 - eps)   # clamp into feasible interval
 
         # Penalty and its gradients
         if penalty_weight > 0:
@@ -879,15 +880,15 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         total_cont_loss      += (loss_weight      * loss_env.mean()).item()      * this_batch_size * gradients_accumulation_steps
         total_loss           += loss_batch.item()                                * this_batch_size * gradients_accumulation_steps
 
-        desc_str = f'Train Epoch: [{epoch}/{epochs}] [{trained_samples}/{total_samples}]' + \
-                   f' {args.ssl_type}:' + \
-                   f' Total: {total_loss/trained_samples:.4f}' + \
-                   f' First: {total_keep_cont_loss/trained_samples:.4f}' + \
-                   f' Env: {total_cont_loss/trained_samples:.4f}' + \
-                   f' {args.penalty_type}: {total_irm_loss/trained_samples:.4g}' + \
-                   f' LR: {train_optimizer.param_groups[0]["lr"]:.4f} PW {penalty_weight:.4f}' + \
-                   f' dot: {dot:.4g}, cos: {cosine:.4f}, ng_l^2: {loss_grad_norm_sq:.4g} ng_p^2: {penalty_grad_norm_sq:.4g}' + \
-                   f' gp_sc: {penalty_grad_scaler:.4f}'
+        desc_str = f'Train Epoch [{epoch}/{epochs}] [{trained_samples}/{total_samples}]' + \
+                   f' {args.ssl_type}' + \
+                   f' Total {total_loss/trained_samples:.4f}' + \
+                   f' Keep {total_keep_cont_loss/trained_samples:.4f}' + \
+                   f' Env {total_cont_loss/trained_samples:.4f}' + \
+                   f' {args.penalty_type} {total_irm_loss/trained_samples:.4g}' + \
+                   f' LR {train_optimizer.param_groups[0]["lr"]:.4f} PW {penalty_weight:.4f}' + \
+                   f' dot {dot:.4g}, cos: {cosine:.4f}, ngl^2 {loss_grad_norm_sq:.4g} ngp^2 {penalty_grad_norm_sq:.4g}' + \
+                   f' gp_sc {penalty_grad_scaler:.4f}'
         desc_str += loss_module.get_debug_info_str()
         train_bar.set_description(desc_str)
 
