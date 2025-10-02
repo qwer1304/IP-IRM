@@ -800,7 +800,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             grad_norm_ratio = (loss_keep_grad_norm + loss_grad_norm) / (penalty_grad_norm + 1e-12)
 
         if ((loss_weight>0) or (args.keep_cont and (loss_keep_weight>0))) and (penalty_weight>0):
-            dot = (loss_keep_grads_flat + loss_grads_flat).dot(p_grads_flat)
+            dot = (l_keep_grads_flat + l_grads_flat).dot(p_grads_flat)
             cosine = torch.nn.functional.cosine_similarity((loss_keep_grads_flat + loss_grads_flat), p_grads_flat, dim=0)           
         else:
             dot, cosine = torch.tensor(0, dtype=torch.float), torch.tensor(0, dtype=torch.float)
