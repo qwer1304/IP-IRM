@@ -825,6 +825,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 penalty_grad_scaler = emas['scaler'].squeeze() # value is (1,N)
                 penalty_grad_scaler = torch.clamp(penalty_grad_scaler, S2 + eps, S1 - eps)   # clamp into feasible interval
 
+        penalty_grad_scaler_orig = penalty_grad_scaler
         if penalty_grad_scaler > 1.0:
             loss_keep_grad_scaler /= penalty_grad_scaler
             loss_grad_scaler /= penalty_grad_scaler
@@ -900,7 +901,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                    f' {args.penalty_type} {total_irm_loss/trained_samples:.4g}' + \
                    f' LR {train_optimizer.param_groups[0]["lr"]:.4f} PW {penalty_weight:.4f}' + \
                    f' dot {dot:.4g} cos: {cosine:.4f} ngl^2 {loss_grad_norm_sq:.4g} ngp^2 {penalty_grad_norm_sq:.4g}' + \
-                   f' gp_sc {penalty_grad_scaler:.4f}'
+                   f' gp_sc {penalty_grad_scaler_orig:.4f}'
         desc_str += loss_module.get_debug_info_str()
         train_bar.set_description(desc_str)
 
@@ -911,7 +912,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                     total_cont_loss/trained_samples) + 
                             ' {args.penalty_type}: {:.4g} LR: {:.4f} PW {:.4f} dot {:.4g} cos {:.4f} ng_l^2: {:.4g} ng_p^2: {:.4g} gp_sc{:.4f}'
                             .format(total_irm_loss/trained_samples, train_optimizer.param_groups[0]['lr'], penalty_weight, dot, cosine, 
-                                    loss_grad_norm_sq, penalty_grad_norm_sq, penalty_grad_scaler), 
+                                    loss_grad_norm_sq, penalty_grad_norm_sq, penalty_grad_scaler_orig), 
                             log_file=log_file)
                                         
         # Prepare for next iteration
