@@ -1160,7 +1160,7 @@ class MovingAverage:
         for name, data in dict_data.items():
             data = data.view(1, -1)
             if self.active:
-                if self._updates == 0:
+                if self._updates == 0 or (name not in self.ema_data):
                     previous_data = torch.zeros_like(data)
                 else:
                     previous_data = self.ema_data[name]
