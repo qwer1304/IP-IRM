@@ -808,30 +808,47 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         loss_grad_norm_sq = loss_grad_norm ** 2 + loss_keep_grad_norm ** 2
         penalty_grad_norm_sq = penalty_grad_norm ** 2
 
-        # ema
-        ema_data = {'loss_grad': loss_grad_norm_sq, 'penalty_grad': penalty_grad_norm_sq, 'dot': dot}
-        emas = ema.update(ema_data)
-        loss_grad_norm_sq_ema, penalty_grad_norm_sq_ema, dot_ema = ema_data['loss_grad'].squeeze(), ema_data['penalty_grad'].squeeze(), ema_data['dot'].squeeze()
+        def compute_gradient_scaler(ngl2, ngp2, dot, ema, eps=1e-6, S1_cap=100.0, safe_s=1.0):
+            """
+            ngl2, ngp2: squared loss and penalty gradients
+            dot: dot product between loss and penalty
+            ema: instance of MovingAverage
+            Returns: scaler
+            """
+            device = ngl2.device
+            d = dot.abs()
 
-        def get_s_S1_S2(lg_sq, pg_sq, dot, eps=1e-6):
-            S1 = lg_sq / (dot.abs() + 1e-30)
-            S2 = dot.abs() / (pg_sq + 1e-30)
-            s_bal = (lg_sq - dot) / (pg_sq - dot + 1e-30)
-            return s_bal, S1, S2
-            
+            s_bal = (ngl2 - dot) / (ngp2 - dot + 1e-30) # balanced scaler
+
+            # Minimal required scaler for descent 
+            if (ngp2 + dot) * (ngl2 + dot) < 0: # different signs, (cases b, c)
+                T = torch.abs(ngl2 + dot) / torch.abs(ngp2 + dot + 1e-30)
+            else: # same signs, (cases a, d)
+                T = torch.tensor(0.0)  # no hard requirement 
+                
+            S1 = torch.clamp(ngl2 / (d + 1e-30), max=S1_cap)
+
+            if T > S1:
+                # Strict descent impossible, pick safe small s
+                s_bal = torch.tensor(safe_s, device=device)
+            else:
+                # Normal case: pick s >= T, do not exceed S1
+                s_bal = torch.clamp(s_bal, T, S1)
+
+            ema_data = {'scaler': s_bal.view(1, -1)}
+            emas = ema.update(ema_data)
+            s_ema = emas['scaler'].squeeze()
+
+            s_ema = torch.clamp(s_ema, T, S1)
+
+            return s_ema
+
         loss_keep_grad_scaler = torch.tensor(1., dtype=torch.float, device=device) # default
         loss_grad_scaler = torch.tensor(1., dtype=torch.float, device=device) # default
         penalty_grad_scaler = torch.tensor(1., dtype=torch.float, device=device) # default
 
         if args.scale_penalty_grad and (dot < 0):
-            eps                   = 1e-6
-            s_bal,     S1,     S2 = get_s_S1_S2(loss_grad_norm_sq,     penalty_grad_norm_sq,     dot,     eps=eps)
-            s_bal_ema, _,      _  = get_s_S1_S2(loss_grad_norm_sq_ema, penalty_grad_norm_sq_ema, dot_ema, eps=eps)
-
-            if S2 <= S1:
-                # soft-project EMA into instant interval
-                s_soft              = torch.clamp(s_bal_ema, S2 + eps, S1 - eps)
-                penalty_grad_scaler = 0.85 * s_bal_ema + 0.15 * s_soft        
+            penalty_grad_scaler = compute_gradient_scaler(loss_grad_norm_sq, penalty_grad_norm_sq, dot, ema)
         
         penalty_grad_scaler_orig = penalty_grad_scaler
         if penalty_grad_scaler > 1.0:
@@ -1306,7 +1323,7 @@ if __name__ == '__main__':
     parser.add_argument('--SGD_momentum', default=0.9, type=float, help='LR')
     parser.add_argument('--weight_decay', default=1e-6, type=float, help='weight decay')
     
-    parser.add_argument('--ema', action="store_true", help="adjust gradients w/ EMA")
+    parser.add_argument('--ema', type=str, default=None, choices=['reinit', 'retain'], help="adjust gradients w/ EMA")
     parser.add_argument('--scale_penalty_grad', action="store_true", help="scale penalty grads")
 
     # args parse
@@ -1480,7 +1497,7 @@ if __name__ == '__main__':
             (model, model_momentum, optimizer, queue,
              args.start_epoch, best_acc1, best_epoch,
              updated_split, updated_split_all, ema_) = load_checkpoint(args.resume, model, model_momentum, optimizer)
-            if ema_ is not None: # exists in checkpoint
+            if (ema_ is not None) and (args.ema == 'retain'): # exists in checkpoint
                 ema = ema_
             ema.set_active(args.ema) # set to what the user has currently set
             # use current LR, not the one from checkpoint
