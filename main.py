@@ -832,7 +832,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         # ema
         ema_data = {'scaler': penalty_grad_scaler}
         emas = ema.update(ema_data)
-        penalty_grad_scaler = emas['scaler']
+        penalty_grad_scaler = emas['scaler'].squeeze() # value is (1,N)
 
         # Penalty and its gradients
         if penalty_weight > 0:
