@@ -774,7 +774,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         # Environments gradients
         if loss_weight > 0:
             loss_grads_flat = []
-            for pind in range(len(net.parameters())):
+            for pind, _ in enumerate(net.parameters()):
                 dLoss_dTheta_env = loss_grads[pind]     # per env sum of dCont/dTheta, shape (I,J,K,param_numel)
                 total_grad_flat  = loss_module.loss_grads_finalize(dLoss_dTheta_env, loss_env, halves_sz)
                 loss_grads_flat.append(total_grad_flat)
