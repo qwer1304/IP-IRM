@@ -152,8 +152,8 @@ class VRExCalculator(BaseCalculator):
         """
         Given dPenalty/dTheta, Penalty per half, per env and their sizes calculate the combined gradient.
         dV/dTheta = 2/E*sum_e((Loss_e - mu) * grad_e), where mu = 1/E*sum_e(Loss_e) 
-            grads:      dPenalty/dTheta per half, per env, unnormalized (1,num_partitions,num_envs,parnums)
-            penalties:  Penalty per half, normalized per env, (1,num_partitions,num_envs)
+            grads:      dPenalty/dTheta per half, per env, unnormalized (1,num_partitions,num_envs,parnums), unweighted
+            penalties:  Penalty per half, normalized per env, (1,num_partitions,num_envs), unweighted
             szs:        sizes of halves of environments
         """
         
@@ -217,8 +217,8 @@ class IRMCalculator(BaseCalculator):
     def penalty_grads_finalize(self, grads, penalties, szs):
         """
         Given dPenalty/dTheta, Penalty per half, per env and their sizes calculate the combined gradient.
-            grads:      dPenalty/dTheta per half, per env, unnormalized
-            penalties:  Penalty per half, normalized per env
+            grads:      dPenalty/dTheta per half, per env, unnormalized, unweighted
+            penalties:  Penalty per half, normalized per env, unweighted
             szs:        sizes of halves of environments
         """
         # IRM = gs1 * gs2, where gs1 and gs2 are gradients w.r.t. scaler of mean CE of halves of sample in a batch
@@ -334,8 +334,8 @@ class LossModule:
 
     def loss_grads_finalize(self, grads, losses, szs):
         """
-            grads:  Penalty per half, unnormalized per env
-            losses: Losses per half, normalized per env
+            grads:  Penalty per half, unnormalized per env, weighted
+            losses: Losses per half, normalized per env, unweighted
             szs:    sizes of halves of environments
         """
         num_env = prod(szs.size())
@@ -646,11 +646,11 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                             mask = torch.zeros(num_samples, dtype=torch.float, device=device)
                             mask[idxs] = 1.0
                             if loss_weight>0:
-                                grad_outputs[linear_idx][offset:offset+num_samples] = mask * loss_weight
+                                grad_outputs[linear_idx][offset:offset+num_samples] = mask # unweighted
                                 linear_idx += num_partitions * args.env_num
                                 offset += num_samples
                             if penalty_weight>0:
-                                grad_outputs[linear_idx][offset:offset+num_samples] = mask * penalty_weight
+                                grad_outputs[linear_idx][offset:offset+num_samples] = mask # unweighted
                                 offset += num_samples
                         # end for env in range(args.env_num):
                     # end for partition_num, partition in enumerate(partitions):
@@ -665,7 +665,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                     loss_keep_aggregator += loss # before scaler
 
                     offset = 0 # use losses
-                    grad_outputs[-1][offset:offset+num_samples]  = 1.0 * loss_keep_weight / this_batch_size / gradients_accumulation_steps
+                    grad_outputs[-1][offset:offset+num_samples]  = 1.0 / this_batch_size / gradients_accumulation_steps # unweighted
                     # don't need to add to losses to be differentiated b/c it uses the same losses
                     # differentiate_this.append(losses_samples)
 
@@ -760,34 +760,34 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
 
         if loss_weight > 0:
             partition_sz = halves_sz.sum(dim=0, keepdim=True) # (1,J,K) # sizes of envs in macro-batch
-            loss_env = loss_aggregator.sum(dim=0, keepdim=True) / partition_sz  # per env for macro-batch, normalized per env
+            loss_env = loss_aggregator.sum(dim=0, keepdim=True) / partition_sz  # per env for macro-batch, normalized per env, unweighted
         else:
             loss_env = torch.tensor(0, dtype=torch.float)
         if penalty_weight > 0:
-            penalty_env = penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz) # normalized per env for macro-batch
+            penalty_env = penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz) # normalized per env for macro-batch, unweighted
         else:
             penalty_env = torch.tensor(0, dtype=torch.float)
 
-        l_keep_grads_flat = torch.cat([g.detach().clone() for g in loss_keep_grads if g is not None])
-        loss_keep_grad_norm = l_keep_grads_flat.norm() # can be 0
+        l_keep_grads_flat = torch.cat([g.detach().clone() for g in loss_keep_grads if g is not None]) * loss_keep_weight # weighted
+        loss_keep_grad_norm = l_keep_grads_flat.norm() # weighted, can be 0
         
         # Environments gradients
         if loss_weight > 0:
             loss_grads_flat = []
             for pind, _ in enumerate(net.parameters()):
-                dLoss_dTheta_env = loss_grads[pind]     # per env sum of dCont/dTheta, shape (I,J,K,param_numel)
+                dLoss_dTheta_env = loss_grads[pind]     # per env sum of dCont/dTheta, shape (I,J,K,param_numel), unweighted
                 total_grad_flat  = loss_module.loss_grads_finalize(dLoss_dTheta_env, loss_env, halves_sz)
                 loss_grads_flat.append(total_grad_flat)
-            l_grads_flat = torch.cat([g.detach().clone() for g in loss_grads_flat if g is not None])
-            loss_grad_norm = l_grads_flat.norm()
+            l_grads_flat = torch.cat([g.detach().clone() for g in loss_grads_flat if g is not None]) * loss_weight # weighted
+            loss_grad_norm = l_grads_flat.norm() # weighted
         else:
             loss_grad_norm = torch.tensor(0., dtype=torch.float, device=device)
 
         if penalty_weight > 0:
             penalty_grads_flat = []
-            penalty_env = penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz) # normalized per env for macro-batch
+            penalty_env = penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz) # normalized per env for macro-batch, unweighted
             for pind in range(len(penalty_grads)):
-                dPenalty_dTheta_env = penalty_grads[pind]  # per env sum of dPenalty/dTheta over macro-batch per parameter, shape (I,J,K,param_numel)
+                dPenalty_dTheta_env = penalty_grads[pind]  # per env sum of dPenalty/dTheta over macro-batch per parameter, unweighted, shape (I,J,K,param_numel)
                 total_grad_flat     = \
                     penalty_calculator.penalty_grads_finalize(
                         dPenalty_dTheta_env, 
@@ -795,18 +795,18 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                         halves_sz
                     )              
                 penalty_grads_flat.append(total_grad_flat.detach().clone())
-            p_grads_flat = torch.cat([g.detach().clone() for g in penalty_grads_flat if g is not None])           
-            penalty_grad_norm = p_grads_flat.norm()
-            grad_norm_ratio = (loss_keep_grad_norm + loss_grad_norm) / (penalty_grad_norm + 1e-12)
+            p_grads_flat = torch.cat([g.detach().clone() for g in penalty_grads_flat if g is not None]) * penalty_weight # weighted         
+            penalty_grad_norm = p_grads_flat.norm() # weighted
+            grad_norm_ratio = (loss_keep_grad_norm + loss_grad_norm) / (penalty_grad_norm + 1e-12) # weighted
 
         if ((loss_weight>0) or (args.keep_cont and (loss_keep_weight>0))) and (penalty_weight>0):
-            dot = (l_keep_grads_flat + l_grads_flat).dot(p_grads_flat)
-            cosine = torch.nn.functional.cosine_similarity((l_keep_grads_flat + l_grads_flat), p_grads_flat, dim=0)           
+            dot = (l_keep_grads_flat + l_grads_flat).dot(p_grads_flat) # weighted
+            cosine = torch.nn.functional.cosine_similarity(l_keep_grads_flat + l_grads_flat, p_grads_flat, dim=0) # weighted          
         else:
             dot, cosine = torch.tensor(0, dtype=torch.float), torch.tensor(0, dtype=torch.float)
 
-        loss_grad_norm_sq = loss_grad_norm ** 2 + loss_keep_grad_norm ** 2
-        penalty_grad_norm_sq = penalty_grad_norm ** 2
+        loss_grad_norm_sq = loss_grad_norm ** 2 + loss_keep_grad_norm ** 2 # weighted
+        penalty_grad_norm_sq = penalty_grad_norm ** 2 # weighted
 
         def compute_gradient_scaler(ngl2, ngp2, dot, ema, eps=1e-6, S1_cap=100.0, safe_s=1.0):
             """
@@ -847,7 +847,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         loss_grad_scaler = torch.tensor(1., dtype=torch.float, device=device) # default
         penalty_grad_scaler = torch.tensor(1., dtype=torch.float, device=device) # default
 
-        if args.scale_penalty_grad and (dot < 0):
+        if args.scale_penalty_grad and (dot < 0): # FIX ME!!!!!!!!!!!!!!!!!!!!!!!!!
             penalty_grad_scaler = compute_gradient_scaler(loss_grad_norm_sq, penalty_grad_norm_sq, dot, ema)
         
         penalty_grad_scaler_orig = penalty_grad_scaler
@@ -857,9 +857,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             penalty_grad_scaler = torch.tensor(1., dtype=torch.float, device=device)
             
         for pind, p in enumerate(net.parameters()):
-            total_grad_flat = (  loss_keep_grads[pind]    * loss_keep_grad_scaler
-                               + loss_grads_flat[pind]    * loss_grad_scaler
-                               + penalty_grads_flat[pind] * penalty_grad_scaler
+            total_grad_flat = (  loss_keep_grads[pind]    * loss_keep_weight * loss_keep_grad_scaler
+                               + loss_grads_flat[pind]    * loss_weight      * loss_grad_scaler
+                               + penalty_grads_flat[pind] * penalty_weight   * penalty_grad_scaler
                               )
             if p.grad is None:
                 p.grad  = total_grad_flat.view(p.shape)
