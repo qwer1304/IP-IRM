@@ -1552,7 +1552,7 @@ if __name__ == '__main__':
         if os.path.isfile(args.resume):
             (model, model_momentum, optimizer, queue,
              args.start_epoch, best_acc1, best_epoch,
-             updated_split, updated_split_all, ema_, gradnorm_balancer, gradnorm_optimizer) = \
+             updated_split, updated_split_all, ema_, gradnorm_balancer, gradnorm_optimizer_s) = \
                 load_checkpoint(args.resume, model, model_momentum, optimizer, gradnorm_balancer, gradnorm_optimizer)
             if (ema_ is not None) and (args.ema == 'retain'): # exists in checkpoint
                 ema = ema_
