@@ -893,8 +893,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             print(f'task names: {gradnorm_balancer.task_names}')
             print(f'parameters: {list(gradnorm_balancer.parameters())}')
             # 1) Does optimizer actually contain the exact Parameter objects?
-            opt_ids = {id(p) for g in gradnorm_optimizer.param_groups for p in g['params']}
-            print(f'opts_ids: {opt_ids}')
             for k, p in gradnorm_balancer.task_weights.items():
                 print("param in opt?", k, id(p) in opt_ids)
 
@@ -1233,7 +1231,7 @@ def load_checkpoint(path, model, model_momentum, optimizer, gradnorm_balancer, g
         else:
             queue = None    
 
-    if True and (gradnorm_balancer is not None):
+    if (gradnorm_balancer is not None):
         if ("state_dict_gradnorm" in checkpoint) and (checkpoint["state_dict_gradnorm"] is not None):
             msg_gradnorm = gradnorm_balancer.load_state_dict(
                 checkpoint["state_dict_gradnorm"],
@@ -1252,7 +1250,7 @@ def load_checkpoint(path, model, model_momentum, optimizer, gradnorm_balancer, g
                 if torch.is_tensor(v):
                     state[k] = v.to(device)
 
-    if True and ("gradnorm_optimizer" in checkpoint) and (checkpoint["gradnorm_optimizer"] is not None):
+    if ("gradnorm_optimizer" in checkpoint) and (checkpoint["gradnorm_optimizer"] is not None):
         gradnorm_optimizer.load_state_dict(checkpoint["gradnorm_optimizer"])
         # Move optimizer tensors to the correct device
         for state in gradnorm_optimizer.state.values():
@@ -1575,31 +1573,6 @@ if __name__ == '__main__':
              args.start_epoch, best_acc1, best_epoch,
              updated_split, updated_split_all, ema_, gradnorm_balancer, gradnorm_optimizer) = \
                 load_checkpoint(args.resume, model, model_momentum, optimizer, gradnorm_balancer, gradnorm_optimizer)
-        print()
-        print('After resume')
-        print(f'task names: {gradnorm_balancer.task_names}')
-        print(f'parameters: {list(gradnorm_balancer.parameters())}')
-        # 1) Does optimizer actually contain the exact Parameter objects?
-        opt_ids = {id(p) for g in gradnorm_optimizer.param_groups for p in g['params']}
-        print(f'opts_ids: {opt_ids}')
-        for k, p in gradnorm_balancer.task_weights.items():
-            print("param in opt?", k, id(p) in opt_ids)
-
-        # 2) Are grads present and nonzero?
-        for k, p in gradnorm_balancer.task_weights.items():
-            print(k, "requires_grad=", p.requires_grad,
-                  "grad is None?", p.grad is None,
-                  "grad norm=", None if p.grad is None else p.grad.norm().item())
-
-            if (ema_ is not None) and (args.ema == 'retain'): # exists in checkpoint
-                ema = ema_
-            ema.set_active(args.ema) # set to what the user has currently set
-            # use current LR, not the one from checkpoint
-            for param_group in optimizer.param_groups:
-                param_group['lr'] = args.lr
-            resumed = True
-        else:
-            print("=> no checkpoint found at '{}'".format(args.resume))
 
     # training loop
     if not os.path.exists('results'):
