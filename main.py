@@ -1213,7 +1213,7 @@ def load_checkpoint(path, model, model_momentum, optimizer, gradnorm_balancer, g
     if gradnorm_balancer is not None:
         if "state_dict_gradnorm" in checkpoint and checkpoint["state_dict_gradnorm"] is not None:
             msg_gradnorm = gradnorm_balancer.load_state_dict(
-                checkpoint["state_dict_gradnorm"], strict=False
+                checkpoint["state_dict_gradnorm"],
             )
         else:
             msg_gradnorm = "no gradnorm in checkpoint"
