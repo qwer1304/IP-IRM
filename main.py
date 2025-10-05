@@ -889,6 +889,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         train_optimizer.step()
         train_optimizer.zero_grad(set_to_none=True)     # clear gradients at beginning of next gradients batch
         if do_gradnorm:
+            """
             print()
             opt_ids = {id(p) for g in gradnorm_optimizer.param_groups for p in g['params']}
             # 1) Does optimizer actually contain the exact Parameter objects?
@@ -908,7 +909,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             # 4) Check lr / optimizer param count
             print("optimizer lr(s):", [g['lr'] for g in gradnorm_optimizer.param_groups])
             print("optimizer param counts:", [len(g['params']) for g in gradnorm_optimizer.param_groups])
-
+            """
             gradnorm_optimizer.zero_grad(set_to_none=True)  # clear gradients
             gradnorm_loss.backward()
             gradnorm_optimizer.step()
