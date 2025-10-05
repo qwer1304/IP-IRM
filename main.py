@@ -831,7 +831,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 if do_loss:
                     losses_dict['loss']     = loss_weighted
                     grad_norms_dict['loss'] = loss_grad_norm_weighted
-                if do_loss_keep:
+                if do_keep_loss:
                     losses_dict['loss_keep']     = loss_keep_weighted
                     grad_norms_dict['loss_keep'] = loss_keep_grad_norm_weighted
                     
