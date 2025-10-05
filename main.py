@@ -823,6 +823,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         
         normalized_weights = {}
         do_gradnorm = False
+        tau = torch.tensor(1.0, dtype=torch.float, device=device)
         if do_penalty:
             if args.gradnorm and (epoch >= args.gradnorm_epoch):
                 do_gradnorm = True
@@ -839,8 +840,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 
                 loss_weight = sum([normalized_weights[k] for k in normalized_weights if k != 'penalty'])
                 tau = loss_weight / (normalized_weights['penalty'] + 1e-12)
-        else:
-            tau = torch.tensor(1.0, dtype=torch.float, device=device)
         
         loss_keep_grad_scaler = normalized_weights['loss_keep'] if 'loss_keep' in normalized_weights else torch.tensor(1.0, dtype=torch.float, device=device)
         loss_grad_scaler      = normalized_weights['loss']      if 'loss'      in normalized_weights else torch.tensor(1.0, dtype=torch.float, device=device)
