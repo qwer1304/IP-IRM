@@ -150,23 +150,41 @@ class GradNormLossBalancer(nn.Module):
             "running_loss_rates": {k: float(v) for k, v in self.running_loss_rates.items()},
         }
 
-    # --------------------------------------------
-    # Custom load_state_dict for GradNorm
-    # --------------------------------------------
-    def load_state_dict(self, state_dict):
-        # Safely restore task weights
-        for k, v in state_dict["task_weights"].items():
-            # ensure Parameter is re-registered properly
-            self.task_weights[k] = nn.Parameter(v.clone().detach().requires_grad_())
+    def load_state_dict(self, state_dict, optimizer=None, gradnorm_optimizer=None, add_param_groups_if_new=False):
+        """
+        Load saved state. If optimizer(s) are provided, this function will:
+          - copy into existing parameters in-place when possible (preserves optimizer tracking)
+          - if new params must be created, it will register them, and optionally add them
+            to the provided gradnorm_optimizer (via add_param_group).
+        Returns: list of newly_registered_param_names
+        """
+        newly_registered = []
 
-        # handle tensors and floats for backward compat
+        # task_weights: update in-place if present, otherwise register new Parameter
+        for k, v in state_dict["task_weights"].items():
+            v = v.detach().clone()
+            if k in self.task_weights:
+                # in-place copy preserves object identity (optimizer still tracks it)
+                self.task_weights[k].data.copy_(v.to(self.task_weights[k].device))
+            else:
+                # register new param
+                self.task_weights[k] = nn.Parameter(v.clone().detach().requires_grad_())
+                newly_registered.append(k)
+
+        # initial_losses and running rates (non-Parameters)
         self.initial_losses = {
             k: (v.clone().detach() if torch.is_tensor(v) else torch.tensor(v))
             for k, v in state_dict["initial_losses"].items()
         }
-
         self.running_loss_rates = dict(state_dict.get("running_loss_rates", {}))
 
+        # If new params were registered and a gradnorm_optimizer is provided, add them
+        if newly_registered and gradnorm_optimizer is not None and add_param_groups_if_new:
+            new_params = [self.task_weights[k] for k in newly_registered]
+            gradnorm_optimizer.add_param_group({'params': new_params})
+
+        return newly_registered
+        
     def set_alpha(self, alpha):
         self.alpha = alpha
-        
+
