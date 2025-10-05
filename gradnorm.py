@@ -45,6 +45,7 @@ class GradNormLossBalancer:
         lb, ub : dictionaries of lb and ub constraints on task's weight
         """
         for k in self.task_weights.keys():
+            x   = self.task_weights[k]
             llb = lb[k] if k in lb else None
             uub = ub[k] if k in ub else None
             x = torch.clamp(x, llb, uub)
