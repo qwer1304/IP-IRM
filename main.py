@@ -1573,6 +1573,18 @@ if __name__ == '__main__':
              args.start_epoch, best_acc1, best_epoch,
              updated_split, updated_split_all, ema_, gradnorm_balancer, gradnorm_optimizer) = \
                 load_checkpoint(args.resume, model, model_momentum, optimizer, gradnorm_balancer, gradnorm_optimizer)
+ 
+            if (ema_ is not None) and (args.ema == 'retain'): # exists in checkpoint
+                ema = ema_
+            ema.set_active(args.ema) # set to what the user has currently set
+            # use current LR, not the one from checkpoint
+            for param_group in optimizer.param_groups:
+                param_group['lr'] = args.lr
+            for param_group in gradnorm_optimizer.param_groups:
+                param_group['lr'] = args.lr
+            resumed = True
+        else:
+            print("=> no checkpoint found at '{}'".format(args.resume))
 
     # training loop
     if not os.path.exists('results'):
