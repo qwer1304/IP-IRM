@@ -835,7 +835,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                     losses_dict['loss_keep']     = loss_keep_weighted
                     grad_norms_dict['loss_keep'] = loss_keep_grad_norm_weighted
                     
-                normalized_weights, gradnorm_loss, grad_norms = gradnorm_balancer.compute_weights_and_loss(losses_dict, grad_norms)
+                normalized_weights, gradnorm_loss, grad_norms = gradnorm_balancer.compute_weights_and_loss(losses_dict, grad_norms_dict)
         
         loss_keep_grad_scaler = normalized_weights['loss_keep'] if 'loss_keep' in normalized_weights else 1.0
         loss_grad_scaler      = normalized_weights['loss']      if 'loss'      in normalized_weights else 1.0
@@ -1520,7 +1520,6 @@ if __name__ == '__main__':
 
     ema = utils.MovingAverage(0.95, oneminusema_correction=False, active=args.ema)
     
-
     initial_weights = {'penalty': 1.0}
     if args.penalty_cont > 0:
         initial_weights['loss'] = 1.0
