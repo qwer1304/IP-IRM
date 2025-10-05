@@ -14,6 +14,7 @@ from tqdm.auto import tqdm
 
 import utils
 from model import ModelResnet, SimSiam
+import gradnorm as gn
 from prepare import prepare_datasets, traverse_objects
 import gc
 from math import ceil, prod
@@ -576,6 +577,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
     ]
 
     train_optimizer.zero_grad(set_to_none=True) # clear gradients at the beginning 
+    k = 0 # number of consecutive batches r_mag is within bounds
 
     for batch_index, data_env in enumerate(train_bar):
 
@@ -767,7 +769,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         else:
             penalty_env = torch.tensor(0, dtype=torch.float)
 
-        l_keep_grads_flat_weighted = torch.cat([g.detach().clone() for g in loss_keep_grads_final if g is not None]) * loss_keep_weight # weighted
+        l_keep_grads_flat_weighted = torch.cat([g.detach().clone() for g in loss_keep_grads_final if g is not None]) * loss_keep_weight
         loss_keep_grad_norm_weighted = l_keep_grads_flat_weighted.norm() # weighted, can be 0
         
         # Environments gradients
@@ -812,16 +814,45 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         loss_grad_norm_weighted_sq = loss_grad_norm_weighted ** 2 + loss_keep_grad_norm_weighted ** 2
         penalty_grad_norm_weighted_sq = penalty_grad_norm_weighted ** 2
 
-        loss_keep_grad_scaler = torch.tensor(1., dtype=torch.float, device=device) # default
-        loss_grad_scaler = torch.tensor(1., dtype=torch.float, device=device) # default
-        penalty_grad_scaler = torch.tensor(1., dtype=torch.float, device=device) # default
-
+        loss_weighted      = loss_weight      * loss_env.mean()
+        loss_keep_weighted = loss_keep_weight * loss_keep_aggregator.mean()
+        penalty_weighted   = penalty_weight   * penalty_env.mean()
+        
+        emas = ema.update({'ngl_keep': loss_keep_grad_norm_weighted, 'ngl': loss_grad_norm_weighted, 'ngp': penalty_grad_norm_weighted})
+        ngl_keep, ngl, ngp = emas.values()
+        
+        normalized_weights = {}
+        do_gradnorm = False
+        if do_penalty:
+            if args.gradnorm and (epoch >= args.gradnorm_epoch):
+                do_gradnorm = True
+                losses_dict      = {'penalty': penalty_weighted}
+                grad_norms_dict  = {'penalty': penalty_grad_norm_weighted}
+                if do_loss:
+                    losses_dict['loss']     = loss_weighted
+                    grad_norms_dict['loss'] = loss_grad_norm_weighted
+                if do_loss_keep:
+                    losses_dict['loss_keep']     = loss_keep_weighted
+                    grad_norms_dict['loss_keep'] = loss_keep_grad_norm_weighted
+                    
+                normalized_weights, gradnorm_loss, grad_norms = gradnorm_balancer.compute_weights_and_loss(losses_dict, grad_norms)
+        
+        loss_keep_grad_scaler = normalized_weights['loss_keep'] if 'loss_keep' in normalized_weights else 1.0
+        loss_grad_scaler      = normalized_weights['loss']      if 'loss'      in normalized_weights else 1.0
+        penalty_grad_scaler   = normalized_weights['penalty']   if 'penalty'   in normalized_weights else 1.0
+        
+        """
         penalty_grad_scaler_orig = penalty_grad_scaler
         if penalty_grad_scaler > 1.0:
             loss_keep_grad_scaler /= penalty_grad_scaler
             loss_grad_scaler /= penalty_grad_scaler
             penalty_grad_scaler = torch.tensor(1., dtype=torch.float, device=device)
-            
+        """
+        
+        loss_keep_weighted *= loss_keep_grad_scaler
+        loss_weighted      *= loss_grad_scaler
+        penalty_weighted   *= penalty_grad_scaler 
+
         for pind, p in enumerate(net.parameters()):
             total_grad_flat_weighted = (  loss_keep_grads_final[pind] * loss_keep_weight * loss_keep_grad_scaler
                                         + loss_grads_final[pind]      * loss_weight      * loss_grad_scaler
@@ -836,15 +867,15 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                     dot_weighted.item(), cosine.item(), loss_keep_grad_norm_weighted.item(), loss_grad_norm_weighted.item(), \
                     penalty_grad_norm_weighted.item(), penalty_grad_scaler.item(), loss_grad_norm_weighted_sq.item(), penalty_grad_norm_weighted_sq.item()
 
-        loss_batch_weighted = ((loss_keep_weight * loss_keep_aggregator) + # loss_keep_aggregator is a scalar normalized over macro-batch
-                               (penalty_weight   * penalty_env.mean())   + # mean over envs normalized over macro-batch
-                               (loss_weight      * loss_env.mean())        # mean over envs normalized over macro-batch
+        loss_batch_weighted = (loss_keep_weighted + # loss_keep_aggregator is a scalar normalized over macro-batch
+                               penalty_weighted   + # mean over envs normalized over macro-batch
+                               loss_weighted        # mean over envs normalized over macro-batch
                               )
 
         # -----------------------
         # Step 3: optimizer step
         # -----------------------
-        if (args.penalty_iters > 0) and (epoch == args.penalty_iters) and (penalty_weight > 0) and (not args.increasing_weight):
+        if (args.penalty_iters > 0) and (epoch == args.penalty_iters) and do_penalty and (not args.increasing_weight):
             # Reset Adam, because it doesn't like the sharp jump in gradient
             # magnitudes that happens at this step.
 
@@ -861,7 +892,15 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                     momentum=args.train_optimizer.param_groups[0]["momentum"])
 
         train_optimizer.step()
-        train_optimizer.zero_grad(set_to_none=True)  # clear gradients at beginning of next gradients batch
+        train_optimizer.zero_grad(set_to_none=True)     # clear gradients at beginning of next gradients batch
+        if do_gradnorm:
+            gradnorm_optimizer.zero_grad(set_to_none=True)  # clear gradients
+            gradnorm_loss.backward()
+            gradnorm_optimizer.step()
+            # add dynamic bounds here
+            lb = {'loss_keep': 0.05, 'loss': 0.05, 'penalty': 0.05} 
+            ub = {'loss_keep': 5.0,  'loss': 5.0,  'penalty': 5.0} 
+            gradnorm_balancer.clamp_weights(lb, ub)
 
         # total loss is sum of losses so far over entire batch aggregation period.
         total_keep_cont_loss_weighted += (loss_keep_weight * loss_keep_aggregator).item() * this_batch_size * gradients_accumulation_steps
@@ -876,8 +915,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                    f' Env {total_cont_loss_weighted/trained_samples:.4f}' + \
                    f' {args.penalty_type} {total_irm_loss_weighted/trained_samples:.4g}' + \
                    f' LR {train_optimizer.param_groups[0]["lr"]:.4f} PW {penalty_weight:.4f}' + \
-                   f' dot {dot_weighted:.4g} cos {cosine:.4f} ngl^2 {loss_grad_norm_weighted_sq:.4g} ngp^2 {penalty_grad_norm_weighted_sq:.4g}' + \
-                   f' gp_sc {penalty_grad_scaler_orig:.4f}'
+                   f' dot {dot_weighted:.4g} cos {cosine:.4f} ngl^2 {loss_grad_norm_weighted_sq:.4g} ngp^2 {penalty_grad_norm_weighted_sq:.4g}'
         desc_str += loss_module.get_debug_info_str()
         train_bar.set_description(desc_str)
 
@@ -886,9 +924,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                             .format(epoch, epochs, trained_samples, total_samples,
                                     total_loss_weighted/trained_samples, total_keep_cont_loss_weighted/trained_samples, 
                                     total_cont_loss_weighted/trained_samples) + 
-                            ' {args.penalty_type}: {:.4g} LR: {:.4f} PW {:.4f} dot {:.4g} cos {:.4f} ng_l^2: {:.4g} ng_p^2: {:.4g} gp_sc{:.4f}'
+                            ' {args.penalty_type}: {:.4g} LR: {:.4f} PW {:.4f} dot {:.4g} cos {:.4f} ng_l^2: {:.4g} ng_p^2: {:.4g}'
                             .format(total_irm_loss_weighted/trained_samples, train_optimizer.param_groups[0]['lr'], penalty_weight, dot_weighted, cosine, 
-                                    loss_grad_norm_weighted_sq, penalty_grad_norm_weighted_sq, penalty_grad_scaler_orig), 
+                                    loss_grad_norm_weighted_sq, penalty_grad_norm_weighted_sq), 
                             log_file=log_file)
                                         
         # Prepare for next iteration
@@ -1118,7 +1156,7 @@ def test(net, feature_bank, feature_labels, test_data_loader, args, progress=Fal
 
     return total_top1 / total_num * 100, total_top5 / total_num * 100
     
-def load_checkpoint(path, model, model_momentum, optimizer, device="cuda"):
+def load_checkpoint(path, model, model_momentum, optimizer, gradnorm_balancer, gradnorm_optimizer, device="cuda"):
     print("=> loading checkpoint '{}'".format(path))
     checkpoint = torch.load(path, map_location=device, weights_only=False)
 
@@ -1151,12 +1189,43 @@ def load_checkpoint(path, model, model_momentum, optimizer, device="cuda"):
     else:
         msg_momentum = "momentum encoder not used"
         queue = None
+        
+        if "state_dict_momentum" in checkpoint and checkpoint["state_dict_momentum"] is not None:
+            msg_momentum = model_momentum.load_state_dict(
+                checkpoint["state_dict_momentum"], strict=False
+            )
+        else:
+            msg_momentum = "no momentum encoder in checkpoint"
+
+        if "queue" in checkpoint and checkpoint["queue"] is not None:
+            queue = checkpoint["queue"]
+        else:
+            queue = None
+    else:
+        msg_momentum = "momentum encoder not used"
+        queue = None
+    
+
+    if "state_dict_gradnorm" in checkpoint and checkpoint["state_dict_gradnorm"] is not None:
+        msg_gradnorm = gradnorm_balancer.load_state_dict(
+            checkpoint["state_dict_gradnorm"], strict=False
+        )
+    else:
+        msg_gradnorm = "no gradnorm in checkpoint"
 
     # Restore optimizer (if available)
     if "optimizer" in checkpoint and checkpoint["optimizer"] is not None:
         optimizer.load_state_dict(checkpoint["optimizer"])
         # Move optimizer tensors to the correct device
         for state in optimizer.state.values():
+            for k, v in state.items():
+                if torch.is_tensor(v):
+                    state[k] = v.to(device)
+
+    if "gradnorm_optimizer" in checkpoint and checkpoint["gradnorm_optimizer"] is not None:
+        gradnorm_optimizer.load_state_dict(checkpoint["gradnorm_optimizer"])
+        # Move optimizer tensors to the correct device
+        for state in gradnorm_optimizer.state.values():
             for k, v in state.items():
                 if torch.is_tensor(v):
                     state[k] = v.to(device)
@@ -1190,10 +1259,12 @@ def load_checkpoint(path, model, model_momentum, optimizer, device="cuda"):
         print("\tmomentum load: {}".format(msg_momentum))
     if queue is not None:
         print("\tqueue restored")
+    if gradnorm_balancer is not None:
+        print("\tgradnorm load: {}".format(msg_gradnorm))
 
     print("<= loaded checkpoint '{}' (epoch {})".format(path, checkpoint.get("epoch", -1)))
 
-    return model, model_momentum, optimizer, queue, start_epoch, best_acc1, best_epoch, updated_split, updated_split_all, ema
+    return model, model_momentum, optimizer, queue, start_epoch, best_acc1, best_epoch, updated_split, updated_split_all, ema, gradnorm_balancer, gradnorm_optimizer
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train SimCLR')
@@ -1290,7 +1361,8 @@ if __name__ == '__main__':
     parser.add_argument('--weight_decay', default=1e-6, type=float, help='weight decay')
     
     parser.add_argument('--ema', type=str, default=None, choices=['reinit', 'retain'], help="adjust gradients w/ EMA")
-    parser.add_argument('--scale_penalty_grad', action="store_true", help="scale penalty grads")
+    parser.add_argument('--gradnorm', action="store_true", help="use gradnorm")
+    parser.add_argument('--gradnorm_epoch', default=0, type=int, help='gradnorm start epoch')
 
     # args parse
     args = parser.parse_args()
@@ -1444,15 +1516,24 @@ if __name__ == '__main__':
         queue = None
         momentum = None
 
-    if args.opt == "Adam":
-        optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-    elif args.opt == 'SGD':
-        optimizer = optim.SGD(model.parameters(), lr=args.lr, weight_decay=args.weight_decay, momentum=args.SGD_momentum)
     c = len(memory_data.classes) if args.dataset != "ImageNet" else args.class_num
     print('# Classes: {}'.format(c))
 
-
     ema = utils.MovingAverage(0.95, oneminusema_correction=False, active=args.ema)
+    
+    initial_weights = {'penalty': 1.0}
+    if args.penalty_loss > 0:
+        initial_weights['loss'] = 1.0
+    if args.penalty_cont > 0:
+        initial_weights['loss_cont'] = 1.0
+    gradnorm_balancer = gn.GradNormLossBalancer(initial_weights, alpha=1.0, device=device, smoothing=False, tau=None, eps=1e-8)
+
+    if args.opt == "Adam":
+        optimizer          = optim.Adam(model.parameters(),             lr=args.lr, weight_decay=args.weight_decay)
+        gradnorm.optimizer = optim.Adam(gradnorm_balancer.parameters(), lr=args.lr, weight_decay=args.weight_decay)        
+    elif args.opt == 'SGD':
+        optimizer          = optim.SGD(model.parameters(),             lr=args.lr, weight_decay=args.weight_decay, momentum=args.SGD_momentum)
+        gradnorm_optimizer = optim.SGD(gradnorm_balancer.parameters(), lr=args.lr, weight_decay=args.weight_decay, momentum=args.SGD_momentum)
 
     # optionally resume from a checkpoint
     best_acc1 = 0
@@ -1462,7 +1543,8 @@ if __name__ == '__main__':
         if os.path.isfile(args.resume):
             (model, model_momentum, optimizer, queue,
              args.start_epoch, best_acc1, best_epoch,
-             updated_split, updated_split_all, ema_) = load_checkpoint(args.resume, model, model_momentum, optimizer)
+             updated_split, updated_split_all, ema_, gradnorm_balancer, gradnorm_optimizer) = \
+                load_checkpoint(args.resume, model, model_momentum, optimizer, gradnorm_balancer, gradnorm_optimizer)
             if (ema_ is not None) and (args.ema == 'retain'): # exists in checkpoint
                 ema = ema_
             ema.set_active(args.ema) # set to what the user has currently set
@@ -1525,6 +1607,8 @@ if __name__ == '__main__':
                 'updated_split_all':    updated_split_all,
                 'state_dict_momentum':  model_momentum.state_dict() if model_momentum else None,
                 'queue':                queue,
+                'state_dict_gradnorm':  gradnorm.state_dict(),
+                'gradnorm_optimizer':   gradnorm_optimizer.state_dict(),
                 "rng_dict": {
                     "rng_state":        torch.get_rng_state(),
                     "cuda_rng_state":   cuda_rng_state,
@@ -1635,6 +1719,8 @@ if __name__ == '__main__':
                 'updated_split_all':    updated_split_all,
                 'state_dict_momentum':  model_momentum.state_dict() if model_momentum else None,
                 'queue':                queue,
+                'state_dict_gradnorm':  gradnorm.state_dict(),
+                'gradnorm_optimizer':   gradnorm_optimizer.state_dict(),
                 "rng_dict": {
                     "rng_state":        torch.get_rng_state(),
                     "cuda_rng_state":   cuda_rng_state,
