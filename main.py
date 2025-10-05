@@ -796,6 +796,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             p_grads_flat_weighted = torch.cat([g.detach().clone() for g in penalty_grads_flat if g is not None]) * penalty_weight    
             penalty_grad_norm_weighted = p_grads_flat_weighted.norm()
             grad_norm_ratio_weighted = (loss_keep_grad_norm_weighted + loss_grad_norm_weighted) / (penalty_grad_norm_weighted + 1e-12)
+        else:
+            penalty_grad_norm_weighted = torch.tensor(0., dtype=torch.float, device=device)
 
         # weighting doesn't affect cosine
         if (do_loss or do_keep_loss) and do_penalty:
