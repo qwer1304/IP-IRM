@@ -837,7 +837,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                     
                 normalized_weights, gradnorm_loss, grad_norms = gradnorm_balancer.compute_weights_and_loss(losses_dict, grad_norms_dict)
                 
-                loss_weight = sum([normalized_weights[k] for k in normalized_weights if k != 'penalty']
+                loss_weight = sum([normalized_weights[k] for k in normalized_weights if k != 'penalty'])
                 tau = loss_weight / (normalized_weights['penalty'] + 1e-12)
         else:
             tau = torch.tensor(1.0, dtype=torch.float, device=device)
