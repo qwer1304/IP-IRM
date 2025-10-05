@@ -88,6 +88,7 @@ class GradNormLossBalancer:
 
         # Step 2: Compute gradient norms of each task loss w/ unnormalized weights
         weights = torch.stack([self.task_weights[k] for k in self.task_names])
+        grad_norms = torch.stack([grad_norms[k] for k in self.task_names])
         weighted_grad_norms = grad_norms * weights
         avg_grad_norm = weighted_grad_norms.mean()
 
