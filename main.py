@@ -1549,11 +1549,11 @@ if __name__ == '__main__':
 
     ema = utils.MovingAverage(0.95, oneminusema_correction=False, active=args.ema)
     
-    initial_weights = {'penalty': torch.tensor(1.0, dtype=toch.float, device=device)}
+    initial_weights = {'penalty': torch.tensor(1.0, dtype=torch.float, device=device)}
     if args.penalty_cont > 0:
-        initial_weights['loss'] = torch.tensor(1.0, dtype=toch.float, device=device)
+        initial_weights['loss'] = torch.tensor(1.0, dtype=torch.float, device=device)
     if args.penalty_keep_cont > 0:
-        initial_weights['loss_keep'] = torch.tensor(1.0, dtype=toch.float, device=device)
+        initial_weights['loss_keep'] = torch.tensor(1.0, dtype=torch.float, device=device)
     gradnorm_balancer = gn.GradNormLossBalancer(initial_weights, alpha=1.0, device=device, smoothing=False, tau=None, eps=1e-8)
 
     if args.opt == "Adam":
