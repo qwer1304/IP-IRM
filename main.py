@@ -569,7 +569,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         torch.zeros((*penalty_aggregator.shape, p.numel()), dtype=p.dtype, device=p.device)
         for p in net.parameters()
     ]
-    loss_keep_grads = [  # dLoss / dTheta
+    # loss keep doesn't require finalization
+    loss_keep_grads_final = [  # dLoss / dTheta
         torch.zeros(p.numel(), dtype=p.dtype, device=p.device)
         for p in net.parameters()
     ]
@@ -703,7 +704,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                         if grads is None:
                             continue
                         grads = grads.detach().view(-1)
-                        loss_keep_grads[_j] += grads
+                        loss_keep_grads_final[_j] += grads
 
                 if do_loss or do_penalty:
                     for _split in range((num_grads - num_baseline_repeates) // max(1,num_split_repeates)):
@@ -766,23 +767,24 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         else:
             penalty_env = torch.tensor(0, dtype=torch.float)
 
-        l_keep_grads_flat_weighted = torch.cat([g.detach().clone() for g in loss_keep_grads if g is not None]) * loss_keep_weight # weighted
+        l_keep_grads_flat_weighted = torch.cat([g.detach().clone() for g in loss_keep_grads_final if g is not None]) * loss_keep_weight # weighted
         loss_keep_grad_norm_weighted = l_keep_grads_flat_weighted.norm() # weighted, can be 0
         
         # Environments gradients
         if do_loss:
-            loss_grads_flat = []
+            loss_grads_final = []
             for pind, _ in enumerate(net.parameters()):
                 dLoss_dTheta_env = loss_grads[pind]     # per env sum of dCont/dTheta, shape (I,J,K,param_numel), unweighted
                 total_grad_flat  = loss_module.loss_grads_finalize(dLoss_dTheta_env, loss_env, halves_sz)
-                loss_grads_flat.append(total_grad_flat)
-            l_grads_flat_weighted = torch.cat([g.detach().clone() for g in loss_grads_flat if g is not None]) * loss_weight
+                loss_grads_final.append(total_grad_flat)
+            l_grads_flat_weighted = torch.cat([g.detach().clone() for g in loss_grads_final if g is not None]) * loss_weight
             loss_grad_norm_weighted = l_grads_flat_weighted.norm()
         else:
+            loss_grads_final = [torch.tensor(0., dtype=torch.float, device=device)] * len(loss_grads)
             loss_grad_norm_weighted = torch.tensor(0., dtype=torch.float, device=device)
 
         if do_penalty:
-            penalty_grads_flat = []
+            penalty_grads_final = []
             penalty_env = penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz) # normalized per env for macro-batch, unweighted
             for pind in range(len(penalty_grads)):
                 dPenalty_dTheta_env = penalty_grads[pind]  # per env sum of dPenalty/dTheta over macro-batch per parameter, unweighted, shape (I,J,K,param_numel)
@@ -792,11 +794,12 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                         penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz, keep_halves=True), 
                         halves_sz
                     )              
-                penalty_grads_flat.append(total_grad_flat.detach().clone())
-            p_grads_flat_weighted = torch.cat([g.detach().clone() for g in penalty_grads_flat if g is not None]) * penalty_weight    
+                penalty_grads_final.append(total_grad_flat.detach().clone())
+            p_grads_flat_weighted = torch.cat([g.detach().clone() for g in penalty_grads_final if g is not None]) * penalty_weight    
             penalty_grad_norm_weighted = p_grads_flat_weighted.norm()
             grad_norm_ratio_weighted = (loss_keep_grad_norm_weighted + loss_grad_norm_weighted) / (penalty_grad_norm_weighted + 1e-12)
         else:
+            penalty_grads_final = [torch.tensor(0., dtype=torch.float, device=device)] * len(penalty_grads)
             penalty_grad_norm_weighted = torch.tensor(0., dtype=torch.float, device=device)
 
         # weighting doesn't affect cosine
@@ -820,9 +823,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             penalty_grad_scaler = torch.tensor(1., dtype=torch.float, device=device)
             
         for pind, p in enumerate(net.parameters()):
-            total_grad_flat_weighted = (  loss_keep_grads[pind]    * loss_keep_weight * loss_keep_grad_scaler
-                                        + loss_grads_flat[pind]    * loss_weight      * loss_grad_scaler
-                                        + penalty_grads_flat[pind] * penalty_weight   * penalty_grad_scaler
+            total_grad_flat_weighted = (  loss_keep_grads_final[pind] * loss_keep_weight * loss_keep_grad_scaler
+                                        + loss_grads_final[pind]      * loss_weight      * loss_grad_scaler
+                                        + penalty_grads_final[pind]   * penalty_weight   * penalty_grad_scaler
                                        )
             if p.grad is None:
                 p.grad  = total_grad_flat_weighted.view(p.shape)
@@ -898,15 +901,15 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             par.zero_()
         for par in penalty_grads: # over list
             par.zero_()
-        for par in loss_keep_grads: # over list
+        for par in loss_keep_grads_final: # over list
             par.zero_()
         del penalty_env, loss_env, loss_batch_weighted
         if do_penalty or do_loss:
             del total_grad_flat, total_grad_flat_weighted
         if do_penalty:
-            del dPenalty_dTheta_env, penalty_grads_flat, p_grads_flat_weighted
+            del dPenalty_dTheta_env, penalty_grads_final, p_grads_flat_weighted
         if do_loss:
-            dLoss_dTheta_env, loss_grads_flat, l_grads_flat_weighted 
+            dLoss_dTheta_env, loss_grads_final, l_grads_flat_weighted 
         del l_keep_grads_flat_weighted
         torch.cuda.empty_cache()
 
