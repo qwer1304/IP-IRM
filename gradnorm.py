@@ -1,7 +1,7 @@
 import torch
 import torch.nn.functional as F
 
-class GradNormLossBalancer:
+class GradNormLossBalancer(nn.Module):
     def __init__(self, initial_weights, alpha=1.2, device='cpu', smoothing=False, tau=None, eps=1e-8):
         """
         Args:
@@ -10,10 +10,14 @@ class GradNormLossBalancer:
             smoothing (bool): False - original rates, True - moving average w/ alpha
             tau (float): loss rates divisor, lower value -> higher effective loss rate -> lower true loss rate -> higher learning rate
         """
-        self.task_weights = {
-            k: torch.nn.Parameter(torch.tensor(v, dtype=torch.float32, requires_grad=True, device=device,))
+
+
+        # looks and behaves like a dict, but parameters are registered
+        self.task_weights = nn.ParameterDict({
+            k: nn.Parameter(torch.tensor(v, dtype=torch.float32, requires_grad=True, device=device))
             for k, v in initial_weights.items()
-        }
+        })
+
         self.task_names = list(initial_weights.keys())
         self.alpha = alpha
         self.initial_losses = {}
@@ -52,10 +56,6 @@ class GradNormLossBalancer:
             if x != self.task_weights[k]:    
                 with torch.no_grad():
                    self.task_weights[k].copy_(x.to(self.task_weights[k].device))
-
-    def parameters(self):
-        # So you can pass these to the optimizer
-        return list(self.task_weights.values())
 
     def compute_weights_and_loss(self, losses_dict, grad_norms):
         """
@@ -138,20 +138,33 @@ class GradNormLossBalancer:
         #print(raw_weights, normalized_weights)
         return normalized_weights, gradnorm_loss, grad_norms
 
+    # --------------------------------------------
+    # Custom state_dict for GradNorm-specific data
+    # --------------------------------------------
     def state_dict(self):
+        # Use .detach() to avoid saving gradients
         return {
-            "task_weights": {k: v.detach() for k, v in self.task_weights.items()},
-            "initial_losses": {k: v for k, v in self.initial_losses.items()},
-            "running_loss_rates": self.running_loss_rates,
+            "task_weights": {k: v.detach().clone() for k, v in self.task_weights.items()},
+            "initial_losses": {k: v.clone().detach() for k, v in self.initial_losses.items()},
+            "running_loss_rates": {k: float(v) for k, v in self.running_loss_rates.items()},
         }
 
+    # --------------------------------------------
+    # Custom load_state_dict for GradNorm
+    # --------------------------------------------
     def load_state_dict(self, state_dict):
+        # Safely restore task weights
         for k, v in state_dict["task_weights"].items():
-            self.task_weights[k] = torch.nn.Parameter(v.clone().requires_grad_())
+            # ensure Parameter is re-registered properly
+            self.task_weights[k] = nn.Parameter(v.clone().detach().requires_grad_())
+
+        # handle tensors and floats for backward compat
         self.initial_losses = {
-            k: v.clone() for k, v in state_dict["initial_losses"].items()
+            k: (v.clone().detach() if torch.is_tensor(v) else torch.tensor(v))
+            for k, v in state_dict["initial_losses"].items()
         }
-        self.running_loss_rates = state_dict["running_loss_rates"]
+
+        self.running_loss_rates = dict(state_dict.get("running_loss_rates", {}))
 
     def set_alpha(self, alpha):
         self.alpha = alpha
