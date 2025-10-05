@@ -22,10 +22,9 @@ import pyvips
 import torch
 import re
 
-import torch
-import re
-
 import argparse
+from types import SimpleNamespace
+import sys
 
 class ParseMixed(argparse.Action):
     def __init__(self, option_strings, dest, types=None, **kwargs):

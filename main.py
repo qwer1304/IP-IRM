@@ -467,7 +467,6 @@ class SimSiamLossModule(LossModule):
 
 # ssl training with IP-IRM
 def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, **kwargs):
-    # Initialize dictionaries to store times
 
     net.train()
     
@@ -479,7 +478,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
     
     device = next(net.parameters()).device
 
-    transform = train_loader.dataset.transform
+    transform        = train_loader.dataset.transform
     target_transform = train_loader.dataset.target_transform
 
     if args.increasing_weight:
@@ -489,9 +488,13 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
     else:
         penalty_weight = args.penalty_weight
         
-    loss_weight      = args.penalty_cont * (1 if penalty_weight <= 1 else 1 / penalty_weight)
+    loss_weight      = args.penalty_cont      * (1 if penalty_weight <= 1 else 1 / penalty_weight)
     loss_keep_weight = args.penalty_keep_cont * (1 if penalty_weight <= 1 else (1 / penalty_weight))
     penalty_weight   = 1 if penalty_weight > 1 else penalty_weight
+    
+    do_loss      = (not args.baseline) and (loss_weight > 0)
+    do_keep_loss = (args.keep_cont)    and (loss_keep_weight > 0)
+    do_penalty   = (not args.baseline) and (penalty_weight > 0)
     
     loader_batch_size            = batch_size
     gradients_accumulation_steps = args.gradients_accumulation_batch_size // loader_batch_size 
@@ -607,19 +610,15 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 """
                 loss_module.pre_micro_batch(batch_micro, transform=transform, normalize=True)
 
-                # -----------------------
-                # SSL
-                # -----------------------
-
                 # compute unnormalized micro-batch loss
                 losses_samples = loss_module.compute_loss_micro(reduction='none')
-                if (loss_weight > 0) or (args.keep_cont and (loss_keep_weight > 0)):
+                if do_loss or do_keep_loss:
                     differentiate_this.append(losses_samples)
-                if penalty_weight > 0:
+                if do_penalty:
                     penalties_samples = penalty_calculator.penalty(losses_samples, reduction='none')
                     differentiate_this.append(penalties_samples)
 
-                if not args.baseline:
+                if do_loss or do_penalty:
                     for partition_num, partition in enumerate(partitions):
                         for env in range(args.env_num):
 
@@ -632,11 +631,11 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                             halves_sz[j,partition_num,env] += N # update number of elements in environment
                             
                             # losses
-                            if loss_weight > 0:
+                            if do_loss:
                                 # compute unnormalized micro-batch loss
                                 loss = losses_samples[idxs].sum(dim=0).detach()
                                 loss_aggregator[j,partition_num,env] += loss # unnormalized, before penalty scaler
-                            if penalty_weight > 0:
+                            if do_penalty:
                                 penalty = penalties_samples[idxs].sum(dim=0).detach()
                                 penalty_aggregator[j,partition_num,env] += penalty # unnormalized penalty components before penalty scaler
 
@@ -645,18 +644,18 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                             offset = 0
                             mask = torch.zeros(num_samples, dtype=torch.float, device=device)
                             mask[idxs] = 1.0
-                            if loss_weight>0:
+                            if do_loss:
                                 grad_outputs[linear_idx][offset:offset+num_samples] = mask # unweighted
                                 linear_idx += num_partitions * args.env_num
                                 offset += num_samples
-                            if penalty_weight>0:
+                            if do_penalty:
                                 grad_outputs[linear_idx][offset:offset+num_samples] = mask # unweighted
                                 offset += num_samples
                         # end for env in range(args.env_num):
                     # end for partition_num, partition in enumerate(partitions):
                 # end if not args.baseline:
 
-                if args.keep_cont and (loss_keep_weight > 0): # global loss @ 1st partition
+                if do_keep_loss: # global loss @ 1st partition
                     # This could be done w/o the split into two halves, but this streamlines the code w/o any harm
                     # Here we know that losses are over the whole macro-batch, so we can normalize up-front
                     loss = losses_samples.sum().detach()  / this_batch_size / gradients_accumulation_steps
@@ -690,10 +689,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                     is_grads_batched=True
                 )
 
-                if args.keep_cont and (loss_keep_weight > 0): # global loss @ 1st partition
+                if do_keep_loss: # global loss @ 1st partition
                     # 'grads_all' is a tuple w/ an entry per parameter.
                     # each entry is a tensor w/ 1st dim = 'grad_outputs.size(0)' and other dims matching the parameter
-
 
                     # flatten and accumulate per parameter
                     # 'grads_all' is a tuple w/ an entry per parameter.
@@ -707,11 +705,11 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                         grads = grads.detach().view(-1)
                         loss_keep_grads[_j] += grads
 
-                if not args.baseline:
+                if do_loss or do_penalty:
                     for _split in range((num_grads - num_baseline_repeates) // max(1,num_split_repeates)):
                         partition_num, env = _split // args.env_num, _split % args.env_num 
                         linear_idx = _split
-                        if loss_weight > 0:
+                        if do_loss:
                             # flatten and accumulate per parameter
                             # 'grads_all' is a tuple w/ an entry per parameter.
                             # each entry is a tensor w/ 1st dim = 'grad_outputs.size(0)' and other dims matching the parameter
@@ -725,7 +723,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                 loss_grads[_j][j,partition_num,env] += grads
                             linear_idx += num_partitions * args.env_num # prepare for penalty grads
                         # penalty
-                        if penalty_weight > 0:
+                        if do_penalty:
                             # flatten and accumulate per parameter
                             for _j, g in enumerate(grads_all):
                                 if g is None:
@@ -741,11 +739,11 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 
                 # free memory of micro-batch
                 del batch_micro, indexs, losses_samples, grads, g, grads_all, differentiate_this
-                if (loss_weight > 0) or (args.keep_cont and (loss_keep_weight > 0)):
+                if do_loss or do_keep_loss:
                     del loss
-                if loss_weight > 0:
+                if do_loss:
                     pass
-                if penalty_weight > 0:
+                if do_penalty:
                     del penalties_samples, penalty
             # end for i in [i_ for i_ in range(len(mb_list)) if i_ % 2 == j]:
             torch.cuda.empty_cache()
@@ -758,32 +756,32 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         if gradients_accumulation_step < gradients_accumulation_steps:
             continue
 
-        if loss_weight > 0:
+        if do_loss:
             partition_sz = halves_sz.sum(dim=0, keepdim=True) # (1,J,K) # sizes of envs in macro-batch
             loss_env = loss_aggregator.sum(dim=0, keepdim=True) / partition_sz  # per env for macro-batch, normalized per env, unweighted
         else:
             loss_env = torch.tensor(0, dtype=torch.float)
-        if penalty_weight > 0:
+        if do_penalty:
             penalty_env = penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz) # normalized per env for macro-batch, unweighted
         else:
             penalty_env = torch.tensor(0, dtype=torch.float)
 
-        l_keep_grads_flat = torch.cat([g.detach().clone() for g in loss_keep_grads if g is not None]) * loss_keep_weight # weighted
-        loss_keep_grad_norm = l_keep_grads_flat.norm() # weighted, can be 0
+        l_keep_grads_flat_weighted = torch.cat([g.detach().clone() for g in loss_keep_grads if g is not None]) * loss_keep_weight # weighted
+        loss_keep_grad_norm_weighted = l_keep_grads_flat_weighted.norm() # weighted, can be 0
         
         # Environments gradients
-        if loss_weight > 0:
+        if do_loss:
             loss_grads_flat = []
             for pind, _ in enumerate(net.parameters()):
                 dLoss_dTheta_env = loss_grads[pind]     # per env sum of dCont/dTheta, shape (I,J,K,param_numel), unweighted
                 total_grad_flat  = loss_module.loss_grads_finalize(dLoss_dTheta_env, loss_env, halves_sz)
                 loss_grads_flat.append(total_grad_flat)
-            l_grads_flat = torch.cat([g.detach().clone() for g in loss_grads_flat if g is not None]) * loss_weight # weighted
-            loss_grad_norm = l_grads_flat.norm() # weighted
+            l_grads_flat_weighted = torch.cat([g.detach().clone() for g in loss_grads_flat if g is not None]) * loss_weight
+            loss_grad_norm_weighted = l_grads_flat_weighted.norm()
         else:
-            loss_grad_norm = torch.tensor(0., dtype=torch.float, device=device)
+            loss_grad_norm_weighted = torch.tensor(0., dtype=torch.float, device=device)
 
-        if penalty_weight > 0:
+        if do_penalty:
             penalty_grads_flat = []
             penalty_env = penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz) # normalized per env for macro-batch, unweighted
             for pind in range(len(penalty_grads)):
@@ -795,61 +793,24 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                         halves_sz
                     )              
                 penalty_grads_flat.append(total_grad_flat.detach().clone())
-            p_grads_flat = torch.cat([g.detach().clone() for g in penalty_grads_flat if g is not None]) * penalty_weight # weighted         
-            penalty_grad_norm = p_grads_flat.norm() # weighted
-            grad_norm_ratio = (loss_keep_grad_norm + loss_grad_norm) / (penalty_grad_norm + 1e-12) # weighted
+            p_grads_flat_weighted = torch.cat([g.detach().clone() for g in penalty_grads_flat if g is not None]) * penalty_weight    
+            penalty_grad_norm_weighted = p_grads_flat_weighted.norm()
+            grad_norm_ratio_weighted = (loss_keep_grad_norm_weighted + loss_grad_norm_weighted) / (penalty_grad_norm_weighted + 1e-12)
 
-        if ((loss_weight>0) or (args.keep_cont and (loss_keep_weight>0))) and (penalty_weight>0):
-            dot = (l_keep_grads_flat + l_grads_flat).dot(p_grads_flat) # weighted
-            cosine = torch.nn.functional.cosine_similarity(l_keep_grads_flat + l_grads_flat, p_grads_flat, dim=0) # weighted          
+        # weighting doesn't affect cosine
+        if (do_loss or do_keep_loss) and do_penalty:
+            dot_weighted = (l_keep_grads_flat_weighted + l_grads_flat_weighted).dot(p_grads_flat_weighted)
+            cosine = torch.nn.functional.cosine_similarity(l_keep_grads_flat_weighted + l_grads_flat_weighted, p_grads_flat_weighted, dim=0)         
         else:
-            dot, cosine = torch.tensor(0, dtype=torch.float), torch.tensor(0, dtype=torch.float)
+            dot_weighted, cosine = torch.tensor(0, dtype=torch.float), torch.tensor(0, dtype=torch.float)
 
-        loss_grad_norm_sq = loss_grad_norm ** 2 + loss_keep_grad_norm ** 2 # weighted
-        penalty_grad_norm_sq = penalty_grad_norm ** 2 # weighted
-
-        def compute_gradient_scaler(ngl2, ngp2, dot, ema, eps=1e-6, S1_cap=100.0, safe_s=1.0):
-            """
-            ngl2, ngp2: squared loss and penalty gradients
-            dot: dot product between loss and penalty
-            ema: instance of MovingAverage
-            Returns: scaler
-            """
-            device = ngl2.device
-            d = dot.abs()
-
-            s_bal = (ngl2 - dot) / (ngp2 - dot + 1e-30) # balanced scaler
-
-            # Minimal required scaler for descent 
-            if (ngp2 + dot) * (ngl2 + dot) < 0: # different signs, (cases b, c)
-                T = torch.abs(ngl2 + dot) / torch.abs(ngp2 + dot + 1e-30)
-            else: # same signs, (cases a, d)
-                T = torch.tensor(0.0, device=device)  # no hard requirement 
-                
-            S1 = torch.clamp(ngl2 / (d + 1e-30), max=S1_cap)
-
-            if T > S1:
-                # Strict descent impossible, pick safe small s
-                s_bal = torch.tensor(safe_s, device=device)
-            else:
-                # Normal case: pick s >= T, do not exceed S1
-                s_bal = torch.clamp(s_bal, T, S1)
-
-            ema_data = {'scaler': s_bal.view(1, -1)}
-            emas = ema.update(ema_data)
-            s_ema = emas['scaler'].squeeze()
-
-            s_ema = torch.clamp(s_ema, T, S1)
-
-            return s_ema
+        loss_grad_norm_weighted_sq = loss_grad_norm_weighted ** 2 + loss_keep_grad_norm_weighted ** 2
+        penalty_grad_norm_weighted_sq = penalty_grad_norm_weighted ** 2
 
         loss_keep_grad_scaler = torch.tensor(1., dtype=torch.float, device=device) # default
         loss_grad_scaler = torch.tensor(1., dtype=torch.float, device=device) # default
         penalty_grad_scaler = torch.tensor(1., dtype=torch.float, device=device) # default
 
-        if args.scale_penalty_grad and (dot < 0): # FIX ME!!!!!!!!!!!!!!!!!!!!!!!!!
-            penalty_grad_scaler = compute_gradient_scaler(loss_grad_norm_sq, penalty_grad_norm_sq, dot, ema)
-        
         penalty_grad_scaler_orig = penalty_grad_scaler
         if penalty_grad_scaler > 1.0:
             loss_keep_grad_scaler /= penalty_grad_scaler
@@ -857,23 +818,23 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             penalty_grad_scaler = torch.tensor(1., dtype=torch.float, device=device)
             
         for pind, p in enumerate(net.parameters()):
-            total_grad_flat = (  loss_keep_grads[pind]    * loss_keep_weight * loss_keep_grad_scaler
-                               + loss_grads_flat[pind]    * loss_weight      * loss_grad_scaler
-                               + penalty_grads_flat[pind] * penalty_weight   * penalty_grad_scaler
-                              )
+            total_grad_flat_weighted = (  loss_keep_grads[pind]    * loss_keep_weight * loss_keep_grad_scaler
+                                        + loss_grads_flat[pind]    * loss_weight      * loss_grad_scaler
+                                        + penalty_grads_flat[pind] * penalty_weight   * penalty_grad_scaler
+                                       )
             if p.grad is None:
-                p.grad  = total_grad_flat.view(p.shape)
+                p.grad  = total_grad_flat_weighted.view(p.shape)
             else:
-                p.grad += total_grad_flat.view(p.shape)                
+                p.grad += total_grad_flat_weighted.view(p.shape)                
         
-        dot, cosine, loss_keep_grad_norm, loss_grad_norm, penalty_grad_norm, penalty_grad_scaler, loss_grad_norm_sq, penalty_grad_norm_sq = \
-                    dot.item(), cosine.item(), loss_keep_grad_norm.item(), loss_grad_norm.item(), \
-                    penalty_grad_norm.item(), penalty_grad_scaler.item(), loss_grad_norm_sq.item(), penalty_grad_norm_sq.item()
+        dot_weighted, cosine, loss_keep_grad_norm_weighted, loss_grad_norm_weighted, penalty_grad_norm_weighted, penalty_grad_scaler, loss_grad_norm_weighted_sq, penalty_grad_norm_weighted_sq = \
+                    dot_weighted.item(), cosine.item(), loss_keep_grad_norm_weighted.item(), loss_grad_norm_weighted.item(), \
+                    penalty_grad_norm_weighted.item(), penalty_grad_scaler.item(), loss_grad_norm_weighted_sq.item(), penalty_grad_norm_weighted_sq.item()
 
-        loss_batch = ((loss_keep_weight * loss_keep_aggregator) + # loss_keep_aggregator is a scalar normalized over macro-batch
-                      (penalty_weight   * penalty_env.mean())   + # mean over envs normalized over macro-batch
-                      (loss_weight      * loss_env.mean())        # mean over envs normalized over macro-batch
-                     )
+        loss_batch_weighted = ((loss_keep_weight * loss_keep_aggregator) + # loss_keep_aggregator is a scalar normalized over macro-batch
+                               (penalty_weight   * penalty_env.mean())   + # mean over envs normalized over macro-batch
+                               (loss_weight      * loss_env.mean())        # mean over envs normalized over macro-batch
+                              )
 
         # -----------------------
         # Step 3: optimizer step
@@ -898,19 +859,19 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         train_optimizer.zero_grad(set_to_none=True)  # clear gradients at beginning of next gradients batch
 
         # total loss is sum of losses so far over entire batch aggregation period.
-        total_keep_cont_loss += (loss_keep_weight * loss_keep_aggregator).item() * this_batch_size * gradients_accumulation_steps
-        total_irm_loss       += (penalty_weight   * penalty_env.mean()).item()   * this_batch_size * gradients_accumulation_steps
-        total_cont_loss      += (loss_weight      * loss_env.mean()).item()      * this_batch_size * gradients_accumulation_steps
-        total_loss           += loss_batch.item()                                * this_batch_size * gradients_accumulation_steps
+        total_keep_cont_loss_weighted += (loss_keep_weight * loss_keep_aggregator).item() * this_batch_size * gradients_accumulation_steps
+        total_irm_loss_weighted       += (penalty_weight   * penalty_env.mean()).item()   * this_batch_size * gradients_accumulation_steps
+        total_cont_loss_weighted      += (loss_weight      * loss_env.mean()).item()      * this_batch_size * gradients_accumulation_steps
+        total_loss_weighted           += loss_batch_weighted.item()                       * this_batch_size * gradients_accumulation_steps
 
         desc_str = f'Epoch [{epoch}/{epochs}] [{trained_samples}/{total_samples}]' + \
                    f' {args.ssl_type}' + \
-                   f' Total {total_loss/trained_samples:.4f}' + \
-                   f' Keep {total_keep_cont_loss/trained_samples:.4f}' + \
-                   f' Env {total_cont_loss/trained_samples:.4f}' + \
-                   f' {args.penalty_type} {total_irm_loss/trained_samples:.4g}' + \
+                   f' Total {total_loss_weighted/trained_samples:.4f}' + \
+                   f' Keep {total_keep_cont_loss_weighted/trained_samples:.4f}' + \
+                   f' Env {total_cont_loss_weighted/trained_samples:.4f}' + \
+                   f' {args.penalty_type} {total_irm_loss_weighted/trained_samples:.4g}' + \
                    f' LR {train_optimizer.param_groups[0]["lr"]:.4f} PW {penalty_weight:.4f}' + \
-                   f' dot {dot:.4g} cos {cosine:.4f} ngl^2 {loss_grad_norm_sq:.4g} ngp^2 {penalty_grad_norm_sq:.4g}' + \
+                   f' dot {dot_weighted:.4g} cos {cosine:.4f} ngl^2 {loss_grad_norm_weighted_sq:.4g} ngp^2 {penalty_grad_norm_weighted_sq:.4g}' + \
                    f' gp_sc {penalty_grad_scaler_orig:.4f}'
         desc_str += loss_module.get_debug_info_str()
         train_bar.set_description(desc_str)
@@ -918,11 +879,11 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         if batch_index % 10 == 0:
             utils.write_log('Train Epoch: [{:d}/{:d}] [{:d}/{:d}] {args.ssl_type}: Total: {:.4f} First: {:.4f} Env: {:.4f}'
                             .format(epoch, epochs, trained_samples, total_samples,
-                                    total_loss/trained_samples, total_keep_cont_loss/trained_samples, 
-                                    total_cont_loss/trained_samples) + 
+                                    total_loss_weighted/trained_samples, total_keep_cont_loss_weighted/trained_samples, 
+                                    total_cont_loss_weighted/trained_samples) + 
                             ' {args.penalty_type}: {:.4g} LR: {:.4f} PW {:.4f} dot {:.4g} cos {:.4f} ng_l^2: {:.4g} ng_p^2: {:.4g} gp_sc{:.4f}'
-                            .format(total_irm_loss/trained_samples, train_optimizer.param_groups[0]['lr'], penalty_weight, dot, cosine, 
-                                    loss_grad_norm_sq, penalty_grad_norm_sq, penalty_grad_scaler_orig), 
+                            .format(total_irm_loss_weighted/trained_samples, train_optimizer.param_groups[0]['lr'], penalty_weight, dot_weighted, cosine, 
+                                    loss_grad_norm_weighted_sq, penalty_grad_norm_weighted_sq, penalty_grad_scaler_orig), 
                             log_file=log_file)
                                         
         # Prepare for next iteration
@@ -937,19 +898,19 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             par.zero_()
         for par in loss_keep_grads: # over list
             par.zero_()
-        del penalty_env, loss_env, loss_batch
-        if (penalty_weight > 0) or (loss_weight > 0):
-            del total_grad_flat
-        if penalty_weight > 0:
-            del dPenalty_dTheta_env, penalty_grads_flat, p_grads_flat
-        if loss_weight > 0:
-            dLoss_dTheta_env, loss_grads_flat, l_grads_flat 
-        del l_keep_grads_flat
+        del penalty_env, loss_env, loss_batch_weighted
+        if do_penalty or do_loss:
+            del total_grad_flat, total_grad_flat_weighted
+        if do_penalty:
+            del dPenalty_dTheta_env, penalty_grads_flat, p_grads_flat_weighted
+        if do_loss:
+            dLoss_dTheta_env, loss_grads_flat, l_grads_flat_weighted 
+        del l_keep_grads_flat_weighted
         torch.cuda.empty_cache()
 
         loss_module.post_batch()
     # end for batch_index, data_env in enumerate(train_bar):
-    return total_loss / trained_samples
+    return total_loss_weighted / trained_samples
 
 def train_update_split(net, update_loader, soft_split, random_init=False, args=None):
     utils.write_log('Start Maximizing ...', log_file, print_=True)
