@@ -1233,7 +1233,7 @@ def load_checkpoint(path, model, model_momentum, optimizer, gradnorm_balancer, g
         else:
             queue = None    
 
-    if gradnorm_balancer is not None:
+    if False and (gradnorm_balancer is not None):
         if "state_dict_gradnorm" in checkpoint and checkpoint["state_dict_gradnorm"] is not None:
             msg_gradnorm = gradnorm_balancer.load_state_dict(
                 checkpoint["state_dict_gradnorm"],
@@ -1252,7 +1252,7 @@ def load_checkpoint(path, model, model_momentum, optimizer, gradnorm_balancer, g
                 if torch.is_tensor(v):
                     state[k] = v.to(device)
 
-    if "gradnorm_optimizer" in checkpoint and checkpoint["gradnorm_optimizer"] is not None:
+    if False and ("gradnorm_optimizer" in checkpoint) and (checkpoint["gradnorm_optimizer"] is not None):
         gradnorm_optimizer.load_state_dict(checkpoint["gradnorm_optimizer"])
         # Move optimizer tensors to the correct device
         for state in gradnorm_optimizer.state.values():
@@ -1564,6 +1564,21 @@ if __name__ == '__main__':
     elif args.opt == 'SGD':
         optimizer          = optim.SGD(model.parameters(),             lr=args.lr, weight_decay=args.weight_decay, momentum=args.SGD_momentum)
         gradnorm_optimizer = optim.SGD(gradnorm_balancer.parameters(), lr=args.lr, weight_decay=args.weight_decay, momentum=args.SGD_momentum)
+
+    print()
+    print(f'task names: {gradnorm_balancer.task_names}')
+    print(f'parameters: {list(gradnorm_balancer.parameters())}')
+    # 1) Does optimizer actually contain the exact Parameter objects?
+    opt_ids = {id(p) for g in gradnorm_optimizer.param_groups for p in g['params']}
+    print(f'opts_ids: {opt_ids}')
+    for k, p in gradnorm_balancer.task_weights.items():
+        print("param in opt?", k, id(p) in opt_ids)
+
+    # 2) Are grads present and nonzero?
+    for k, p in gradnorm_balancer.task_weights.items():
+        print(k, "requires_grad=", p.requires_grad,
+              "grad is None?", p.grad is None,
+              "grad norm=", None if p.grad is None else p.grad.norm().item())
 
     # optionally resume from a checkpoint
     best_acc1 = 0
