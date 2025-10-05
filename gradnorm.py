@@ -1,3 +1,5 @@
+import torch
+
 class GradNormLossBalancer:
     def __init__(self, initial_weights, alpha=1.2, device='cpu', smoothing=False, tau=None, eps=1e-8):
         """
