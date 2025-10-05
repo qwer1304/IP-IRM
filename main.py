@@ -923,7 +923,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                    f' {args.penalty_type} {total_irm_loss_weighted/trained_samples:.4g}' + \
                    f' LR {train_optimizer.param_groups[0]["lr"]:.4f} PW {penalty_weight:.4f}' + \
                    f' dot {dot_weighted:.4g} cos {cosine:.4f} ngl^2 {loss_grad_norm_weighted_sq:.4g} ngp^2 {penalty_grad_norm_weighted_sq:.4g}' + \
-                   f' tau {tau:.4e} gn_loss {:.4e}'
+                   f' tau {tau:.4e} gn_loss {gradnorm_loss:.4e}'
         desc_str += loss_module.get_debug_info_str()
         train_bar.set_description(desc_str)
 
