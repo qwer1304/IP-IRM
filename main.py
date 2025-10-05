@@ -838,8 +838,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                     
                 normalized_weights, gradnorm_loss, grad_norms = gradnorm_balancer.compute_weights_and_loss(losses_dict, grad_norms_dict)
                 
-                loss_weight = sum([normalized_weights[k] for k in normalized_weights if k != 'penalty'])
-                tau = loss_weight / (normalized_weights['penalty'] + 1e-12)
+                loss_plus_keep_weight = sum([normalized_weights[k] for k in normalized_weights if k != 'penalty'])
+                tau                   = loss_plus_keep_weight / (normalized_weights['penalty'] + 1e-12)
         
         loss_keep_grad_scaler = normalized_weights['loss_keep'] if 'loss_keep' in normalized_weights else torch.tensor(1.0, dtype=torch.float, device=device)
         loss_grad_scaler      = normalized_weights['loss']      if 'loss'      in normalized_weights else torch.tensor(1.0, dtype=torch.float, device=device)
