@@ -1530,7 +1530,7 @@ if __name__ == '__main__':
 
     if args.opt == "Adam":
         optimizer          = optim.Adam(model.parameters(),             lr=args.lr, weight_decay=args.weight_decay)
-        gradnorm.optimizer = optim.Adam(gradnorm_balancer.parameters(), lr=args.lr, weight_decay=args.weight_decay)        
+        gradnorm_optimizer = optim.Adam(gradnorm_balancer.parameters(), lr=args.lr, weight_decay=args.weight_decay)        
     elif args.opt == 'SGD':
         optimizer          = optim.SGD(model.parameters(),             lr=args.lr, weight_decay=args.weight_decay, momentum=args.SGD_momentum)
         gradnorm_optimizer = optim.SGD(gradnorm_balancer.parameters(), lr=args.lr, weight_decay=args.weight_decay, momentum=args.SGD_momentum)
