@@ -889,6 +889,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         train_optimizer.step()
         train_optimizer.zero_grad(set_to_none=True)     # clear gradients at beginning of next gradients batch
         if do_gradnorm:
+            print()
+            print(gradnorm_balancer.task_names)
             # 1) Does optimizer actually contain the exact Parameter objects?
             opt_ids = {id(p) for g in gradnorm_optimizer.param_groups for p in g['params']}
             for k, p in gradnorm_balancer.task_weights.items():
@@ -1547,11 +1549,11 @@ if __name__ == '__main__':
 
     ema = utils.MovingAverage(0.95, oneminusema_correction=False, active=args.ema)
     
-    initial_weights = {'penalty': 1.0}
+    initial_weights = {'penalty': torch.tensor(1.0, dtype=toch.float, device=device)}
     if args.penalty_cont > 0:
-        initial_weights['loss'] = 1.0
+        initial_weights['loss'] = torch.tensor(1.0, dtype=toch.float, device=device)
     if args.penalty_keep_cont > 0:
-        initial_weights['loss_keep'] = 1.0
+        initial_weights['loss_keep'] = torch.tensor(1.0, dtype=toch.float, device=device)
     gradnorm_balancer = gn.GradNormLossBalancer(initial_weights, alpha=1.0, device=device, smoothing=False, tau=None, eps=1e-8)
 
     if args.opt == "Adam":
@@ -1569,7 +1571,7 @@ if __name__ == '__main__':
         if os.path.isfile(args.resume):
             (model, model_momentum, optimizer, queue,
              args.start_epoch, best_acc1, best_epoch,
-             updated_split, updated_split_all, ema_, gradnorm_balancer, gradnorm_optimizer_s) = \
+             updated_split, updated_split_all, ema_, gradnorm_balancer, gradnorm_optimizer) = \
                 load_checkpoint(args.resume, model, model_momentum, optimizer, gradnorm_balancer, gradnorm_optimizer)
             if (ema_ is not None) and (args.ema == 'retain'): # exists in checkpoint
                 ema = ema_
