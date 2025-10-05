@@ -1614,7 +1614,7 @@ if __name__ == '__main__':
                 'updated_split_all':    updated_split_all,
                 'state_dict_momentum':  model_momentum.state_dict() if model_momentum else None,
                 'queue':                queue,
-                'state_dict_gradnorm':  gradnorm.state_dict(),
+                'state_dict_gradnorm':  gradnorm_balancer.state_dict(),
                 'gradnorm_optimizer':   gradnorm_optimizer.state_dict(),
                 "rng_dict": {
                     "rng_state":        torch.get_rng_state(),
@@ -1726,7 +1726,7 @@ if __name__ == '__main__':
                 'updated_split_all':    updated_split_all,
                 'state_dict_momentum':  model_momentum.state_dict() if model_momentum else None,
                 'queue':                queue,
-                'state_dict_gradnorm':  gradnorm.state_dict(),
+                'state_dict_gradnorm':  gradnorm_balancer.state_dict(),
                 'gradnorm_optimizer':   gradnorm_optimizer.state_dict(),
                 "rng_dict": {
                     "rng_state":        torch.get_rng_state(),
