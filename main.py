@@ -1520,11 +1520,12 @@ if __name__ == '__main__':
 
     ema = utils.MovingAverage(0.95, oneminusema_correction=False, active=args.ema)
     
+
     initial_weights = {'penalty': 1.0}
-    if args.penalty_loss > 0:
-        initial_weights['loss'] = 1.0
     if args.penalty_cont > 0:
-        initial_weights['loss_cont'] = 1.0
+        initial_weights['loss'] = 1.0
+    if args.penalty_keep_cont > 0:
+        initial_weights['loss_keep'] = 1.0
     gradnorm_balancer = gn.GradNormLossBalancer(initial_weights, alpha=1.0, device=device, smoothing=False, tau=None, eps=1e-8)
 
     if args.opt == "Adam":
