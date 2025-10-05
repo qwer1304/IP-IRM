@@ -11,7 +11,7 @@ class GradNormLossBalancer(nn.Module):
             smoothing (bool): False - original rates, True - moving average w/ alpha
             tau (float): loss rates divisor, lower value -> higher effective loss rate -> lower true loss rate -> higher learning rate
         """
-
+        super().__init__()
 
         # looks and behaves like a dict, but parameters are registered
         self.task_weights = nn.ParameterDict({
