@@ -890,8 +890,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         train_optimizer.zero_grad(set_to_none=True)     # clear gradients at beginning of next gradients batch
         if do_gradnorm:
             print()
-            print(f'task names: {gradnorm_balancer.task_names}')
-            print(f'parameters: {list(gradnorm_balancer.parameters())}')
+            opt_ids = {id(p) for g in gradnorm_optimizer.param_groups for p in g['params']}
             # 1) Does optimizer actually contain the exact Parameter objects?
             for k, p in gradnorm_balancer.task_weights.items():
                 print("param in opt?", k, id(p) in opt_ids)
