@@ -840,9 +840,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 
                 loss_plus_keep_weight = sum([normalized_weights[k] for k in normalized_weights if k != 'penalty'])
                 tau                   = loss_plus_keep_weight / (normalized_weights['penalty'] + 1e-12)
-                print()
-                print(gradnorm_balancer.parameters())
-                print()
         
         loss_keep_grad_scaler = normalized_weights['loss_keep'] if 'loss_keep' in normalized_weights else torch.tensor(1.0, dtype=torch.float, device=device)
         loss_grad_scaler      = normalized_weights['loss']      if 'loss'      in normalized_weights else torch.tensor(1.0, dtype=torch.float, device=device)
@@ -892,6 +889,25 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         train_optimizer.step()
         train_optimizer.zero_grad(set_to_none=True)     # clear gradients at beginning of next gradients batch
         if do_gradnorm:
+            # 1) Does optimizer actually contain the exact Parameter objects?
+            opt_ids = {id(p) for g in gradnorm_optimizer.param_groups for p in g['params']}
+            for k, p in gradnorm_balancer.task_weights.items():
+                print("param in opt?", k, id(p) in opt_ids)
+
+            # 2) Are grads present and nonzero?
+            for k, p in gradnorm_balancer.task_weights.items():
+                print(k, "requires_grad=", p.requires_grad,
+                      "grad is None?", p.grad is None,
+                      "grad norm=", None if p.grad is None else p.grad.norm().item())
+
+            # 3) Check loss and dtype/device sanity
+            print("loss item:", float(gradnorm_loss.item()))
+            print("weights device/dtype:", [(k, p.device, p.dtype) for k, p in gradnorm_balancer.task_weights.items()])
+
+            # 4) Check lr / optimizer param count
+            print("optimizer lr(s):", [g['lr'] for g in gradnorm_optimizer.param_groups])
+            print("optimizer param counts:", [len(g['params']) for g in gradnorm_optimizer.param_groups])
+
             gradnorm_optimizer.zero_grad(set_to_none=True)  # clear gradients
             gradnorm_loss.backward()
             gradnorm_optimizer.step()
