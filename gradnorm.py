@@ -10,6 +10,7 @@ class GradNormLossBalancer(nn.Module):
             alpha (float): Moving average smoothing factor for task loss rates.
             smoothing (bool): False - original rates, True - moving average w/ alpha
             tau (float): loss rates divisor, lower value -> higher effective loss rate -> lower true loss rate -> higher learning rate
+            Note: initial_weights keys determine the tasks to be tracked by GradNorm
         """
         super().__init__()
 
@@ -71,14 +72,16 @@ class GradNormLossBalancer(nn.Module):
         Returns:
             dict: weight for each task
             torch.Tensor: gradnorm_loss
+            torch.tensor: rate for each task 
         Notes:
             1. It's expected that weights are updated through an optimizer on gradnorm_loss:
                 optimizer.zero_grads()
                 gradnorm_loss.backward()
                 optimizer.step()
                w/ the optimizer has been given the weights to optimize
-            2. Returned weights are normalized to sum to 1 and detached and should be used to combine task losses
-               into aggregate loss before optimizer is applied on model's parameters
+            2. Returned weights are normalized to sum to num_tasks and detached and should be used 
+               to combine task losses into aggregate loss before optimizer is applied on model's parameters
+            3. First time this method is run the losses are used to set the initial losses
         """
 
         """
@@ -140,7 +143,7 @@ class GradNormLossBalancer(nn.Module):
                 for i, k in enumerate(self.task_names)
         }
         #print(raw_weights, normalized_weights)
-        return normalized_weights, gradnorm_loss, grad_norms
+        return normalized_weights, gradnorm_loss, smoothed_rates
 
     # --------------------------------------------
     # Custom state_dict for GradNorm-specific data
