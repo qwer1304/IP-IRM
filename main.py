@@ -953,13 +953,14 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         if batch_index % 10 == 0:
             utils.write_log('Train Epoch: [{:d}/{:d}] [{:d}/{:d}] {args.ssl_type}: Total: {:.4f} First: {:.4f} Env: {:.4f}'
                             .format(epoch, epochs, trained_samples, total_samples,
-                                    total_loss_weighted/trained_samples, total_keep_cont_loss_weighted/trained_samples, 
+                                    total_loss_weighted/trained_samples, 
+                                    total_keep_cont_loss_weighted/trained_samples, 
                                     total_cont_loss_weighted/trained_samples) + 
                             ' {args.penalty_type}: {:.4g} LR: {:.4f} PW {:.4f} dot {:.4g} cos {:.4f} ng_l^2: {:.4g} ng_p^2: {:.4g} tau {:4e} gn_loss {:.4e}'
                             .format(total_irm_loss_weighted/trained_samples, train_optimizer.param_groups[0]['lr'], penalty_weight, dot_weighted, cosine, 
                                     loss_grad_norm_weighted_sq, penalty_grad_norm_weighted_sq, tau, gradnorm_loss) + 
                             ' rates {}'
-                            .format(gradnorm_rates_str)
+                            .format(gradnorm_rates_str),
                             log_file=log_file)
                                         
         # Prepare for next iteration
