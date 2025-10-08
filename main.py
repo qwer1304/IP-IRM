@@ -814,10 +814,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         delta_lp = l_grads_flat_weighted.dot(p_grads_flat_weighted)
         delta_kp = l_keep_grads_flat_weighted.dot(p_grads_flat_weighted)
 
-        loss_grad_norm_weighted_sq      = loss_grad_norm_weighted ** 2
-        loss_keep_grad_norm_weighted_sq = loss_keep_grad_norm_weighted ** 2
-        penalty_grad_norm_weighted_sq   = penalty_grad_norm_weighted ** 2
-
         loss_weighted      = loss_weight      * loss_env.mean()
         loss_keep_weighted = loss_keep_weight * loss_keep_aggregator.mean()
         penalty_weighted   = penalty_weight   * penalty_env.mean()
@@ -831,6 +827,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                           })
                           
         ngl_keep, ngl, ngp, dot_lk, dot_lp, dot_kp = emas.values()
+        ngl_keep2 = ngl ** 2
+        ngl2      = ngl ** 2
+        ngp2      = ngp ** 2
         
         normalized_scales = {}
         gradnorm_rates = torch.zeros(int(args.penalty_weight>0) + int(do_loss) + int(do_keep_loss), dtype=torch.float, device=device)
@@ -929,6 +928,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         dot_kp                = dot_kp.item()
         gradnorm_loss         = gradnorm_loss.item()
         gradnorm_rates        = gradnorm_rates.tolist()
+        ngl_keep2             = ngl_keep2.item()
+        ngl2                  = ngl2.item()
+        ngp2                  = ngp2.item()
 
         loss_batch_weighted = (loss_keep_weighted + # loss_keep_aggregator is a scalar normalized over macro-batch
                                penalty_weighted   + # mean over envs normalized over macro-batch
@@ -949,8 +951,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                    f' Env {total_env_loss_weighted/trained_samples:.4f}' + \
                    f' {args.penalty_type} {total_irm_loss_weighted/trained_samples:.4g}' + \
                    f' LR {train_optimizer.param_groups[0]["lr"]:.4f} PW {penalty_weight:.4f}' + \
-                   f' dot lk {dot_lk:.4g} lp {dot_lp:.4g} kp {dot_kp:.4g}' + \
-                   f' scalers k {loss_keep_grad_scaler:.4f} l {loss_grad_scaler:.4f} p {penalty_grad_scaler:.4f}' + \
+                   f' dot ll {ngl2:.2e} lk {dot_lk:.2e} lp {dot_lp:.2e} kk {ngl_keep2:.2e} kp {dot_kp:.2e} pp {ngp2:.2e}' + \
+                   f' w k {loss_keep_grad_scaler:.4f} l {loss_grad_scaler:.4f} p {penalty_grad_scaler:.4f}' + \
                    f' gn_loss {gradnorm_loss:.4e} rates: {gradnorm_rates_str}'
         desc_str += loss_module.get_debug_info_str()
         train_bar.set_description(desc_str)
@@ -963,8 +965,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                     total_env_loss_weighted/trained_samples) + 
                             ' {args.penalty_type}: {:.4g} LR: {:.4f} PW {:.4f} GN {:.4f}'
                             .format(total_irm_loss_weighted/trained_samples, train_optimizer.param_groups[0]['lr'], penalty_weight, gradnorm_loss) + 
-                            ' dot {:.4g} {:.4g} {:.4g} gn_loss {:.4e}'
-                            .format(dot_lk, dot_lp, dot_kp) +
+                            ' dot {:.2e} {:.2e} {:.2e} {:.2e} {:.2e} {:.2e}'
+                            .format(ngl2, dot_lk, dot_lp, ngl_keep2, dot_kp, ngp2) +
                             ' rates {}'
                             .format(gradnorm_rates_str),
                             log_file=log_file)
