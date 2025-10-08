@@ -975,7 +975,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                             ' rates {}'
                             .format(gradnorm_rates_str) + 
                             ' decr l {:.2f} k {.2f} p {.2f}'
-                            .format(loss_decrease_cond, loss_keep_decreae_cond, penalty_decrease_cond,
+                            .format(loss_decrease_cond, loss_keep_decreae_cond, penalty_decrease_cond),
                             log_file=log_file)
                                         
         # Prepare for next iteration
