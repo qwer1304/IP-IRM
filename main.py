@@ -942,6 +942,10 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         total_irm_loss_weighted  += (penalty_weight   * penalty_env.mean()).item()   * this_batch_size * gradients_accumulation_steps
         total_env_loss_weighted  += (loss_weight      * loss_env.mean()).item()      * this_batch_size * gradients_accumulation_steps
         total_loss_weighted      += loss_batch_weighted.item()                       * this_batch_size * gradients_accumulation_steps
+        
+        loss_decrease_cond     = loss_grad_scaler*ngl2 + loss_keep_grad_scaler*dot_lk + penalty_grad_scaler*dot_lp
+        loss_keep_decreae_cond = loss_keep_grad_scaler*ngl_keep2 + loss_grad_scaler*dot_lk + penalty_grad_scaler*dot_kp
+        penalty_decrease_cond  = penalty_grad_scaler*ngl2 + loss_keep_grad_scaler*dot_kp + loss_grad_scaler*dot_lp
 
         gradnorm_rates_str = " ".join([f'{n} {r:.4f}' for n,r in zip(task_names, gradnorm_rates)])  
         desc_str = f'Epoch [{epoch}/{epochs}] [{trained_samples}/{total_samples}]' + \
@@ -953,6 +957,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                    f' LR {train_optimizer.param_groups[0]["lr"]:.4f} PW {penalty_weight:.4f}' + \
                    f' dot ll {ngl2:.2e} lk {dot_lk:.2e} lp {dot_lp:.2e} kk {ngl_keep2:.2e} kp {dot_kp:.2e} pp {ngp2:.2e}' + \
                    f' w k {loss_keep_grad_scaler:.4f} l {loss_grad_scaler:.4f} p {penalty_grad_scaler:.4f}' + \
+                   f' decr l {loss_decrease_cond:.2f} k {loss_keep_decreae_cond:.2f} p {penalty_decrease_cond:.2f}' + \
                    f' gn_loss {gradnorm_loss:.4e} rates: {gradnorm_rates_str}'
         desc_str += loss_module.get_debug_info_str()
         train_bar.set_description(desc_str)
@@ -968,7 +973,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                             ' dot {:.2e} {:.2e} {:.2e} {:.2e} {:.2e} {:.2e}'
                             .format(ngl2, dot_lk, dot_lp, ngl_keep2, dot_kp, ngp2) +
                             ' rates {}'
-                            .format(gradnorm_rates_str),
+                            .format(gradnorm_rates_str) + 
+                            ' decr l {:.2f} k {.2f} p {.2f}'
+                            .format(loss_decrease_cond, loss_keep_decreae_cond, penalty_decrease_cond,
                             log_file=log_file)
                                         
         # Prepare for next iteration
