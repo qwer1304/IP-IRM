@@ -507,11 +507,11 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
     gradients_accumulation_step = 0
     total_samples               = len(train_loader.dataset)
     
-    trained_samples      = 0
-    total_keep_cont_loss_weighted = 0.0
-    total_cont_loss_weighted      = 0.0
-    total_irm_loss_weighted       = 0.0
-    total_loss_weighted           = 0.0
+    trained_samples          = 0
+    total_keep_loss_weighted = 0.0
+    total_env_loss_weighted  = 0.0
+    total_irm_loss_weighted  = 0.0
+    total_loss_weighted      = 0.0
 
     bar_format = '{l_bar}{bar:' + str(args.bar) + '}{r_bar}' #{bar:-' + str(args.bar) + 'b}'
     train_bar = tqdm(train_loader,
