@@ -825,7 +825,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                            'ngl':      loss_grad_norm_weighted, 
                            'ngp':      penalty_grad_norm_weighted, 
                            'dot_lk':   delta_lk,
-                           'dot_lp':   delat_lp,
+                           'dot_lp':   delta_lp,
                            'dot_kp':   delta_kp
                           })
                           
