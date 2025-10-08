@@ -1180,3 +1180,104 @@ class MovingAverage:
 
     def set_active(self, active):
         self.active = active
+
+import argparse
+import sys
+from types import SimpleNamespace
+from collections import defaultdict
+
+
+class NonExclusiveParser:
+    """
+    Explicit sentinel-based multi-subparser wrapper.
+
+    Syntax:
+        prog.py [base args] [-- name <args>] [-- name <args>] ...
+
+    Everything before the first '--' is parsed by base_parser.
+    Each '-- <name> ...' starts a subparser section until the next '--' or EOF.
+    Allows multiple occurrences of the same subparser.
+    """
+
+    def __init__(self, *args, **kwargs):
+        self.base_parser = argparse.ArgumentParser(*args, **kwargs)
+        self.subparsers = {}
+
+    def add_argument(self, *args, **kwargs):
+        return self.base_parser.add_argument(*args, **kwargs)
+
+    def add_subparser(self, name, **kwargs):
+        sp = argparse.ArgumentParser(prog=name, add_help=False, **kwargs)
+        self.subparsers[name] = sp
+        return sp
+
+    def parse_args(self, argv=None):
+        argv = sys.argv[1:] if argv is None else list(argv)
+
+        # Split into sections separated by '--'
+        chunks, current = [], []
+        for token in argv:
+            if token == "--":
+                if current:
+                    chunks.append(current)
+                    current = []
+            else:
+                current.append(token)
+        if current:
+            chunks.append(current)
+
+        results = defaultdict(list)
+
+        # Base parser: first chunk
+        if chunks:
+            base_chunk = chunks.pop(0)
+            base_ns, unknown = self.base_parser.parse_known_args(base_chunk)
+            if unknown:
+                raise SystemExit(f"unrecognized base args: {unknown}")
+            results["_base"] = base_ns
+        else:
+            results["_base"] = SimpleNamespace()
+
+        # Subparser sections
+        for chunk in chunks:
+            if not chunk:
+                continue
+            name, *args = chunk
+            if name not in self.subparsers:
+                raise SystemExit(f"unknown subparser '{name}'")
+            sp = self.subparsers[name]
+            ns = sp.parse_args(args)
+            results[name].append(ns)
+
+        # If subparser appears only once, unwrap list for convenience
+        final = {}
+        for k, v in results.items():
+            if k == "_base" or len(v) != 1:
+                final[k] = v
+            else:
+                final[k] = v[0]
+
+        return argparse.Namespace(**final)
+
+    """
+    if __name__ == "__main__":
+        parser = NonExclusiveParser(description="Sentinel-based non-exclusive subparsers")
+
+        parser.add_argument("--foo", type=int)
+
+        pa = parser.add_subparser("a")
+        pa.add_argument("--x")
+        pa.add_argument("--y", nargs="*")
+
+        pb = parser.add_subparser("b")
+        pb.add_argument("--v", type=int)
+
+        args = parser.parse_args("--foo 10 -- a --x 1 -- b --v 2 -- a --x 3 --y 4 5".split())
+        print(args)
+
+    Namespace(
+      _base=Namespace(foo=10),
+      a=[Namespace(x='1', y=[]), Namespace(x='3', y=['4', '5'])],
+      b=Namespace(v=2)
+    )
+    """

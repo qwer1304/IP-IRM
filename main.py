@@ -496,6 +496,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
     do_loss      = (not args.baseline) and (loss_weight > 0)
     do_keep_loss = (args.keep_cont)    and (loss_keep_weight > 0)
     do_penalty   = (not args.baseline) and (penalty_weight > 0)
+    do_gradnorm =  args.gradnorm       and (epoch >= args.gradnorm_epoch)
+
     
     loader_batch_size            = batch_size
     gradients_accumulation_steps = args.gradients_accumulation_batch_size // loader_batch_size 
@@ -782,6 +784,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             l_grads_flat_weighted = torch.cat([g.detach().clone() for g in loss_grads_final if g is not None]) * loss_weight
             loss_grad_norm_weighted = l_grads_flat_weighted.norm()
         else:
+            l_grads_flat_weighted = torch.zeros_like(l_keep_grads_flat_weighted)
             loss_grads_final = [torch.tensor(0., dtype=torch.float, device=device)] * len(loss_grads)
             loss_grad_norm_weighted = torch.tensor(0., dtype=torch.float, device=device)
 
@@ -801,59 +804,54 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             penalty_grad_norm_weighted = p_grads_flat_weighted.norm()
             grad_norm_ratio_weighted = (loss_keep_grad_norm_weighted + loss_grad_norm_weighted) / (penalty_grad_norm_weighted + 1e-12)
         else:
+            p_grads_flat_weighted = torch.zeros_like(l_keep_grads_flat_weighted)
             penalty_grads_final = [torch.tensor(0., dtype=torch.float, device=device)] * len(penalty_grads)
             penalty_grad_norm_weighted = torch.tensor(0., dtype=torch.float, device=device)
 
-        # weighting doesn't affect cosine
-        if (do_loss or do_keep_loss) and do_penalty:
-            dot_weighted = (l_keep_grads_flat_weighted + l_grads_flat_weighted).dot(p_grads_flat_weighted)
-            cosine = torch.nn.functional.cosine_similarity(l_keep_grads_flat_weighted + l_grads_flat_weighted, p_grads_flat_weighted, dim=0)         
-        else:
-            dot_weighted, cosine = torch.tensor(0, dtype=torch.float), torch.tensor(0, dtype=torch.float)
+        # Compute dot products
+        delta_lk = l_grads_flat_weighted.dot(l_keep_grads_flat_weighted)
+        delta_lp = l_grads_flat_weighted.dot(p_grads_flat_weighted)
+        delta_kp = l_keep_grads_flat_weighted.dot(p_grads_flat_weighted)
 
-        loss_grad_norm_weighted_sq = loss_grad_norm_weighted ** 2 + loss_keep_grad_norm_weighted ** 2
-        penalty_grad_norm_weighted_sq = penalty_grad_norm_weighted ** 2
+        loss_grad_norm_weighted_sq      = loss_grad_norm_weighted ** 2
+        loss_keep_grad_norm_weighted_sq = loss_keep_grad_norm_weighted ** 2
+        penalty_grad_norm_weighted_sq   = penalty_grad_norm_weighted ** 2
 
         loss_weighted      = loss_weight      * loss_env.mean()
         loss_keep_weighted = loss_keep_weight * loss_keep_aggregator.mean()
         penalty_weighted   = penalty_weight   * penalty_env.mean()
         
-        emas = ema.update({'ngl_keep': loss_keep_grad_norm_weighted, 'ngl': loss_grad_norm_weighted, 'ngp': penalty_grad_norm_weighted, 'dot': dot_weighted})
-        ngl_keep, ngl, ngp, dot_ema = emas.values()
+        emas = ema.update({'ngl_keep': loss_keep_grad_norm_weighted, 
+                           'ngl':      loss_grad_norm_weighted, 
+                           'ngp':      penalty_grad_norm_weighted, 
+                           'dot_lk':   delta_lk,
+                           'dot_lp':   delat_lp,
+                           'dot_kp':   delta_kp
+                          })
+                          
+        ngl_keep, ngl, ngp, dot_lk, dot_lp, dot_kp = emas.values()
         
-        normalized_weights = {}
-        do_gradnorm = False
-        tau = torch.tensor(1.0, dtype=torch.float, device=device)
+        normalized_scales = {}
         gradnorm_rates = torch.zeros(int(args.penalty_weight>0) + int(do_loss) + int(do_keep_loss), dtype=torch.float, device=device)
-        if do_penalty:
-            if args.gradnorm and (epoch >= args.gradnorm_epoch):
-                do_gradnorm = True
-                losses_dict      = {'penalty': penalty_weighted}
-                grad_norms_dict  = {'penalty': penalty_grad_norm_weighted}
-                if do_loss:
-                    losses_dict['loss']     = loss_weighted
-                    grad_norms_dict['loss'] = loss_grad_norm_weighted
-                if do_keep_loss:
-                    losses_dict['loss_keep']     = loss_keep_weighted
-                    grad_norms_dict['loss_keep'] = loss_keep_grad_norm_weighted
+        losses_dict, grad_norms_dict = {}, {}
+        if do_gradnorm:
+            if do_penalty:
+                losses_dict['penalty']       = penalty_weighted
+                grad_norms_dict['penalty']   = ngp
+            if do_loss:
+                losses_dict['loss']          = loss_weighted
+                grad_norms_dict['loss']      = ngl
+            if do_keep_loss:
+                losses_dict['loss_keep']     = loss_keep_weighted
+                grad_norms_dict['loss_keep'] = ngl_keep            
                     
-                normalized_weights, gradnorm_loss, gradnorm_rates = gradnorm_balancer.compute_weights_and_loss(losses_dict, grad_norms_dict)
+            normalized_scales, gradnorm_loss, gradnorm_rates = gradnorm_balancer.compute_weights_and_loss(losses_dict, grad_norms_dict)
                 
-                loss_plus_keep_weight = sum([normalized_weights[k] for k in normalized_weights if k != 'penalty'])
-                tau                   = loss_plus_keep_weight / (normalized_weights['penalty'] + 1e-12)
         
-        loss_keep_grad_scaler = normalized_weights['loss_keep'] if 'loss_keep' in normalized_weights else torch.tensor(1.0, dtype=torch.float, device=device)
-        loss_grad_scaler      = normalized_weights['loss']      if 'loss'      in normalized_weights else torch.tensor(1.0, dtype=torch.float, device=device)
-        penalty_grad_scaler   = normalized_weights['penalty']   if 'penalty'   in normalized_weights else torch.tensor(1.0, dtype=torch.float, device=device)
-                
-        """
-        penalty_grad_scaler_orig = penalty_grad_scaler
-        if penalty_grad_scaler > 1.0:
-            loss_keep_grad_scaler /= penalty_grad_scaler
-            loss_grad_scaler /= penalty_grad_scaler
-            penalty_grad_scaler = torch.tensor(1., dtype=torch.float, device=device)
-        """
-        
+        loss_keep_grad_scaler = normalized_scales['loss_keep'] if 'loss_keep' in normalized_scales else torch.tensor(1.0, dtype=torch.float, device=device)
+        loss_grad_scaler      = normalized_scales['loss']      if 'loss'      in normalized_scales else torch.tensor(1.0, dtype=torch.float, device=device)
+        penalty_grad_scaler   = normalized_scales['penalty']   if 'penalty'   in normalized_scales else torch.tensor(1.0, dtype=torch.float, device=device)
+                        
         loss_keep_weighted *= loss_keep_grad_scaler
         loss_weighted      *= loss_grad_scaler
         penalty_weighted   *= penalty_grad_scaler 
@@ -919,12 +917,14 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             ub = {'loss_keep': 5.0,  'loss': 5.0,  'penalty': 5.0} 
             gradnorm_balancer.clamp_weights(lb, ub)
 
-        dot_weighted, cosine, loss_keep_grad_norm_weighted, loss_grad_norm_weighted, \
-        penalty_grad_norm_weighted, penalty_grad_scaler, loss_grad_norm_weighted_sq, \
-        penalty_grad_norm_weighted_sq, tau, dot_ema, gradnorm_loss, gradnorm_rates = \
-                    dot_weighted.item(), cosine.item(), loss_keep_grad_norm_weighted.item(), loss_grad_norm_weighted.item(), \
-                    penalty_grad_norm_weighted.item(), penalty_grad_scaler.item(), loss_grad_norm_weighted_sq.item(), \
-                    penalty_grad_norm_weighted_sq.item(), tau.item(), dot_ema.item(), gradnorm_loss.item(), gradnorm_rates.tolist()
+        ngl_keep,              ngl,              ngp, \
+        loss_keep_grad_scaler, loss_grad_scaler, penalty_grad_scaler, \
+        dot_lk,                dot_lp,           dot_kp \
+        gradnorm_loss,         gradnorm_rates = \
+            ngl_keep.item(),              ngl.item(),              ngp.item(), \
+            loss_keep_grad_scaler.item(), loss_grad_scaler.item(), penalty_grad_scaler.item(), \
+            dot_lk.item(),                dot_lp.item(),           dot_kp.item() \
+            gradnorm_loss.item(),         gradnorm_rates.tolist()
 
         loss_batch_weighted = (loss_keep_weighted + # loss_keep_aggregator is a scalar normalized over macro-batch
                                penalty_weighted   + # mean over envs normalized over macro-batch
@@ -932,21 +932,21 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                               )
 
         # total loss is sum of losses so far over entire batch aggregation period.
-        total_keep_cont_loss_weighted += (loss_keep_weight * loss_keep_aggregator).item() * this_batch_size * gradients_accumulation_steps
-        total_irm_loss_weighted       += (penalty_weight   * penalty_env.mean()).item()   * this_batch_size * gradients_accumulation_steps
-        total_cont_loss_weighted      += (loss_weight      * loss_env.mean()).item()      * this_batch_size * gradients_accumulation_steps
-        total_loss_weighted           += loss_batch_weighted.item()                       * this_batch_size * gradients_accumulation_steps
+        total_keep_loss_weighted += (loss_keep_weight * loss_keep_aggregator).item() * this_batch_size * gradients_accumulation_steps
+        total_irm_loss_weighted  += (penalty_weight   * penalty_env.mean()).item()   * this_batch_size * gradients_accumulation_steps
+        total_env_loss_weighted  += (loss_weight      * loss_env.mean()).item()      * this_batch_size * gradients_accumulation_steps
+        total_loss_weighted      += loss_batch_weighted.item()                       * this_batch_size * gradients_accumulation_steps
 
         gradnorm_rates_str = " ".join([f'{r:.4f}' for r in gradnorm_rates])  
         desc_str = f'Epoch [{epoch}/{epochs}] [{trained_samples}/{total_samples}]' + \
                    f' {args.ssl_type}' + \
                    f' Total {total_loss_weighted/trained_samples:.4f}' + \
-                   f' Keep {total_keep_cont_loss_weighted/trained_samples:.4f}' + \
-                   f' Env {total_cont_loss_weighted/trained_samples:.4f}' + \
+                   f' Keep {total_keep_loss_weighted/trained_samples:.4f}' + \
+                   f' Env {total_env_loss_weighted/trained_samples:.4f}' + \
                    f' {args.penalty_type} {total_irm_loss_weighted/trained_samples:.4g}' + \
                    f' LR {train_optimizer.param_groups[0]["lr"]:.4f} PW {penalty_weight:.4f}' + \
-                   f' dot {dot_weighted:.4g} cos {cosine:.4f} ngl^2 {loss_grad_norm_weighted_sq:.4g} ngp^2 {penalty_grad_norm_weighted_sq:.4g}' + \
-                   f' tau {tau:.4e} gn_loss {gradnorm_loss:.4e} rates: {gradnorm_rates_str}'
+                   f' dot {dot_lk:.4g} {dot_lp:.4g} {dot_kp:.4g}' + \
+                   f' gn_loss {gradnorm_loss:.4e} rates: {gradnorm_rates_str}'
         desc_str += loss_module.get_debug_info_str()
         train_bar.set_description(desc_str)
 
@@ -954,11 +954,12 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             utils.write_log('Train Epoch: [{:d}/{:d}] [{:d}/{:d}] {args.ssl_type}: Total: {:.4f} First: {:.4f} Env: {:.4f}'
                             .format(epoch, epochs, trained_samples, total_samples,
                                     total_loss_weighted/trained_samples, 
-                                    total_keep_cont_loss_weighted/trained_samples, 
-                                    total_cont_loss_weighted/trained_samples) + 
-                            ' {args.penalty_type}: {:.4g} LR: {:.4f} PW {:.4f} dot {:.4g} cos {:.4f} ng_l^2: {:.4g} ng_p^2: {:.4g} tau {:4e} gn_loss {:.4e}'
-                            .format(total_irm_loss_weighted/trained_samples, train_optimizer.param_groups[0]['lr'], penalty_weight, dot_weighted, cosine, 
-                                    loss_grad_norm_weighted_sq, penalty_grad_norm_weighted_sq, tau, gradnorm_loss) + 
+                                    total_keep_loss_weighted/trained_samples, 
+                                    total_env_loss_weighted/trained_samples) + 
+                            ' {args.penalty_type}: {:.4g} LR: {:.4f} PW {:.4f} GN {:.4f}'
+                            .format(total_irm_loss_weighted/trained_samples, train_optimizer.param_groups[0]['lr'], penalty_weight, gradnorm_loss) + 
+                            ' dot {:.4g} {:.4g} {:.4g} gn_loss {:.4e}'
+                            .format(dot_lk, dot_lp, dot_kp) +
                             ' rates {}'
                             .format(gradnorm_rates_str),
                             log_file=log_file)
@@ -1238,9 +1239,10 @@ def load_checkpoint(path, model, model_momentum, optimizer, gradnorm_balancer, g
 
     if (gradnorm_balancer is not None):
         if ("state_dict_gradnorm" in checkpoint) and (checkpoint["state_dict_gradnorm"] is not None):
-            msg_gradnorm = gradnorm_balancer.load_state_dict(
+            new_parameters = gradnorm_balancer.load_state_dict(
                 checkpoint["state_dict_gradnorm"],
             )
+            msg_gradnorm = f'new parameters: {new_parameters}'
         else:
             msg_gradnorm = "no gradnorm in checkpoint"
     else:
@@ -1300,7 +1302,7 @@ def load_checkpoint(path, model, model_momentum, optimizer, gradnorm_balancer, g
     return model, model_momentum, optimizer, queue, start_epoch, best_acc1, best_epoch, updated_split, updated_split_all, ema, gradnorm_balancer, gradnorm_optimizer
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Train SimCLR')
+    parser = utils.NonExclusiveParser(description='Train IP-IRM')
     parser.add_argument('--ssl_type', default='MoCo', type=str, choices=['MoCo', 'SimSiam'], help='SSL type')    
     parser.add_argument('--penalty_type', default='IRM', type=str, choices=['IRM', 'VREx'], help='Penalty type')        
     parser.add_argument('--feature_dim', default=128, type=int, help='Feature dim for latent vector')
