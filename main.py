@@ -496,8 +496,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
     do_loss      = (not args.baseline) and (loss_weight > 0)
     do_keep_loss = (args.keep_cont)    and (loss_keep_weight > 0)
     do_penalty   = (not args.baseline) and (penalty_weight > 0)
-    do_gradnorm =  args.gradnorm       and (epoch >= args.gradnorm_epoch)
+    do_gradnorm  =  args.gradnorm       and (epoch >= args.gradnorm_epoch)
 
+    task_names   = gradnorm_balancer.task_names # list
     
     loader_batch_size            = batch_size
     gradients_accumulation_steps = args.gradients_accumulation_batch_size // loader_batch_size 
@@ -940,7 +941,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         total_env_loss_weighted  += (loss_weight      * loss_env.mean()).item()      * this_batch_size * gradients_accumulation_steps
         total_loss_weighted      += loss_batch_weighted.item()                       * this_batch_size * gradients_accumulation_steps
 
-        gradnorm_rates_str = " ".join([f'{r:.4f}' for r in gradnorm_rates])  
+        gradnorm_rates_str = " ".join([f'{n} {r:.4f}' for n,r in zip(task_names, gradnorm_rates)])  
         desc_str = f'Epoch [{epoch}/{epochs}] [{trained_samples}/{total_samples}]' + \
                    f' {args.ssl_type}' + \
                    f' Total {total_loss_weighted/trained_samples:.4f}' + \
@@ -948,7 +949,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                    f' Env {total_env_loss_weighted/trained_samples:.4f}' + \
                    f' {args.penalty_type} {total_irm_loss_weighted/trained_samples:.4g}' + \
                    f' LR {train_optimizer.param_groups[0]["lr"]:.4f} PW {penalty_weight:.4f}' + \
-                   f' dot {dot_lk:.4g} {dot_lp:.4g} {dot_kp:.4g}' + \
+                   f' dot lk {dot_lk:.4g} lp {dot_lp:.4g} kp {dot_kp:.4g}' + \
+                   f' scalers k {loss_keep_grad_scaler:.4f} l {loss_grad_scaler:.4f} p {penalty_grad_scaler:.4f}' + \
                    f' gn_loss {gradnorm_loss:.4e} rates: {gradnorm_rates_str}'
         desc_str += loss_module.get_debug_info_str()
         train_bar.set_description(desc_str)
