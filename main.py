@@ -917,14 +917,17 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             ub = {'loss_keep': 5.0,  'loss': 5.0,  'penalty': 5.0} 
             gradnorm_balancer.clamp_weights(lb, ub)
 
-        ngl_keep,              ngl,              ngp, \
-        loss_keep_grad_scaler, loss_grad_scaler, penalty_grad_scaler, \
-        dot_lk,                dot_lp,           dot_kp \
-        gradnorm_loss,         gradnorm_rates = \
-            ngl_keep.item(),              ngl.item(),              ngp.item(), \
-            loss_keep_grad_scaler.item(), loss_grad_scaler.item(), penalty_grad_scaler.item(), \
-            dot_lk.item(),                dot_lp.item(),           dot_kp.item() \
-            gradnorm_loss.item(),         gradnorm_rates.tolist()
+        ngl_keep              = ngl_keep.item()
+        ngl                   = ngl.item()
+        ngp                   = ngp.item()
+        loss_keep_grad_scaler = loss_keep_grad_scaler.item()
+        loss_grad_scaler      = loss_grad_scaler.item()
+        penalty_grad_scaler   = penalty_grad_scaler.item()
+        dot_lk                = dot_lk.item()               
+        dot_lp                = dot_lp.item()
+        dot_kp                = dot_kp.item()
+        gradnorm_loss         = gradnorm_loss.item()
+        gradnorm_rates        = gradnorm_rates.tolist()
 
         loss_batch_weighted = (loss_keep_weighted + # loss_keep_aggregator is a scalar normalized over macro-batch
                                penalty_weighted   + # mean over envs normalized over macro-batch
