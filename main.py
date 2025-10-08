@@ -1305,7 +1305,7 @@ def load_checkpoint(path, model, model_momentum, optimizer, gradnorm_balancer, g
     return model, model_momentum, optimizer, queue, start_epoch, best_acc1, best_epoch, updated_split, updated_split_all, ema, gradnorm_balancer, gradnorm_optimizer
 
 if __name__ == '__main__':
-    parser = utils.NonExclusiveParser(description='Train IP-IRM')
+    parser = argparse.ArgumentParser(description='Train IP-IRM')
     parser.add_argument('--ssl_type', default='MoCo', type=str, choices=['MoCo', 'SimSiam'], help='SSL type')    
     parser.add_argument('--penalty_type', default='IRM', type=str, choices=['IRM', 'VREx'], help='Penalty type')        
     parser.add_argument('--feature_dim', default=128, type=int, help='Feature dim for latent vector')
