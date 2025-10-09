@@ -467,13 +467,13 @@ class SimSiamLossModule(LossModule):
         return loss
 
 def gradnorm_clamp_scalers_for_progress(norm2_dict, dot_dict, scaler_dict):
-    LB_kl = dot_dict['kl'] / norm2_dict['k'] if norm2_dict['k'] > 0 else None)
-    LB_kp = dot_dict['kp'] / norm2_dict['k'] if norm2_dict['k'] > 0 else None)
-    LB_lp = dot_dict['lp'] / norm2_dict['l'] if norm2_dict['l'] > 0 else None)
+    LB_kl = dot_dict['kl'] / norm2_dict['k'] if norm2_dict['k'] > 0 else None
+    LB_kp = dot_dict['kp'] / norm2_dict['k'] if norm2_dict['k'] > 0 else None
+    LB_lp = dot_dict['lp'] / norm2_dict['l'] if norm2_dict['l'] > 0 else None
     
-    UB_kl = norm_dict2['k'] / dot_dict['kl'] if dot_dict['kl'] > 0 else None)
-    UB_kp = norm_dict2['k'] / dot_dict['kp'] if dot_dict['kp'] > 0 else None)
-    UB_lp = norm_dict2['l'] / dot_dict['lp'] if dot_dict['lp'] > 0 else None)
+    UB_kl = norm_dict2['k'] / dot_dict['kl'] if dot_dict['kl'] > 0 else None
+    UB_kp = norm_dict2['k'] / dot_dict['kp'] if dot_dict['kp'] > 0 else None
+    UB_lp = norm_dict2['l'] / dot_dict['lp'] if dot_dict['lp'] > 0 else None
     
     q_kl  = scaler_dict['k'] / scaler_dict['l']
     q_kp  = scaler_dict['k'] / scaler_dict['p']
