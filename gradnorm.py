@@ -72,7 +72,7 @@ class GradNormLossBalancer(nn.Module):
         Returns:
             dict: weight for each task
             torch.Tensor: gradnorm_loss
-            torch.tensor: rate for each task 
+            torch.tensor: rate for each task (raised to alpha power)
         Notes:
             1. It's expected that weights are updated through an optimizer on gradnorm_loss:
                 optimizer.zero_grads()

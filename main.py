@@ -466,6 +466,39 @@ class SimSiamLossModule(LossModule):
             loss = loss.sum()
         return loss
 
+def gradnorm_clamp_scalers_for_progress(norm2_dict, dot_dict, scaler_dict):
+    LB_kl = dot_dict['kl'] / norm2_dict['k'] if norm2_dict['k'] > 0 else None)
+    LB_kp = dot_dict['kp'] / norm2_dict['k'] if norm2_dict['k'] > 0 else None)
+    LB_lp = dot_dict['lp'] / norm2_dict['l'] if norm2_dict['l'] > 0 else None)
+    
+    UB_kl = norm_dict2['k'] / dot_dict['kl'] if dot_dict['kl'] > 0 else None)
+    UB_kp = norm_dict2['k'] / dot_dict['kp'] if dot_dict['kp'] > 0 else None)
+    UB_lp = norm_dict2['l'] / dot_dict['lp'] if dot_dict['lp'] > 0 else None)
+    
+    q_kl  = scaler_dict['k'] / scaler_dict['l']
+    q_kp  = scaler_dict['k'] / scaler_dict['p']
+    q_kl  = scaler_dict['l'] / scaler_dict['p']
+
+    q_kl_c  = torch.clamp(q_kl, LB_kl, UB_kl)
+    q_kp_c  = torch.clamp(q_kp, LB_kp, UB_kp)
+    q_lp_c  = torch.clamp(q_lp, LB_lp, UB_lp)
+    
+    if (q_kl_c == q_kl) and (q_kp_c == q_kp) and (q_lp_c == q_lp):
+        return scaler_dict
+    
+    if q_lp_c != q_kl_c * q_kp_c:
+        q_lp_c = q_kl_c * q_kp_c
+    w_k = torch.ones_like(scaler_dict['k']
+    w_l = 1 / q_kl_c
+    w_p = 1 / q_kp_c
+    
+    def normalize_weights(w1, w2, w3, T=3):
+        ssum = w1 + w2 + w3
+        return T*w1/ssum, T*w2/ssum, T*w3/ssum
+        
+    scaler_dict['k'], scaler_dict['l'], scaler_dict['p'] = normalize_weights(scaler_dict['k'], scaler_dict['l'], scaler_dict['p'])
+    return  scaler_dict  
+
 # ssl training with IP-IRM
 def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, **kwargs):
 
@@ -846,7 +879,15 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 grad_norms_dict['loss_keep'] = ngl_keep            
                     
             normalized_scales, gradnorm_loss, gradnorm_rates = gradnorm_balancer.compute_weights_and_loss(losses_dict, grad_norms_dict)
-                
+            task_names_2_klp = {'loss_keep': 'k', 'loss': 'l', 'penalty': 'p'}
+            klp_2_task_names = {'k': 'loss_keep': 'l', 'loss': 'p', 'penalty'}
+            dot_dict    = {'kl': dot_lk, 'kp': dot_kp, 'lp': dot_lp}
+            norm2_dict   = {'k': ngl_keep2, 'l': ngl2, 'p': ngp2}
+            scaler_dict = {'k': normalized_scales[klp_2_task_names['k'], 'l': normalized_scales[klp_2_task_names['l'], 'p': normalized_scales[klp_2_task_names['p']}
+            w = gradnorm_clamp_scalers_for_progress(norm2_dict, dot_dict, scaler_dict)
+            normalized_scales['loss_keep'] = w[task_names_2_klp['loss_keep']]
+            normalized_scales['loss']      = w[task_names_2_klp['loss']]
+            normalized_scales['penalty']   = w[task_names_2_klp['penalty']]               
         
         loss_keep_grad_scaler = normalized_scales['loss_keep'] if 'loss_keep' in normalized_scales else torch.tensor(1.0, dtype=torch.float, device=device)
         loss_grad_scaler      = normalized_scales['loss']      if 'loss'      in normalized_scales else torch.tensor(1.0, dtype=torch.float, device=device)
@@ -912,7 +953,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             gradnorm_optimizer.zero_grad(set_to_none=True)  # clear gradients
             gradnorm_loss.backward()
             gradnorm_optimizer.step()
-            # add dynamic bounds here
+            
             lb = {'loss_keep': 0.05, 'loss': 0.05, 'penalty': 0.05} 
             ub = {'loss_keep': 5.0,  'loss': 5.0,  'penalty': 5.0} 
             gradnorm_balancer.clamp_weights(lb, ub)
