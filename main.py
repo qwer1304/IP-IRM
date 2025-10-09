@@ -854,9 +854,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 g_lk = l_grads_flat_weighted
             elif do_k:
                 g_lk = l_keep_grads_flat_weighted
-            if g_lk:    
+            if g_lk is not None:    
                 delta_kl_p = g_lk.dot(p_grads_flat_weighted)
-                g_p_rot    = p_grads_flat_weighted - (delta_kl_p / delta_kl_p**2) * g_lk
+                g_p_rot    = p_grads_flat_weighted - (delta_kl_p / g_lk**2) * g_lk
                 g_p_rot    = g_p_rot * penalty_grad_norm_weighted / g_p_rot.norm()
                 p_grads_flat_weighted = g_p_rot 
         
