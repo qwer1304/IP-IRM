@@ -843,9 +843,18 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
 
         # rotate penalty gradient if it's orthogonal enough to losses' gradients
         if args.gradnorm_project and do_penalty:
-            g_lk = l_grads_flat_weighted + l_keep_grads_flat_weighted # one of these is non-zero
-            cos_kl_p   = F.cosine_similarity(g_lk, p_grads_flat_weighted, dim=0)
-            if (cos_kl_p < 0) and (cos_kl_p.abs() < 0.02):
+            cos_lp   = F.cosine_similarity(l_grads_flat_weighted, p_grads_flat_weighted, dim=0)
+            cos_kp   = F.cosine_similarity(l_keep_grads_flat_weighted, p_grads_flat_weighted, dim=0)
+            do_k = (cos_kp < 0) and (cos_kp.abs() < 0.02)
+            do_l = (cos_lp < 0) and (cos_lp.abs() < 0.02)
+            g_lk = None
+            if do_k and do_l:
+                g_lk = l_grads_flat_weighted if cos_lp <= cos_kp else l_keep_grads_flat_weighted
+            elif do_l:
+                g_lk = l_grads_flat_weighted
+            elif do_k:
+                g_lk = l_keep_grads_flat_weighted
+            if g_lk:    
                 delta_kl_p = g_lk.dot(p_grads_flat_weighted)
                 g_p_rot    = p_grads_flat_weighted - (delta_kl_p / delta_kl_p**2) * g_lk
                 g_p_rot    = g_p_rot * penalty_grad_norm_weighted / g_p_rot.norm()
