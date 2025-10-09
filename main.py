@@ -477,7 +477,7 @@ def gradnorm_clamp_scalers_for_progress(norm2_dict, dot_dict, scaler_dict):
     
     q_kl  = scaler_dict['k'] / scaler_dict['l']
     q_kp  = scaler_dict['k'] / scaler_dict['p']
-    q_kl  = scaler_dict['l'] / scaler_dict['p']
+    q_lp  = scaler_dict['l'] / scaler_dict['p']
 
     q_kl_c  = torch.clamp(q_kl, LB_kl, UB_kl)
     q_kp_c  = torch.clamp(q_kp, LB_kp, UB_kp)
