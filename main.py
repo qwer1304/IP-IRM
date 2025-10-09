@@ -1461,7 +1461,7 @@ if __name__ == '__main__':
     parser.add_argument('--gradnorm_epoch', default=0, type=int, help='gradnorm start epoch')
     parser.add_argument('--gradnorm_alpha', default=1.0, type=float, help='gradnorm alpha')
     parser.add_argument('--gradnorm_project', action="store_true", help="project penalty grad for orthogonality")
-gradnorm_project
+
     # args parse
     args = parser.parse_args()
 
