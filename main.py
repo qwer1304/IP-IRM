@@ -861,7 +861,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 g_p_rot    = g_p_rot * penalty_grad_norm_weighted / g_p_rot.norm()
                 p_grads_flat_weighted = g_p_rot 
             print()
-            print(cos_kp.item(), cos_kp.abs().item(), cos_lp.item(), cos_lp.abs().item(), delta_kl_p, p_grads_flat_weighted.norm()) 
+            print(f'{cos_kp.item():.4f}', f'{cos_lp.item():.4f}', delta_kl_p, f'{p_grads_flat_weighted.norm().item():.4f}') 
            
         
         # Compute dot products
