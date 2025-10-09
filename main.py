@@ -488,7 +488,7 @@ def gradnorm_clamp_scalers_for_progress(norm2_dict, dot_dict, scaler_dict):
     
     if q_lp_c != q_kl_c * q_kp_c:
         q_lp_c = q_kl_c * q_kp_c
-    w_k = torch.ones_like(scaler_dict['k']
+    w_k = torch.ones_like(scaler_dict['k'])
     w_l = 1 / q_kl_c
     w_p = 1 / q_kp_c
     
