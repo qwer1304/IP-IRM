@@ -25,6 +25,7 @@ import re
 import argparse
 from types import SimpleNamespace
 import sys
+from collections import defaultdict
 
 class ParseMixed(argparse.Action):
     def __init__(self, option_strings, dest, types=None, **kwargs):
@@ -1234,9 +1235,9 @@ class NonExclusiveParser:
             base_ns, unknown = self.base_parser.parse_known_args(base_chunk)
             if unknown:
                 raise SystemExit(f"unrecognized base args: {unknown}")
-            results["_base"] = base_ns
+            base_dict = vars(base_ns)
         else:
-            results["_base"] = SimpleNamespace()
+            base_dict = {}
 
         # Subparser sections
         for chunk in chunks:
@@ -1249,13 +1250,13 @@ class NonExclusiveParser:
             ns = sp.parse_args(args)
             results[name].append(ns)
 
-        # If subparser appears only once, unwrap list for convenience
-        final = {}
-        for k, v in results.items():
-            if k == "_base" or len(v) != 1:
-                final[k] = v
+        # Merge base args at top level, and subparser results under their names
+        final = dict(base_dict)
+        for name, v in results.items():
+            if len(v) == 1:
+                final[name] = v[0]
             else:
-                final[k] = v[0]
+                final[name] = v
 
         return argparse.Namespace(**final)
 
@@ -1275,9 +1276,9 @@ class NonExclusiveParser:
         args = parser.parse_args("--foo 10 -- a --x 1 -- b --v 2 -- a --x 3 --y 4 5".split())
         print(args)
 
-    Namespace(
-      _base=Namespace(foo=10),
-      a=[Namespace(x='1', y=[]), Namespace(x='3', y=['4', '5'])],
-      b=Namespace(v=2)
-    )
-    """
+        Namespace(
+          _base=Namespace(foo=10),
+          a=[Namespace(x='1', y=[]), Namespace(x='3', y=['4', '5'])],
+          b=Namespace(v=2)
+        )
+    """    

@@ -955,9 +955,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                    f' Env {total_env_loss_weighted/trained_samples:.4f}' + \
                    f' {args.penalty_type} {total_irm_loss_weighted/trained_samples:.4g}' + \
                    f' LR {train_optimizer.param_groups[0]["lr"]:.4f} PW {penalty_weight:.4f}' + \
-                   f' dot ll {ngl2:.2e} lk {dot_lk:.2e} lp {dot_lp:.2e} kk {ngl_keep2:.2e} kp {dot_kp:.2e} pp {ngp2:.2e}' + \
-                   f' w k {loss_keep_grad_scaler:.4f} l {loss_grad_scaler:.4f} p {penalty_grad_scaler:.4f}' + \
-                   f' decr l {loss_decrease_cond:.2e} k {loss_keep_decreae_cond:.2e} p {penalty_decrease_cond:.2e}' + \
+                   f' dot: ll {ngl2:.2e} lk {dot_lk:.2e} lp {dot_lp:.2e} kk {ngl_keep2:.2e} kp {dot_kp:.2e} pp {ngp2:.2e}' + \
+                   f' w: k {loss_keep_grad_scaler:.4f} l {loss_grad_scaler:.4f} p {penalty_grad_scaler:.4f}' + \
+                   f' decr: l {loss_decrease_cond:.2e} k {loss_keep_decreae_cond:.2e} p {penalty_decrease_cond:.2e}' + \
                    f' gn_loss {gradnorm_loss:.4e} rates: {gradnorm_rates_str}'
         desc_str += loss_module.get_debug_info_str()
         train_bar.set_description(desc_str)
@@ -1412,6 +1412,7 @@ if __name__ == '__main__':
     parser.add_argument('--ema', type=str, default=None, choices=['reinit', 'retain'], help="adjust gradients w/ EMA")
     parser.add_argument('--gradnorm', action="store_true", help="use gradnorm")
     parser.add_argument('--gradnorm_epoch', default=0, type=int, help='gradnorm start epoch')
+    parser.add_argument('--gradnorm_alpha', default=1.0, type=float, default=1.0, help='gradnorm alpha')
 
     # args parse
     args = parser.parse_args()
@@ -1575,7 +1576,7 @@ if __name__ == '__main__':
         initial_weights['loss'] = torch.tensor(1.0, dtype=torch.float, device=device)
     if args.penalty_keep_cont > 0:
         initial_weights['loss_keep'] = torch.tensor(1.0, dtype=torch.float, device=device)
-    gradnorm_balancer = gn.GradNormLossBalancer(initial_weights, alpha=1.0, device=device, smoothing=False, tau=None, eps=1e-8)
+    gradnorm_balancer = gn.GradNormLossBalancer(initial_weights, alpha=args.gradnorm_alpha, device=device, smoothing=False, tau=None, eps=1e-8)
 
     if args.opt == "Adam":
         optimizer          = optim.Adam(model.parameters(),             lr=args.lr, weight_decay=args.weight_decay)
@@ -1598,6 +1599,7 @@ if __name__ == '__main__':
             if (ema_ is not None) and (args.ema == 'retain'): # exists in checkpoint
                 ema = ema_
             ema.set_active(args.ema) # set to what the user has currently set
+            gradnorm_balancer.set_alpha(args.gradnorm_alpha) # always set alpha to currently provided value
             # use current LR, not the one from checkpoint
             for param_group in optimizer.param_groups:
                 param_group['lr'] = args.lr
