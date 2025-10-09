@@ -848,6 +848,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             do_k = (cos_kp < 0) and (cos_kp.abs() < 0.02)
             do_l = (cos_lp < 0) and (cos_lp.abs() < 0.02)
             g_lk = None
+            delta_kl_p = None
             if do_k and do_l:
                 g_lk = l_grads_flat_weighted if cos_lp <= cos_kp else l_keep_grads_flat_weighted
             elif do_l:
