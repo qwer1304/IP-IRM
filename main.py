@@ -883,7 +883,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             klp_2_task_names = {'k': 'loss_keep': 'l', 'loss': 'p', 'penalty'}
             dot_dict    = {'kl': dot_lk, 'kp': dot_kp, 'lp': dot_lp}
             norm2_dict   = {'k': ngl_keep2, 'l': ngl2, 'p': ngp2}
-            scaler_dict = {'k': normalized_scales[klp_2_task_names['k'], 'l': normalized_scales[klp_2_task_names['l'], 'p': normalized_scales[klp_2_task_names['p']}
+            scaler_dict = {'k': normalized_scales[klp_2_task_names['k']], 
+                           'l': normalized_scales[klp_2_task_names['l']], 
+                           'p': normalized_scales[klp_2_task_names['p']]}
             w = gradnorm_clamp_scalers_for_progress(norm2_dict, dot_dict, scaler_dict)
             normalized_scales['loss_keep'] = w[task_names_2_klp['loss_keep']]
             normalized_scales['loss']      = w[task_names_2_klp['loss']]
