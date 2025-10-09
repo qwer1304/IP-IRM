@@ -836,12 +836,21 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 penalty_grads_final.append(total_grad_flat.detach().clone())
             p_grads_flat_weighted = torch.cat([g.detach().clone() for g in penalty_grads_final if g is not None]) * penalty_weight    
             penalty_grad_norm_weighted = p_grads_flat_weighted.norm()
-            grad_norm_ratio_weighted = (loss_keep_grad_norm_weighted + loss_grad_norm_weighted) / (penalty_grad_norm_weighted + 1e-12)
         else:
             p_grads_flat_weighted = torch.zeros_like(l_keep_grads_flat_weighted)
             penalty_grads_final = [torch.tensor(0., dtype=torch.float, device=device)] * len(penalty_grads)
             penalty_grad_norm_weighted = torch.tensor(0., dtype=torch.float, device=device)
 
+        # rotate penalty gradient if it's orthogonal enough to losses' gradients
+        if args.gradnorm_project and do_penalty:
+            g_lk = l_grads_flat_weighted + l_keep_grads_flat_weighted # one of these is non-zero
+            cos_kl_p   = F.cosine_similarity(g_lk, p_grads_flat_weighted)
+            if (cos_kl_p < 0) and (cos_kl_p.abs() < 0.02):
+                delta_kl_p = g_lk.dot(p_grads_flat_weighted)
+                g_p_rot    = p_grads_flat_weighted - (delta_kl_p / delta_kl_p**2) * g_lk
+                g_p_rot    = g_p_rot * penalty_grad_norm_weighted / g_p_rot.norm()
+                p_grads_flat_weighted = g_p_rot 
+        
         # Compute dot products
         delta_lk = l_grads_flat_weighted.dot(l_keep_grads_flat_weighted)
         delta_lp = l_grads_flat_weighted.dot(p_grads_flat_weighted)
@@ -1451,7 +1460,8 @@ if __name__ == '__main__':
     parser.add_argument('--gradnorm', action="store_true", help="use gradnorm")
     parser.add_argument('--gradnorm_epoch', default=0, type=int, help='gradnorm start epoch')
     parser.add_argument('--gradnorm_alpha', default=1.0, type=float, help='gradnorm alpha')
-
+    parser.add_argument('--gradnorm_project', action="store_true", help="project penalty grad for orthogonality")
+gradnorm_project
     # args parse
     args = parser.parse_args()
 
