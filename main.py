@@ -880,7 +880,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                     
             normalized_scales, gradnorm_loss, gradnorm_rates = gradnorm_balancer.compute_weights_and_loss(losses_dict, grad_norms_dict)
             task_names_2_klp = {'loss_keep': 'k', 'loss': 'l', 'penalty': 'p'}
-            klp_2_task_names = {'k': 'loss_keep': 'l', 'loss': 'p', 'penalty'}
+            klp_2_task_names = {'k': 'loss_keep', 'l': 'loss', 'p': 'penalty'}
             dot_dict    = {'kl': dot_lk, 'kp': dot_kp, 'lp': dot_lp}
             norm2_dict   = {'k': ngl_keep2, 'l': ngl2, 'p': ngp2}
             scaler_dict = {'k': normalized_scales[klp_2_task_names['k']], 
