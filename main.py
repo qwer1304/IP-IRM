@@ -529,7 +529,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
     do_loss      = (not args.baseline) and (loss_weight > 0)
     do_keep_loss = (args.keep_cont)    and (loss_keep_weight > 0)
     do_penalty   = (not args.baseline) and (penalty_weight > 0)
-    do_gradnorm  =  args.gradnorm       and (epoch >= args.gradnorm_epoch)
+    do_gradnorm  =  args.gradnorm      and (epoch >= args.gradnorm_epoch)
 
     task_names   = gradnorm_balancer.task_names # list
     
@@ -985,8 +985,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         dot_lk                = dot_lk.item()               
         dot_lp                = dot_lp.item()
         dot_kp                = dot_kp.item()
-        gradnorm_loss         = gradnorm_loss.item()
-        gradnorm_rates        = gradnorm_rates.tolist()
+        gradnorm_loss         = gradnorm_loss.item()    if do_gradnorm else 0.
+        gradnorm_rates        = gradnorm_rates.tolist() if do_gradnorm else []
         ngl_keep2             = ngl_keep2.item()
         ngl2                  = ngl2.item()
         ngp2                  = ngp2.item()
@@ -1006,7 +1006,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         loss_keep_decreae_cond = loss_keep_grad_scaler*ngl_keep2 + loss_grad_scaler*dot_lk + penalty_grad_scaler*dot_kp
         penalty_decrease_cond  = penalty_grad_scaler*ngl2 + loss_keep_grad_scaler*dot_kp + loss_grad_scaler*dot_lp
 
-        gradnorm_rates_str = " ".join([f'{n} {r:.4f}' for n,r in zip(task_names, gradnorm_rates)])  
+        gradnorm_rates_str = " ".join([f'{n} {r:.4f}' for n,r in zip(task_names, gradnorm_rates)]) if do_gradnorm else ""  
         desc_str = f'Epoch [{epoch}/{epochs}] [{trained_samples}/{total_samples}]' + \
                    f' {args.ssl_type}' + \
                    f' Total {total_loss_weighted/trained_samples:.4f}' + \
