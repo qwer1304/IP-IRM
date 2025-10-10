@@ -858,7 +858,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                     p_grads_flat_weighted = g_p_rot 
                     # update list of pars' gradients w/ rotated grad
                     grad_lengths = [len(p) for p in penalty_grads_final] 
-                    penalty_grads_final = list(torch.split(p_grads_flat_weighted, grad_lengths, dim=0)                    
+                    penalty_grads_final = list(torch.split(p_grads_flat_weighted, grad_lengths, dim=0))                   
             else:
                 cos_Lp     = torch.tensor(0., dtype=torch.float, device=device)
                 alpha      = torch.tensor(0., dtype=torch.float, device=device)
