@@ -858,10 +858,10 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             else:
                 cos_Lp     = torch.tensor(0., dtype=torch.float, device=device)
                 alpha      = torch.tensor(0., dtype=torch.float, device=device)
-                delta_kl_p = torch.tensor(0., dtype=torch.float, device=device)
+                delta_Lp = torch.tensor(0., dtype=torch.float, device=device)
 
             print()
-            print(f'{cos_Lp.item():.4f}', f'{alpha:.4f}', delta_kl_p, f'{p_grads_flat_weighted.norm().item():.4f}') 
+            print(f'{cos_Lp.item():.4f}', f'{alpha:.4f}', delta_Lp, f'{p_grads_flat_weighted.norm().item():.4f}') 
         
         # Compute dot products
         delta_lk = l_grads_flat_weighted.dot(l_keep_grads_flat_weighted)
