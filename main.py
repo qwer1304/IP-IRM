@@ -799,11 +799,11 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             partition_sz = halves_sz.sum(dim=0, keepdim=True) # (1,J,K) # sizes of envs in macro-batch
             loss_env = loss_aggregator.sum(dim=0, keepdim=True) / partition_sz  # per env for macro-batch, normalized per env, unweighted
         else:
-            loss_env = torch.tensor(0, dtype=torch.float)
+            loss_env = torch.tensor(0, dtype=torch.float, device=device)
         if do_penalty:
             penalty_env = penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz) # normalized per env for macro-batch, unweighted
         else:
-            penalty_env = torch.tensor(0, dtype=torch.float)
+            penalty_env = torch.tensor(0, dtype=torch.float, device=device)
 
         l_keep_grads_flat_weighted = torch.cat([g.detach().clone() for g in loss_keep_grads_final if g is not None]) * loss_keep_weight
         loss_keep_grad_norm_weighted = l_keep_grads_flat_weighted.norm() # weighted, can be 0
@@ -856,7 +856,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                     g_p_rot = g_p_rot * (penalty_grad_norm_weighted / (g_p_rot.norm() + 1e-12))
                     p_grads_flat_weighted = g_p_rot 
             else:
-                cos_Lp, alpha, delta_kl_p = torch.tensor(0), torch.tensor(0), torch.tensor(0)
+                cos_Lp     = torch.tensor(0., dtype=torch.float, device=device)
+                alpha      = torch.tensor(0., dtype=torch.float, device=device)
+                delta_kl_p = torch.tensor(0., dtype=torch.float, device=device)
 
             print()
             print(f'{cos_Lp.item():.4f}', f'{alpha:.4f}', delta_kl_p, f'{p_grads_flat_weighted.norm().item():.4f}') 
