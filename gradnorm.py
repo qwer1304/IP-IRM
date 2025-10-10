@@ -129,8 +129,6 @@ class GradNormLossBalancer(nn.Module):
         Normalization is only applied after the update, when you want to use the weights to combine task losses in the forward pass.
         """
         gradnorm_loss = (weighted_grad_norms - avg_grad_norm * smoothed_rates).abs()
-        print()
-        print(f'gn_loss_sz {gradnorm_loss.size()}, weights {weights}, gn_norms_sz {grad_norms.size()}')
         gradnorm_loss = gradnorm_loss.sum()
         #gradnorm_loss = ((weighted_grad_norms - avg_grad_norm * smoothed_rates) ** 2).sum()
 
