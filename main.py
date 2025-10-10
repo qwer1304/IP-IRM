@@ -953,7 +953,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             gradnorm_loss.backward()
             gradnorm_optimizer.step()
             
-            #"""
+            """
             print()
             opt_ids = {id(p) for g in gradnorm_optimizer.param_groups for p in g['params']}
             # 1) Does optimizer actually contain the exact Parameter objects?
@@ -973,7 +973,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             # 4) Check lr / optimizer param count
             print("optimizer lr(s):", [g['lr'] for g in gradnorm_optimizer.param_groups])
             print("optimizer param counts:", [len(g['params']) for g in gradnorm_optimizer.param_groups])
-            #"""
+            """
            
             lb = {'loss_keep': 0.05, 'loss': 0.05, 'penalty': 0.05} 
             ub = {'loss_keep': 5.0,  'loss': 5.0,  'penalty': 5.0} 
