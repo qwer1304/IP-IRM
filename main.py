@@ -856,6 +856,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                     g_p_rot = p_grads_flat_weighted - alpha * proj
                     g_p_rot = g_p_rot * (penalty_grad_norm_weighted / (g_p_rot.norm() + 1e-12))
                     p_grads_flat_weighted = g_p_rot 
+                    # update list of pars' gradients w/ rotated grad
+                    grad_lengths = [len(p) for p in penalty_grads_final] 
+                    penalty_grads_final = list(torch.split(p_grads_flat_weighted, grad_lengths, dim=0)                    
             else:
                 cos_Lp     = torch.tensor(0., dtype=torch.float, device=device)
                 alpha      = torch.tensor(0., dtype=torch.float, device=device)
@@ -1022,7 +1025,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                    f' dot: ll {ngl2:.2e} lk {dot_lk:.2e} lp {dot_lp:.2e} kk {ngl_keep2:.2e} kp {dot_kp:.2e} pp {ngp2:.2e}' + \
                    f' w: k {loss_keep_grad_scaler:.4f} l {loss_grad_scaler:.4f} p {penalty_grad_scaler:.4f}' + \
                    f' decr: l {loss_decrease_cond:.2e} k {loss_keep_decreae_cond:.2e} p {penalty_decrease_cond:.2e}' + \
-                   f' gn_loss {gradnorm_loss:.4e} rates: {gradnorm_rates_str} Lp: cos{cos_Lp:.4f} delta {delta_Lp:.4f}'
+                   f' gn_loss {gradnorm_loss:.4e} rates: {gradnorm_rates_str} Lp: cos {cos_Lp:.4f} delta {delta_Lp:.4f}'
         desc_str += loss_module.get_debug_info_str()
         train_bar.set_description(desc_str)
 
