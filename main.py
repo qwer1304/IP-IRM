@@ -842,27 +842,24 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             penalty_grad_norm_weighted = torch.tensor(0., dtype=torch.float, device=device)
 
         # rotate penalty gradient if it's orthogonal enough to losses' gradients
-        if args.gradnorm_project and do_penalty:
-            cos_kp   = F.cosine_similarity(l_keep_grads_flat_weighted, p_grads_flat_weighted, dim=0)
-            cos_lp   = F.cosine_similarity(l_grads_flat_weighted,      p_grads_flat_weighted, dim=0)
-            do_k = (cos_kp < 0) and (cos_kp.abs() < 0.02)
-            do_l = (cos_lp < 0) and (cos_lp.abs() < 0.02)
-            g_lk = None
-            delta_kl_p = None
-            if do_k and do_l:
-                g_lk = l_grads_flat_weighted if cos_lp <= cos_kp else l_keep_grads_flat_weighted
-            elif do_l:
-                g_lk = l_grads_flat_weighted
-            elif do_k:
-                g_lk = l_keep_grads_flat_weighted
-            if g_lk is not None:    
-                delta_kl_p = g_lk.dot(p_grads_flat_weighted)
-                g_p_rot    = p_grads_flat_weighted - (delta_kl_p / g_lk**2) * g_lk
-                g_p_rot    = g_p_rot * penalty_grad_norm_weighted / g_p_rot.norm()
-                p_grads_flat_weighted = g_p_rot 
+        if (args.gradnorm_project is not None) and do_penalty:
+            L_grads_flat_weighted = l_keep_grads_flat_weighted + l_grads_flat_weighted
+            cos_Lp   = F.cosine_similarity(L_grads_flat_weighted, p_grads_flat_weighted, dim=0)
+            if cos_Lp < 0:
+                tau_low, tau_high = args.gradnorm_project
+                alpha = torch.clip((cos_Lp.abs() - tau_low) / (tau_high - tau_low), 0, 1)
+                if alpha > 0.
+                    delta_Lp = L_grads_flat_weighted.dot(p_grads_flat_weighted)
+                    nL = L_grads_flat_weighted.norm()
+                    proj = (delta_Lp / (nL * nL + 1e-12)) * L_grads_flat_weighted
+                    g_p_rot = p_grads_flat_weighted - alpha * proj
+                    g_p_rot = g_p_rot * (penalty_grad_norm_weighted / (g_p_rot.norm() + 1e-12))
+                    p_grads_flat_weighted = g_p_rot 
+            else:
+                cos_Lp, alpha, delta_kl_p = torch.tensor(0), torch.tensor(0), torch.tensor(0)
+
             print()
-            print(f'{cos_kp.item():.4f}', f'{cos_lp.item():.4f}', delta_kl_p, f'{p_grads_flat_weighted.norm().item():.4f}') 
-           
+            print(f'{cos_Lp.item():.4f}', f'{alpha:.4f}', delta_kl_p, f'{p_grads_flat_weighted.norm().item():.4f}') 
         
         # Compute dot products
         delta_lk = l_grads_flat_weighted.dot(l_keep_grads_flat_weighted)
@@ -1473,7 +1470,7 @@ if __name__ == '__main__':
     parser.add_argument('--gradnorm', action="store_true", help="use gradnorm")
     parser.add_argument('--gradnorm_epoch', default=0, type=int, help='gradnorm start epoch')
     parser.add_argument('--gradnorm_alpha', default=1.0, type=float, help='gradnorm alpha')
-    parser.add_argument('--gradnorm_project', action="store_true", help="project penalty grad for orthogonality")
+    parser.add_argument('--gradnorm_project', type=float, nargs=2, default=None, help="project penalty grad for orthogonality", metavar="[tau_low, tau_high]")
 
     # args parse
     args = parser.parse_args()
