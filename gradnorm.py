@@ -130,7 +130,7 @@ class GradNormLossBalancer(nn.Module):
         """
         gradnorm_loss = (weighted_grad_norms - avg_grad_norm * smoothed_rates).abs()
         print()
-        print(f'gradnorm_loss {gradnorm_loss}, weights {weights}, grad_norms {grad_norms}'}
+        print(f'gradnorm_loss {gradnorm_loss}, weights {weights}, grad_norms {grad_norms}')
         gradnorm_loss = gradnorm_loss.sum()
         #gradnorm_loss = ((weighted_grad_norms - avg_grad_norm * smoothed_rates) ** 2).sum()
 
