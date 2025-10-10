@@ -842,7 +842,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             penalty_grad_norm_weighted = torch.tensor(0., dtype=torch.float, device=device)
 
         # rotate penalty gradient if it's orthogonal enough to losses' gradients
-        if (args.gradnorm_project is not None) and do_penalty:
+        if do_gradnorm and do_penalty and (args.gradnorm_project is not None):
             L_grads_flat_weighted = l_keep_grads_flat_weighted + l_grads_flat_weighted
             cos_Lp   = F.cosine_similarity(L_grads_flat_weighted, p_grads_flat_weighted, dim=0)
             if cos_Lp < 0:
