@@ -902,6 +902,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 grad_norms_dict['loss_keep'] = ngl_keep            
                     
             normalized_scales, gradnorm_loss, gradnorm_rates = gradnorm_balancer.compute_weights_and_loss(losses_dict, grad_norms_dict)
+            print()
+            print(normalized_scales, gradnorm_loss, gradnorm_rates, gradnorm_balancer.task_weights)
             dot_dict    = {'kl': dot_lk,    'kp': dot_kp, 'lp': dot_lp}
             norm2_dict  = {'k':  ngl_keep2, 'l':  ngl2,   'p':  ngp2}
             task_names_2_klp = {'loss_keep': 'k', 'loss': 'l', 'penalty': 'p'}
@@ -909,8 +911,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             w = gradnorm_clamp_scalers_for_progress(norm2_dict, dot_dict, scaler_dict)
             normalized_scales = {k: w[v] for k,v in task_names_2_klp.items()} 
         
-        print()
-        print(normalized_scales)
         loss_keep_grad_scaler = normalized_scales['loss_keep'] if 'loss_keep' in normalized_scales else torch.tensor(1.0, dtype=torch.float, device=device)
         loss_grad_scaler      = normalized_scales['loss']      if 'loss'      in normalized_scales else torch.tensor(1.0, dtype=torch.float, device=device)
         penalty_grad_scaler   = normalized_scales['penalty']   if 'penalty'   in normalized_scales else torch.tensor(1.0, dtype=torch.float, device=device)
