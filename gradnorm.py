@@ -9,7 +9,7 @@ class GradNormLossBalancer(nn.Module):
             initial_weights (dict): Initial task weights, e.g., {'cont': 1.0, 'keep_cont': 1.0, 'penalty': 1.0}
             alpha (float): Moving average smoothing factor for task loss rates.
             smoothing (bool): False - original rates, True - moving average w/ alpha
-            tau (float): loss rates divisor, lower value -> higher apparent loss rate -> lower true loss rate -> higher learning rate
+            tau (dict): loss rates divisors, lower value -> weight decrease
             Note: initial_weights keys determine the tasks to be tracked by GradNorm
         """
         super().__init__()
@@ -32,8 +32,8 @@ class GradNormLossBalancer(nn.Module):
         if tau is None:
             tau = [1.0 for k in self.task_names]
         else:
-            mtau = sum([v for v in tau.values()]) / len(self.task_names)
-            tau = [v / mtau for v in tau.values()] 
+            mtau = sum([tau[k] for k in self.task_names]) / len(self.task_names)
+            tau = [tau[k] / mtau for k in self.task_names] 
         self.tau = torch.tensor(tau, device=device, requires_grad=False)
         self.eps = eps
 
@@ -106,7 +106,7 @@ class GradNormLossBalancer(nn.Module):
 
         normalized_ratios = loss_ratios / (loss_ratios.mean().detach() + self.eps)
         # smaller tau -> bigger apparent loss_rates; since the objective is to have similar loss rates, 
-        # this'd cause the true loss rate to decrease, i.e. the true learning rate to increase 
+        # this'd cause the weight to decrease 
         loss_rates = normalized_ratios / self.tau 
         
         if not self.smoothing:        
@@ -195,3 +195,10 @@ class GradNormLossBalancer(nn.Module):
     def set_alpha(self, alpha):
         self.alpha = alpha
 
+    def set_tau(self, tau):
+        if tau is None:
+            tau = [1.0 for k in self.task_names]
+        else:
+            mtau = sum([tau[k] for k in self.task_names]) / len(self.task_names)
+            tau = [tau[k] / mtau for k in self.task_names] 
+        self.tau = torch.tensor(tau, device=self.device, requires_grad=False)

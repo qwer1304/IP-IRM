@@ -1481,9 +1481,14 @@ if __name__ == '__main__':
     parser.add_argument('--gradnorm_epoch', default=0, type=int, help='gradnorm start epoch')
     parser.add_argument('--gradnorm_alpha', default=1.0, type=float, help='gradnorm alpha')
     parser.add_argument('--gradnorm_project', type=float, nargs=2, default=None, help="project penalty grad for orthogonality", metavar="[tau_low, tau_high]")
+    parser.add_argument('--gradnorm_tau', default=None, nargs=2*3, type=str,
+                        action=utils.ParseMixed, types=[str, float, str, float, str, float],
+                        metavar='tau dictionary k-v pairs',    
+                        help='loss divisors')
 
     # args parse
     args = parser.parse_args()
+    args.gradnorm_tau = {args.gradnorm_tau[i]: args.gradnorm_tau[i+1] for i in range(0,len(args.gradnorm_tau),2)} if args.gradnorm_tau is not None else None
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -1668,6 +1673,7 @@ if __name__ == '__main__':
                 ema = ema_
             ema.set_active(args.ema) # set to what the user has currently set
             gradnorm_balancer.set_alpha(args.gradnorm_alpha) # always set alpha to currently provided value
+            gradnorm_balancer.set_tau(args.gradnorm_tau) # always set alpha to currently provided value
             # use current LR, not the one from checkpoint
             for param_group in optimizer.param_groups:
                 param_group['lr'] = args.lr
