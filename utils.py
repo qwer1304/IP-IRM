@@ -1178,7 +1178,8 @@ class MovingAverage:
         if self.active:
             self._updates += 1
 
-        ema_dict_data = {k: v.view(dict_data[k].shape) for k,v in ema_dict_data.items()}
+        if orig_shape:
+            ema_dict_data = {k: v.view(dict_data[k].shape) for k,v in ema_dict_data.items()}
         return ema_dict_data
 
     def set_active(self, active):
