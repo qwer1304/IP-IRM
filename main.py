@@ -848,7 +848,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             if cos_Lp < 0:
                 tau_low, tau_high = args.gradnorm_project
                 alpha = torch.clip((cos_Lp.abs() - tau_low) / (tau_high - tau_low), 0, 1)
-                if alpha > 0.
+                if alpha > 0.:
                     delta_Lp = L_grads_flat_weighted.dot(p_grads_flat_weighted)
                     nL = L_grads_flat_weighted.norm()
                     proj = (delta_Lp / (nL * nL + 1e-12)) * L_grads_flat_weighted
