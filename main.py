@@ -532,7 +532,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
     do_gradnorm  =  args.gradnorm      and (epoch >= args.gradnorm_epoch)
 
     task_names   = gradnorm_balancer.task_names # list
-    
+    task_names_2_klp = {'loss_keep': 'k', 'loss': 'l', 'penalty': 'p'}
+
     loader_batch_size            = batch_size
     gradients_accumulation_steps = args.gradients_accumulation_batch_size // loader_batch_size 
     gpu_batch_size               = args.micro_batch_size
@@ -904,7 +905,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             normalized_scales, gradnorm_loss, gradnorm_rates = gradnorm_balancer.compute_weights_and_loss(losses_dict, grad_norms_dict)
             dot_dict    = {'kl': dot_lk,    'kp': dot_kp, 'lp': dot_lp}
             norm2_dict  = {'k':  ngl_keep2, 'l':  ngl2,   'p':  ngp2}
-            task_names_2_klp = {'loss_keep': 'k', 'loss': 'l', 'penalty': 'p'}
             scaler_dict = {v: normalized_scales[k] for k,v in task_names_2_klp.items()}
             w = gradnorm_clamp_scalers_for_progress(norm2_dict, dot_dict, scaler_dict)
             normalized_scales = {k: w[v] for k,v in task_names_2_klp.items()} 
@@ -993,6 +993,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         ngl_keep2             = ngl_keep2.item()
         ngl2                  = ngl2.item()
         ngp2                  = ngp2.item()
+        cos_Lp                = cos_Lp.item()
+        delta_Lp              = delta_Lp.item() 
 
         loss_batch_weighted = (loss_keep_weighted + # loss_keep_aggregator is a scalar normalized over macro-batch
                                penalty_weighted   + # mean over envs normalized over macro-batch
@@ -1009,7 +1011,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         loss_keep_decreae_cond = loss_keep_grad_scaler*ngl_keep2 + loss_grad_scaler*dot_lk + penalty_grad_scaler*dot_kp
         penalty_decrease_cond  = penalty_grad_scaler*ngl2 + loss_keep_grad_scaler*dot_kp + loss_grad_scaler*dot_lp
 
-        gradnorm_rates_str = " ".join([f'{n} {r:.4f}' for n,r in zip(task_names, gradnorm_rates)]) if do_gradnorm else ""  
+        gradnorm_rates_str = " ".join([f'{n} {r:.4f}' for n,r in zip([task_names_2_klp[k] for k in task_names], gradnorm_rates)]) if do_gradnorm else ""  
         desc_str = f'Epoch [{epoch}/{epochs}] [{trained_samples}/{total_samples}]' + \
                    f' {args.ssl_type}' + \
                    f' Total {total_loss_weighted/trained_samples:.4f}' + \
@@ -1018,9 +1020,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                    f' {args.penalty_type} {total_irm_loss_weighted/trained_samples:.4g}' + \
                    f' LR {train_optimizer.param_groups[0]["lr"]:.4f} PW {penalty_weight:.4f}' + \
                    f' dot: ll {ngl2:.2e} lk {dot_lk:.2e} lp {dot_lp:.2e} kk {ngl_keep2:.2e} kp {dot_kp:.2e} pp {ngp2:.2e}' + \
-                   f' w: k {loss_keep_grad_scaler:.4f} l {loss_grad_scaler:.8f} p {penalty_grad_scaler:.8f}' + \
+                   f' w: k {loss_keep_grad_scaler:.4f} l {loss_grad_scaler:.4f} p {penalty_grad_scaler:.4f}' + \
                    f' decr: l {loss_decrease_cond:.2e} k {loss_keep_decreae_cond:.2e} p {penalty_decrease_cond:.2e}' + \
-                   f' gn_loss {gradnorm_loss:.4e} rates: {gradnorm_rates_str}'
+                   f' gn_loss {gradnorm_loss:.4e} rates: {gradnorm_rates_str} Lp: cos{cos_Lp:.4f} delta {delta_Lp:.4f}'
         desc_str += loss_module.get_debug_info_str()
         train_bar.set_description(desc_str)
 
@@ -1036,8 +1038,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                             .format(ngl2, dot_lk, dot_lp, ngl_keep2, dot_kp, ngp2) +
                             ' rates {}'
                             .format(gradnorm_rates_str) + 
-                            ' decr l {:.2e} k {.2e} p {.2e}'
-                            .format(loss_decrease_cond, loss_keep_decreae_cond, penalty_decrease_cond),
+                            ' decr l {:.2e} k {.2e} p {.2e} Lp cos {:4f} delta {:.4f}'
+                            .format(loss_decrease_cond, loss_keep_decreae_cond, penalty_decrease_cond, cos_Lp, delta_Lp),
                             log_file=log_file)
                                         
         # Prepare for next iteration
