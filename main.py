@@ -880,7 +880,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                            'dot_lk':   delta_lk,
                            'dot_lp':   delta_lp,
                            'dot_kp':   delta_kp
-                          })
+                          }, orig_shape=True)   # return data shaped as input data
                           
         ngl_keep, ngl, ngp, dot_lk, dot_lp, dot_kp = emas.values()
         ngl_keep2 = ngl ** 2

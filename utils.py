@@ -1155,7 +1155,7 @@ class MovingAverage:
         self._oneminusema_correction = oneminusema_correction
         self.active = active
 
-    def update(self, dict_data):
+    def update(self, dict_data, orig_shape=False):
         ema_dict_data = {}
         for name, data in dict_data.items():
             data = data.view(1, -1)
@@ -1177,6 +1177,8 @@ class MovingAverage:
                  ema_dict_data[name] = torch.ones_like(data)
         if self.active:
             self._updates += 1
+
+        ema_dict_data = {k: v.view(dict_data[k].shape) for k,v in ema_dict_data.items()}
         return ema_dict_data
 
     def set_active(self, active):
