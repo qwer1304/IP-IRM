@@ -902,8 +902,11 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 grad_norms_dict['loss_keep'] = ngl_keep            
                     
             normalized_scales, gradnorm_loss, gradnorm_rates = gradnorm_balancer.compute_weights_and_loss(losses_dict, grad_norms_dict)
+            print("weights device/dtype:", [(k, p.device, p.dtype) for k, p in gradnorm_balancer.task_weights.items()])
+
             print()
-            print(normalized_scales.values(), gradnorm_loss.item(), gradnorm_rates.tolist(), gradnorm_balancer.task_weights.values())
+            print(normalized_scales.values(), gradnorm_loss.item(), gradnorm_rates.tolist(), 
+                [(k, p) for k, p in gradnorm_balancer.task_weights.items()])
             dot_dict    = {'kl': dot_lk,    'kp': dot_kp, 'lp': dot_lp}
             norm2_dict  = {'k':  ngl_keep2, 'l':  ngl2,   'p':  ngp2}
             task_names_2_klp = {'loss_keep': 'k', 'loss': 'l', 'penalty': 'p'}
