@@ -105,6 +105,8 @@ class GradNormLossBalancer(nn.Module):
         loss_ratios = torch.stack([losses_dict[k] / self.initial_losses[k] for k in self.task_names])
 
         normalized_ratios = loss_ratios / (loss_ratios.mean().detach() + self.eps)
+        print()
+        print(f'ldict: {losses_dict}, lratio {loss_ratios}, nratio {normalized_ratios}')
         # smaller tau -> bigger effective loss_rates; since the objective is to have similar loss rates, 
         # this'd cause the true loss rate to decrease 
         loss_rates = normalized_ratios / self.tau 
