@@ -860,8 +860,10 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 alpha      = torch.tensor(0., dtype=torch.float, device=device)
                 delta_Lp = torch.tensor(0., dtype=torch.float, device=device)
 
+            """
             print()
             print(f'{cos_Lp.item():.4f}', f'{alpha:.4f}', delta_Lp, f'{p_grads_flat_weighted.norm().item():.4f}') 
+            """
         
         # Compute dot products
         delta_lk = l_grads_flat_weighted.dot(l_keep_grads_flat_weighted)
@@ -904,7 +906,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             norm2_dict  = {'k':  ngl_keep2, 'l':  ngl2,   'p':  ngp2}
             task_names_2_klp = {'loss_keep': 'k', 'loss': 'l', 'penalty': 'p'}
             scaler_dict = {v: normalized_scales[k] for k,v in task_names_2_klp.items()}
-            w = gradnorm_clamp_scalers_for_progress(norm2_dict, dot_dict, scaler_dict)
+            print()
+            print(scaler_dict)
+            w = scaler_dict #gradnorm_clamp_scalers_for_progress(norm2_dict, dot_dict, scaler_dict)
             normalized_scales = {k: w[v] for k,v in task_names_2_klp.items()} 
         
         loss_keep_grad_scaler = normalized_scales['loss_keep'] if 'loss_keep' in normalized_scales else torch.tensor(1.0, dtype=torch.float, device=device)
