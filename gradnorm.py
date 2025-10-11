@@ -111,6 +111,10 @@ class GradNormLossBalancer(nn.Module):
         # this'd cause the weight to increase 
         loss_rates = normalized_ratios / self.tau 
         
+        # Clamp excessive rates to prevent runaway domination
+        R_max = getattr(self, "max_rate", 3.0)
+        loss_rates = torch.clamp(loss_rates, max=R_max)        
+        
         if not self.smoothing:        
             # Step 4a: Update running rates (instantenous, original)
             loss_rates = loss_rates ** self.alpha
