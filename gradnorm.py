@@ -9,7 +9,7 @@ class GradNormLossBalancer(nn.Module):
             initial_weights (dict): Initial task weights, e.g., {'cont': 1.0, 'keep_cont': 1.0, 'penalty': 1.0}
             alpha (float): Moving average smoothing factor for task loss rates.
             smoothing (bool): False - original rates, True - moving average w/ alpha
-            tau (dict): loss rates divisors, lower value -> weight decrease
+            tau (dict): loss rates divisors, lower value -> weight increases
             Note: initial_weights keys determine the tasks to be tracked by GradNorm
         """
         super().__init__()
@@ -105,8 +105,10 @@ class GradNormLossBalancer(nn.Module):
         loss_ratios = torch.stack([losses_dict[k] / self.initial_losses[k] for k in self.task_names])
 
         normalized_ratios = loss_ratios / (loss_ratios.mean().detach() + self.eps)
-        # smaller tau -> bigger apparent loss_rates; since the objective is to have similar loss rates, 
-        # this'd cause the weight to decrease 
+        # smaller tau -> bigger target loss_rates; since the objective is to have similar loss rates, 
+        # this'd cause the weight to increase 
+        print()
+        print(self.tau)
         loss_rates = normalized_ratios / self.tau 
         
         if not self.smoothing:        
