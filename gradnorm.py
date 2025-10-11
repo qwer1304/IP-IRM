@@ -3,7 +3,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class GradNormLossBalancer(nn.Module):
-    def __init__(self, initial_weights, alpha=1.2, device='cpu', smoothing=False, tau=None, eps=1e-8, debug=False, beta=1.0, Gscaler=1.0):
+    def __init__(self, initial_weights, alpha=1.2, device='cpu', smoothing=False, tau=None, eps=1e-8, debug=False, 
+                    beta=1.0, Gscaler=1.0, avgG_detach_frac=0.0):
         """
         Args:
             initial_weights (dict): Initial task weights, e.g., {'cont': 1.0, 'keep_cont': 1.0, 'penalty': 1.0}
@@ -39,6 +40,7 @@ class GradNormLossBalancer(nn.Module):
         self.debug = debug
         self.beta = beta
         self.Gscaler = Gscaler
+        self.avgG_detach_frac = avgG_detach_frac
 
     def reset_weights(self, new_initial_weights):
         for k, new_val in new_initial_weights.items():
@@ -104,6 +106,11 @@ class GradNormLossBalancer(nn.Module):
         weighted_grad_norms = grad_norms * weights
         avg_grad_norm = weighted_grad_norms.mean()
 
+        # --- SOFT-DETACH avgG: keep some gradient flow, but damp the dominating global term ---
+        # avg_grad_norm is a scalar with grad. We produce a mixed scalar that partially detaches.
+        avgG_semi_detached = (1.0 - self.avgG_detach_frac) * avg_grad_norm + \
+                             (0.0 + self.avgG_detach_frac) * avg_grad_norm.detach()
+
         # Step 3: Compute inverse training rates
         loss_ratios = torch.stack([losses_dict[k] / self.initial_losses[k] for k in self.task_names])
 
@@ -135,7 +142,7 @@ class GradNormLossBalancer(nn.Module):
         to learn relative scales. The GradNorm loss must be unconstrained, otherwise the model can't freely adjust magnitudes.
         Normalization is only applied after the update, when you want to use the weights to combine task losses in the forward pass.
         """
-        gradnorm_loss = self.Gscaler * (weighted_grad_norms - avg_grad_norm * smoothed_rates).abs().mean()
+        gradnorm_loss = self.Gscaler * (weighted_grad_norms - avgG_semi_detached * smoothed_rates).abs().mean()
         #gradnorm_loss = ((weighted_grad_norms - avg_grad_norm * smoothed_rates) ** 2).sum()
 
         # Step 6: Normalize task weights
@@ -153,9 +160,9 @@ class GradNormLossBalancer(nn.Module):
         
         if self.debug:
             veights = weights.detach()       # unnormalized v
-            g = grad_norms.detach()          # your grad norms g_i
-            avgG = avg_grad_norm.detach()
-            rates = smoothed_rates.detach()  # already computed in your code
+            g = grad_norms.detach()          # grad norms g_i
+            avgG = avgG_semi_detached.detach()
+            rates = smoothed_rates.detach()  
 
             r = (veights * g) - (avgG * rates)           # residuals r_i
             global_term = (r * rates).mean()             # (1/N) sum_j r_j * rate_j

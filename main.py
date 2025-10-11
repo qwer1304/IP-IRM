@@ -1500,6 +1500,7 @@ if __name__ == '__main__':
     parser.add_argument('--gradnorm_debug', action="store_true", help="debug gradnorm")
     parser.add_argument('--gradnorm_Gscaler', default=1.0, type=float, help='gradnorm loss scaler')
     parser.add_argument('--gradnorm_beta', default=1.0, type=float, help='gradnorm softplus')
+    parser.add_argument('--gradnorm_avgG_detach_frac', default=0.0, type=float, help='gradnorm avg detach fraction')
 
     # args parse
     args = parser.parse_args()
@@ -1665,7 +1666,8 @@ if __name__ == '__main__':
     if args.penalty_keep_cont > 0:
         initial_weights['loss_keep'] = torch.tensor(1.0, dtype=torch.float, device=device)
     gradnorm_balancer = gn.GradNormLossBalancer(initial_weights, alpha=args.gradnorm_alpha, device=device, smoothing=False, 
-                            tau=args.gradnorm_tau, eps=1e-8, debug=args.gradnorm_debug, beta=args.gradnorm_beta, Gscaler=args.gradnorm_Gscaler)
+                            tau=args.gradnorm_tau, eps=1e-8, debug=args.gradnorm_debug, beta=args.gradnorm_beta, 
+                            avgG_detach_frac=args.gradnorm_avgG_detach_frac, Gscaler=args.gradnorm_Gscaler)
 
     if args.opt == "Adam":
         optimizer          = optim.Adam(model.parameters(),             lr=args.lr, weight_decay=args.weight_decay)
@@ -1693,6 +1695,7 @@ if __name__ == '__main__':
             setattr(gradnorm_balancer, 'beta', args.gradnorm_beta)
             setattr(gradnorm_balancer, 'debug', args.gradnorm_debug)
             setattr(gradnorm_balancer, 'Gscaler', args.gradnorm_Gscaler)
+            setattr(gradnorm_balancer, 'avgG_detach_frac', args.avgG_detach_frac)
 
             # use current LR, not the one from checkpoint
             for param_group in optimizer.param_groups:
