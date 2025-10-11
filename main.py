@@ -960,7 +960,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         train_optimizer.zero_grad(set_to_none=True)     # clear gradients at beginning of next gradients batch
         if do_gradnorm:
             gradnorm_optimizer.zero_grad(set_to_none=True)  # clear gradients
-            Gscaler = 1
+            Gscaler = args.gradnorm_gscaler
             gradnorm_loss *= Gscaler
             gradnorm_loss.backward()
 
@@ -1500,6 +1500,7 @@ if __name__ == '__main__':
                         metavar='tau dictionary k-v pairs',    
                         help='loss divisors')
     parser.add_argument('--gradnorm_debug', action="store_true", help="debug gradnorm")
+    parser.add_argument('--gradnorm_gscaler', default=1.0, type=float, help='gradnorm loss scaler')
 
     # args parse
     args = parser.parse_args()
