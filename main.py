@@ -1695,7 +1695,7 @@ if __name__ == '__main__':
             setattr(gradnorm_balancer, 'beta', args.gradnorm_beta)
             setattr(gradnorm_balancer, 'debug', args.gradnorm_debug)
             setattr(gradnorm_balancer, 'Gscaler', args.gradnorm_Gscaler)
-            setattr(gradnorm_balancer, 'avgG_detach_frac', args.avgG_detach_frac)
+            setattr(gradnorm_balancer, 'avgG_detach_frac', args.gradnorm_avgG_detach_frac)
 
             # use current LR, not the one from checkpoint
             for param_group in optimizer.param_groups:
