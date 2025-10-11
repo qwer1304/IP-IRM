@@ -114,7 +114,7 @@ class GradNormLossBalancer(nn.Module):
         
         # Clamp excessive rates to prevent runaway domination
         R_max = getattr(self, "max_rate", 3.0)
-        loss_rates = torch.clamp(loss_rates, max=R_max)        
+        loss_rates = torch.clamp(loss_rates, 1 / R_max, R_max)        
         
         if not self.smoothing:        
             # Step 4a: Update running rates (instantenous, original)
