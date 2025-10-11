@@ -151,8 +151,9 @@ class GradNormLossBalancer(nn.Module):
             avgG = avg_grad_norm.detach()
             rates = smoothed_rates.detach()  # already computed in your code
 
-            r = (weights * g) - (avgG * rates)           # residuals r_i
+            r = (veights * g) - (avgG * rates)           # residuals r_i
             global_term = (r * rates).mean()             # (1/N) sum_j r_j * rate_j
+            #expected_v_grad = g * (r - global_term).sign()
             expected_v_grad = 2.0 * g * (r - global_term)
 
             print()
