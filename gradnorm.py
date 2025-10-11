@@ -160,7 +160,7 @@ class GradNormLossBalancer(nn.Module):
             print("g (grad norms):", g.cpu().numpy())
             print("avgG:", avgG.item())
             print("rates:", rates.cpu().numpy())
-            print("residuals r:", r.cpu().numpy())
+            print("residuals r:", r.cpu().detach().numpy())
             print("global_term:", global_term.item())
             print("expected_v_grad:", expected_v_grad.cpu().numpy())
         
