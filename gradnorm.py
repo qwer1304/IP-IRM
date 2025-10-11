@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class GradNormLossBalancer(nn.Module):
-    def __init__(self, initial_weights, alpha=1.2, device='cpu', smoothing=False, tau=None, eps=1e-8, debug=False):
+    def __init__(self, initial_weights, alpha=1.2, device='cpu', smoothing=False, tau=None, eps=1e-8, debug=False, beta=1.0):
         """
         Args:
             initial_weights (dict): Initial task weights, e.g., {'cont': 1.0, 'keep_cont': 1.0, 'penalty': 1.0}
@@ -37,6 +37,7 @@ class GradNormLossBalancer(nn.Module):
         self.tau = torch.tensor(tau, device=device, requires_grad=False)
         self.eps = eps
         self.debug = debug
+        self.beta = beta
 
     def reset_weights(self, new_initial_weights):
         for k, new_val in new_initial_weights.items():
@@ -136,7 +137,7 @@ class GradNormLossBalancer(nn.Module):
         # SoftPlus is a smooth approximation to the ReLU function and can be used to constrain 
         # the output of a machine to always be positive.
         task_weights = torch.stack([v for v in self.task_weights.values()])
-        raw_weights = F.softplus(task_weights, beta=2.0)
+        raw_weights = F.softplus(task_weights, beta=self.beta)
         weights_sum = raw_weights.sum()
         # normalized to sum to the number of tasks
         normed_weights = len(self.task_names) * raw_weights / weights_sum
@@ -213,9 +214,6 @@ class GradNormLossBalancer(nn.Module):
 
         return newly_registered
         
-    def set_alpha(self, alpha):
-        self.alpha = alpha
-
     def set_tau(self, tau):
         if tau is None:
             tau = [1.0 for k in self.task_names]
@@ -223,7 +221,4 @@ class GradNormLossBalancer(nn.Module):
             mtau = sum([tau[k] for k in self.task_names]) / len(self.task_names)
             tau = [tau[k] / mtau for k in self.task_names] 
         self.tau = torch.tensor(tau, device=self.device, requires_grad=False)
-
-    def set_debug(self, debug):
-        self.debug = debug
 

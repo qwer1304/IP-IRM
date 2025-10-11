@@ -1501,6 +1501,7 @@ if __name__ == '__main__':
                         help='loss divisors')
     parser.add_argument('--gradnorm_debug', action="store_true", help="debug gradnorm")
     parser.add_argument('--gradnorm_gscaler', default=1.0, type=float, help='gradnorm loss scaler')
+    parser.add_argument('--gradnorm_beta', default=1.0, type=float, help='gradnorm softplus')
 
     # args parse
     args = parser.parse_args()
@@ -1665,7 +1666,8 @@ if __name__ == '__main__':
         initial_weights['loss'] = torch.tensor(1.0, dtype=torch.float, device=device)
     if args.penalty_keep_cont > 0:
         initial_weights['loss_keep'] = torch.tensor(1.0, dtype=torch.float, device=device)
-    gradnorm_balancer = gn.GradNormLossBalancer(initial_weights, alpha=args.gradnorm_alpha, device=device, smoothing=False, tau=None, eps=1e-8, debug=args.gradnorm_debug)
+    gradnorm_balancer = gn.GradNormLossBalancer(initial_weights, alpha=args.gradnorm_alpha, device=device, smoothing=False, 
+                            tau=args.gradnorm_tau, eps=1e-8, debug=args.gradnorm_debug, args.gradnorm_beta)
 
     if args.opt == "Adam":
         optimizer          = optim.Adam(model.parameters(),             lr=args.lr, weight_decay=args.weight_decay)
@@ -1688,8 +1690,11 @@ if __name__ == '__main__':
             if (ema_ is not None) and (args.ema == 'retain'): # exists in checkpoint
                 ema = ema_
             ema.set_active(args.ema) # set to what the user has currently set
-            gradnorm_balancer.set_alpha(args.gradnorm_alpha) # always set alpha to currently provided value
             gradnorm_balancer.set_tau(args.gradnorm_tau) # always set tau to currently provided value
+            setattr(gradnorm_balancer, 'alpha', args.gradnorm_alpha)
+            setattr(gradnorm_balancer, 'beta', args.gradnorm_beta)
+            setattr(gradnorm_balancer, 'debug', args.gradnorm_debug)
+
             gradnorm_balancer.set_debug(args.gradnorm_debug) # always set debug to currently provided value
             # use current LR, not the one from checkpoint
             for param_group in optimizer.param_groups:
