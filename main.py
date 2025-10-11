@@ -963,10 +963,11 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             Gscaler = 1
             gradnorm_loss *= Gscaler
             gradnorm_loss.backward()
-            print()
-            print("gradnorm_loss:", gradnorm_loss.item())
-            for k,v in gradnorm_balancer.task_weights.items():
-                print(k, "grad mean", v.grad.abs().mean().item() / Gscaler if v.grad is not None else None)
+
+            # actual computed grads after backward:
+            if args.gradnorm_debug:
+                print("actual v.grad:", [gradnorm_balancer.task_weights[k].grad.item() for k in gradnorm_balancer.task_names])
+
             gradnorm_optimizer.step()
             
             """
@@ -1498,6 +1499,7 @@ if __name__ == '__main__':
                         action=utils.ParseMixed, types=[str, float, str, float, str, float],
                         metavar='tau dictionary k-v pairs',    
                         help='loss divisors')
+    parser.add_argument('--gradnorm_debug', action="store_true", help="debug gradnorm")
 
     # args parse
     args = parser.parse_args()
@@ -1662,7 +1664,7 @@ if __name__ == '__main__':
         initial_weights['loss'] = torch.tensor(1.0, dtype=torch.float, device=device)
     if args.penalty_keep_cont > 0:
         initial_weights['loss_keep'] = torch.tensor(1.0, dtype=torch.float, device=device)
-    gradnorm_balancer = gn.GradNormLossBalancer(initial_weights, alpha=args.gradnorm_alpha, device=device, smoothing=False, tau=None, eps=1e-8)
+    gradnorm_balancer = gn.GradNormLossBalancer(initial_weights, alpha=args.gradnorm_alpha, device=device, smoothing=False, tau=None, eps=1e-8, debug=args.gradnorm_debug)
 
     if args.opt == "Adam":
         optimizer          = optim.Adam(model.parameters(),             lr=args.lr, weight_decay=args.weight_decay)
@@ -1686,7 +1688,8 @@ if __name__ == '__main__':
                 ema = ema_
             ema.set_active(args.ema) # set to what the user has currently set
             gradnorm_balancer.set_alpha(args.gradnorm_alpha) # always set alpha to currently provided value
-            gradnorm_balancer.set_tau(args.gradnorm_tau) # always set alpha to currently provided value
+            gradnorm_balancer.set_tau(args.gradnorm_tau) # always set tau to currently provided value
+            gradnorm_balancer.set_debug(args.gradnorm_debug) # always set debug to currently provided value
             # use current LR, not the one from checkpoint
             for param_group in optimizer.param_groups:
                 param_group['lr'] = args.lr

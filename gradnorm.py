@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class GradNormLossBalancer(nn.Module):
-    def __init__(self, initial_weights, alpha=1.2, device='cpu', smoothing=False, tau=None, eps=1e-8):
+    def __init__(self, initial_weights, alpha=1.2, device='cpu', smoothing=False, tau=None, eps=1e-8, debug=False):
         """
         Args:
             initial_weights (dict): Initial task weights, e.g., {'cont': 1.0, 'keep_cont': 1.0, 'penalty': 1.0}
@@ -33,9 +33,10 @@ class GradNormLossBalancer(nn.Module):
             tau = [1.0 for k in self.task_names]
         else:
             mtau = sum([tau[k] for k in self.task_names]) / len(self.task_names)
-            tau = [tau[k] / mtau for k in self.task_names] 
+            tau  = [tau[k] / mtau for k in self.task_names] 
         self.tau = torch.tensor(tau, device=device, requires_grad=False)
         self.eps = eps
+        self.debug = debug
 
     def reset_weights(self, new_initial_weights):
         for k, new_val in new_initial_weights.items():
@@ -143,7 +144,26 @@ class GradNormLossBalancer(nn.Module):
         normalized_weights = {k: normed_weights[i].detach().to(self.device) \
                 for i, k in enumerate(self.task_names)
         }
-        #print(raw_weights, normalized_weights)
+        
+        weights = torch.stack([self.task_weights[k] for k in self.task_names]).detach()  # unnormalized v
+        g = torch.stack([grad_norms[k] for k in self.task_names]).detach()               # your grad norms g_i
+        avgG = avg_grad_norm.detach()
+        rates = smoothed_rates.detach()  # already computed in your code
+
+        r = (weights * g) - (avgG * rates)           # residuals r_i
+        global_term = (r * rates).mean()             # (1/N) sum_j r_j * rate_j
+        expected_v_grad = 2.0 * g * (r - global_term)
+
+        if self.debug:
+            print()
+            print("weights:", weights.cpu().numpy())
+            print("g (grad norms):", g.cpu().numpy())
+            print("avgG:", avgG.item())
+            print("rates:", rates.cpu().numpy())
+            print("residuals r:", r.cpu().numpy())
+            print("global_term:", global_term.item())
+            print("expected_v_grad:", expected_v_grad.cpu().numpy())
+        
         return normalized_weights, gradnorm_loss, smoothed_rates
 
     # --------------------------------------------
@@ -202,3 +222,7 @@ class GradNormLossBalancer(nn.Module):
             mtau = sum([tau[k] for k in self.task_names]) / len(self.task_names)
             tau = [tau[k] / mtau for k in self.task_names] 
         self.tau = torch.tensor(tau, device=self.device, requires_grad=False)
+
+    def set_debug(self, debug):
+        self.debug = debug
+
