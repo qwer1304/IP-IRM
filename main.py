@@ -909,7 +909,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             print()
             print([f'{k}: {v.item()}' for k,v in normalized_scales.items()], 
                    f'gloss: {gradnorm_loss.item()}', 
-                   [f'{k}: {gradnorm_rates[i].item()}' for k,i in enumerate(task_names)], 
+                   [f'{k}: {gradnorm_rates[i].item()}' for i,k in enumerate(task_names)], 
                    [f'{k} {gradnorm_balancer.task_weights[k].item()}' for k in task_names])
             dot_dict    = {'kl': dot_lk,    'kp': dot_kp, 'lp': dot_lp}
             norm2_dict  = {'k':  ngl_keep2, 'l':  ngl2,   'p':  ngp2}
