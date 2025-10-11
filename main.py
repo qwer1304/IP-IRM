@@ -1010,8 +1010,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         ngl_keep2             = ngl_keep2.item()
         ngl2                  = ngl2.item()
         ngp2                  = ngp2.item()
-        cos_Lp                = cos_Lp.item()
-        delta_Lp              = delta_Lp.item() 
+        cos_Lp                = cos_Lp.item()           if do_gradnorm else 0.
+        delta_Lp              = delta_Lp.item()         if do_gradnorm else 0. 
 
         loss_batch_weighted = (loss_keep_weighted + # loss_keep_aggregator is a scalar normalized over macro-batch
                                penalty_weighted   + # mean over envs normalized over macro-batch
