@@ -107,8 +107,6 @@ class GradNormLossBalancer(nn.Module):
         normalized_ratios = loss_ratios / (loss_ratios.mean().detach() + self.eps)
         # smaller tau -> bigger target loss_rates; since the objective is to have similar loss rates, 
         # this'd cause the weight to increase 
-        print()
-        print(self.tau)
         loss_rates = normalized_ratios / self.tau 
         
         if not self.smoothing:        
@@ -130,8 +128,8 @@ class GradNormLossBalancer(nn.Module):
         to learn relative scales. The GradNorm loss must be unconstrained, otherwise the model can't freely adjust magnitudes.
         Normalization is only applied after the update, when you want to use the weights to combine task losses in the forward pass.
         """
-        gradnorm_loss = (weighted_grad_norms - avg_grad_norm * smoothed_rates).abs().sum()
-        #gradnorm_loss = ((weighted_grad_norms - avg_grad_norm * smoothed_rates) ** 2).sum()
+        #gradnorm_loss = (weighted_grad_norms - avg_grad_norm * smoothed_rates).abs().sum()
+        gradnorm_loss = ((weighted_grad_norms - avg_grad_norm * smoothed_rates) ** 2).sum()
 
         # Step 6: Normalize task weights
         # SoftPlus is a smooth approximation to the ReLU function and can be used to constrain 
