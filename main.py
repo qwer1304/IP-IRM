@@ -960,8 +960,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         train_optimizer.zero_grad(set_to_none=True)     # clear gradients at beginning of next gradients batch
         if do_gradnorm:
             gradnorm_optimizer.zero_grad(set_to_none=True)  # clear gradients
-            Gscaler = args.gradnorm_gscaler
-            gradnorm_loss *= Gscaler
             gradnorm_loss.backward()
 
             # actual computed grads after backward:
@@ -1500,7 +1498,7 @@ if __name__ == '__main__':
                         metavar='tau dictionary k-v pairs',    
                         help='loss divisors')
     parser.add_argument('--gradnorm_debug', action="store_true", help="debug gradnorm")
-    parser.add_argument('--gradnorm_gscaler', default=1.0, type=float, help='gradnorm loss scaler')
+    parser.add_argument('--gradnorm_Gscaler', default=1.0, type=float, help='gradnorm loss scaler')
     parser.add_argument('--gradnorm_beta', default=1.0, type=float, help='gradnorm softplus')
 
     # args parse
@@ -1667,7 +1665,7 @@ if __name__ == '__main__':
     if args.penalty_keep_cont > 0:
         initial_weights['loss_keep'] = torch.tensor(1.0, dtype=torch.float, device=device)
     gradnorm_balancer = gn.GradNormLossBalancer(initial_weights, alpha=args.gradnorm_alpha, device=device, smoothing=False, 
-                            tau=args.gradnorm_tau, eps=1e-8, debug=args.gradnorm_debug, beta=args.gradnorm_beta)
+                            tau=args.gradnorm_tau, eps=1e-8, debug=args.gradnorm_debug, beta=args.gradnorm_beta, Gscaler=args.Gscaler)
 
     if args.opt == "Adam":
         optimizer          = optim.Adam(model.parameters(),             lr=args.lr, weight_decay=args.weight_decay)
@@ -1694,6 +1692,7 @@ if __name__ == '__main__':
             setattr(gradnorm_balancer, 'alpha', args.gradnorm_alpha)
             setattr(gradnorm_balancer, 'beta', args.gradnorm_beta)
             setattr(gradnorm_balancer, 'debug', args.gradnorm_debug)
+            setattr(gradnorm_balancer, 'Gscaler', args.gradnorm_Gscaler)
 
             # use current LR, not the one from checkpoint
             for param_group in optimizer.param_groups:

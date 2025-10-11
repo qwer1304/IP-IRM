@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class GradNormLossBalancer(nn.Module):
-    def __init__(self, initial_weights, alpha=1.2, device='cpu', smoothing=False, tau=None, eps=1e-8, debug=False, beta=1.0):
+    def __init__(self, initial_weights, alpha=1.2, device='cpu', smoothing=False, tau=None, eps=1e-8, debug=False, beta=1.0, Gscaler=1.0):
         """
         Args:
             initial_weights (dict): Initial task weights, e.g., {'cont': 1.0, 'keep_cont': 1.0, 'penalty': 1.0}
@@ -38,6 +38,7 @@ class GradNormLossBalancer(nn.Module):
         self.eps = eps
         self.debug = debug
         self.beta = beta
+        self.Gscaler = Gscaler
 
     def reset_weights(self, new_initial_weights):
         for k, new_val in new_initial_weights.items():
@@ -134,7 +135,7 @@ class GradNormLossBalancer(nn.Module):
         to learn relative scales. The GradNorm loss must be unconstrained, otherwise the model can't freely adjust magnitudes.
         Normalization is only applied after the update, when you want to use the weights to combine task losses in the forward pass.
         """
-        gradnorm_loss = (weighted_grad_norms - avg_grad_norm * smoothed_rates).abs().sum()
+        gradnorm_loss = self.Gscaler * (weighted_grad_norms - avg_grad_norm * smoothed_rates).abs().mean()
         #gradnorm_loss = ((weighted_grad_norms - avg_grad_norm * smoothed_rates) ** 2).sum()
 
         # Step 6: Normalize task weights
@@ -158,17 +159,19 @@ class GradNormLossBalancer(nn.Module):
 
             r = (veights * g) - (avgG * rates)           # residuals r_i
             global_term = (r * rates).mean()             # (1/N) sum_j r_j * rate_j
-            expected_v_grad = g * (r - global_term).sign()
-            #expected_v_grad = 2.0 * g * (r - global_term)
+            expected_v_grad = self.Gscaler * g * (r - global_term).sign()
+            #expected_v_grad = self.Gscaler * 2.0 * g * (r - global_term)
 
             print()
-            print("weights:", veights.cpu().numpy())
+            print("weights (pars):", veights.cpu().numpy())
             print("g (grad norms):", g.cpu().numpy())
             print("avgG:", avgG.item())
             print("rates:", rates.cpu().numpy())
             print("residuals r:", r.cpu().detach().numpy())
             print("global_term:", global_term.item())
-            print("expected_v_grad (before Gscaler):", expected_v_grad.cpu().detach().numpy())
+            print("expected_v_grad:", expected_v_grad.cpu().detach().numpy())
+            print("normalized_weights:", normalized_weights.cpu().numpy())
+            print("gradnorm_loss:", gradnorm_loss.cpu().numpy())
         
         return normalized_weights, gradnorm_loss, smoothed_rates
 
