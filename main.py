@@ -1695,7 +1695,6 @@ if __name__ == '__main__':
             setattr(gradnorm_balancer, 'beta', args.gradnorm_beta)
             setattr(gradnorm_balancer, 'debug', args.gradnorm_debug)
 
-            gradnorm_balancer.set_debug(args.gradnorm_debug) # always set debug to currently provided value
             # use current LR, not the one from checkpoint
             for param_group in optimizer.param_groups:
                 param_group['lr'] = args.lr
