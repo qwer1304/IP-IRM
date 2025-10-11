@@ -958,8 +958,13 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         train_optimizer.zero_grad(set_to_none=True)     # clear gradients at beginning of next gradients batch
         if do_gradnorm:
             gradnorm_optimizer.zero_grad(set_to_none=True)  # clear gradients
-            gradnorm_loss *= 20
+            Gscaler = 1000
+            gradnorm_loss *= Gscaler
             gradnorm_loss.backward()
+            print()
+            print("gradnorm_loss:", gradnorm_loss.item())
+            for k,v in gradnorm_balancer.task_weights.items():
+                print(k, "grad mean", v.grad.abs().mean().item() / Gscaler if v.grad is not None else None)
             gradnorm_optimizer.step()
             
             """
