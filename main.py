@@ -921,7 +921,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         
         loss_keep_grad_scaler = normalized_scales['loss_keep'] if 'loss_keep' in normalized_scales else torch.tensor(1.0, dtype=torch.float, device=device)
         loss_grad_scaler      = normalized_scales['loss']      if 'loss'      in normalized_scales else torch.tensor(1.0, dtype=torch.float, device=device)
-        penalty_grad_scaler   = normalized_scales['penalty']   if 'penalty'   in normalized_scales else torch.tensor(2.0, dtype=torch.float, device=device)
+        penalty_grad_scaler   = normalized_scales['penalty']   if 'penalty'   in normalized_scales else torch.tensor(1.0, dtype=torch.float, device=device)
                         
         loss_keep_weighted *= loss_keep_grad_scaler
         loss_weighted      *= loss_grad_scaler
