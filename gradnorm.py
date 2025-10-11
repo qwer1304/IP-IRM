@@ -145,18 +145,18 @@ class GradNormLossBalancer(nn.Module):
                 for i, k in enumerate(self.task_names)
         }
         
-        weights = torch.stack([self.task_weights[k] for k in self.task_names]).detach()  # unnormalized v
-        g = torch.stack([grad_norms[k] for k in self.task_names]).detach()               # your grad norms g_i
-        avgG = avg_grad_norm.detach()
-        rates = smoothed_rates.detach()  # already computed in your code
-
-        r = (weights * g) - (avgG * rates)           # residuals r_i
-        global_term = (r * rates).mean()             # (1/N) sum_j r_j * rate_j
-        expected_v_grad = 2.0 * g * (r - global_term)
-
         if self.debug:
+            veights = weights.detach()       # unnormalized v
+            g = grad_norms.detach()          # your grad norms g_i
+            avgG = avg_grad_norm.detach()
+            rates = smoothed_rates.detach()  # already computed in your code
+
+            r = (weights * g) - (avgG * rates)           # residuals r_i
+            global_term = (r * rates).mean()             # (1/N) sum_j r_j * rate_j
+            expected_v_grad = 2.0 * g * (r - global_term)
+
             print()
-            print("weights:", weights.cpu().numpy())
+            print("weights:", veights.cpu().numpy())
             print("g (grad norms):", g.cpu().numpy())
             print("avgG:", avgG.item())
             print("rates:", rates.cpu().numpy())
