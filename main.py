@@ -964,7 +964,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
 
             # actual computed grads after backward:
             if args.gradnorm_debug:
-                print("actual v.grad:", [gradnorm_balancer.task_weights[k].grad.item() for k in gradnorm_balancer.task_names])
+                print("actual v.grad:", [f"{gradnorm_balancer.task_weights[k].grad.item():.6f}" for k in gradnorm_balancer.task_names])
 
             gradnorm_optimizer.step()
             
