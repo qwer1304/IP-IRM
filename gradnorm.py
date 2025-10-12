@@ -172,10 +172,10 @@ class GradNormLossBalancer(nn.Module):
             if self.gradnorm_loss_type == 'L1':
                 s = r.sign()                             # s_i = sign(res_i)
                 global_term = (s * rates).mean()         # (1/N) sum_i s_i * rho_i
-                expected_v_grad = self.Gscaler * g * (s - global_term) / T
+                expected_v_grad = self.Gscaler * 1.0 * g * (s - (1.0 - self.avgG_detach_frac)* global_term) / T
             elif self.gradnorm_loss_type == 'L2':
                 global_term = (r * rates).mean()         # (1/N) sum_j r_j * rate_j
-                expected_v_grad = self.Gscaler * 2.0 * g * (r - global_term) / T
+                expected_v_grad = self.Gscaler * 2.0 * g * (r - (1.0 - self.avgG_detach_frac) * global_term) / T
 
             with np.printoptions(precision=6):
                 print()
