@@ -236,8 +236,5 @@ class GradNormLossBalancer(nn.Module):
     def set_tau(self, tau):
         if tau is None:
             tau = [1.0 for k in self.task_names]
-        else:
-            #mtau = sum([tau[k] for k in self.task_names]) / len(self.task_names)
-            #tau = [tau[k] / mtau for k in self.task_names] 
         self.tau = torch.tensor(tau, device=self.device, requires_grad=False)
 
