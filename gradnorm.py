@@ -187,7 +187,7 @@ class GradNormLossBalancer(nn.Module):
                 print("residuals r:\t", r.cpu().detach().numpy())
                 print("global_term:\t", global_term.cpu().numpy())
                 print("expected_v_grad:", expected_v_grad.cpu().detach().numpy())
-                print("normed_weights:\t", [f"{normalized_weights[k].cpu().item():.6f}" for k in self.task_names])
+                print("normed_weights:\t", np.array([normalized_weights[k].cpu().item() for k in self.task_names]))
                 print("gradnorm_loss:\t", gradnorm_loss.cpu().detach().numpy())
         
         return normalized_weights, gradnorm_loss, smoothed_rates
