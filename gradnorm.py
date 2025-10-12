@@ -144,7 +144,7 @@ class GradNormLossBalancer(nn.Module):
         Normalization is only applied after the update, when you want to use the weights to combine task losses in the forward pass.
         """
         #gradnorm_loss = self.Gscaler * (weighted_grad_norms - avgG_semi_detached * smoothed_rates).abs().sum()
-        gradnorm_loss = self.Gscaler * ((weighted_grad_norms - avg_grad_norm * smoothed_rates) ** 2).sum()
+        gradnorm_loss = self.Gscaler * ((weighted_grad_norms - avg_grad_norm * smoothed_rates) ** 2).mean()
 
         # Step 6: Normalize task weights
         # SoftPlus is a smooth approximation to the ReLU function and can be used to constrain 
