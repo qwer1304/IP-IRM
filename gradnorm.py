@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import numpy as np
 
 class GradNormLossBalancer(nn.Module):
     def __init__(self, initial_weights, alpha=1.2, device='cpu', smoothing=False, tau=None, eps=1e-8, debug=False, 
@@ -169,17 +170,18 @@ class GradNormLossBalancer(nn.Module):
             expected_v_grad = self.Gscaler * g * (r - global_term).sign()
             #expected_v_grad = self.Gscaler * 2.0 * g * (r - global_term)
 
-            print()
-            print("tasks:\t", self.task_names)
-            print("weights (pars):\t", veights.cpu().numpy())
-            print("g (grad norms):\t", g.cpu().numpy())
-            print("avgG:\t", avgG.item())
-            print("rates:\t", rates.cpu().numpy())
-            print("residuals r:\t", r.cpu().detach().numpy())
-            print("global_term:\t", global_term.item())
-            print("expected_v_grad:\t", expected_v_grad.cpu().detach().numpy())
-            print("normalized_weights:\t", [normalized_weights[k].cpu().numpy().item() for k in self.task_names])
-            print("gradnorm_loss:\t", gradnorm_loss.cpu().detach().numpy())
+            with np.printoptions(precision=6):
+                print()
+                print("tasks:\t", self.task_names)
+                print("weights (pars):\t", veights.cpu().numpy())
+                print("g (grad norms):\t", g.cpu().numpy())
+                print("avgG:\t", avgG.cpu().numpy())
+                print("rates:\t", rates.cpu().numpy())
+                print("residuals r:\t", r.cpu().detach().numpy())
+                print("global_term:\t", global_term.cpu().numpy())
+                print("expected_v_grad:\t", expected_v_grad.cpu().detach().numpy())
+                print("normalized_weights:\t", [normalized_weights[k].cpu().numpy() for k in self.task_names])
+                print("gradnorm_loss:\t", gradnorm_loss.cpu().detach().numpy())
         
         return normalized_weights, gradnorm_loss, smoothed_rates
 
