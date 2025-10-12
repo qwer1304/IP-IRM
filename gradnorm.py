@@ -170,15 +170,16 @@ class GradNormLossBalancer(nn.Module):
             #expected_v_grad = self.Gscaler * 2.0 * g * (r - global_term)
 
             print()
-            print("weights (pars):", veights.cpu().numpy())
-            print("g (grad norms):", g.cpu().numpy())
-            print("avgG:", avgG.item())
-            print("rates:", rates.cpu().numpy())
-            print("residuals r:", r.cpu().detach().numpy())
-            print("global_term:", global_term.item())
-            print("expected_v_grad:", expected_v_grad.cpu().detach().numpy())
-            print("normalized_weights:", [normalized_weights[k].cpu().numpy().item() for k in self.task_names])
-            print("gradnorm_loss:", gradnorm_loss.cpu().detach().numpy())
+            print("tasks:\t", self.task_names)
+            print("weights (pars):\t", veights.cpu().numpy())
+            print("g (grad norms):\t", g.cpu().numpy())
+            print("avgG:\t", avgG.item())
+            print("rates:\t", rates.cpu().numpy())
+            print("residuals r:\t", r.cpu().detach().numpy())
+            print("global_term:\t", global_term.item())
+            print("expected_v_grad:\t", expected_v_grad.cpu().detach().numpy())
+            print("normalized_weights:\t", [normalized_weights[k].cpu().numpy().item() for k in self.task_names])
+            print("gradnorm_loss:\t", gradnorm_loss.cpu().detach().numpy())
         
         return normalized_weights, gradnorm_loss, smoothed_rates
 
