@@ -5,7 +5,7 @@ import numpy as np
 
 class GradNormLossBalancer(nn.Module):
     def __init__(self, initial_weights, alpha=1.2, device='cpu', smoothing=False, tau=None, eps=1e-8, debug=False, 
-                    beta=1.0, Gscaler=1.0, avgG_detach_frac=0.0):
+                    beta=1.0, Gscaler=1.0, avgG_detach_frac=0.0, gradnorm_loss_type='L1'):
         """
         Args:
             initial_weights (dict): Initial task weights, e.g., {'cont': 1.0, 'keep_cont': 1.0, 'penalty': 1.0}
@@ -42,6 +42,7 @@ class GradNormLossBalancer(nn.Module):
         self.beta = beta
         self.Gscaler = Gscaler
         self.avgG_detach_frac = avgG_detach_frac
+        self.gradnorm_loss_type = gradnorm_loss_type
 
     def reset_weights(self, new_initial_weights):
         for k, new_val in new_initial_weights.items():
@@ -143,8 +144,9 @@ class GradNormLossBalancer(nn.Module):
         to learn relative scales. The GradNorm loss must be unconstrained, otherwise the model can't freely adjust magnitudes.
         Normalization is only applied after the update, when you want to use the weights to combine task losses in the forward pass.
         """
-        gradnorm_loss = self.Gscaler * (weighted_grad_norms - avgG_semi_detached * smoothed_rates).abs().sum()
-        #gradnorm_loss = self.Gscaler * ((weighted_grad_norms - avg_grad_norm * smoothed_rates) ** 2).mean()
+        gradnorm_loss = self.Gscaler * (weighted_grad_norms - avgG_semi_detached * smoothed_rates)
+        gradnorm_loss = gradnorm_loss.abs() if self.gradnorm_loss_type == 'L1' else (gradnorm_loss ** 2)
+        gradnorm_loss = gradnorm_loss.mean()
 
         # Step 6: Normalize task weights
         # SoftPlus is a smooth approximation to the ReLU function and can be used to constrain 
@@ -168,8 +170,12 @@ class GradNormLossBalancer(nn.Module):
 
             r = (veights * g) - (avgG * rates)           # residuals r_i
             global_term = (r * rates).mean()             # (1/N) sum_j r_j * rate_j
-            expected_v_grad = self.Gscaler * g * (r - global_term).sign()
-            #expected_v_grad = self.Gscaler * 2.0 * g * (r - global_term) / T
+            if self.gradnorm_loss_type == 'L1':
+                s = r.sign()                                 # s_i = sign(res_i)
+                global_term = (s * rates).mean()             # (1/N) sum_i s_i * rho_i
+                expected_v_grad = self.Gscaler * g * (r - global_term) / T
+            elif self.gradnorm_loss_type == 'L2':
+                expected_v_grad = self.Gscaler * 2.0 * g * (r - global_term) / T
 
             with np.printoptions(precision=6):
                 print()
