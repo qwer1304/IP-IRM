@@ -160,6 +160,7 @@ class GradNormLossBalancer(nn.Module):
         }
         
         if self.debug:
+            T = len(self.task_names)
             veights = weights.detach()       # unnormalized v
             g = grad_norms.detach()          # grad norms g_i
             avgG = avgG_semi_detached.detach()
@@ -168,7 +169,7 @@ class GradNormLossBalancer(nn.Module):
             r = (veights * g) - (avgG * rates)           # residuals r_i
             global_term = (r * rates).mean()             # (1/N) sum_j r_j * rate_j
             #expected_v_grad = self.Gscaler * g * (r - global_term).sign()
-            expected_v_grad = self.Gscaler * 2.0 * g * (r - global_term)
+            expected_v_grad = self.Gscaler * 2.0 * g * (r - global_term) / T
 
             with np.printoptions(precision=6):
                 print()
