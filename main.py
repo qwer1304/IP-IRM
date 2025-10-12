@@ -923,9 +923,13 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         loss_grad_scaler      = normalized_scales['loss']      if 'loss'      in normalized_scales else torch.tensor(1.0, dtype=torch.float, device=device)
         penalty_grad_scaler   = normalized_scales['penalty']   if 'penalty'   in normalized_scales else torch.tensor(1.0, dtype=torch.float, device=device)
                         
+        """
+        Don't multiply individual task's loss by scaler, since it's misleading
+        Only multiply the gradients since this is what determines how tasks' losses are updated
         loss_keep_weighted *= loss_keep_grad_scaler
         loss_weighted      *= loss_grad_scaler
         penalty_weighted   *= penalty_grad_scaler 
+        """
 
         for pind, p in enumerate(net.parameters()):
             total_grad_flat_weighted = (  loss_keep_grads_final[pind] * loss_keep_weight * loss_keep_grad_scaler
