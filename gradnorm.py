@@ -143,7 +143,7 @@ class GradNormLossBalancer(nn.Module):
         to learn relative scales. The GradNorm loss must be unconstrained, otherwise the model can't freely adjust magnitudes.
         Normalization is only applied after the update, when you want to use the weights to combine task losses in the forward pass.
         """
-        gradnorm_loss = self.Gscaler * (weighted_grad_norms - avgG_semi_detached * smoothed_rates).abs().mean()
+        gradnorm_loss = self.Gscaler * (weighted_grad_norms - avgG_semi_detached * smoothed_rates).abs().sum()
         #gradnorm_loss = ((weighted_grad_norms - avg_grad_norm * smoothed_rates) ** 2).sum()
 
         # Step 6: Normalize task weights
@@ -166,8 +166,8 @@ class GradNormLossBalancer(nn.Module):
             rates = smoothed_rates.detach()  
 
             r = (veights * g) - (avgG * rates)           # residuals r_i
-            global_term = (r * rates).mean()             # (1/N) sum_j r_j * rate_j
-            expected_v_grad = self.Gscaler * g * (r*(1.0 - self.avgG_detach_frac) - global_term).sign()
+            global_term = (r * rates).sum()             # (1/N) sum_j r_j * rate_j
+            expected_v_grad = self.Gscaler * g * (r - global_term).sign()
             #expected_v_grad = self.Gscaler * 2.0 * g * (r - global_term)
 
             with np.printoptions(precision=6):
