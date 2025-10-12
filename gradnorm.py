@@ -31,12 +31,7 @@ class GradNormLossBalancer(nn.Module):
         self.running_loss_rates = {k: 1.0 for k in self.task_names}  # Initialized to 1.0
         self.smoothing = smoothing
         self.device = device
-        if tau is None:
-            tau = [1.0 for k in self.task_names]
-        else:
-            mtau = sum([tau[k] for k in self.task_names]) / len(self.task_names)
-            tau  = [tau[k] / mtau for k in self.task_names] 
-        self.tau = torch.tensor(tau, device=device, requires_grad=False)
+        self.tau = self.set_tau(tau)
         self.eps = eps
         self.debug = debug
         self.beta = beta
@@ -172,7 +167,7 @@ class GradNormLossBalancer(nn.Module):
             if self.gradnorm_loss_type == 'L1':
                 s = r.sign()                             # s_i = sign(res_i)
                 global_term = (s * rates).mean()         # (1/N) sum_i s_i * rho_i
-                expected_v_grad = self.Gscaler * 1.0 * g * (s - (1.0 - self.avgG_detach_frac)* global_term) / T
+                expected_v_grad = self.Gscaler * 1.0 * g * (s - (1.0 - self.avgG_detach_frac) * global_term) / T
             elif self.gradnorm_loss_type == 'L2':
                 global_term = (r * rates).mean()         # (1/N) sum_j r_j * rate_j
                 expected_v_grad = self.Gscaler * 2.0 * g * (r - (1.0 - self.avgG_detach_frac) * global_term) / T
@@ -242,7 +237,7 @@ class GradNormLossBalancer(nn.Module):
         if tau is None:
             tau = [1.0 for k in self.task_names]
         else:
-            mtau = sum([tau[k] for k in self.task_names]) / len(self.task_names)
-            tau = [tau[k] / mtau for k in self.task_names] 
+            #mtau = sum([tau[k] for k in self.task_names]) / len(self.task_names)
+            #tau = [tau[k] / mtau for k in self.task_names] 
         self.tau = torch.tensor(tau, device=self.device, requires_grad=False)
 
