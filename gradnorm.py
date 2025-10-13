@@ -187,7 +187,7 @@ class GradNormLossBalancer(nn.Module):
         # diagnostic booleans
         pred_gn_increase = (gradnorm_loss_sim > gradnorm_loss * (1.0 + small_eps))  # small_eps like 1e-6 or 1e-3
         all_negative = (expected_v_grad < 0).all()
-        all_positive = np.all(expected_v_grad > 0).all()
+        all_positive = (expected_v_grad > 0).all()
         mixed = not (all_negative or all_positive)
 
         # short-running-window logic: keep last W booleans in a circular buffer and count
