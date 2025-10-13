@@ -1038,13 +1038,14 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         train_bar.set_description(desc_str)
 
         if (batch_index % 10 - gradients_accumulation_steps + 1) == 0:
-           utils.write_log('Train Epoch: [{:d}/{:d}] [{:d}/{:d}] {args.ssl_type}: Total: {:.4f} First: {:.4f} Env: {:.4f}'
-                            .format(epoch, epochs, trained_samples, total_samples,
+           utils.write_log('Train Epoch: [{:d}/{:d}] [{:d}/{:d}] {}: Total: {:.4f} First: {:.4f} Env: {:.4f}'
+                            .format(epoch, epochs, trained_samples, args.ssl_type, total_samples,
                                     total_loss_weighted/trained_samples, 
                                     total_keep_loss_weighted/trained_samples, 
                                     total_env_loss_weighted/trained_samples) + 
-                            ' {args.penalty_type}: {:.4g} LR: {:.4f} PW {:.4f} GN {:.4f}'
-                            .format(total_irm_loss_weighted/trained_samples, train_optimizer.param_groups[0]['lr'], penalty_weight_orig, gradnorm_loss) + 
+                            ' {}: {:.4g} LR: {:.4f} PW {:.4f} GN {:.4f}'
+                            .format(args.penalty_type, total_irm_loss_weighted/trained_samples, train_optimizer.param_groups[0]['lr'], 
+                                    penalty_weight_orig, gradnorm_loss) + 
                             ' dot {:.2e} {:.2e} {:.2e} {:.2e} {:.2e} {:.2e}'
                             .format(ngl2, dot_lk, dot_lp, ngl_keep2, dot_kp, ngp2) +
                             ' rates {}'
