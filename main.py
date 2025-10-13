@@ -1037,11 +1037,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         desc_str += loss_module.get_debug_info_str()
         train_bar.set_description(desc_str)
 
-        print()
-        print(batch_index, batch_index % 10, batch_index % 10 == 0)
-        if batch_index % 10 == 0:
-           print()
-           print('writing to log file ...')
+        if (batch_index % 10 - gradients_accumulation_steps + 1) == 0:
            utils.write_log('Train Epoch: [{:d}/{:d}] [{:d}/{:d}] {args.ssl_type}: Total: {:.4f} First: {:.4f} Env: {:.4f}'
                             .format(epoch, epochs, trained_samples, total_samples,
                                     total_loss_weighted/trained_samples, 
@@ -1729,6 +1725,9 @@ if __name__ == '__main__':
         test_acc_1, test_acc_5 = test(model, feauture_bank, feature_labels, test_loader, args, progress=True, prefix="Test:")
         exit()
 
+    if not args.resume and os.path.exists(log_file):
+        os.remove(log_file)            
+    
     # update partition for the first time, if we need one
     if not args.baseline:
         if (not resumed) or (resumed and (updated_split is None) and ((args.penalty_cont > 0) or (args.penalty_weight > 0))):  
