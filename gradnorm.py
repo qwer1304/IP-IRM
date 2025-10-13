@@ -198,7 +198,7 @@ class GradNormLossBalancer(nn.Module):
             warnings.warn("PATHOLOGICAL GN state: predicted GN loss increases; all expected_v_grad negative.")
         elif pred_gn_increase:
             warnings.warn("Predicted GN loss increases (mixed signs).")
-        else
+        else:
             pass
 
         if self.debug:
