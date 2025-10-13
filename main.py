@@ -1040,7 +1040,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         if batch_index % 10 == 0:
            print()
            print('writing to log file ...')
-            utils.write_log('Train Epoch: [{:d}/{:d}] [{:d}/{:d}] {args.ssl_type}: Total: {:.4f} First: {:.4f} Env: {:.4f}'
+           utils.write_log('Train Epoch: [{:d}/{:d}] [{:d}/{:d}] {args.ssl_type}: Total: {:.4f} First: {:.4f} Env: {:.4f}'
                             .format(epoch, epochs, trained_samples, total_samples,
                                     total_loss_weighted/trained_samples, 
                                     total_keep_loss_weighted/trained_samples, 
