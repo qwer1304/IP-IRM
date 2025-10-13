@@ -199,7 +199,7 @@ class GradNormLossBalancer(nn.Module):
         elif pred_gn_increase:
             warnings.warn("Predicted GN loss increases (mixed signs).")
         else:
-            warnings.warn("All is OK")
+            pass
 
         if self.debug:
             with np.printoptions(precision=6):
