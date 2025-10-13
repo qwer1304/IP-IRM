@@ -1037,6 +1037,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         desc_str += loss_module.get_debug_info_str()
         train_bar.set_description(desc_str)
 
+        print()
+        print(batch_index, batch_index % 0)
         if batch_index % 10 == 0:
            print()
            print('writing to log file ...')
