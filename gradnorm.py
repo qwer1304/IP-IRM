@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 import warnings
+import collections
 
 class GradNormLossBalancer(nn.Module):
     def __init__(self, initial_weights, alpha=1.2, device='cpu', smoothing=False, tau=None, eps=1e-8, debug=False, 
@@ -40,6 +41,16 @@ class GradNormLossBalancer(nn.Module):
         self.avgG_detach_frac = avgG_detach_frac
         self.gradnorm_loss_type = gradnorm_loss_type
         self.gradnorm_lr = gradnorm_lr
+        # --- persistent state for pathological state detection
+        # --- configurable thresholds ---
+        self.window_size     = 5        # number of consecutive batches to monitor
+        self.required_count  = 4        # how many in the window must be all-negative
+        self.min_mag         = 1e-4     # ignore tiny grad values as numerical noise
+        self.cooldown_period = 2 * self.window_size
+
+        self.gn_bad_buffer            = collections.deque(maxlen=self.window_size)
+        self.gn_last_mitigation_batch = -9999
+        self.batch_idx                = 0
 
     def reset_weights(self, new_initial_weights):
         for k, new_val in new_initial_weights.items():
@@ -174,35 +185,62 @@ class GradNormLossBalancer(nn.Module):
         elif self.gradnorm_loss_type == 'L2':
             global_term = (r * rates).mean()         # (1/T) sum_j r_j * rate_j
             expected_v_grad = self.Gscaler * 2.0 * g * (r - (1.0 - self.avgG_detach_frac) * global_term) / T
+        expected_v_grad = expected_v_grad.detach().cpu()
 
-        # simulate one GN update
-        veights_sim = veights - self.gradnorm_lr * expected_v_grad   # optimizer does v <- v - lr * grad
-        weighted_grad_norms_sim = veights_sim * g                    # assume g hasn't changed much
-        avgG_sim = weighted_grad_norms_sim.mean()                    # semi-detaching doesn't impact the value, only gradients
-
-        gradnorm_loss_sim = self.Gscaler * (weighted_grad_norms_sim - avgG_sim * smoothed_rates)
-        gradnorm_loss_sim = gradnorm_loss_sim.abs() if self.gradnorm_loss_type == 'L1' else (gradnorm_loss_sim ** 2)
-        gradnorm_loss_sim = gradnorm_loss_sim.mean()
+        # --- GradNorm pathological state detector ---
 
         # diagnostic booleans
-        pred_gn_increase = (gradnorm_loss_sim > gradnorm_loss * (1.0 + small_eps))  # small_eps like 1e-6 or 1e-3
         all_negative = (expected_v_grad < 0).all()
         all_positive = (expected_v_grad > 0).all()
-        mixed = not (all_negative or all_positive)
+        mixed        = not (all_negative or all_positive)
 
-        # short-running-window logic: keep last W booleans in a circular buffer and count
-        # If pred_gn_increase True for K_out_of_W (e.g. K>=3 of W=5), flag.
+        # --- evaluate current batch condition ---
+        # ignore elements with very small magnitude
+        significant_mask = expected_v_grad.abs() > self.min_mag
 
-        # print/log concise message
-        if pred_gn_increase and all_negative:
-            warnings.warn("PATHOLOGICAL GN state: predicted GN loss increases; all expected_v_grad negative.")
-        elif pred_gn_increase:
-            warnings.warn("Predicted GN loss increases (mixed signs).")
+        if significant_mask.sum() == 0:
+            this_batch_bad = False
         else:
-            pass
+            # pathological if *all* significant 'expected_v_grad' are negative
+            this_batch_bad = expected_v_grad[significant_mask].all() < 0
+
+        # store in rolling window
+        self.gn_bad_buffer.append(this_batch_bad)
+
+        # determine if persistent pathology
+        if len(self.gn_bad_buffer) == self.window_size:
+            count_bad = sum(self.gn_bad_buffer)
+            persistent_bad = (count_bad >= self.required_count)
+        else:
+            persistent_bad = False
+
+        # --- mitigation (only once per cooldown) ---
+        if persistent_bad:
+            warnings.warn(f"[GN WARNING] Persistent all-negative expected_v_grad detected "
+                  f"({count_bad}/{window_size})")
+
+            """
+            DON'T APLLY MITIGATION YET!!!!!!!!!!!
+            if (self.batch_idx - self.gn_last_mitigation_batch) > self.cooldown_period:
+                # Option A: reduce GN learning rate
+                for gparam_group in gn_optimizer.param_groups:
+                    gparam_group['lr'] *= 0.5
+                print(f"  -> gn_optimizer.lr *= 0.5 "
+                      f"(now {gn_optimizer.param_groups[0]['lr']})")
+
+                # Option B (alternative): halve Gscaler
+                # Gscaler *= 0.5
+
+                # Option C (alternative): double tau_p
+                # tau_p *= 2
+                self.gn_last_mitigation_batch = batch_idx
+            """
+
+        self.batch_idx += 1
 
         if self.debug:
             with np.printoptions(precision=6):
+                # convert to numpy to use numpy's formatting options
                 print()
                 print("tasks:\t\t", self.task_names)
                 print("weights (pars):\t", veights.cpu().numpy())
@@ -211,10 +249,11 @@ class GradNormLossBalancer(nn.Module):
                 print("rates:\t\t", rates.cpu().numpy())
                 print("residuals r:\t", r.cpu().detach().numpy())
                 print("global_term:\t", global_term.cpu().numpy())
-                print("expected_v_grad:", expected_v_grad.cpu().detach().numpy())
+                print("expected_v_grad:", expected_v_grad.numpy())
                 print("normed_weights:\t", np.array([normalized_weights[k].cpu().item() for k in self.task_names]))
-                print("gradnorm_loss:\t", gradnorm_loss.cpu().detach().numpy(), "gradnorm_loss_sim: ", gradnorm_loss_sim.cpu().detach().numpy())
-                print(f"gn_increase {pred_gn_increase} all_neg {all_negative} all_pos {all_positive} mixed {mixed}")
+                print("gradnorm_loss:\t", gradnorm_loss.cpu().detach().numpy())
+                print(f"all_neg {all_negative.numpy()} all_pos {all_positive.numpy()} mixed {mixed.numpy()}" +
+                      f" sgnfcnt_msk {np.array(significant_mask.tolist())} prsst_bad {persistent_bad.numpy()}")
 
         return normalized_weights, gradnorm_loss, smoothed_rates
 
