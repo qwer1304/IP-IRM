@@ -1038,6 +1038,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         train_bar.set_description(desc_str)
 
         if batch_index % 10 == 0:
+           print()
+           print('writing to log file ...')
             utils.write_log('Train Epoch: [{:d}/{:d}] [{:d}/{:d}] {args.ssl_type}: Total: {:.4f} First: {:.4f} Env: {:.4f}'
                             .format(epoch, epochs, trained_samples, total_samples,
                                     total_loss_weighted/trained_samples, 
@@ -1708,9 +1710,6 @@ if __name__ == '__main__':
             print("=> no checkpoint found at '{}'".format(args.resume))
 
     # training loop
-    if not os.path.exists('results'):
-        os.mkdir('results')
-
     epoch = args.start_epoch
 
     if args.evaluate:

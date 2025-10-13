@@ -79,6 +79,19 @@ class GradNormLossBalancer(nn.Module):
 
     def compute_weights_and_loss(self, losses_dict, grad_norms):
         """
+        Objective:  GradNorm should establish a common scale for gradient magnitudes, and also should balance
+                    training rates of different tasks. 
+        Method:     The common scale for gradients is the average gradient norm, G(t), which establishes 
+                    a baseline at each timestep t by which we can determine relative gradient sizes. 
+                    The relative inverse training rate of task i, r_i(t), can be used to rate-balance the gradients. 
+                    The higher the value of r_i(t) (slower training rate), the higher the gradient magnitudes 
+                    should be for task i in order to encourage the task to train more quickly.
+        Training objective: GN_loss(t; w_i(t)) = sum_i L1[G_i(t; w_i(t)) - avg_i G(t; w_i(t)) * r_i(t)^alpha]
+                            G_i(t; w_i(t)) = L2[d/dTheta (w_i(t)*L_i(t))]
+                            r_i(t) = normedL_i(t) / avg_i normedL_i(t)
+                            normedL_i(t) = L_i(t) / L_i(0)
+        Trained parameters: w_i(t)
+        Hyperparametrs: alpha
         Args:
             losses_dict (dict): Mapping from task name to loss tensor (scalar), not weighted by task's weight.
             grad_norms (dict):  Mapping from task name to sum of its parameters gradient norms (scalar tensor), 
