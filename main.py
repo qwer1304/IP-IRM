@@ -1050,7 +1050,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                             .format(ngl2, dot_lk, dot_lp, ngl_keep2, dot_kp, ngp2) +
                             ' rates {}'
                             .format(gradnorm_rates_str) + 
-                            ' decr l {:.2e} k {.2e} p {.2e} Lp cos {:4f} delta {:.3e}'
+                            ' decr l {:.2e} k {:.2e} p {:.2e} Lp cos {:4f} delta {:.3e}'
                             .format(loss_decrease_cond, loss_keep_decreae_cond, penalty_decrease_cond, cos_Lp, delta_Lp),
                             log_file=log_file)
                                         
