@@ -522,9 +522,10 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
     else:
         penalty_weight = args.penalty_weight
         
-    loss_weight      = args.penalty_cont      * (1 if penalty_weight <= 1 else 1 / penalty_weight)
-    loss_keep_weight = args.penalty_keep_cont * (1 if penalty_weight <= 1 else (1 / penalty_weight))
-    penalty_weight   = 1 if penalty_weight > 1 else penalty_weight
+    loss_weight         = args.penalty_cont      * (1 if penalty_weight <= 1 else 1 / penalty_weight)
+    loss_keep_weight    = args.penalty_keep_cont * (1 if penalty_weight <= 1 else (1 / penalty_weight))
+    penalty_weight_orig = penalty_weight
+    penalty_weight      = 1 if penalty_weight > 1 else penalty_weight
     
     do_loss      = (not args.baseline) and (loss_weight > 0)
     do_keep_loss = (args.keep_cont)    and (loss_keep_weight > 0)
@@ -1039,11 +1040,11 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                    f' Keep {total_keep_loss_weighted/trained_samples:.4f}' + \
                    f' Env {total_env_loss_weighted/trained_samples:.4f}' + \
                    f' {args.penalty_type} {total_irm_loss_weighted/trained_samples:.4g}' + \
-                   f' LR {train_optimizer.param_groups[0]["lr"]:.4f} PW {penalty_weight:.4f}' + \
+                   f' LR {train_optimizer.param_groups[0]["lr"]:.4f} PW {penalty_weight_orig:.4f}' + \
                    f' dot: ll {ngl2:.2e} lk {dot_lk:.2e} lp {dot_lp:.2e} kk {ngl_keep2:.2e} kp {dot_kp:.2e} pp {ngp2:.2e}' + \
                    f' w: k {loss_keep_grad_scaler:.4f} l {loss_grad_scaler:.4f} p {penalty_grad_scaler:.4f}' + \
                    f' decr: l {loss_decrease_cond:.2e} k {loss_keep_decreae_cond:.2e} p {penalty_decrease_cond:.2e}' + \
-                   f' gn_loss {gradnorm_loss:.4e} rates: {gradnorm_rates_str} Lp: cos {cos_Lp:.4f} delta {delta_Lp:.4f}'
+                   f' gn_loss {gradnorm_loss:.4e} rates: {gradnorm_rates_str} Lp: cos {cos_Lp:.4f} delta {delta_Lp:.3e}'
         desc_str += loss_module.get_debug_info_str()
         train_bar.set_description(desc_str)
 
@@ -1054,12 +1055,12 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                     total_keep_loss_weighted/trained_samples, 
                                     total_env_loss_weighted/trained_samples) + 
                             ' {args.penalty_type}: {:.4g} LR: {:.4f} PW {:.4f} GN {:.4f}'
-                            .format(total_irm_loss_weighted/trained_samples, train_optimizer.param_groups[0]['lr'], penalty_weight, gradnorm_loss) + 
+                            .format(total_irm_loss_weighted/trained_samples, train_optimizer.param_groups[0]['lr'], penalty_weight_orig, gradnorm_loss) + 
                             ' dot {:.2e} {:.2e} {:.2e} {:.2e} {:.2e} {:.2e}'
                             .format(ngl2, dot_lk, dot_lp, ngl_keep2, dot_kp, ngp2) +
                             ' rates {}'
                             .format(gradnorm_rates_str) + 
-                            ' decr l {:.2e} k {.2e} p {.2e} Lp cos {:4f} delta {:.4f}'
+                            ' decr l {:.2e} k {.2e} p {.2e} Lp cos {:4f} delta {:.3e}'
                             .format(loss_decrease_cond, loss_keep_decreae_cond, penalty_decrease_cond, cos_Lp, delta_Lp),
                             log_file=log_file)
                                         

@@ -177,8 +177,8 @@ class GradNormLossBalancer(nn.Module):
 
         # simulate one GN update
         veights_sim = veights - self.gradnorm_lr * expected_v_grad   # optimizer does v <- v - lr * grad
-        weighted_grad_norms_sim = veights_sim * g               # assume g hasn't changed much
-        avgG_sim = weighted_grad_norms_sim.mean()               # semi-detaching doesn't impact the value, only gradients
+        weighted_grad_norms_sim = veights_sim * g                    # assume g hasn't changed much
+        avgG_sim = weighted_grad_norms_sim.mean()                    # semi-detaching doesn't impact the value, only gradients
 
         gradnorm_loss_sim = self.Gscaler * (weighted_grad_norms_sim - avgG_sim * smoothed_rates)
         gradnorm_loss_sim = gradnorm_loss_sim.abs() if self.gradnorm_loss_type == 'L1' else (gradnorm_loss_sim ** 2)
@@ -199,7 +199,7 @@ class GradNormLossBalancer(nn.Module):
         elif pred_gn_increase:
             warnings.warn("Predicted GN loss increases (mixed signs).")
         else:
-            pass
+            warnings.warn("All is OK")
 
         if self.debug:
             with np.printoptions(precision=6):
@@ -214,7 +214,8 @@ class GradNormLossBalancer(nn.Module):
                 print("expected_v_grad:", expected_v_grad.cpu().detach().numpy())
                 print("normed_weights:\t", np.array([normalized_weights[k].cpu().item() for k in self.task_names]))
                 print("gradnorm_loss:\t", gradnorm_loss.cpu().detach().numpy(), "gradnorm_loss_sim: ", gradnorm_loss_sim.cpu().detach().numpy())
-        
+                print(f"gn_increase {pred_gn_increase} all_neg {all_negative} all_pos {all_positive} mixed {mixed}")
+
         return normalized_weights, gradnorm_loss, smoothed_rates
 
     # --------------------------------------------
