@@ -1285,3 +1285,37 @@ class NonExclusiveParser:
           b=Namespace(v=2)
         )
     """    
+
+def reset_optimizer(optimizer):
+    """
+    Reinitialize all dynamic state (e.g. momentum, exp_avg, exp_avg_sq, step)
+    while preserving:
+        - parameter groups
+        - learning rates
+        - momentum/betas
+        - weight decay
+        - references to model parameters
+    Works for Adam, SGD, and similar torch.optim optimizers.
+    """
+    # Loop over parameter groups and parameters
+    for group in optimizer.param_groups:
+        for p in group['params']:
+            state = optimizer.state.get(p, None)
+            if state is not None:
+                state.clear()  # remove old buffers
+
+            # Rebuild empty state if optimizer would normally track it
+            if isinstance(optimizer, torch.optim.SGD):
+                # SGD with momentum keeps a momentum_buffer
+                if group.get('momentum', 0) != 0:
+                    optimizer.state[p] = {'momentum_buffer': torch.zeros_like(p.data)}
+            elif isinstance(optimizer, torch.optim.Adam) or isinstance(optimizer, torch.optim.AdamW):
+                optimizer.state[p] = {
+                    'step': torch.tensor(0.0, dtype=torch.float32),
+                    'exp_avg': torch.zeros_like(p.data),
+                    'exp_avg_sq': torch.zeros_like(p.data)
+                }
+            else:
+                # Generic fallback: just clear whatever state exists
+                optimizer.state[p] = {}
+

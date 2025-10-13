@@ -948,18 +948,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         if (args.penalty_iters > 0) and (epoch == args.penalty_iters) and do_penalty and (not args.increasing_weight):
             # Reset Adam, because it doesn't like the sharp jump in gradient
             # magnitudes that happens at this step.
-
-            if args.opt == "Adam":
-                train_optimizer = torch.optim.Adam(
-                    net.parameters(),
-                    lr=train_optimizer.param_groups[0]["lr"],
-                    weight_decay=train_optimizer.param_groups[0]["weight_decay"])
-            elif args.opt == 'SGD':
-                    optimizer = optim.SGD(
-                    net.parameters(),
-                    lr=train_optimizer.param_groups[0]["lr"],
-                    weight_decay=train_optimizer.param_groups[0]["weight_decay"],
-                    momentum=args.train_optimizer.param_groups[0]["momentum"])
+            utils.reset_optimizer(train_optimizer)
 
         train_optimizer.step()
         train_optimizer.zero_grad(set_to_none=True)     # clear gradients at beginning of next gradients batch
@@ -1826,6 +1815,8 @@ if __name__ == '__main__':
             upd_loader = shutdown_loader(upd_loader)
             gc.collect()              # run Python's garbage collector
             updated_split_all.append(updated_split)
+            # reset optimizer after new split created
+            utils.reset_optimizer(optimizer)
 
         feature_bank, feature_labels = None, None
         if (epoch % args.test_freq == 0) or \
