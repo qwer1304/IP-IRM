@@ -1016,6 +1016,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         cos_Lp                = cos_Lp.item()           if do_gradnorm else 0.
         delta_Lp              = delta_Lp.item()         if do_gradnorm else 0. 
 
+        # True loss reflecting progress does NOT include balancing scalers
         loss_batch_weighted = (loss_keep_weighted + # loss_keep_aggregator is a scalar normalized over macro-batch
                                penalty_weighted   + # mean over envs normalized over macro-batch
                                loss_weighted        # mean over envs normalized over macro-batch
@@ -1507,6 +1508,7 @@ if __name__ == '__main__':
     parser.add_argument('--gradnorm_beta', default=1.0, type=float, help='gradnorm softplus')
     parser.add_argument('--gradnorm_avgG_detach_frac', default=0.0, type=float, help='gradnorm avg detach fraction')
     parser.add_argument('--gradnorm_loss_type', default='L1', type=str, choices=['L1', 'L2'], help='gradnorm loss type')
+    parser.add_argument('--gradnorm_lr', default=1e-3, type=float, help='gradnorm LR')
 
     # args parse
     args = parser.parse_args()
@@ -1673,14 +1675,15 @@ if __name__ == '__main__':
         initial_weights['loss_keep'] = torch.tensor(1.0, dtype=torch.float, device=device)
     gradnorm_balancer = gn.GradNormLossBalancer(initial_weights, alpha=args.gradnorm_alpha, device=device, smoothing=False, 
                             tau=args.gradnorm_tau, eps=1e-8, debug=args.gradnorm_debug, beta=args.gradnorm_beta, 
-                            avgG_detach_frac=args.gradnorm_avgG_detach_frac, Gscaler=args.gradnorm_Gscaler, gradnorm_loss_type=args.gradnorm_loss_type)
+                            avgG_detach_frac=args.gradnorm_avgG_detach_frac, Gscaler=args.gradnorm_Gscaler, 
+                            gradnorm_loss_type=args.gradnorm_loss_type, gradnorm_lr=args.gradnorm_lr)
 
     if args.opt == "Adam":
         optimizer          = optim.Adam(model.parameters(),             lr=args.lr, weight_decay=args.weight_decay)
-        gradnorm_optimizer = optim.Adam(gradnorm_balancer.parameters(), lr=args.lr, weight_decay=args.weight_decay)        
+        gradnorm_optimizer = optim.Adam(gradnorm_balancer.parameters(), lr=args.gradnorm_lr, weight_decay=args.weight_decay)        
     elif args.opt == 'SGD':
         optimizer          = optim.SGD(model.parameters(),             lr=args.lr, weight_decay=args.weight_decay, momentum=args.SGD_momentum)
-        gradnorm_optimizer = optim.SGD(gradnorm_balancer.parameters(), lr=args.lr, weight_decay=args.weight_decay, momentum=args.SGD_momentum)
+        gradnorm_optimizer = optim.SGD(gradnorm_balancer.parameters(), lr=args.gradnorm_lr, weight_decay=args.weight_decay, momentum=args.SGD_momentum)
 
     # optionally resume from a checkpoint
     best_acc1 = 0
@@ -1703,6 +1706,7 @@ if __name__ == '__main__':
             setattr(gradnorm_balancer, 'Gscaler', args.gradnorm_Gscaler)
             setattr(gradnorm_balancer, 'avgG_detach_frac', args.gradnorm_avgG_detach_frac)
             setattr(gradnorm_balancer, 'gradnorm_loss_type', args.gradnorm_loss_type)
+            setattr(gradnorm_balancer, 'gradnorm_lr', args.gradnorm_lr)
 
             # use current LR, not the one from checkpoint
             for param_group in optimizer.param_groups:
