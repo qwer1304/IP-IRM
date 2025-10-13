@@ -181,7 +181,7 @@ class GradNormLossBalancer(nn.Module):
         avgG_sim = weighted_grad_norms_sim.mean()               # semi-detaching doesn't impact the value, only gradients
 
         gradnorm_loss_sim = self.Gscaler * (weighted_grad_norms_sim - avgG_sim * smoothed_rates)
-        gradnorm_loss_sim = gradnorm_loss_sim.abs() if self.gradnorm_loss_sim == 'L1' else (gradnorm_loss_sim ** 2)
+        gradnorm_loss_sim = gradnorm_loss_sim.abs() if self.gradnorm_loss_type == 'L1' else (gradnorm_loss_sim ** 2)
         gradnorm_loss_sim = gradnorm_loss_sim.mean()
 
         # diagnostic booleans
