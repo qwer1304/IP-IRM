@@ -202,7 +202,7 @@ class GradNormLossBalancer(nn.Module):
             this_batch_bad = False
         else:
             # pathological if *all* significant 'expected_v_grad' are negative
-            this_batch_bad = expected_v_grad[significant_mask].all() < 0
+            this_batch_bad = (expected_v_grad[significant_mask] < 0).all()
 
         # store in rolling window
         self.gn_bad_buffer.append(this_batch_bad)
