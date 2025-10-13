@@ -1039,7 +1039,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
 
         if (batch_index % 10 - gradients_accumulation_steps + 1) == 0:
            utils.write_log('Train Epoch: [{:d}/{:d}] [{:d}/{:d}] {}: Total: {:.4f} First: {:.4f} Env: {:.4f}'
-                            .format(epoch, epochs, trained_samples, args.ssl_type, total_samples,
+                            .format(epoch, epochs, trained_samples, total_samples, args.ssl_type, 
                                     total_loss_weighted/trained_samples, 
                                     total_keep_loss_weighted/trained_samples, 
                                     total_env_loss_weighted/trained_samples) + 
