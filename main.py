@@ -844,11 +844,11 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             penalty_grad_norm_weighted = torch.tensor(0., dtype=torch.float, device=device)
 
         # rotate penalty gradient if it's orthogonal enough to losses' gradients
-        if do_gradnorm and do_penalty and (args.gradnorm_project is not None):
+        if do_gradnorm and do_penalty and (args.penalty_grad_project is not None):
             L_grads_flat_weighted = l_keep_grads_flat_weighted + l_grads_flat_weighted
             cos_Lp   = F.cosine_similarity(L_grads_flat_weighted, p_grads_flat_weighted, dim=0)
             if cos_Lp < 0:
-                tau_low, tau_high = args.gradnorm_project
+                tau_low, tau_high = args.penalty_grad_project
                 alpha = torch.clip((cos_Lp.abs() - tau_low) / (tau_high - tau_low), 0, 1)
                 if alpha > 0.:
                     delta_Lp = L_grads_flat_weighted.dot(p_grads_flat_weighted)
@@ -1489,7 +1489,7 @@ if __name__ == '__main__':
     parser.add_argument('--gradnorm', action="store_true", help="use gradnorm")
     parser.add_argument('--gradnorm_epoch', default=0, type=int, help='gradnorm start epoch')
     parser.add_argument('--gradnorm_alpha', default=1.0, type=float, help='gradnorm alpha')
-    parser.add_argument('--gradnorm_project', type=float, nargs=2, default=None, help="project penalty grad for orthogonality", metavar="[tau_low, tau_high]")
+    parser.add_argument('--penalty_grad_project', type=float, nargs=2, default=None, help="project penalty grad for orthogonality", metavar="[tau_low, tau_high]")
     parser.add_argument('--gradnorm_tau', default=None, nargs=2*3, type=str,
                         action=utils.ParseMixed, types=[str, float, str, float, str, float],
                         metavar='tau dictionary k-v pairs',    
@@ -1690,14 +1690,7 @@ if __name__ == '__main__':
             if (ema_ is not None) and (args.ema == 'retain'): # exists in checkpoint
                 ema = ema_
             ema.set_active(args.ema) # set to what the user has currently set
-            gradnorm_balancer.set_tau(args.gradnorm_tau) # always set tau to currently provided value
-            setattr(gradnorm_balancer, 'alpha', args.gradnorm_alpha)
-            setattr(gradnorm_balancer, 'beta', args.gradnorm_beta)
-            setattr(gradnorm_balancer, 'debug', args.gradnorm_debug)
-            setattr(gradnorm_balancer, 'Gscaler', args.gradnorm_Gscaler)
-            setattr(gradnorm_balancer, 'avgG_detach_frac', args.gradnorm_avgG_detach_frac)
-            setattr(gradnorm_balancer, 'gradnorm_loss_type', args.gradnorm_loss_type)
-            setattr(gradnorm_balancer, 'gradnorm_lr', args.gradnorm_lr)
+            # gradnorm restores only attributes needed to continue running. arguments are taken from  user args
 
             # use current LR, not the one from checkpoint
             for param_group in optimizer.param_groups:
