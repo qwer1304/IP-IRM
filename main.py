@@ -512,9 +512,9 @@ def gradnorm_clamp_scalers_for_progress_ema_safe(norm2, dot, scaler, eps=1e-12):
     dot = consistent_dots(dot, norm2)
 
     # compute correlation coefficients (dimensionless)
-    rho_kl = dot['kl'] / math.sqrt(norm2['k']*norm2['l'] + eps)
-    rho_kp = dot['kp'] / math.sqrt(norm2['k']*norm2['p'] + eps)
-    rho_lp = dot['lp'] / math.sqrt(norm2['l']*norm2['p'] + eps)
+    rho_kl = dot['kl'] / (norm2['k']*norm2['l'] + eps).sqrt()
+    rho_kp = dot['kp'] / (norm2['k']*norm2['p'] + eps).sqrt()
+    rho_lp = dot['lp'] / (norm2['l']*norm2['p'] + eps).sqrt()
 
     # safe clamping bounds (weakened to survive EMA noise)
     def safe_bounds(rho):
