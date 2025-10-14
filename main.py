@@ -466,7 +466,18 @@ class SimSiamLossModule(LossModule):
             loss = loss.sum()
         return loss
 
-def gradnorm_clamp_scalers_for_progress(norm2_dict, dot_dict, scaler_dict):
+def gradnorm_clamp_scalers_for_progress(norm2_dict, dot_dict, scaler_dict, ema=False):
+    def consistent_dots(dot_dict, norm2_dict, eps=1e-12):
+        for (i,j) in [('k','l'), ('k','p'), ('l','p')]:
+            ub = (norm2_dict[i] * norm2_dict[j]).sqrt() + eps
+            dot_dict[i+j] = torch.clamp(dot_dict[i+j], -ub, ub)
+            dot_dict[j+i] = dot_dict[i+j]
+        return dot_dict
+
+    if ema:
+        # enforce geometric consistency
+        dot_dict = consistent_dots(dot_dict, norm2_dict)
+        
     LB_kl = dot_dict['kl'] / norm2_dict['k'] if norm2_dict['k'] > 0 else None
     LB_kp = dot_dict['kp'] / norm2_dict['k'] if norm2_dict['k'] > 0 else None
     LB_lp = dot_dict['lp'] / norm2_dict['l'] if norm2_dict['l'] > 0 else None
@@ -547,8 +558,6 @@ def gradnorm_clamp_scalers_for_progress_ema_safe(norm2, dot, scaler, eps=1e-12):
     scaler['l'] = 3 * w_l / ssum
     scaler['p'] = 3 * w_p / ssum
     return scaler
-
-
 
 # ssl training with IP-IRM
 def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, **kwargs):
@@ -983,8 +992,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             dot_dict    = {'kl': dot_lk,    'kp': dot_kp, 'lp': dot_lp}
             norm2_dict  = {'k':  ngl_keep2, 'l':  ngl2,   'p':  ngp2}
             scaler_dict = {v: normalized_scales[k] for k,v in task_names_2_klp.items()}
-            #w = gradnorm_clamp_scalers_for_progress(norm2_dict, dot_dict, scaler_dict)
-            w = gradnorm_clamp_scalers_for_progress_ema_safe(norm2_dict, dot_dict, scaler_dict)
+            w = gradnorm_clamp_scalers_for_progress(norm2_dict, dot_dict, scaler_dict, ema=(args.ema is not None))
+            #w = gradnorm_clamp_scalers_for_progress_ema_safe(norm2_dict, dot_dict, scaler_dict)
             normalized_scales = {k: w[v] for k,v in task_names_2_klp.items()} 
         
         loss_keep_grad_scaler = normalized_scales['loss_keep'] if 'loss_keep' in normalized_scales else torch.tensor(1.0, dtype=torch.float, device=device)
