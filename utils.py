@@ -1157,12 +1157,9 @@ class MovingAverage:
 
     def update(self, dict_data, orig_shape=False):
         ema_dict_data = {}
-        print()
-        print('dict_data', [(k, v.item()) for k,v in dict_data.items()], f'ema {self.ema}', f'self._updates {self._updates}')
         for name, data in dict_data.items():
             data = data.view(1, -1)
             if self.active:
-                print(f'name {name}', f'data {data.item()}', 'self.ema_data', [(k, v.item()) for k,v in self.ema_data.items()])
                 if self._updates == 0 or (name not in self.ema_data):
                     previous_data = torch.zeros_like(data)
                 else:
@@ -1178,8 +1175,6 @@ class MovingAverage:
                 self.ema_data[name] = ema_data.clone().detach()
             else:
                  ema_dict_data[name] = torch.ones_like(data)
-            if name == 'dot_lk':
-                print(f'DOT_LK OUT name {name} data {data.item()}, prev_d {previous_data.item()}, ema_data {ema_data.item()} ema_dict {ema_dict_data[name].item()}')
         if self.active:
             self._updates += 1
 

@@ -499,6 +499,57 @@ def gradnorm_clamp_scalers_for_progress(norm2_dict, dot_dict, scaler_dict):
     scaler_dict['k'], scaler_dict['l'], scaler_dict['p'] = normalize_weights(scaler_dict['k'], scaler_dict['l'], scaler_dict['p'])
     return  scaler_dict  
 
+def gradnorm_clamp_scalers_for_progress_ema_safe(norm2, dot, scaler, eps=1e-12):
+
+    def consistent_dots(dot_dict, norm2_dict, eps=1e-12):
+        for (i,j) in [('k','l'), ('k','p'), ('l','p')]:
+            ub = (norm2_dict[i] * norm2_dict[j]).sqrt() + eps
+            dot_dict[i+j] = torch.clamp(dot_dict[i+j], -ub, ub)
+            dot_dict[j+i] = dot_dict[i+j]
+        return dot_dict
+
+    # enforce geometric consistency
+    dot = consistent_dots(dot, norm2)
+
+    # compute correlation coefficients (dimensionless)
+    rho_kl = dot['kl'] / math.sqrt(norm2['k']*norm2['l'] + eps)
+    rho_kp = dot['kp'] / math.sqrt(norm2['k']*norm2['p'] + eps)
+    rho_lp = dot['lp'] / math.sqrt(norm2['l']*norm2['p'] + eps)
+
+    # safe clamping bounds (weakened to survive EMA noise)
+    def safe_bounds(rho):
+        if rho <= 0: return 0.5, 2.0      # if anti-correlated or noisy
+        f = max(min(rho, 0.999), 1e-3)
+        return f, 1/f
+
+    LB_kl, UB_kl = safe_bounds(rho_kl)
+    LB_kp, UB_kp = safe_bounds(rho_kp)
+    LB_lp, UB_lp = safe_bounds(rho_lp)
+
+    q_kl = scaler['k'] / scaler['l']
+    q_kp = scaler['k'] / scaler['p']
+    q_lp = scaler['l'] / scaler['p']
+
+    q_kl_c = torch.clamp(q_kl, LB_kl, UB_kl)
+    q_kp_c = torch.clamp(q_kp, LB_kp, UB_kp)
+    q_lp_c = torch.clamp(q_lp, LB_lp, UB_lp)
+
+    # multiplicative consistency
+    if not torch.allclose(q_lp_c, q_kl_c*q_kp_c, atol=1e-6):
+        q_lp_c = q_kl_c * q_kp_c
+
+    # renormalize back to sum T=3
+    w_k = torch.ones_like(scaler['k'])
+    w_l = 1 / q_kl_c
+    w_p = 1 / q_kp_c
+    ssum = w_k + w_l + w_p
+    scaler['k'] = 3 * w_k / ssum
+    scaler['l'] = 3 * w_l / ssum
+    scaler['p'] = 3 * w_p / ssum
+    return scaler
+
+
+
 # ssl training with IP-IRM
 def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, **kwargs):
 
@@ -870,17 +921,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             """
         
         # Compute dot products
-        ngl           = l_grads_flat_weighted.norm()
-        ngk           = l_keep_grads_flat_weighted.norm()
-        delta_lk      = l_grads_flat_weighted.dot(l_keep_grads_flat_weighted)
-        delta_ll_sqrt = l_grads_flat_weighted.dot(l_grads_flat_weighted).sqrt()
-        delta_kk_sqrt = l_keep_grads_flat_weighted.dot(l_keep_grads_flat_weighted).sqrt()
-        
-        print()
-        print(f'ngk {ngk.item()} ngl {ngl.item()} dot_lk {delta_lk.item()}')
-        print(f'dot_kk_sqrt {delta_kk_sqrt.item()} dot_ll_sqrt {delta_ll_sqrt.item()} dot_lk {delta_lk.item()}')
-        print(f'{(delta_ll_sqrt*delta_kk_sqrt).item()}, {(ngk*ngl).item()}')
-        
+        delta_lk = l_grads_flat_weighted.dot(l_keep_grads_flat_weighted)       
         delta_lp = l_grads_flat_weighted.dot(p_grads_flat_weighted)
         delta_kp = l_keep_grads_flat_weighted.dot(p_grads_flat_weighted)
 
@@ -898,7 +939,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                               }, orig_shape=True)   # return data shaped as input data
             # make sure the order is explicit and not some implicit one
             emas_k = ['ngl_keep', 'ngl', 'ngp', 'dot_lk', 'dot_lp', 'dot_kp']
-            ngl_keep,   ngl,   ngp,   dot_lk,   dot_lp,   dot_kp = [emas[k] for k in emas_k]
+            ngl_keep, ngl, ngp, dot_lk, dot_lp, dot_kp = [emas[k] for k in emas_k]
         else:
             ngl_keep = loss_keep_grad_norm_weighted
             ngl      = loss_grad_norm_weighted
@@ -940,7 +981,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             dot_dict    = {'kl': dot_lk,    'kp': dot_kp, 'lp': dot_lp}
             norm2_dict  = {'k':  ngl_keep2, 'l':  ngl2,   'p':  ngp2}
             scaler_dict = {v: normalized_scales[k] for k,v in task_names_2_klp.items()}
-            w = gradnorm_clamp_scalers_for_progress(norm2_dict, dot_dict, scaler_dict)
+            #w = gradnorm_clamp_scalers_for_progress(norm2_dict, dot_dict, scaler_dict)
+            w = gradnorm_clamp_scalers_for_progress_ema_safe(norm2_dict, dot_dict, scaler_dict)
             normalized_scales = {k: w[v] for k,v in task_names_2_klp.items()} 
         
         loss_keep_grad_scaler = normalized_scales['loss_keep'] if 'loss_keep' in normalized_scales else torch.tensor(1.0, dtype=torch.float, device=device)
