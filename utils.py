@@ -1178,6 +1178,8 @@ class MovingAverage:
                 self.ema_data[name] = ema_data.clone().detach()
             else:
                  ema_dict_data[name] = torch.ones_like(data)
+            if name == 'dot_lk':
+                print(f'name {name} data {data.item()}, prev_d {previous_data.item()}, ema_data {ema_data.item()} ema_dict {ema_dict_data[name].item()}')
         if self.active:
             self._updates += 1
 
