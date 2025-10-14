@@ -1037,7 +1037,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                    f' Env {total_env_loss_weighted/trained_samples:.4f}' + \
                    f' {args.penalty_type} {total_irm_loss_weighted/trained_samples:.4g}' + \
                    f' LR {train_optimizer.param_groups[0]["lr"]:.4f} PW {penalty_weight_orig:.4f}' + \
-                   f' dot: ll {ngl2:.2e} lk {dot_lk:.2e} lp {dot_lp:.2e} kk {ngl_keep2:.2e} kp {dot_kp:.2e} pp {ngp2:.2e}' + \
+                   f' dot: ll {ngl2:.6e} lk {dot_lk:.6e} lp {dot_lp:.6e} kk {ngl_keep2:.6e} kp {dot_kp:.6e} pp {ngp2:.6e}' + \
                    f' w: k {loss_keep_grad_scaler:.4f} l {loss_grad_scaler:.4f} p {penalty_grad_scaler:.4f}' + \
                    f' decr: l {loss_decrease_cond:.2e} k {loss_keep_decreae_cond:.2e} p {penalty_decrease_cond:.2e}' + \
                    f' gn_loss {gradnorm_loss:.4e} rates: {gradnorm_rates_str} Lp: cos {cos_Lp:.4f} delta {delta_Lp:.3e}'
