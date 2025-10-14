@@ -897,6 +897,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             dot_lp   = delta_lp
             dot_kp   = delta_kp
         # Better safe than sorry
+        print()
+        print(loss_keep_grad_norm_weighted, loss_grad_norm_weighted, delta_lk.abs())
         assert dot_lk.abs() <= ngl_keep * ngl, f"ngk {ngl_keep}, ngl {ngl}, lk {dot_lk.abs()}" 
         assert dot_lp.abs() <= ngl      * ngp, f"ngl {ngl}, ngp {ngp}, lp {dot_lp.abs()}"
         assert dot_kp.abs() <= ngl_keep * ngp, f"ngk {ngl_keep}, ngp {ngp}, lpk {dot_lp.abs()}"
