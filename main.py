@@ -886,7 +886,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                'dot_lp':   delta_lp,
                                'dot_kp':   delta_kp
                               }, orig_shape=True)   # return data shaped as input data
-            ngl_keep, ngl, ngp, dot_lk, dot_lp, dot_kp = emas.values()
+            # make sure the order is explicit and not some implicit one
+            emas_k = ['ngl_keep', 'ngl', 'ngp', 'dot_lk', 'dot_lp', 'dot_kp']
+            ngl_keep, ngl, ngp, dot_lk, dot_lp, dot_kp = [emas[k] for k in emas_k]
         else:
             ngl_keep = loss_keep_grad_norm_weighted
             ngl      = loss_grad_norm_weighted
@@ -894,7 +896,11 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             dot_lk   = delta_lk
             dot_lp   = delta_lp
             dot_kp   = delta_kp
-            
+        # Better safe than sorry
+        assert dot_lk.abs() < ngl_keep * ngl
+        assert dot_lp.abs() < ngl      * ngp
+        assert dot_kp.abs() < ngl_keep * ngp
+        
         ngl_keep2 = ngl_keep ** 2
         ngl2      = ngl      ** 2
         ngp2      = ngp      ** 2
