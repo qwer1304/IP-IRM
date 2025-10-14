@@ -878,15 +878,23 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         loss_keep_weighted = loss_keep_weight * loss_keep_aggregator.mean()
         penalty_weighted   = penalty_weight   * penalty_env.mean()
         
-        emas = ema.update({'ngl_keep': loss_keep_grad_norm_weighted, 
-                           'ngl':      loss_grad_norm_weighted, 
-                           'ngp':      penalty_grad_norm_weighted, 
-                           'dot_lk':   delta_lk,
-                           'dot_lp':   delta_lp,
-                           'dot_kp':   delta_kp
-                          }, orig_shape=True)   # return data shaped as input data
-                          
-        ngl_keep, ngl, ngp, dot_lk, dot_lp, dot_kp = emas.values()
+        if args.ema:
+            emas = ema.update({'ngl_keep': loss_keep_grad_norm_weighted, 
+                               'ngl':      loss_grad_norm_weighted, 
+                               'ngp':      penalty_grad_norm_weighted, 
+                               'dot_lk':   delta_lk,
+                               'dot_lp':   delta_lp,
+                               'dot_kp':   delta_kp
+                              }, orig_shape=True)   # return data shaped as input data
+            ngl_keep, ngl, ngp, dot_lk, dot_lp, dot_kp = emas.values()
+        else:
+            ngl_keep = loss_keep_grad_norm_weighted
+            ngl      = loss_grad_norm_weighted
+            ngp      = penalty_grad_norm_weighted
+            dot_lk   = delat_lk
+            dot_lp   = delta_lp
+            dot_kp   = delta_kp
+            
         ngl_keep2 = ngl ** 2
         ngl2      = ngl ** 2
         ngp2      = ngp ** 2
