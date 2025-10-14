@@ -1161,7 +1161,7 @@ class MovingAverage:
             data = data.view(1, -1)
             if self.active:
                 if self._updates == 0 or (name not in self.ema_data):
-                    previous_data = torch.zeros_like(data)
+                    previous_data = data
                 else:
                     previous_data = self.ema_data[name]
 
