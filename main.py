@@ -873,8 +873,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         ngl           = l_grads_flat_weighted.norm()
         ngk           = l_keep_grads_flat_weighted.norm()
         delta_lk      = l_grads_flat_weighted.dot(l_keep_grads_flat_weighted)
-        delta_ll_sqrt = ngl.dot(l_grads_flat_weighted).sqrt()
-        delta_kk_sqrt = ngk.dot(l_keep_grads_flat_weighted).sqrt()
+        delta_ll_sqrt = l_grads_flat_weighted.dot(l_grads_flat_weighted).sqrt()
+        delta_kk_sqrt = l_keep_grads_flat_weighted.dot(l_keep_grads_flat_weighted).sqrt()
         
         print()
         print(f'ngk {ngk.item()} ngl {ngl.item()} dot_lk {delta_lk.item()}')
