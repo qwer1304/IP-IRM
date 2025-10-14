@@ -1185,12 +1185,6 @@ class MovingAverage:
     def set_active(self, active):
         self.active = active
 
-import argparse
-import sys
-from types import SimpleNamespace
-from collections import defaultdict
-
-
 class NonExclusiveParser:
     """
     Explicit sentinel-based multi-subparser wrapper.
