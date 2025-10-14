@@ -844,6 +844,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             penalty_grad_norm_weighted = torch.tensor(0., dtype=torch.float, device=device)
 
         # rotate penalty gradient if it's orthogonal enough to losses' gradients
+        cos_Lp     = torch.tensor(0., dtype=torch.float, device=device)
+        alpha      = torch.tensor(0., dtype=torch.float, device=device)
+        delta_Lp   = torch.tensor(0., dtype=torch.float, device=device)
         if do_gradnorm and do_penalty and (args.penalty_grad_project is not None):
             L_grads_flat_weighted = l_keep_grads_flat_weighted + l_grads_flat_weighted
             cos_Lp   = F.cosine_similarity(L_grads_flat_weighted, p_grads_flat_weighted, dim=0)
@@ -860,10 +863,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                     # update list of pars' gradients w/ rotated grad
                     grad_lengths = [len(p) for p in penalty_grads_final] 
                     penalty_grads_final = list(torch.split(p_grads_flat_weighted, grad_lengths, dim=0))                   
-            else:
-                cos_Lp     = torch.tensor(0., dtype=torch.float, device=device)
-                alpha      = torch.tensor(0., dtype=torch.float, device=device)
-                delta_Lp   = torch.tensor(0., dtype=torch.float, device=device)
 
             """
             print()
