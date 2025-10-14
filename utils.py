@@ -1168,13 +1168,13 @@ class MovingAverage:
                 else:
                     previous_data = self.ema_data[name]
 
-                ema_data = self.ema * previous_data + (1 - self.ema) * data
+                ema_data = self.ema * previous_data.to(torch.float64) + (1 - self.ema) * data.to(torch.float64)
                 if self._oneminusema_correction:
                     # correction by 1/(1 - self.ema)
                     # so that the gradients amplitude backpropagated in data is independent of self.ema
-                    ema_dict_data[name] = ema_data / (1 - self.ema)
+                    ema_dict_data[name] = (ema_data / (1 - self.ema)).to(torch.float32)
                 else:
-                    ema_dict_data[name] = ema_data
+                    ema_dict_data[name] = ema_data.to(torch.float32)
                 self.ema_data[name] = ema_data.clone().detach()
             else:
                  ema_dict_data[name] = torch.ones_like(data)
