@@ -871,6 +871,10 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         
         # Compute dot products
         delta_lk = l_grads_flat_weighted.dot(l_keep_grads_flat_weighted)
+        
+        print()
+        print(f'ngk {l_keep_grads_flat_weighted.item()} ngl {l_grads_flat_weighted.item()} dot_lk {delta_lk.item()}')
+        
         delta_lp = l_grads_flat_weighted.dot(p_grads_flat_weighted)
         delta_kp = l_keep_grads_flat_weighted.dot(p_grads_flat_weighted)
 
