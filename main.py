@@ -1691,6 +1691,7 @@ if __name__ == '__main__':
                 ema = ema_
             ema.set_active(args.ema) # set to what the user has currently set
             # gradnorm restores only attributes needed to continue running. arguments are taken from  user args
+            gradnorm_balancer.set_tau(args.gradnorm_tau) # always set tau to currently provided value; also converts None to values
 
             # use current LR, not the one from checkpoint
             for param_group in optimizer.param_groups:
