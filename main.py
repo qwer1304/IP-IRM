@@ -1071,6 +1071,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             gradnorm_balancer.clamp_weights(lb, ub)
             if all([v == lb[k] for k,v in gradnorm_balancer.task_weights]) or all([v == ub[k] for k,v in gradnorm_balancer.task_weights]):
                 gradnorm_balancer.rescale_weights(self)
+                utils.reset_optimizer(gradnorm_optimizer)
 
             """
             # config
