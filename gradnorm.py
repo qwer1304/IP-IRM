@@ -251,7 +251,7 @@ class GradNormLossBalancer(nn.Module):
 
         self.batch_idx += 1
 
-        if 'gn' in self.debug:
+        if self.debug and 'gn' is in self.debug:
             with np.printoptions(precision=6):
                 # convert to numpy to use numpy's formatting options
                 print()

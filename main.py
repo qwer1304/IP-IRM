@@ -1038,13 +1038,13 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             gradnorm_loss.backward()
 
             # actual computed grads after backward:
-            if 'gn' in args.gradnorm_debug:
+            if self.debug and 'gn' is in self.debug:
                 with np.printoptions(precision=6):
                     print("actual v.grad:\t", np.array([gradnorm_balancer.task_weights[k].grad.item() for k in gradnorm_balancer.task_names]))
 
             gradnorm_optimizer.step()
             
-            if 'opt' in args.gradnorm_debug:
+            if self.debug and 'opt' is in self.debug:
                 print()
                 opt_ids = {id(p) for g in gradnorm_optimizer.param_groups for p in g['params']}
                 # 1) Does optimizer actually contain the exact Parameter objects?
@@ -1069,6 +1069,75 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             lb = {'loss_keep': 0.0,  'loss': 0.0,  'penalty': 0.0} 
             ub = {'loss_keep': 5.0,  'loss': 5.0,  'penalty': 5.0} 
             #gradnorm_balancer.clamp_weights(lb, ub)
+
+            """
+            # config
+            V_target = float(len(v_params))   # target sum of v (e.g., T)
+            min_frac = 0.1                    # if sum(v) < min_frac * V_target -> rescale up
+            max_frac = 10.0                   # if sum(v) > max_frac * V_target -> rescale down
+            rescale_every = 50                # optional periodic check (or trigger by condition)
+            cooldown_steps = 200
+            _eps = 1e-12
+
+            # persistent (init once)
+            if 'last_v_rescale_step' not in globals():
+                last_v_rescale_step = -9999
+            if 'global_step' not in globals():
+                global_step = 0
+
+            def maybe_rescale_v(v_params, v_optimizer):
+                global last_v_rescale_step, global_step
+
+                with torch.no_grad():
+                    v_vals = torch.stack([p.detach().flatten() for p in v_params])
+                    # if v are scalars, this gives shape (T, 1) -> flatten
+                    # compute sum over tasks (assume each v is scalar param)
+                    V_sum = float(sum(p.item() if p.numel()==1 else p.detach().sum().item() for p in v_params))
+
+                    if (global_step - last_v_rescale_step) < cooldown_steps:
+                        return False
+
+                    if not ( (V_sum < min_frac * V_target) or (V_sum > max_frac * V_target) or (global_step % rescale_every == 0) ):
+                        return False
+
+                    alpha = V_target / (V_sum + _eps)
+                    if abs(alpha - 1.0) < 1e-6:
+                        return False
+
+                    # apply scaling to v parameters
+                    for p in v_params:
+                        p.data.mul_(alpha)
+
+                    # IMPORTANT: scale optimizer state for v parameters consistently
+                    # handle common optimizers: SGD (momentum buffer), Adam (exp avg of grads / sqr)
+                    opt_state = v_optimizer.state
+                    for p in v_params:
+                        state = opt_state.get(p, None)
+                        if state is None:
+                            continue
+                        # scale momentum buffer if present
+                        if 'momentum_buffer' in state:
+                            state['momentum_buffer'].mul_(alpha)
+                        # Adam-like buffers
+                        if 'exp_avg' in state:
+                            state['exp_avg'].mul_(alpha)
+                        if 'exp_avg_sq' in state:
+                            # exp_avg_sq scales like grad^2; if you scaled v (not grads),
+                            # best to scale exp_avg_sq by alpha**2 if it actually holds gradient units.
+                            # But here we scale buffers consistent with how p was scaled:
+                            state['exp_avg_sq'].mul_(alpha**2)
+
+                    last_v_rescale_step = global_step
+                    return True
+
+            # call in training loop:
+            # ...
+            # after updating v (or periodically), call:
+            rescaled = maybe_rescale_v(v_params, v_optimizer)
+            if rescaled:
+                print(f"[v-rescale] step={global_step} scaled v by {alpha:.3g}")
+            global_step += 1
+            """
 
         ngk                   = ngk.item()
         ngl                   = ngl.item()
