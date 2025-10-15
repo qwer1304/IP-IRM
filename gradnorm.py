@@ -165,9 +165,10 @@ class GradNormLossBalancer(nn.Module):
         to learn relative scales. The GradNorm loss must be unconstrained, otherwise the model can't freely adjust magnitudes.
         Normalization is only applied after the update, when you want to use the weights to combine task losses in the forward pass.
         """
-        gradnorm_loss = self.Gscaler * (weighted_grad_norms - avgG_semi_detached * smoothed_rates)
-        gradnorm_loss = gradnorm_loss.abs() if self.gradnorm_loss_type == 'L1' else (gradnorm_loss ** 2)
-        gradnorm_loss = gradnorm_loss.mean()
+        gradnorm_loss  = self.Gscaler * (weighted_grad_norms - avgG_semi_detached * smoothed_rates)
+        gradnorm_loss  = gradnorm_loss.abs() if self.gradnorm_loss_type == 'L1' else (gradnorm_loss ** 2)
+        gradnorm_loss  = gradnorm_loss.mean()
+        gradnorm_loss += 5e-4 * (weights.sum() - len(self.task_names)).abs()
 
         # Step 6: Normalize task weights
         # SoftPlus is a smooth approximation to the ReLU function and can be used to constrain 
@@ -200,8 +201,8 @@ class GradNormLossBalancer(nn.Module):
             expected_v_grad = self.Gscaler * 2.0 * g * (r - (1.0 - self.avgG_detach_frac) * global_term) / T
         expected_v_grad = expected_v_grad.detach().cpu()
 
-        veights_ratios = veights / veights.sum()
-        dr = veights_ratios.diff()
+        #veights_ratios = veights / veights.sum()
+        #dr = veights_ratios.diff()
 
         # --- GradNorm pathological state detector ---
 
@@ -274,7 +275,7 @@ class GradNormLossBalancer(nn.Module):
                 print("gradnorm_loss:\t", gradnorm_loss.cpu().detach().numpy())
                 print(f"all_neg {all_negative.numpy()} all_pos {all_positive.numpy()} mixed {mixed}" +
                       f" sgnfcnt_msk {np.array(significant_mask.tolist())} prsst_bad {persistent_bad}")
-                print(f"pthlgy dtct:\t dr_norm {dr.norm().cpu().detach().numpy()}, veights.diff.norm {(veights.diff()).norm().cpu().detach().numpy()}")
+                #print(f"pthlgy dtct:\t dr_norm {dr.norm().cpu().detach().numpy()}, veights.diff.norm {(veights.diff()).norm().cpu().detach().numpy()}")
                 # You'll see - when all E_i share sign, dr.norm() (change in ratios) << v.diff().norm() (change in magnitude). 
                 # When E_i have mixed signs, dr.norm() becomes much larger — that's the rebalancing regime.
 

@@ -1066,9 +1066,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 print("optimizer param counts:", [len(g['params']) for g in gradnorm_optimizer.param_groups])
             
            
-            lb = {'loss_keep': 0.0,  'loss': 0.0,  'penalty': 0.0} 
+            lb = {'loss_keep': 1e-3,  'loss': 1e-3,  'penalty': 1e-3} 
             ub = {'loss_keep': 5.0,  'loss': 5.0,  'penalty': 5.0} 
-            #gradnorm_balancer.clamp_weights(lb, ub)
+            gradnorm_balancer.clamp_weights(lb, ub)
 
             """
             # config
