@@ -1171,9 +1171,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         total_env_loss_weighted  += (loss_weight      * loss_env.mean()).item()      * this_batch_size * gradients_accumulation_steps
         total_loss_weighted      += loss_batch_weighted.item()                       * this_batch_size * gradients_accumulation_steps
         
-        loss_decrease_cond     = loss_grad_scaler      * ngl2 + loss_keep_grad_scaler*dot_lk + penalty_grad_scaler*dot_lp
-        loss_keep_decreae_cond = loss_keep_grad_scaler * ngk2 + loss_grad_scaler*dot_lk      + penalty_grad_scaler*dot_kp
-        penalty_decrease_cond  = penalty_grad_scaler   * ngl2 + loss_keep_grad_scaler*dot_kp + loss_grad_scaler*dot_lp
+        loss_decrease_cond      = loss_grad_scaler      * ngl2 + loss_keep_grad_scaler*dot_lk + penalty_grad_scaler*dot_lp
+        loss_keep_decrease_cond = loss_keep_grad_scaler * ngk2 + loss_grad_scaler*dot_lk      + penalty_grad_scaler*dot_kp
+        penalty_decrease_cond   = penalty_grad_scaler   * ngl2 + loss_keep_grad_scaler*dot_kp + loss_grad_scaler*dot_lp
 
         gradnorm_rates_str = " ".join([f'{n} {r:.4f}' for n,r in zip([task_names_2_klp[k] for k in task_names], gradnorm_rates)]) if do_gradnorm else ""  
         desc_str = f'Epoch [{epoch}/{epochs}] [{trained_samples}/{total_samples}]' + \
@@ -1204,7 +1204,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                             ' rates {}'
                             .format(gradnorm_rates_str) + 
                             ' decr l {:.2e} k {:.2e} p {:.2e} Lp cos {:4f} delta {:.3e}'
-                            .format(loss_decrease_cond, loss_keep_decreae_cond, penalty_decrease_cond, cos_Lp, delta_Lp),
+                            .format(loss_decrease_cond, loss_keep_decrease_cond, penalty_decrease_cond, cos_Lp, delta_Lp),
                             log_file=log_file)
                                         
         # Prepare for next iteration
