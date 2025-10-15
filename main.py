@@ -1068,7 +1068,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
            
             lb = {'loss_keep': 0.05, 'loss': 0.05, 'penalty': 0.05} 
             ub = {'loss_keep': 5.0,  'loss': 5.0,  'penalty': 5.0} 
-            gradnorm_balancer.clamp_weights(lb, ub)
+            #gradnorm_balancer.clamp_weights(lb, ub)
 
         ngk                   = ngk.item()
         ngl                   = ngl.item()
