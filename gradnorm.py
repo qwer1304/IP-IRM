@@ -55,6 +55,8 @@ class GradNormLossBalancer(nn.Module):
         self.gn_last_mitigation_batch = -9999
         self.batch_idx                = 0
 
+        self.w                        = 0
+
     def reset_weights(self, new_initial_weights):
         for k, new_val in new_initial_weights.items():
             if k not in self.task_weights:
@@ -171,6 +173,7 @@ class GradNormLossBalancer(nn.Module):
         gradnorm_loss  = self.Gscaler * (weighted_grad_norms - avgG_semi_detached * smoothed_rates)
         gradnorm_loss  = gradnorm_loss.abs() if self.gradnorm_loss_type == 'L1' else (gradnorm_loss ** 2)
         gradnorm_loss  = gradnorm_loss.mean()
+        # leave this for now, but don't instantiate - gradnorm_loss_lambda = 0.
         V = weights.sum()
         gradnorm_loss += self.gradnorm_loss_lambda * (V.log() - math.log(len(self.task_names)))**2
         
@@ -221,13 +224,21 @@ class GradNormLossBalancer(nn.Module):
 
         this_batch_bad = False
         if significant_mask.sum() > 0:
-            # pathological if *all* significant 'expected_v_grad' are negative
+            # pathological if *all* significant 'expected_v_grad' are negative.
+            # sometimes also when they're all positive
             if all_negative:
                 this_batch_bad = True
                 msg_bad = 'all-negative'
             if all_positive:
-                this_batch_bad = True
-                msg_bad = 'all-positive'
+                E = expected_v_grad[significant_mask].cpu().detach().numpy()
+                w = (veights / veights.sum()).cpu().numpy()
+                delta_w_norm = np.linalg.norm(w - self.w)
+                eq_metric = np.std(E) / (abs(E.mean()) + 1e-8)
+                w_prev = self.w 
+                self.w = w
+                if (eq_metric > 0.1) or (delta_w_norm > 1e-3):
+                    this_batch_bad = True
+                    msg_bad = 'all-positive'
 
         # store in rolling window
         self.gn_bad_buffer.append(this_batch_bad)
@@ -279,9 +290,8 @@ class GradNormLossBalancer(nn.Module):
                 print("gradnorm_loss:\t", gradnorm_loss.cpu().detach().numpy())
                 print(f"all_neg {all_negative.numpy()} all_pos {all_positive.numpy()} mixed {mixed}" +
                       f" sgnfcnt_msk {np.array(significant_mask.tolist())} prsst_bad {persistent_bad}")
-                #print(f"pthlgy dtct:\t dr_norm {dr.norm().cpu().detach().numpy()}, veights.diff.norm {(veights.diff()).norm().cpu().detach().numpy()}")
-                # You'll see - when all E_i share sign, dr.norm() (change in ratios) << v.diff().norm() (change in magnitude). 
-                # When E_i have mixed signs, dr.norm() becomes much larger — that's the rebalancing regime.
+                if all_positive:
+                    print(f"eqlbrm/rnwy dtct:\t w {w} w_prev {w_prev} |w-w_p| {delta_w_norm} eq_metric {eq_metric}")
 
         return normalized_weights, gradnorm_loss, smoothed_rates
 

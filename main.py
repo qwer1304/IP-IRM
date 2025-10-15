@@ -676,7 +676,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
 
     train_optimizer.zero_grad(set_to_none=True) # clear gradients at the beginning 
     k = 0 # number of consecutive batches r_mag is within bounds
-    gradnorm_balancer.rescale_weights()
 
     for batch_index, data_env in enumerate(train_bar):
 
@@ -1651,7 +1650,7 @@ if __name__ == '__main__':
     parser.add_argument('--gradnorm_avgG_detach_frac', default=0.0, type=float, help='gradnorm avg detach fraction')
     parser.add_argument('--gradnorm_loss_type', default='L1', type=str, choices=['L1', 'L2'], help='gradnorm loss type')
     parser.add_argument('--gradnorm_lr', default=1e-3, type=float, help='gradnorm LR')
-    parser.add_argument('--gradnorm_loss_lambda', default=5e-4, type=float, help='gradnorm loss regularizer strength')
+    parser.add_argument('--gradnorm_loss_lambda', default=0., type=float, help='gradnorm loss regularizer strength')
 
     # args parse
     args = parser.parse_args()
