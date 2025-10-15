@@ -228,7 +228,6 @@ class GradNormLossBalancer(nn.Module):
             # sometimes also when they're all positive
             if all_negative:
                 this_batch_bad = -1
-                msg_bad = 'all-negative'
             if all_positive:
                 E = expected_v_grad[significant_mask].cpu().detach().numpy()
                 w = (veights / veights.sum()).cpu().numpy()
@@ -238,9 +237,6 @@ class GradNormLossBalancer(nn.Module):
                 self.w = w
                 if (eq_metric > 0.1) or (delta_w_norm > 1e-3):
                     this_batch_bad = 1
-                    msg_bad = 'all-positive'
-                else:
-                    msg_bad = 'equilibrium'
 
         # store in rolling window
         self.gn_bad_buffer.append(this_batch_bad)
@@ -254,8 +250,8 @@ class GradNormLossBalancer(nn.Module):
 
         # --- mitigation (only once per cooldown) ---
         if persistent_bad:
-            warnings.warn(f"[GN WARNING] Persistent {msg_bad} expected_v_grad detected "
-                  f"({count_bad}/{self.window_size})")
+            msg_bad = 'all-negative' if count_bad < 0 else 'all-positive'
+            warnings.warn(f"[GN WARNING] Persistent {msg_bad} detected: ({count_bad}/{self.window_size})")
 
             """
             DON'T APLLY MITIGATION YET!!!!!!!!!!!

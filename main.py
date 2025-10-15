@@ -1142,9 +1142,12 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         ngk                   = ngk.item()
         ngl                   = ngl.item()
         ngp                   = ngp.item()
-        loss_keep_grad_scaler = loss_keep_grad_scaler.item()
-        loss_grad_scaler      = loss_grad_scaler.item()
-        penalty_grad_scaler   = penalty_grad_scaler.item()
+        w_k                   = loss_keep_grad_scaler.item()
+        w_l                   = loss_grad_scaler.item()
+        w_p                   = penalty_grad_scaler.item()
+        v_k                   = gradnorm_balancer.task_weights['loss_keep'.item()
+        v_l                   = gradnorm_balancer.task_weights['loss'.item()
+        v_p                   = gradnorm_balancer.task_weights['penalty'.item()
         dot_lk                = dot_lk.item()               
         dot_lp                = dot_lp.item()
         dot_kp                = dot_kp.item()
@@ -1181,8 +1184,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                    f' {args.penalty_type} {total_irm_loss_weighted/trained_samples:.4g}' + \
                    f' LR {train_optimizer.param_groups[0]["lr"]:.4f} PW {penalty_weight_orig:.4f}' + \
                    f' dot: ll {ngl2:.2e} lk {dot_lk:.2e} lp {dot_lp:.2e} kk {ngk2:.2e} kp {dot_kp:.2e} pp {ngp2:.2e}' + \
-                   f' w: k {loss_keep_grad_scaler:.4f} l {loss_grad_scaler:.4f} p {penalty_grad_scaler:.4f}' + \
-                   f' decr: l {loss_decrease_cond:.2e} k {loss_keep_decreae_cond:.2e} p {penalty_decrease_cond:.2e}' + \
+                   f' w/v: k {w_k:.4f}/{v_k:.4f} l {w_l:.4f}/{v_l:.4f} p {w_p:.4f}/{v_p:.4f}' + \
+                   f' decr: l {loss_decrease_cond:.2e} k {loss_keep_decrease_cond:.2e} p {penalty_decrease_cond:.2e}' + \
                    f' gn_loss {gradnorm_loss:.4e} rates: {gradnorm_rates_str} Lp: cos {cos_Lp:.4f} delta {delta_Lp:.3e}'
         desc_str += loss_module.get_debug_info_str()
         train_bar.set_description(desc_str)
