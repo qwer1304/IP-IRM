@@ -222,12 +222,12 @@ class GradNormLossBalancer(nn.Module):
         all_positive = (expected_v_grad[significant_mask] > 0).all()
         mixed        = not (all_negative or all_positive)
 
-        this_batch_bad = False
+        this_batch_bad = 0
         if significant_mask.sum() > 0:
             # pathological if *all* significant 'expected_v_grad' are negative.
             # sometimes also when they're all positive
             if all_negative:
-                this_batch_bad = True
+                this_batch_bad = -1
                 msg_bad = 'all-negative'
             if all_positive:
                 E = expected_v_grad[significant_mask].cpu().detach().numpy()
@@ -237,8 +237,10 @@ class GradNormLossBalancer(nn.Module):
                 w_prev = self.w 
                 self.w = w
                 if (eq_metric > 0.1) or (delta_w_norm > 1e-3):
-                    this_batch_bad = True
+                    this_batch_bad = 1
                     msg_bad = 'all-positive'
+                else:
+                    msg_bad = 'equilibrium'
 
         # store in rolling window
         self.gn_bad_buffer.append(this_batch_bad)
@@ -246,7 +248,7 @@ class GradNormLossBalancer(nn.Module):
         # determine if persistent pathology
         if len(self.gn_bad_buffer) == self.window_size:
             count_bad = sum(self.gn_bad_buffer)
-            persistent_bad = (count_bad >= self.required_count)
+            persistent_bad = (abs(count_bad) >= self.required_count)
         else:
             persistent_bad = False
 
