@@ -1044,27 +1044,27 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
 
             gradnorm_optimizer.step()
             
-            """
-            print()
-            opt_ids = {id(p) for g in gradnorm_optimizer.param_groups for p in g['params']}
-            # 1) Does optimizer actually contain the exact Parameter objects?
-            for k, p in gradnorm_balancer.task_weights.items():
-                print("param in opt?", k, id(p) in opt_ids)
+            if args.gradnorm_debug:
+                print()
+                opt_ids = {id(p) for g in gradnorm_optimizer.param_groups for p in g['params']}
+                # 1) Does optimizer actually contain the exact Parameter objects?
+                for k, p in gradnorm_balancer.task_weights.items():
+                    print("param in opt?", k, id(p) in opt_ids)
 
-            # 2) Are grads present and nonzero?
-            for k, p in gradnorm_balancer.task_weights.items():
-                print(k, "requires_grad=", p.requires_grad,
-                      "grad is None?", p.grad is None,
-                      "grad norm=", None if p.grad is None else p.grad.norm().item())
+                # 2) Are grads present and nonzero?
+                for k, p in gradnorm_balancer.task_weights.items():
+                    print(k, "requires_grad=", p.requires_grad,
+                          "grad is None?", p.grad is None,
+                          "grad norm=", None if p.grad is None else p.grad.norm().item())
 
-            # 3) Check loss and dtype/device sanity
-            print("loss item:", float(gradnorm_loss.item()))
-            print("weights device/dtype:", [(k, p.device, p.dtype) for k, p in gradnorm_balancer.task_weights.items()])
+                # 3) Check loss and dtype/device sanity
+                print("loss item:", float(gradnorm_loss.item()))
+                print("weights device/dtype:", [(k, p.device, p.dtype) for k, p in gradnorm_balancer.task_weights.items()])
 
-            # 4) Check lr / optimizer param count
-            print("optimizer lr(s):", [g['lr'] for g in gradnorm_optimizer.param_groups])
-            print("optimizer param counts:", [len(g['params']) for g in gradnorm_optimizer.param_groups])
-            """
+                # 4) Check lr / optimizer param count
+                print("optimizer lr(s):", [g['lr'] for g in gradnorm_optimizer.param_groups])
+                print("optimizer param counts:", [len(g['params']) for g in gradnorm_optimizer.param_groups])
+            
            
             lb = {'loss_keep': 0.05, 'loss': 0.05, 'penalty': 0.05} 
             ub = {'loss_keep': 5.0,  'loss': 5.0,  'penalty': 5.0} 
