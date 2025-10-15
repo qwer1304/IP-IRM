@@ -1044,7 +1044,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
 
             gradnorm_optimizer.step()
             
-            if args.gradnorm_debug and 'opt' in args.gradnorm_debug.debug:
+            if args.gradnorm_debug and 'opt' in args.gradnorm_debug:
                 print()
                 opt_ids = {id(p) for g in gradnorm_optimizer.param_groups for p in g['params']}
                 # 1) Does optimizer actually contain the exact Parameter objects?
