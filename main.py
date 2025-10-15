@@ -964,6 +964,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             dot_kp   = delta_kp
         
         # This awlays holds because we compute it from cosines
+        print()
+        print(ngl.size(), ngk.size(), ngp.size(), dot_lk.size(), dot.lp.size(), dot_kp.size())
         assert dot_lk.abs() <= ngl_keep * ngl, f"ngk {ngl_keep}, ngl {ngl}, lk {dot_lk.abs()}" 
         assert dot_lp.abs() <= ngl      * ngp, f"ngl {ngl}, ngp {ngp}, lp {dot_lp.abs()}"
         assert dot_kp.abs() <= ngl_keep * ngp, f"ngk {ngl_keep}, ngp {ngp}, lpk {dot_lp.abs()}"
