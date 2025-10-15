@@ -1069,7 +1069,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             lb = {'loss_keep': 1e-3,  'loss': 1e-3,  'penalty': 1e-3} 
             ub = {'loss_keep': 5.0,  'loss': 5.0,  'penalty': 5.0} 
             gradnorm_balancer.clamp_weights(lb, ub)
-            if all([v == lb[k] for k,v in gradnorm_balancer.task_weights]) or all([v == ub[k] for k,v in gradnorm_balancer.task_weights]):
+            if all([v == lb[k] for k,v in gradnorm_balancer.task_weights.items()]) or all([v == ub[k] for k,v in gradnorm_balancer.task_weights.items()]):
                 gradnorm_balancer.rescale_weights(self)
                 utils.reset_optimizer(gradnorm_optimizer)
 
