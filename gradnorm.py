@@ -200,22 +200,29 @@ class GradNormLossBalancer(nn.Module):
             expected_v_grad = self.Gscaler * 2.0 * g * (r - (1.0 - self.avgG_detach_frac) * global_term) / T
         expected_v_grad = expected_v_grad.detach().cpu()
 
-        # --- GradNorm pathological state detector ---
+        veights_ratios = veights / veights.sum()
+        dr = veights_ratios.diff()
 
-        # diagnostic booleans
-        all_negative = (expected_v_grad < 0).all()
-        all_positive = (expected_v_grad > 0).all()
-        mixed        = not (all_negative or all_positive)
+        # --- GradNorm pathological state detector ---
 
         # --- evaluate current batch condition ---
         # ignore elements with very small magnitude
         significant_mask = expected_v_grad.abs() > self.min_mag
 
-        if significant_mask.sum() == 0:
-            this_batch_bad = False
-        else:
+        # diagnostic booleans
+        all_negative = (expected_v_grad[significant_mask] < 0).all()
+        all_positive = (expected_v_grad[significant_mask] > 0).all()
+        mixed        = not (all_negative or all_positive)
+
+        this_batch_bad = False
+        if significant_mask.sum() > 0:
             # pathological if *all* significant 'expected_v_grad' are negative
-            this_batch_bad = (expected_v_grad[significant_mask] < 0).all()
+            if all_negative:
+                this_batch_bad = True
+                msg_bad = 'all-negative'
+            if all_positive:
+                this_batch_bad = True
+                msg_bad = 'all-positive'
 
         # store in rolling window
         self.gn_bad_buffer.append(this_batch_bad)
@@ -229,7 +236,7 @@ class GradNormLossBalancer(nn.Module):
 
         # --- mitigation (only once per cooldown) ---
         if persistent_bad:
-            warnings.warn(f"[GN WARNING] Persistent all-negative expected_v_grad detected "
+            warnings.warn(f"[GN WARNING] Persistent {msg_bad} expected_v_grad detected "
                   f"({count_bad}/{window_size})")
 
             """
@@ -267,6 +274,9 @@ class GradNormLossBalancer(nn.Module):
                 print("gradnorm_loss:\t", gradnorm_loss.cpu().detach().numpy())
                 print(f"all_neg {all_negative.numpy()} all_pos {all_positive.numpy()} mixed {mixed}" +
                       f" sgnfcnt_msk {np.array(significant_mask.tolist())} prsst_bad {persistent_bad}")
+                print(f"pthlgy dtct:\t dr_norm {dr.norm().cpu().detach().numpy()}, veights.diff.norm {(veights.diff()).norm().cpu().detach().numpy()}")
+                # You'll see - when all E_i share sign, dr.norm() (change in ratios) << v.diff().norm() (change in magnitude). 
+                # When E_i have mixed signs, dr.norm() becomes much larger — that's the rebalancing regime.
 
         return normalized_weights, gradnorm_loss, smoothed_rates
 
