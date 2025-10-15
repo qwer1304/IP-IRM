@@ -1650,6 +1650,7 @@ if __name__ == '__main__':
     parser.add_argument('--gradnorm_avgG_detach_frac', default=0.0, type=float, help='gradnorm avg detach fraction')
     parser.add_argument('--gradnorm_loss_type', default='L1', type=str, choices=['L1', 'L2'], help='gradnorm loss type')
     parser.add_argument('--gradnorm_lr', default=1e-3, type=float, help='gradnorm LR')
+    parser.add_argument('--gradnorm_loss_lambda', default=5e-4, type=float, help='gradnorm loss regularizer strength')
 
     # args parse
     args = parser.parse_args()
@@ -1817,7 +1818,7 @@ if __name__ == '__main__':
     gradnorm_balancer = gn.GradNormLossBalancer(initial_weights, alpha=args.gradnorm_alpha, device=device, smoothing=False, 
                             tau=args.gradnorm_tau, eps=1e-8, debug=args.gradnorm_debug, beta=args.gradnorm_beta, 
                             avgG_detach_frac=args.gradnorm_avgG_detach_frac, Gscaler=args.gradnorm_Gscaler, 
-                            gradnorm_loss_type=args.gradnorm_loss_type, gradnorm_lr=args.gradnorm_lr)
+                            gradnorm_loss_type=args.gradnorm_loss_type, gradnorm_lr=args.gradnorm_lr, gradnorm_loss_lambda=args.gradnorm_loss_lambda)
 
     if args.opt == "Adam":
         optimizer          = optim.Adam(model.parameters(),             lr=args.lr, weight_decay=args.weight_decay)

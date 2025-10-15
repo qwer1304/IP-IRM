@@ -8,7 +8,7 @@ import collections
 
 class GradNormLossBalancer(nn.Module):
     def __init__(self, initial_weights, alpha=1.2, device='cpu', smoothing=False, tau=None, eps=1e-8, debug=None, 
-                    beta=1.0, Gscaler=1.0, avgG_detach_frac=0.0, gradnorm_loss_type='L1', gradnorm_lr=1e-3):
+                    beta=1.0, Gscaler=1.0, avgG_detach_frac=0.0, gradnorm_loss_type='L1', gradnorm_lr=1e-3, gradnorm_loss_lambda=5e-4):
         """
         Args:
             initial_weights (dict): Initial task weights, e.g., {'cont': 1.0, 'keep_cont': 1.0, 'penalty': 1.0}
@@ -42,6 +42,8 @@ class GradNormLossBalancer(nn.Module):
         self.avgG_detach_frac = avgG_detach_frac
         self.gradnorm_loss_type = gradnorm_loss_type
         self.gradnorm_lr = gradnorm_lr
+        self.gradnorm_loss_lambda = gradnorm_loss_lambda
+        
         # --- persistent state for pathological state detection
         # --- configurable thresholds ---
         self.window_size     = 5        # number of consecutive batches to monitor
@@ -170,7 +172,7 @@ class GradNormLossBalancer(nn.Module):
         gradnorm_loss  = gradnorm_loss.abs() if self.gradnorm_loss_type == 'L1' else (gradnorm_loss ** 2)
         gradnorm_loss  = gradnorm_loss.mean()
         V = weights.sum()
-        gradnorm_loss += 5e-4 * (V.log() - math.log(len(self.task_names)))**2
+        gradnorm_loss += self.gradnorm_loss_lambda * (V.log() - math.log(len(self.task_names)))**2
         
         # Step 6: Normalize task weights
         # SoftPlus is a smooth approximation to the ReLU function and can be used to constrain 
@@ -240,7 +242,7 @@ class GradNormLossBalancer(nn.Module):
         # --- mitigation (only once per cooldown) ---
         if persistent_bad:
             warnings.warn(f"[GN WARNING] Persistent {msg_bad} expected_v_grad detected "
-                  f"({count_bad}/{window_size})")
+                  f"({count_bad}/{self.window_size})")
 
             """
             DON'T APLLY MITIGATION YET!!!!!!!!!!!
