@@ -942,7 +942,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         penalty_weighted   = penalty_weight   * penalty_env.mean()
         
         if args.ema:
-            emas = ema.update({'ngl_keep': loss_keep_grad_norm_weighted, 
+            emas = ema.update({'ngk':      loss_keep_grad_norm_weighted, 
                                'ngl':      loss_grad_norm_weighted, 
                                'ngp':      penalty_grad_norm_weighted, 
                                'cos_lk':   cos_lk,
@@ -950,13 +950,13 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                'cos_kp':   cos_kp
                               }, orig_shape=True)   # return data shaped as input data
             # make sure the order is explicit and not some implicit one
-            emas_k = ['ngl_keep', 'ngl', 'ngp', 'cos_lk', 'cos_lp', 'cos_kp']
-            ngl_keep, ngl, ngp, cos_lk, cos_lp, cos_kp = [emas[k] for k in emas_k]
-            dot_lk = ngl_keep * ngl * cos_lk
-            dot_lp = ngl      * ngp * cos_lp
-            dot_kp = ngl_keep * ngp * cos_kp
+            emas_k = ['ngk', 'ngl', 'ngp', 'cos_lk', 'cos_lp', 'cos_kp']
+            ngk, ngl, ngp, cos_lk, cos_lp, cos_kp = [emas[k] for k in emas_k]
+            dot_lk = ngk * ngl * cos_lk
+            dot_lp = ngl * ngp * cos_lp
+            dot_kp = ngk * ngp * cos_kp
         else:
-            ngl_keep = loss_keep_grad_norm_weighted
+            ngk = loss_keep_grad_norm_weighted
             ngl      = loss_grad_norm_weighted
             ngp      = penalty_grad_norm_weighted
             dot_lk   = delta_lk
@@ -966,13 +966,13 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         # This awlays holds because we compute it from cosines
         print()
         print(ngl.size(), ngk.size(), ngp.size(), dot_lk.size(), dot.lp.size(), dot_kp.size())
-        assert dot_lk.abs() <= ngl_keep * ngl, f"ngk {ngl_keep}, ngl {ngl}, lk {dot_lk.abs()}" 
-        assert dot_lp.abs() <= ngl      * ngp, f"ngl {ngl}, ngp {ngp}, lp {dot_lp.abs()}"
-        assert dot_kp.abs() <= ngl_keep * ngp, f"ngk {ngl_keep}, ngp {ngp}, lpk {dot_lp.abs()}"
+        assert dot_lk.abs() <= ngk * ngl, f"ngk {ngk}, ngl {ngl}, lk {dot_lk.abs()}" 
+        assert dot_lp.abs() <= ngl * ngp, f"ngl {ngl}, ngp {ngp}, lp {dot_lp.abs()}"
+        assert dot_kp.abs() <= ngk * ngp, f"ngk {ngk}, ngp {ngp}, lpk {dot_lp.abs()}"
         
-        ngl_keep2 = ngl_keep ** 2
-        ngl2      = ngl      ** 2
-        ngp2      = ngp      ** 2
+        ngk2 = ngk ** 2
+        ngl2 = ngl ** 2
+        ngp2 = ngp ** 2
         
         normalized_scales = {}
         gradnorm_rates = torch.zeros(int(args.penalty_weight>0) + int(do_loss) + int(do_keep_loss), dtype=torch.float, device=device)
@@ -986,7 +986,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 grad_norms_dict['loss']      = ngl
             if do_keep_loss:
                 losses_dict['loss_keep']     = loss_keep_weighted
-                grad_norms_dict['loss_keep'] = ngl_keep            
+                grad_norms_dict['loss_keep'] = ngk            
                     
             normalized_scales, gradnorm_loss, gradnorm_rates = gradnorm_balancer.compute_weights_and_loss(losses_dict, grad_norms_dict)
             """
@@ -996,8 +996,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                    [f'{k}: {gradnorm_rates[i].item()}' for i,k in enumerate(task_names)], 
                    [f'{k} {gradnorm_balancer.task_weights[k].item()}' for k in task_names])
             """
-            dot_dict    = {'kl': dot_lk,    'kp': dot_kp, 'lp': dot_lp}
-            norm2_dict  = {'k':  ngl_keep2, 'l':  ngl2,   'p':  ngp2}
+            dot_dict    = {'kl': dot_lk, 'kp': dot_kp, 'lp': dot_lp}
+            norm2_dict  = {'k':  ngk2,   'l':  ngl2,   'p':  ngp2}
             scaler_dict = {v: normalized_scales[k] for k,v in task_names_2_klp.items()}
             #w = gradnorm_clamp_scalers_for_progress(norm2_dict, dot_dict, scaler_dict, ema=(args.ema is not None))
             w = gradnorm_clamp_scalers_for_progress_ema_safe(norm2_dict, dot_dict, scaler_dict)
@@ -1072,7 +1072,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             ub = {'loss_keep': 5.0,  'loss': 5.0,  'penalty': 5.0} 
             gradnorm_balancer.clamp_weights(lb, ub)
 
-        ngl_keep              = ngl_keep.item()
+        ngk                   = ngk.item()
         ngl                   = ngl.item()
         ngp                   = ngp.item()
         loss_keep_grad_scaler = loss_keep_grad_scaler.item()
@@ -1083,7 +1083,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         dot_kp                = dot_kp.item()
         gradnorm_loss         = gradnorm_loss.item()    if do_gradnorm else 0.
         gradnorm_rates        = gradnorm_rates.tolist() if do_gradnorm else []
-        ngl_keep2             = ngl_keep2.item()
+        ngk2                  = ngk2.item()
         ngl2                  = ngl2.item()
         ngp2                  = ngp2.item()
         cos_Lp                = cos_Lp.item()           if do_gradnorm else 0.
@@ -1101,9 +1101,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         total_env_loss_weighted  += (loss_weight      * loss_env.mean()).item()      * this_batch_size * gradients_accumulation_steps
         total_loss_weighted      += loss_batch_weighted.item()                       * this_batch_size * gradients_accumulation_steps
         
-        loss_decrease_cond     = loss_grad_scaler*ngl2 + loss_keep_grad_scaler*dot_lk + penalty_grad_scaler*dot_lp
-        loss_keep_decreae_cond = loss_keep_grad_scaler*ngl_keep2 + loss_grad_scaler*dot_lk + penalty_grad_scaler*dot_kp
-        penalty_decrease_cond  = penalty_grad_scaler*ngl2 + loss_keep_grad_scaler*dot_kp + loss_grad_scaler*dot_lp
+        loss_decrease_cond     = loss_grad_scaler      * ngl2 + loss_keep_grad_scaler*dot_lk + penalty_grad_scaler*dot_lp
+        loss_keep_decreae_cond = loss_keep_grad_scaler * ngk2 + loss_grad_scaler*dot_lk      + penalty_grad_scaler*dot_kp
+        penalty_decrease_cond  = penalty_grad_scaler   * ngl2 + loss_keep_grad_scaler*dot_kp + loss_grad_scaler*dot_lp
 
         gradnorm_rates_str = " ".join([f'{n} {r:.4f}' for n,r in zip([task_names_2_klp[k] for k in task_names], gradnorm_rates)]) if do_gradnorm else ""  
         desc_str = f'Epoch [{epoch}/{epochs}] [{trained_samples}/{total_samples}]' + \
@@ -1113,7 +1113,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                    f' Env {total_env_loss_weighted/trained_samples:.4f}' + \
                    f' {args.penalty_type} {total_irm_loss_weighted/trained_samples:.4g}' + \
                    f' LR {train_optimizer.param_groups[0]["lr"]:.4f} PW {penalty_weight_orig:.4f}' + \
-                   f' dot: ll {ngl2:.2e} lk {dot_lk:.2e} lp {dot_lp:.2e} kk {ngl_keep2:.2e} kp {dot_kp:.2e} pp {ngp2:.2e}' + \
+                   f' dot: ll {ngl2:.2e} lk {dot_lk:.2e} lp {dot_lp:.2e} kk {ngk2:.2e} kp {dot_kp:.2e} pp {ngp2:.2e}' + \
                    f' w: k {loss_keep_grad_scaler:.4f} l {loss_grad_scaler:.4f} p {penalty_grad_scaler:.4f}' + \
                    f' decr: l {loss_decrease_cond:.2e} k {loss_keep_decreae_cond:.2e} p {penalty_decrease_cond:.2e}' + \
                    f' gn_loss {gradnorm_loss:.4e} rates: {gradnorm_rates_str} Lp: cos {cos_Lp:.4f} delta {delta_Lp:.3e}'
@@ -1130,7 +1130,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                             .format(args.penalty_type, total_irm_loss_weighted/trained_samples, train_optimizer.param_groups[0]['lr'], 
                                     penalty_weight_orig, gradnorm_loss) + 
                             ' dot {:.2e} {:.2e} {:.2e} {:.2e} {:.2e} {:.2e}'
-                            .format(ngl2, dot_lk, dot_lp, ngl_keep2, dot_kp, ngp2) +
+                            .format(ngl2, dot_lk, dot_lp, ngk2, dot_kp, ngp2) +
                             ' rates {}'
                             .format(gradnorm_rates_str) + 
                             ' decr l {:.2e} k {:.2e} p {:.2e} Lp cos {:4f} delta {:.3e}'
