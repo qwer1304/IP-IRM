@@ -933,9 +933,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         delta_lk = l_grads_flat_weighted.dot(l_keep_grads_flat_weighted)       
         delta_lp = l_grads_flat_weighted.dot(p_grads_flat_weighted)
         delta_kp = l_keep_grads_flat_weighted.dot(p_grads_flat_weighted)
-        cos_lk   = delta_lk / (loss_keep_grad_norm_weighted * loss_grad_norm_weighted + 1e-12)
-        cos_lp   = delta_lp / (loss_grad_norm_weighted      * p_grads_flat_weighted   + 1e-12)
-        cos_kp   = delta_kp / (loss_keep_grad_norm_weighted * p_grads_flat_weighted   + 1e-12)
+        cos_lk   = delta_lk / (loss_keep_grad_norm_weighted * loss_grad_norm_weighted    + 1e-12)
+        cos_lp   = delta_lp / (loss_grad_norm_weighted      * penalty_grad_norm_weighted + 1e-12)
+        cos_kp   = delta_kp / (loss_keep_grad_norm_weighted * penalty_grad_norm_weighted + 1e-12)
 
         loss_weighted      = loss_weight      * loss_env.mean()
         loss_keep_weighted = loss_keep_weight * loss_keep_aggregator.mean()
@@ -964,8 +964,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             dot_kp   = delta_kp
         
         # This awlays holds because we compute it from cosines
-        print()
-        print(ngl.size(), ngk.size(), ngp.size(), dot_lk.size(), dot_lp.size(), dot_kp.size())
         assert dot_lk.abs() <= ngk * ngl, f"ngk {ngk}, ngl {ngl}, lk {dot_lk.abs()}" 
         assert dot_lp.abs() <= ngl * ngp, f"ngl {ngl}, ngp {ngp}, lp {dot_lp.abs()}"
         assert dot_kp.abs() <= ngk * ngp, f"ngk {ngk}, ngp {ngp}, lpk {dot_lp.abs()}"
