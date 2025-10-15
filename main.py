@@ -519,8 +519,8 @@ def gradnorm_clamp_scalers_for_progress_ema_safe(norm2, dot, scaler, eps=1e-12):
             dot_dict[j+i] = dot_dict[i+j]
         return dot_dict
 
-    # enforce geometric consistency
-    dot = consistent_dots(dot, norm2)
+    # enforce geometric consistency - no need, calculated off cosines
+    # dot = consistent_dots(dot, norm2)
 
     # compute correlation coefficients (dimensionless)
     rho_kl = dot['kl'] / (norm2['k']*norm2['l'] + eps).sqrt()
@@ -929,10 +929,13 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             print(f'{cos_Lp.item():.4f}', f'{alpha:.4f}', delta_Lp, f'{p_grads_flat_weighted.norm().item():.4f}') 
             """
         
-        # Compute dot products
+        # Compute dot products & cosines
         delta_lk = l_grads_flat_weighted.dot(l_keep_grads_flat_weighted)       
         delta_lp = l_grads_flat_weighted.dot(p_grads_flat_weighted)
         delta_kp = l_keep_grads_flat_weighted.dot(p_grads_flat_weighted)
+        cos_lk   = delta_lk / (loss_keep_grad_norm_weighted * loss_grad_norm_weighted + 1e-12)
+        cos_lp   = delta_lp / (loss_grad_norm_weighted      * p_grads_flat_weighted   + 1e-12)
+        cos_kp   = delta_kp / (loss_keep_grad_norm_weighted * p_grads_flat_weighted   + 1e-12)
 
         loss_weighted      = loss_weight      * loss_env.mean()
         loss_keep_weighted = loss_keep_weight * loss_keep_aggregator.mean()
@@ -942,13 +945,16 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             emas = ema.update({'ngl_keep': loss_keep_grad_norm_weighted, 
                                'ngl':      loss_grad_norm_weighted, 
                                'ngp':      penalty_grad_norm_weighted, 
-                               'dot_lk':   delta_lk,
-                               'dot_lp':   delta_lp,
-                               'dot_kp':   delta_kp
+                               'cos_lk':   cos_lk,
+                               'cos_lp':   cos_lp,
+                               'cos_kp':   cos_kp
                               }, orig_shape=True)   # return data shaped as input data
             # make sure the order is explicit and not some implicit one
-            emas_k = ['ngl_keep', 'ngl', 'ngp', 'dot_lk', 'dot_lp', 'dot_kp']
-            ngl_keep, ngl, ngp, dot_lk, dot_lp, dot_kp = [emas[k] for k in emas_k]
+            emas_k = ['ngl_keep', 'ngl', 'ngp', 'cos_lk', 'cos_lp', 'cos_kp']
+            ngl_keep, ngl, ngp, cos_lk, cos_lp, cos_kp = [emas[k] for k in emas_k]
+            dot_lk = ngl_keep * ngl * cos_lk
+            dot_lp = ngl      * ngp * cos_lp
+            dot_kp = ngl_keep * ngp * cos_kp
         else:
             ngl_keep = loss_keep_grad_norm_weighted
             ngl      = loss_grad_norm_weighted
@@ -956,12 +962,11 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             dot_lk   = delta_lk
             dot_lp   = delta_lp
             dot_kp   = delta_kp
-        """
-        This doesn't hold because of EMA
+        
+        # This awlays holds because we compute it from cosines
         assert dot_lk.abs() <= ngl_keep * ngl, f"ngk {ngl_keep}, ngl {ngl}, lk {dot_lk.abs()}" 
         assert dot_lp.abs() <= ngl      * ngp, f"ngl {ngl}, ngp {ngp}, lp {dot_lp.abs()}"
         assert dot_kp.abs() <= ngl_keep * ngp, f"ngk {ngl_keep}, ngp {ngp}, lpk {dot_lp.abs()}"
-        """
         
         ngl_keep2 = ngl_keep ** 2
         ngl2      = ngl      ** 2
@@ -992,8 +997,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             dot_dict    = {'kl': dot_lk,    'kp': dot_kp, 'lp': dot_lp}
             norm2_dict  = {'k':  ngl_keep2, 'l':  ngl2,   'p':  ngp2}
             scaler_dict = {v: normalized_scales[k] for k,v in task_names_2_klp.items()}
-            w = gradnorm_clamp_scalers_for_progress(norm2_dict, dot_dict, scaler_dict, ema=(args.ema is not None))
-            #w = gradnorm_clamp_scalers_for_progress_ema_safe(norm2_dict, dot_dict, scaler_dict)
+            #w = gradnorm_clamp_scalers_for_progress(norm2_dict, dot_dict, scaler_dict, ema=(args.ema is not None))
+            w = gradnorm_clamp_scalers_for_progress_ema_safe(norm2_dict, dot_dict, scaler_dict)
             normalized_scales = {k: w[v] for k,v in task_names_2_klp.items()} 
         
         loss_keep_grad_scaler = normalized_scales['loss_keep'] if 'loss_keep' in normalized_scales else torch.tensor(1.0, dtype=torch.float, device=device)
