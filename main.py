@@ -536,7 +536,7 @@ def gradnorm_clamp_scalers_for_progress_ema_safe(norm2, dot, scaler, eps=1e-12):
     LB_kl, UB_kl = safe_bounds(rho_kl)
     LB_kp, UB_kp = safe_bounds(rho_kp)
     LB_lp, UB_lp = safe_bounds(rho_lp)
-
+    
     q_kl = scaler['k'] / scaler['l']
     q_kp = scaler['k'] / scaler['p']
     q_lp = scaler['l'] / scaler['p']
@@ -544,6 +544,9 @@ def gradnorm_clamp_scalers_for_progress_ema_safe(norm2, dot, scaler, eps=1e-12):
     q_kl_c = torch.clamp(q_kl, LB_kl, UB_kl)
     q_kp_c = torch.clamp(q_kp, LB_kp, UB_kp)
     q_lp_c = torch.clamp(q_lp, LB_lp, UB_lp)
+
+    print()
+    print(scaler, LB_kl, UB_kl, LB_kp, UB_kp, LB_lp, UB_lp, q_kl_c, q_kp_c, q_lp_c)
 
     # multiplicative consistency
     if not torch.allclose(q_lp_c, q_kl_c*q_kp_c, atol=1e-6):
@@ -1000,8 +1003,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             #w = gradnorm_clamp_scalers_for_progress(norm2_dict, dot_dict, scaler_dict, ema=(args.ema is not None))
             w = gradnorm_clamp_scalers_for_progress_ema_safe(norm2_dict, dot_dict, scaler_dict)
             normalized_scales = {k: w[v] for k,v in task_names_2_klp.items()} 
-            print()
-            print(normalized_scales)
         
         loss_keep_grad_scaler = normalized_scales['loss_keep'] if 'loss_keep' in normalized_scales else torch.tensor(1.0, dtype=torch.float, device=device)
         loss_grad_scaler      = normalized_scales['loss']      if 'loss'      in normalized_scales else torch.tensor(1.0, dtype=torch.float, device=device)
