@@ -266,7 +266,7 @@ class GradNormLossBalancer(nn.Module):
                 print("normed_weights:\t", np.array([normalized_weights[k].cpu().item() for k in self.task_names]))
                 print("gradnorm_loss:\t", gradnorm_loss.cpu().detach().numpy())
                 print(f"all_neg {all_negative.numpy()} all_pos {all_positive.numpy()} mixed {mixed}" +
-                      f" sgnfcnt_msk {np.array(significant_mask.tolist())} prsst_bad {persistent_bad.numpy()}")
+                      f" sgnfcnt_msk {np.array(significant_mask.tolist())} prsst_bad {persistent_bad}")
 
         return normalized_weights, gradnorm_loss, smoothed_rates
 
