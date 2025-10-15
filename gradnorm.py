@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
+import math
 import warnings
 import collections
 
@@ -168,8 +169,9 @@ class GradNormLossBalancer(nn.Module):
         gradnorm_loss  = self.Gscaler * (weighted_grad_norms - avgG_semi_detached * smoothed_rates)
         gradnorm_loss  = gradnorm_loss.abs() if self.gradnorm_loss_type == 'L1' else (gradnorm_loss ** 2)
         gradnorm_loss  = gradnorm_loss.mean()
-        gradnorm_loss += 5e-4 * (weights.sum() - len(self.task_names)).abs()
-
+        V = weights.sum()
+        gradnorm_loss += 5e-4 * (V.log() - math.log(len(self.task_names)))**2
+        
         # Step 6: Normalize task weights
         # SoftPlus is a smooth approximation to the ReLU function and can be used to constrain 
         # the output of a machine to always be positive.
