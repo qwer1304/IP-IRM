@@ -1038,13 +1038,13 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             gradnorm_loss.backward()
 
             # actual computed grads after backward:
-            if self.debug and 'gn' is in self.debug:
+            if self.debug and 'gn' in self.debug:
                 with np.printoptions(precision=6):
                     print("actual v.grad:\t", np.array([gradnorm_balancer.task_weights[k].grad.item() for k in gradnorm_balancer.task_names]))
 
             gradnorm_optimizer.step()
             
-            if self.debug and 'opt' is in self.debug:
+            if self.debug and 'opt' in self.debug:
                 print()
                 opt_ids = {id(p) for g in gradnorm_optimizer.param_groups for p in g['params']}
                 # 1) Does optimizer actually contain the exact Parameter objects?
