@@ -676,6 +676,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
 
     train_optimizer.zero_grad(set_to_none=True) # clear gradients at the beginning 
     k = 0 # number of consecutive batches r_mag is within bounds
+    gradnorm_balancer.rescale_weights()
 
     for batch_index, data_env in enumerate(train_bar):
 
