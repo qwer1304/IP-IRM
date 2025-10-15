@@ -6,7 +6,7 @@ import warnings
 import collections
 
 class GradNormLossBalancer(nn.Module):
-    def __init__(self, initial_weights, alpha=1.2, device='cpu', smoothing=False, tau=None, eps=1e-8, debug=False, 
+    def __init__(self, initial_weights, alpha=1.2, device='cpu', smoothing=False, tau=None, eps=1e-8, debug=None, 
                     beta=1.0, Gscaler=1.0, avgG_detach_frac=0.0, gradnorm_loss_type='L1', gradnorm_lr=1e-3):
         """
         Args:
@@ -251,7 +251,7 @@ class GradNormLossBalancer(nn.Module):
 
         self.batch_idx += 1
 
-        if self.debug:
+        if 'gn' in self.debug:
             with np.printoptions(precision=6):
                 # convert to numpy to use numpy's formatting options
                 print()

@@ -1038,13 +1038,13 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             gradnorm_loss.backward()
 
             # actual computed grads after backward:
-            if args.gradnorm_debug:
+            if 'gn' in args.gradnorm_debug:
                 with np.printoptions(precision=6):
                     print("actual v.grad:\t", np.array([gradnorm_balancer.task_weights[k].grad.item() for k in gradnorm_balancer.task_names]))
 
             gradnorm_optimizer.step()
             
-            if args.gradnorm_debug:
+            if 'opt' in args.gradnorm_debug:
                 print()
                 opt_ids = {id(p) for g in gradnorm_optimizer.param_groups for p in g['params']}
                 # 1) Does optimizer actually contain the exact Parameter objects?
@@ -1066,7 +1066,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 print("optimizer param counts:", [len(g['params']) for g in gradnorm_optimizer.param_groups])
             
            
-            lb = {'loss_keep': 0.05, 'loss': 0.05, 'penalty': 0.05} 
+            lb = {'loss_keep': 0.0,  'loss': 0.0,  'penalty': 0.0} 
             ub = {'loss_keep': 5.0,  'loss': 5.0,  'penalty': 5.0} 
             #gradnorm_balancer.clamp_weights(lb, ub)
 
@@ -1575,7 +1575,7 @@ if __name__ == '__main__':
                         action=utils.ParseMixed, types=[str, float, str, float, str, float],
                         metavar='tau dictionary k-v pairs',    
                         help='loss divisors')
-    parser.add_argument('--gradnorm_debug', action="store_true", help="debug gradnorm")
+    parser.add_argument('--gradnorm_debug', type=str, default=None, choices=['gn', 'opt'], nargs='*', help="debug gradnorm", metavar='gn, optimize')
     parser.add_argument('--gradnorm_Gscaler', default=1.0, type=float, help='gradnorm loss scaler')
     parser.add_argument('--gradnorm_beta', default=1.0, type=float, help='gradnorm softplus')
     parser.add_argument('--gradnorm_avgG_detach_frac', default=0.0, type=float, help='gradnorm avg detach fraction')
