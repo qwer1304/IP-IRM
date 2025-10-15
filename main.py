@@ -545,9 +545,6 @@ def gradnorm_clamp_scalers_for_progress_ema_safe(norm2, dot, scaler, eps=1e-12):
     q_kp_c = torch.clamp(q_kp, LB_kp, UB_kp)
     q_lp_c = torch.clamp(q_lp, LB_lp, UB_lp)
 
-    print()
-    print(scaler, LB_kl, UB_kl, LB_kp, UB_kp, LB_lp, UB_lp, q_kl_c, q_kp_c, q_lp_c)
-
     # multiplicative consistency
     if not torch.allclose(q_lp_c, q_kl_c*q_kp_c, atol=1e-6):
         q_lp_c = q_kl_c * q_kp_c
