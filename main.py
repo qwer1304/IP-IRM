@@ -1665,6 +1665,7 @@ if __name__ == '__main__':
     parser.add_argument('--gradnorm_loss_type', default='L1', type=str, choices=['L1', 'L2'], help='gradnorm loss type')
     parser.add_argument('--gradnorm_lr', default=1e-3, type=float, help='gradnorm LR')
     parser.add_argument('--gradnorm_loss_lambda', default=0., type=float, help='gradnorm loss regularizer strength')
+    parser.add_argument('--gradnorm_rescale_weights', action="store_true", help="rescale weights before starting")
 
     # args parse
     args = parser.parse_args()
@@ -1890,6 +1891,9 @@ if __name__ == '__main__':
 
     if not args.resume and os.path.exists(log_file):
         os.remove(log_file)            
+    
+    if args.gradnorm_rescale_weights:
+        gradnorm_balancer.rescale_weights()
     
     # update partition for the first time, if we need one
     if not args.baseline:
