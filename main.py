@@ -475,6 +475,8 @@ def gradnorm_clamp_scalers_for_progress(norm2_dict, dot_dict, scaler_dict, ema=F
             dot_dict[j+i] = dot_dict[i+j]
         return dot_dict
 
+    scaler_dict = {k: v.clone() for k,v in scaler_dict.items()}  # make a safe copy
+
     if ema:
         # enforce geometric consistency
         dot_dict = consistent_dots(dot_dict, norm2_dict)
@@ -1048,6 +1050,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         v_k                   = gradnorm_balancer.task_weights['loss_keep'].item()
         v_l                   = gradnorm_balancer.task_weights['loss'].item()
         v_p                   = gradnorm_balancer.task_weights['penalty'].item()
+        print()
+        print(f"{w_k:.6f}, {w_l:.6f}, {w_p:.6f}, {v_k:.6f}, {v_l:.6f}, {v_p:.6f}")
         
         gn_pm = 0
         for _, p in enumerate(gradnorm_balancer.parameters()):
