@@ -511,7 +511,7 @@ def gradnorm_clamp_scalers_for_progress(norm2_dict, dot_dict, scaler_dict, ema=F
     scaler_dict['k'], scaler_dict['l'], scaler_dict['p'] = normalize_weights(scaler_dict['k'], scaler_dict['l'], scaler_dict['p'])
     return  scaler_dict  
 
-def gradnorm_clamp_scalers_for_progress_ema_safe(norm2, dot, scaler, eps=1e-12):
+def gradnorm_clamp_scalers_for_progress_ema_safe(norm2, dot, scaler, eps=1e-12, do_print=False):
 
     def consistent_dots(dot_dict, norm2_dict, eps=1e-12):
         for (i,j) in [('k','l'), ('k','p'), ('l','p')]:
@@ -547,9 +547,10 @@ def gradnorm_clamp_scalers_for_progress_ema_safe(norm2, dot, scaler, eps=1e-12):
     q_kl_c = torch.clamp(q_kl, LB_kl, UB_kl)
     q_kp_c = torch.clamp(q_kp, LB_kp, UB_kp)
     q_lp_c = torch.clamp(q_lp, LB_lp, UB_lp)
-    print("q_kl", q_kl.item(), q_kl_c.item(), LB_kl.item(), UB_kl.item())
-    print("q_kp", q_kp.item(), q_kp_c.item(), LB_kp.item(), UB_kp.item())
-    print("q_lp", q_lp.item(), q_lp_c.item(), LB_lp.item(), UB_lp.item())
+    if do_print:
+        print("q_kl", q_kl.item(), q_kl_c.item(), LB_kl.item(), UB_kl.item())
+        print("q_kp", q_kp.item(), q_kp_c.item(), LB_kp.item(), UB_kp.item())
+        print("q_lp", q_lp.item(), q_lp_c.item(), LB_lp.item(), UB_lp.item())
 
     # multiplicative consistency
     #if not torch.allclose(q_lp_c, q_kl_c*q_kp_c, atol=1e-6):
@@ -1005,8 +1006,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             scaler_dict = {v: normalized_scales[k] for k,v in task_names_2_klp.items()}
             #print()
             #print('before scaler', [f"{k}: {v.item()}" for k,v in scaler_dict.items()])
-            w = gradnorm_clamp_scalers_for_progress(norm2_dict, dot_dict, scaler_dict, ema=(args.ema is not None))
-            #w = gradnorm_clamp_scalers_for_progress_ema_safe(norm2_dict, dot_dict, scaler_dict)
+            #w = gradnorm_clamp_scalers_for_progress(norm2_dict, dot_dict, scaler_dict, ema=(args.ema is not None))
+            w = gradnorm_clamp_scalers_for_progress_ema_safe(norm2_dict, dot_dict, scaler_dict, do_print=False)
             #print('after w', [f"{k}: {v.item()}" for k,v in w.items()])
             #normalized_scales = {k: w[v] for k,v in task_names_2_klp.items()} 
         
