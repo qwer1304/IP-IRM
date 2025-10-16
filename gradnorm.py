@@ -37,6 +37,9 @@ class GradNormLossBalancer(nn.Module):
         self.smoothing = smoothing
         self.device = device
         self.tau = self.set_tau(tau)
+        print()
+        print(self.tau, tau)
+        exit(1)
         self.eps = eps
         self.debug = debug
         self.beta = beta

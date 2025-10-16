@@ -1849,9 +1849,6 @@ if __name__ == '__main__':
                             gradnorm_loss_type=args.gradnorm_loss_type, gradnorm_lr=args.gradnorm_lr, 
                             gradnorm_loss_lambda=args.gradnorm_loss_lambda, huber_delta=args.gradnorm_huber_delta)
 
-    print()
-    print(gradnorm_balancer.tau, args.gradnorm_tau)
-    exit(1)
     if args.opt == "Adam":
         optimizer          = optim.Adam(model.parameters(),             lr=args.lr, weight_decay=args.weight_decay)
         gradnorm_optimizer = optim.Adam(gradnorm_balancer.parameters(), lr=args.gradnorm_lr, weight_decay=args.weight_decay)        
