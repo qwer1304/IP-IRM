@@ -22,6 +22,7 @@ class GradNormLossBalancer(nn.Module):
 
         # looks and behaves like a dict, but parameters are registered
 
+        # MUST be done in this way b/c nn.ParameterDict() reorders keys when done with dict comprehension!!!!!
         self.task_weights = nn.ParameterDict()
         for k, v in initial_weights.items():
             self.task_weights[k] = nn.Parameter(
@@ -29,8 +30,6 @@ class GradNormLossBalancer(nn.Module):
             )
 
         self.task_names = list(initial_weights.keys())
-        print()
-        print(self.task_weights.keys(), self.task_names)
         self.alpha = alpha
         self.initial_losses = {}
         self.running_loss_rates = {k: 1.0 for k in self.task_names}  # Initialized to 1.0
