@@ -182,7 +182,7 @@ class GradNormLossBalancer(nn.Module):
         # Step 6: Normalize task weights
         # SoftPlus is a smooth approximation to the ReLU function and can be used to constrain 
         # the output of a machine to always be positive.
-        task_weights = torch.stack([v for v in self.task_weights.values()])
+        task_weights = torch.stack([self.task_weights[k] for k in self.task_names])
         raw_weights = F.softplus(task_weights, beta=self.beta)
         weights_sum = raw_weights.sum()
         # normalized to sum to the number of tasks
