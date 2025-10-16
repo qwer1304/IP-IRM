@@ -520,6 +520,8 @@ def gradnorm_clamp_scalers_for_progress_ema_safe(norm2, dot, scaler, eps=1e-12):
             dot_dict[j+i] = dot_dict[i+j]
         return dot_dict
 
+    scaler = {k: v.clone() for k,v in scaler.items()}  # make a safe copy
+    
     # enforce geometric consistency - no need, calculated off cosines
     # dot = consistent_dots(dot, norm2)
 
