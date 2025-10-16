@@ -44,7 +44,7 @@ class GradNormLossBalancer(nn.Module):
         self.gradnorm_loss_type = gradnorm_loss_type
         self.gradnorm_lr = gradnorm_lr
         self.gradnorm_loss_lambda = gradnorm_loss_lambda
-        slef.huber_delta = huber_delta
+        self.huber_delta = huber_delta
         
         # --- persistent state for pathological state detection
         # --- configurable thresholds ---
