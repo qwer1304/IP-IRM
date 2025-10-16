@@ -998,11 +998,11 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             dot_dict    = {'kl': dot_lk, 'kp': dot_kp, 'lp': dot_lp}
             norm2_dict  = {'k':  ngk2,   'l':  ngl2,   'p':  ngp2}
             scaler_dict = {v: normalized_scales[k] for k,v in task_names_2_klp.items()}
-            #w = gradnorm_clamp_scalers_for_progress(norm2_dict, dot_dict, scaler_dict, ema=(args.ema is not None))
-            w = gradnorm_clamp_scalers_for_progress_ema_safe(norm2_dict, dot_dict, scaler_dict)
             print()
             print('before normalized', [f"{k},{v.item()}" for k,v in normalized_scales.items()])
             print('before scaler', [f"{k},{v.item()}" for k,v in scaler_dict.items()])
+            #w = gradnorm_clamp_scalers_for_progress(norm2_dict, dot_dict, scaler_dict, ema=(args.ema is not None))
+            w = gradnorm_clamp_scalers_for_progress_ema_safe(norm2_dict, dot_dict, scaler_dict)
             normalized_scales = {k: w[v] for k,v in task_names_2_klp.items()} 
             print('after w', [f"{k},{v.item()}" for k,v in w.items()])
             print('after normalized', [f"{k},{v.item()}" for k,v in normalized_scales.items()])
