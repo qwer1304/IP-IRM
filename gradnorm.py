@@ -248,6 +248,8 @@ class GradNormLossBalancer(nn.Module):
         else:
             persistent_bad = False
 
+        print()
+        print(len(self.gn_bad_buffer), self.window_size, count_bad, sum(self.gn_bad_buffer), persistent_bad)
         # --- mitigation (only once per cooldown) ---
         if persistent_bad:
             msg_bad = 'all-negative' if count_bad < 0 else 'all-positive'
@@ -289,7 +291,7 @@ class GradNormLossBalancer(nn.Module):
                 print(f"all_neg {all_negative.numpy()} all_pos {all_positive.numpy()} mixed {mixed}" +
                       f" sgnfcnt_msk {np.array(significant_mask.tolist())} prsst_bad {persistent_bad}")
                 if all_positive:
-                    print(f"eqlbrm/rnwy dtct:\t w {w} w_prev {w_prev} |w-w_p| {delta_w_norm} eq_metric {eq_metric}")
+                    print(f"eqlbrm/rnwy dtct: w {w} w_prev {w_prev} |w-w_p| {delta_w_norm} eq_metric {eq_metric}")
 
         return normalized_weights, gradnorm_loss, smoothed_rates
 
