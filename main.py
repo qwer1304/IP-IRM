@@ -1004,7 +1004,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             print('before normalized', [f"{k},{v.item()}" for k,v in normalized_scales.items()])
             print('before scaler', [f"{k},{v.item()}" for k,v in scaler_dict.items()])
             normalized_scales = {k: w[v] for k,v in task_names_2_klp.items()} 
-            print('after w', [f"{k},{v,item()}" for k,v in w.items()])
+            print('after w', [f"{k},{v.item()}" for k,v in w.items()])
             print('after normalized', [f"{k},{v.item()}" for k,v in normalized_scales.items()])
         
         loss_keep_grad_scaler = normalized_scales['loss_keep'] if 'loss_keep' in normalized_scales else torch.tensor(1.0, dtype=torch.float, device=device)
