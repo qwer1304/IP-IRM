@@ -22,6 +22,7 @@ import copy
 import traceback
 import sys
 import time
+import warnings
 
 def get_negative_mask(batch_size):
     negative_mask = torch.ones((batch_size, 2 * batch_size), dtype=bool)
@@ -1680,6 +1681,9 @@ if __name__ == '__main__':
     # seed
     utils.set_seed(args.seed)
 
+    # warnings
+    warnings.filterwarnings("always", category=UserWarning)
+    
     feature_dim, temperature, tau_plus, k = args.feature_dim, args.temperature, args.tau_plus, args.k
     epochs, debiased,  = args.epochs,  args.debiased
     dl_tr, dl_te, dl_u, dl_uo = args.dl_tr, args.dl_te, args.dl_u, args.dl_uo
