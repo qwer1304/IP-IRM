@@ -1001,7 +1001,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             #w = gradnorm_clamp_scalers_for_progress(norm2_dict, dot_dict, scaler_dict, ema=(args.ema is not None))
             w = gradnorm_clamp_scalers_for_progress_ema_safe(norm2_dict, dot_dict, scaler_dict)
             print()
-            print('before', normalized_scales)
+            print('before', normalized_scales, scaler_dict)
             normalized_scales = {k: w[v] for k,v in task_names_2_klp.items()} 
             print('after', w, normalized_scales)
         
