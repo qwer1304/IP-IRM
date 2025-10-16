@@ -187,12 +187,12 @@ class GradNormLossBalancer(nn.Module):
         weights_sum = raw_weights.sum()
         # normalized to sum to the number of tasks
         normed_weights = len(self.task_names) * raw_weights / weights_sum
-        print()
-        print(task_weights.tolist(), raw_weights.tolist(), weights_sum.item(), normed_weights.tolist())
         # DETACHED!
         normalized_weights = {k: normed_weights[i].detach().to(self.device) \
                 for i, k in enumerate(self.task_names)
         }
+        print()
+        print(task_weights.tolist(), raw_weights.tolist(), normed_weights.tolist(), normalized_weights)
         
         # Diagnostics / safeguard code against pathological misconfiguration / behavior
         small_eps = 1e-6
