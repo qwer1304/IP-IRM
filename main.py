@@ -532,7 +532,7 @@ def gradnorm_clamp_scalers_for_progress_ema_safe(norm2, dot, scaler, eps=1e-12):
 
     # safe clamping bounds (weakened to survive EMA noise)
     def safe_bounds(rho):
-        if rho <= 0: return 0.5, 2.0      # if anti-correlated or noisy
+        if rho <= 0: return torch.tensor(0.5, device=rho.device), torch.tensor(2.0, device=rho.device)      # if anti-correlated or noisy
         f = max(min(rho, 0.999), 1e-3)
         return f, 1/f
 
