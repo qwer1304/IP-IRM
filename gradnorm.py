@@ -22,12 +22,11 @@ class GradNormLossBalancer(nn.Module):
 
         # looks and behaves like a dict, but parameters are registered
 
-        self.task_weights = nn.ParameterDict({
-            k: nn.Parameter(
+        self.task_weights = nn.ParameterDict()
+        for k, v in initial_weights.items():
+            self.task_weights[k] = nn.Parameter(
                 torch.as_tensor(v, dtype=torch.float32, device=device).clone().detach().requires_grad_()
             )
-            for k, v in initial_weights.items()
-        })
 
         self.task_names = list(initial_weights.keys())
         print()
