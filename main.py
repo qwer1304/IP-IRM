@@ -1031,6 +1031,19 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             # magnitudes that happens at this step.
             utils.reset_optimizer(train_optimizer)
 
+        # get these before optimizer updates them
+        w_k                   = loss_keep_grad_scaler.item()
+        w_l                   = loss_grad_scaler.item()
+        w_p                   = penalty_grad_scaler.item()
+        v_k                   = gradnorm_balancer.task_weights['loss_keep'].item()
+        v_l                   = gradnorm_balancer.task_weights['loss'].item()
+        v_p                   = gradnorm_balancer.task_weights['penalty'].item()
+        
+        gn_pm = 0
+        for _, p in enumerate(gradnorm_balancer.parameters()):
+            if p.grad is not None:
+                gn_pm += p.grad.sign() 
+
         train_optimizer.step()
         train_optimizer.zero_grad(set_to_none=True)     # clear gradients at beginning of next gradients batch
         if do_gradnorm:
@@ -1145,12 +1158,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         ngk                   = ngk.item()
         ngl                   = ngl.item()
         ngp                   = ngp.item()
-        w_k                   = loss_keep_grad_scaler.item()
-        w_l                   = loss_grad_scaler.item()
-        w_p                   = penalty_grad_scaler.item()
-        v_k                   = gradnorm_balancer.task_weights['loss_keep'].item()
-        v_l                   = gradnorm_balancer.task_weights['loss'].item()
-        v_p                   = gradnorm_balancer.task_weights['penalty'].item()
         dot_lk                = dot_lk.item()               
         dot_lp                = dot_lp.item()
         dot_kp                = dot_kp.item()
@@ -1189,7 +1196,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                    f' dot: ll {ngl2:.2e} lk {dot_lk:.2e} lp {dot_lp:.2e} kk {ngk2:.2e} kp {dot_kp:.2e} pp {ngp2:.2e}' + \
                    f' w/v: k {w_k:.4f}/{v_k:.4f} l {w_l:.4f}/{v_l:.4f} p {w_p:.4f}/{v_p:.4f}' + \
                    f' decr: l {loss_decrease_cond:.2e} k {loss_keep_decrease_cond:.2e} p {penalty_decrease_cond:.2e}' + \
-                   f' gn_loss {gradnorm_loss:.4e} rates: {gradnorm_rates_str} Lp: cos {cos_Lp:.4f} delta {delta_Lp:.3e}'
+                   f' gn_loss {gradnorm_loss:.4e} rates: {gradnorm_rates_str} gn_gpm: {gn_pm} Lp: cos {cos_Lp:.4f} delta {delta_Lp:.3e}'
         desc_str += loss_module.get_debug_info_str()
         train_bar.set_description(desc_str)
 
@@ -1206,8 +1213,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                             .format(ngl2, dot_lk, dot_lp, ngk2, dot_kp, ngp2) +
                             ' rates {}'
                             .format(gradnorm_rates_str) + 
-                            ' decr l {:.2e} k {:.2e} p {:.2e} Lp cos {:4f} delta {:.3e}'
-                            .format(loss_decrease_cond, loss_keep_decrease_cond, penalty_decrease_cond, cos_Lp, delta_Lp),
+                            ' decr l {:.2e} k {:.2e} p {:.2e} gn_gpm {} Lp cos {:4f} delta {:.3e}'
+                            .format(loss_decrease_cond, loss_keep_decrease_cond, penalty_decrease_cond, gn_pm, cos_Lp, delta_Lp),
                             log_file=log_file)
                                         
         # Prepare for next iteration
