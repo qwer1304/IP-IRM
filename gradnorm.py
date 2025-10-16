@@ -29,7 +29,8 @@ class GradNormLossBalancer(nn.Module):
                 torch.as_tensor(v, dtype=torch.float32, device=device).clone().detach().requires_grad_()
             )
 
-        self.task_names = list(initial_weights.keys())
+        # get task names from parameters dict to ensure they're in the same order
+        self.task_names = list(self.task_weights.keys())
         self.alpha = alpha
         self.initial_losses = {}
         self.running_loss_rates = {k: 1.0 for k in self.task_names}  # Initialized to 1.0
@@ -173,7 +174,13 @@ class GradNormLossBalancer(nn.Module):
         Normalization is only applied after the update, when you want to use the weights to combine task losses in the forward pass.
         """
         gradnorm_loss  = weighted_grad_norms - avgG_semi_detached * smoothed_rates
-        gradnorm_loss  = gradnorm_loss.abs() if self.gradnorm_loss_type == 'L1' else (gradnorm_loss ** 2)
+        if self.gradnorm_loss_type == 'L1':
+            gradnorm_loss  = gradnorm_loss.abs() 
+        elif self.gradnorm_loss_type == 'L2':
+            gradnorm_loss = 1/2 * gradnorm_loss ** 2
+        elif self.gradnorm_loss_type == 'Huber':
+            delta = self.huber_delta
+            gradnorm_loss = torch.where(gradnorm_loss.abs() <= delta, 1/2*gradnorm_loss**2 / delta, delta*(gradnorm_loss.abs() - 1/2*delta))
         gradnorm_loss  = self.Gscaler * gradnorm_loss.mean()
         # leave this for now, but don't instantiate - gradnorm_loss_lambda = 0.
         V = weights.sum()
@@ -205,11 +212,11 @@ class GradNormLossBalancer(nn.Module):
         if self.gradnorm_loss_type == 'L1':
             s = r.sign()                             # s_i = sign(res_i)
             global_term = (s * rates).mean()         # (1/T) sum_i s_i * rho_i
-            expected_v_grad = self.Gscaler * 1.0 * g * (s - alpha*global_term) / T
+            expected_v_grad = self.Gscaler * g * (s - alpha*global_term) / T
 
         elif self.gradnorm_loss_type == 'L2':
             global_term = (r * rates).mean()         # (1/T) sum_j r_j * rate_j
-            expected_v_grad = self.Gscaler * 2.0 * g * (r - alpha*global_term) / T
+            expected_v_grad = self.Gscaler * g * (r - alpha*global_term) / T
 
         elif self.gradnorm_loss_type == 'Huber':
             # Parameters
@@ -219,7 +226,7 @@ class GradNormLossBalancer(nn.Module):
             # global term: (1/T) sum phi'(r_j) * rate_j
             global_term = (phi_prime * rates).mean()
             # expected v.grad (Huber)
-            expected_v_grad = self.Gscaler * 2.0 * g * (phi_prime - alpha*global_term) / T        
+            expected_v_grad = self.Gscaler * g * (phi_prime - alpha*global_term) / T        
         expected_v_grad = expected_v_grad.detach().cpu()
 
         #veights_ratios = veights / veights.sum()
