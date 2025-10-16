@@ -30,6 +30,8 @@ class GradNormLossBalancer(nn.Module):
         })
 
         self.task_names = list(initial_weights.keys())
+        print()
+        print(self.task_weights.keys(), self.task_names)
         self.alpha = alpha
         self.initial_losses = {}
         self.running_loss_rates = {k: 1.0 for k in self.task_names}  # Initialized to 1.0
