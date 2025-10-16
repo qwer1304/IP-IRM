@@ -347,12 +347,11 @@ class GradNormLossBalancer(nn.Module):
         self.tau = torch.tensor(tau, device=self.device, dtype=torch.float, requires_grad=False)
 
     def rescale_weights(self):
+        v = [v for v in self.task_weights.values()]
+        vsum = sum(v)
         for k, v in self.task_weights.items():
             v = v.detach().clone()
-            vsum = v.sum()
             v = v * len(self.task_weights) / (vsum + 1e-12)
-            print()
-            print(v, vsum, len(self.task_weights))
             if k in self.task_weights:
                 # in-place copy preserves object identity (optimizer still tracks it)
                 self.task_weights[k].data.copy_(v.to(self.task_weights[k].device))
