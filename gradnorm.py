@@ -8,7 +8,8 @@ import collections
 
 class GradNormLossBalancer(nn.Module):
     def __init__(self, initial_weights, alpha=1.2, device='cpu', smoothing=False, tau=None, eps=1e-8, debug=None, 
-                    beta=1.0, Gscaler=1.0, avgG_detach_frac=0.0, gradnorm_loss_type='L1', gradnorm_lr=1e-3, gradnorm_loss_lambda=5e-4):
+                    beta=1.0, Gscaler=1.0, avgG_detach_frac=0.0, gradnorm_loss_type='L1', gradnorm_lr=1e-3, 
+                    gradnorm_loss_lambda=5e-4, huber_delta=1e-2):
         """
         Args:
             initial_weights (dict): Initial task weights, e.g., {'cont': 1.0, 'keep_cont': 1.0, 'penalty': 1.0}
@@ -43,6 +44,7 @@ class GradNormLossBalancer(nn.Module):
         self.gradnorm_loss_type = gradnorm_loss_type
         self.gradnorm_lr = gradnorm_lr
         self.gradnorm_loss_lambda = gradnorm_loss_lambda
+        slef.huber_delta = huber_delta
         
         # --- persistent state for pathological state detection
         # --- configurable thresholds ---
@@ -186,6 +188,8 @@ class GradNormLossBalancer(nn.Module):
         # normalized to sum to the number of tasks
         normed_weights = len(self.task_names) * raw_weights / weights_sum
         # DETACHED!
+        print()
+        print([f"{i}: {k} {normed_weights[i].item()}" for i,k in enumerate(self.task_names)])  
         normalized_weights = {k: normed_weights[i].detach().to(self.device) \
                 for i, k in enumerate(self.task_names)
         }
@@ -197,15 +201,27 @@ class GradNormLossBalancer(nn.Module):
         g = grad_norms.detach()          # grad norms g_i
         avgG = avgG_semi_detached.detach()
         rates = smoothed_rates.detach()  
+        alpha = 1.0 - self.avgG_detach_frac
 
         r = (veights * g) - (avgG * rates)           # residuals r_i
         if self.gradnorm_loss_type == 'L1':
             s = r.sign()                             # s_i = sign(res_i)
             global_term = (s * rates).mean()         # (1/T) sum_i s_i * rho_i
-            expected_v_grad = self.Gscaler * 1.0 * g * (s - (1.0 - self.avgG_detach_frac) * global_term) / T
+            expected_v_grad = self.Gscaler * 1.0 * g * (s - alpha*global_term) / T
+
         elif self.gradnorm_loss_type == 'L2':
             global_term = (r * rates).mean()         # (1/T) sum_j r_j * rate_j
-            expected_v_grad = self.Gscaler * 2.0 * g * (r - (1.0 - self.avgG_detach_frac) * global_term) / T
+            expected_v_grad = self.Gscaler * 2.0 * g * (r - alpha*global_term) / T
+
+        elif self.gradnorm_loss_type == 'Huber':
+            # Parameters
+            delta = self.huber_delta
+            # Piecewise derivative phi'(r_i)
+            phi_prime = torch.where(r.abs() <= delta, r, delta * r.sign())
+            # global term: (1/T) sum phi'(r_j) * rate_j
+            global_term = (phi_prime * rates).mean()
+            # expected v.grad (Huber)
+            expected_v_grad = self.Gscaler * 2.0 * g * (phi_prime - alpha*global_term) / T        
         expected_v_grad = expected_v_grad.detach().cpu()
 
         #veights_ratios = veights / veights.sum()

@@ -1000,7 +1000,10 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             scaler_dict = {v: normalized_scales[k] for k,v in task_names_2_klp.items()}
             #w = gradnorm_clamp_scalers_for_progress(norm2_dict, dot_dict, scaler_dict, ema=(args.ema is not None))
             w = gradnorm_clamp_scalers_for_progress_ema_safe(norm2_dict, dot_dict, scaler_dict)
+            print()
+            print('before', normalized_scales)
             normalized_scales = {k: w[v] for k,v in task_names_2_klp.items()} 
+            print('after', normalized_scales)
         
         loss_keep_grad_scaler = normalized_scales['loss_keep'] if 'loss_keep' in normalized_scales else torch.tensor(1.0, dtype=torch.float, device=device)
         loss_grad_scaler      = normalized_scales['loss']      if 'loss'      in normalized_scales else torch.tensor(1.0, dtype=torch.float, device=device)
@@ -1662,10 +1665,11 @@ if __name__ == '__main__':
     parser.add_argument('--gradnorm_Gscaler', default=1.0, type=float, help='gradnorm loss scaler')
     parser.add_argument('--gradnorm_beta', default=1.0, type=float, help='gradnorm softplus')
     parser.add_argument('--gradnorm_avgG_detach_frac', default=0.0, type=float, help='gradnorm avg detach fraction')
-    parser.add_argument('--gradnorm_loss_type', default='L1', type=str, choices=['L1', 'L2'], help='gradnorm loss type')
+    parser.add_argument('--gradnorm_loss_type', default='L1', type=str, choices=['L1', 'L2', "Huber"], help='gradnorm loss type')
     parser.add_argument('--gradnorm_lr', default=1e-3, type=float, help='gradnorm LR')
     parser.add_argument('--gradnorm_loss_lambda', default=0., type=float, help='gradnorm loss regularizer strength')
     parser.add_argument('--gradnorm_rescale_weights', action="store_true", help="rescale weights before starting")
+    parser.add_argument('--gradnorm_huber_delta', default=1e-2, type=float, help='gradnorm Huber delta')
 
     # args parse
     args = parser.parse_args()
@@ -1836,7 +1840,8 @@ if __name__ == '__main__':
     gradnorm_balancer = gn.GradNormLossBalancer(initial_weights, alpha=args.gradnorm_alpha, device=device, smoothing=False, 
                             tau=args.gradnorm_tau, eps=1e-8, debug=args.gradnorm_debug, beta=args.gradnorm_beta, 
                             avgG_detach_frac=args.gradnorm_avgG_detach_frac, Gscaler=args.gradnorm_Gscaler, 
-                            gradnorm_loss_type=args.gradnorm_loss_type, gradnorm_lr=args.gradnorm_lr, gradnorm_loss_lambda=args.gradnorm_loss_lambda)
+                            gradnorm_loss_type=args.gradnorm_loss_type, gradnorm_lr=args.gradnorm_lr, 
+                            gradnorm_loss_lambda=args.gradnorm_loss_lambda, huber_delta=args.gradnorm_huber_delta)
 
     if args.opt == "Adam":
         optimizer          = optim.Adam(model.parameters(),             lr=args.lr, weight_decay=args.weight_decay)
