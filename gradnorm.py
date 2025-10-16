@@ -36,7 +36,10 @@ class GradNormLossBalancer(nn.Module):
         self.running_loss_rates = {k: 1.0 for k in self.task_names}  # Initialized to 1.0
         self.smoothing = smoothing
         self.device = device
-        self.tau = self.set_tau(tau)
+        self.set_tau(tau)
+        print()
+        print(self.tau, tau)
+        exit(1)
         self.eps = eps
         self.debug = debug
         self.beta = beta
@@ -361,15 +364,11 @@ class GradNormLossBalancer(nn.Module):
         return newly_registered
         
     def set_tau(self, tau):
-        print()
-        print(tau)
         if tau is None:
             tau = [1.0 for k in self.task_names]
         else:
-            tau = [tau[k] for k in self.task_names] 
+            tau = [tau[k] for k in self.task_names]            
         self.tau = torch.tensor(tau, device=self.device, dtype=torch.float, requires_grad=False)
-        print(tau, self.tau)
-        exit(1)
 
     def rescale_weights(self):
         v = [v for v in self.task_weights.values()]
