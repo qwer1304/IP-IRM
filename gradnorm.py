@@ -242,6 +242,8 @@ class GradNormLossBalancer(nn.Module):
         self.gn_bad_buffer.append(this_batch_bad)
 
         # determine if persistent pathology
+        count_bad = 0
+        persistent_bad = False
         if len(self.gn_bad_buffer) == self.window_size:
             count_bad = sum(self.gn_bad_buffer)
             persistent_bad = (abs(count_bad) >= self.required_count)
