@@ -37,8 +37,6 @@ class GradNormLossBalancer(nn.Module):
         self.smoothing = smoothing
         self.device = device
         self.set_tau(tau)
-        print()
-        print(self.tau, tau)
         exit(1)
         self.eps = eps
         self.debug = debug
@@ -369,6 +367,7 @@ class GradNormLossBalancer(nn.Module):
         else:
             tau = [tau[k] for k in self.task_names]            
         self.tau = torch.tensor(tau, device=self.device, dtype=torch.float, requires_grad=False)
+        return self.tau 
 
     def rescale_weights(self):
         v = [v for v in self.task_weights.values()]
