@@ -180,7 +180,11 @@ class GradNormLossBalancer(nn.Module):
             gradnorm_loss = 1/2 * gradnorm_loss ** 2
         elif self.gradnorm_loss_type == 'Huber':
             delta = self.huber_delta
-            gradnorm_loss = torch.where(gradnorm_loss.abs() <= delta, 1/2*gradnorm_loss**2 / delta, delta*(gradnorm_loss.abs() - 1/2*delta))
+            # Huber loss is continuous at |gradnorm_loss| = delta
+            gradnorm_loss = torch.where(gradnorm_loss.abs() <= delta, 
+                                        1/2*gradnorm_loss**2, 
+                                        delta*(gradnorm_loss.abs() - 1/2*delta)
+                                       )
         gradnorm_loss  = self.Gscaler * gradnorm_loss.mean()
         # leave this for now, but don't instantiate - gradnorm_loss_lambda = 0.
         V = weights.sum()
@@ -219,9 +223,9 @@ class GradNormLossBalancer(nn.Module):
             expected_v_grad = self.Gscaler * g * (r - alpha*global_term) / T
 
         elif self.gradnorm_loss_type == 'Huber':
-            # Parameters
+            # Parameters - delta is BEFORE multiplying by Gscaler
             delta = self.huber_delta
-            # Piecewise derivative phi'(r_i)
+            # Piecewise derivative phi'(r_i; delta). phi(r_i; delta) is Huber loss
             phi_prime = torch.where(r.abs() <= delta, r, delta * r.sign())
             # global term: (1/T) sum phi'(r_j) * rate_j
             global_term = (phi_prime * rates).mean()
