@@ -1059,6 +1059,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         if do_gradnorm:
             gradnorm_optimizer.zero_grad(set_to_none=True)  # clear gradients
             gradnorm_loss.backward()
+            gradnorm_loss.remove_common_mode_hook()         # remove common-mode from grads
 
             # actual computed grads after backward:
             if args.gradnorm_debug and 'gn' in args.gradnorm_debug:
