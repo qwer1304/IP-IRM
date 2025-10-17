@@ -29,6 +29,13 @@ class GradNormLossBalancer(nn.Module):
                 torch.as_tensor(v, dtype=torch.float32, device=device).clone().detach().requires_grad_()
             )
 
+        def zero_mean_grad_hook(grad):
+            return grad - grad.mean()
+
+        # Register a hook to remove common-mode gradient from gradients to make them differential
+        for p in self.task_weights.values():
+            p.register_hook(zero_mean_grad_hook)
+
         # get task names from parameters dict to ensure they match the order of parameters
         self.task_names = list(self.task_weights.keys())
         self.alpha = alpha
