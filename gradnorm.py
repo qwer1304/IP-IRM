@@ -7,6 +7,9 @@ import warnings
 import collections
 
 class GradNormLossBalancer(nn.Module):
+    def zero_mean_grad_hook(grad):
+        return grad - grad.mean()
+
     def __init__(self, initial_weights, alpha=1.2, device='cpu', smoothing=False, tau=None, eps=1e-8, debug=None, 
                     beta=1.0, Gscaler=1.0, avgG_detach_frac=0.0, gradnorm_loss_type='L1', gradnorm_lr=1e-3, 
                     gradnorm_loss_lambda=5e-4, huber_delta=1e-2):
@@ -29,12 +32,9 @@ class GradNormLossBalancer(nn.Module):
                 torch.as_tensor(v, dtype=torch.float32, device=device).clone().detach().requires_grad_()
             )
 
-        def zero_mean_grad_hook(grad):
-            return grad - grad.mean()
-
         # Register a hook to remove common-mode gradient from gradients to make them differential
         for p in self.task_weights.values():
-            p.register_hook(zero_mean_grad_hook)
+            p.register_hook(self.zero_mean_grad_hook)
 
         # get task names from parameters dict to ensure they match the order of parameters
         self.task_names = list(self.task_weights.keys())
@@ -238,6 +238,7 @@ class GradNormLossBalancer(nn.Module):
             global_term = (phi_prime * rates).mean()
             # expected v.grad (Huber)
             expected_v_grad = self.Gscaler * g * (phi_prime - alpha*global_term) / T        
+        expected_v_grad = self.zero_mean_grad_hook(expected_v_grad) # remove common-mode
         expected_v_grad = expected_v_grad.detach().cpu()
 
         #veights_ratios = veights / veights.sum()
