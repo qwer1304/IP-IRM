@@ -12,7 +12,7 @@ class GradNormLossBalancer(nn.Module):
                     gradnorm_loss_lambda=5e-4, huber_delta=1e-2):
         """
         Args:
-            initial_weights (dict): Initial task weights, e.g., {'cont': 1.0, 'keep_cont': 1.0, 'penalty': 1.0}
+            initial_weights (dict): Initial task weights, e.g., {'loss': 1.0, 'loss_keep': 1.0, 'penalty': 1.0}
             alpha (float): Moving average smoothing factor for task loss rates.
             smoothing (bool): False - original rates, True - moving average w/ alpha
             tau (dict): loss rates divisors, lower value -> weight increases
@@ -29,7 +29,7 @@ class GradNormLossBalancer(nn.Module):
                 torch.as_tensor(v, dtype=torch.float32, device=device).clone().detach().requires_grad_()
             )
 
-        # get task names from parameters dict to ensure they're in the same order
+        # get task names from parameters dict to ensure they match the order of parameters
         self.task_names = list(self.task_weights.keys())
         self.alpha = alpha
         self.initial_losses = {}
@@ -298,7 +298,7 @@ class GradNormLossBalancer(nn.Module):
         self.batch_idx += 1
 
         if self.debug and 'gn' in self.debug:
-            with np.printoptions(precision=6):
+            with np.printoptions(precision=8):
                 # convert to numpy to use numpy's formatting options
                 print()
                 print("tasks:\t\t", self.task_names)
