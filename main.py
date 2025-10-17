@@ -1677,6 +1677,8 @@ if __name__ == '__main__':
     parser.add_argument('--gradnorm_avgG_detach_frac', default=0.0, type=float, help='gradnorm avg detach fraction')
     parser.add_argument('--gradnorm_loss_type', default='L1', type=str, choices=['L1', 'L2', "Huber"], help='gradnorm loss type')
     parser.add_argument('--gradnorm_lr', default=1e-3, type=float, help='gradnorm LR')
+    parser.add_argument('--gradnorm_betas', default=[0.9, 0.999], type=float, nargs=2, help='gradnorm Adam betas')
+    parser.add_argument('--gradnorm_weight_decay', default=1e-6, type=float, help='weight decay')
     parser.add_argument('--gradnorm_loss_lambda', default=0., type=float, help='gradnorm loss regularizer strength')
     parser.add_argument('--gradnorm_rescale_weights', action="store_true", help="rescale weights before starting")
     parser.add_argument('--gradnorm_huber_delta', default=1e-2, type=float, help='gradnorm Huber delta')
@@ -1850,12 +1852,12 @@ if __name__ == '__main__':
     gradnorm_balancer = gn.GradNormLossBalancer(initial_weights, alpha=args.gradnorm_alpha, device=device, smoothing=False, 
                             tau=args.gradnorm_tau, eps=1e-8, debug=args.gradnorm_debug, beta=args.gradnorm_beta, 
                             avgG_detach_frac=args.gradnorm_avgG_detach_frac, Gscaler=args.gradnorm_Gscaler, 
-                            gradnorm_loss_type=args.gradnorm_loss_type, gradnorm_lr=args.gradnorm_lr, 
+                            gradnorm_loss_type=args.gradnorm_loss_type, 
                             gradnorm_loss_lambda=args.gradnorm_loss_lambda, huber_delta=args.gradnorm_huber_delta)
 
     if args.opt == "Adam":
         optimizer          = optim.Adam(model.parameters(),             lr=args.lr, weight_decay=args.weight_decay)
-        gradnorm_optimizer = optim.Adam(gradnorm_balancer.parameters(), lr=args.gradnorm_lr, weight_decay=args.weight_decay)        
+        gradnorm_optimizer = optim.Adam(gradnorm_balancer.parameters(), lr=args.gradnorm_lr, weight_decay=args.gradnorm_weight_decay, betas=args.gradnorm_betas)        
     elif args.opt == 'SGD':
         optimizer          = optim.SGD(model.parameters(),             lr=args.lr, weight_decay=args.weight_decay, momentum=args.SGD_momentum)
         gradnorm_optimizer = optim.SGD(gradnorm_balancer.parameters(), lr=args.gradnorm_lr, weight_decay=args.weight_decay, momentum=args.SGD_momentum)
