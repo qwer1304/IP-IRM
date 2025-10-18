@@ -1694,12 +1694,12 @@ if __name__ == '__main__':
 
     parser.add_argument('--clamp_weights_for_progress', action="store_true", help="clamp loss' weights for progress")
     parser.add_argument('--penalty_grad_project', type=float, nargs=2, default=None, help="project penalty grad for orthogonality", metavar="[tau_low, tau_high]")
-    assert not (args.clamp_weights_for_progress and (args.penalty_grad_project is not None)), "Using weight clamping and projection is mutually exclusive"
     
     # args parse
     args = parser.parse_args()
     args.gradnorm_tau = {args.gradnorm_tau[i]: args.gradnorm_tau[i+1] for i in range(0,len(args.gradnorm_tau),2)} if args.gradnorm_tau is not None else None
     args.gradnorm_scalers = {args.gradnorm_scalers[i]: args.gradnorm_scalers[i+1] for i in range(0,len(args.gradnorm_scalers),2)} if args.gradnorm_scalers is not None else None
+    assert not (args.clamp_weights_for_progress and (args.penalty_grad_project is not None)), "Using weight clamping and projection is mutually exclusive"
     
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
