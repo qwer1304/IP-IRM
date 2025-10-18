@@ -846,11 +846,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                 grads = grads.detach().view(-1)
                                 penalty_grads[_j][j,partition_num,env] += grads
                 # end if not args.baseline:
-                print()
-                print(14,penalty_grads[14][0,0,0].norm())
-                print(14,penalty_grads[14][0,0,1].norm())
-                print(14,penalty_grads[14][1,0,0].norm())
-                print(14,penalty_grads[14][1,0,1].norm())
                 loss_module.post_micro_batch()
                 loss_module.prepare_for_free()
                 
@@ -900,6 +895,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             loss_grads_final = [torch.tensor(0., dtype=torch.float, device=device)] * len(loss_grads)
             loss_grad_norm_weighted = torch.tensor(0., dtype=torch.float, device=device)
 
+        print()
         if do_penalty:
             penalty_grads_final = []
             penalty_env = penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz) # normalized per env for macro-batch, unweighted
@@ -911,7 +907,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                         dPenalty_dTheta_env, 
                         pen, 
                         halves_sz,
-                    )  
+                    ) 
+                if (pind==13) or (pind==14)
+                    print(pind, total_grad_flat.norm())
                 penalty_grads_final.append(total_grad_flat.detach().clone())
             p_grads_flat_weighted = torch.cat([g.detach().clone() for g in penalty_grads_final if g is not None]) * penalty_weight 
             penalty_grad_norm_weighted = p_grads_flat_weighted.norm()
