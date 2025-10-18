@@ -916,9 +916,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         cos_Lp     = torch.tensor(0., dtype=torch.float, device=device)
         alpha      = torch.tensor(0., dtype=torch.float, device=device)
         delta_Lp   = torch.tensor(0., dtype=torch.float, device=device)
-        print()
-        print(do_penalty, args.penalty_grad_project)
-        exit(1)
         if do_penalty and (args.penalty_grad_project is not None):
             L_grads_flat_weighted = l_keep_grads_flat_weighted + l_grads_flat_weighted
             cos_Lp   = F.cosine_similarity(L_grads_flat_weighted, p_grads_flat_weighted, dim=0)
