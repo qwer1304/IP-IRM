@@ -915,9 +915,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             penalty_grads_final = [torch.tensor(0., dtype=torch.float, device=device)] * len(penalty_grads)
             penalty_grad_norm_weighted = torch.tensor(0., dtype=torch.float, device=device)
             
-        print()
-        print(12, penalty_grads_final[12], 13, penalty_grads_final[13])
-
         # rotate penalty gradient if it's orthogonal enough to losses' gradients
         cos_Lp     = torch.tensor(0., dtype=torch.float, device=device)
         alpha      = torch.tensor(0., dtype=torch.float, device=device)
@@ -944,6 +941,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             print(f'{cos_Lp.item():.4f}', f'{alpha:.4f}', dot_Lp, f'{p_grads_flat_weighted.norm().item():.4f}') 
             """
         
+        print()
+        print(12, penalty_grads_final[12], 13, penalty_grads_final[13])
+
         # Compute dot products & cosines
         delta_lk = l_grads_flat_weighted.dot(l_keep_grads_flat_weighted)       
         delta_lp = l_grads_flat_weighted.dot(p_grads_flat_weighted)
