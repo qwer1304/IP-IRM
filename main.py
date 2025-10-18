@@ -861,9 +861,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             torch.cuda.empty_cache()
         # end for j in range(idxs):
         torch.cuda.empty_cache()
-        print()
-        print(13,penalty_grads[13].norm(),14,penalty_grads[14].norm())
-        exit(1)
 
         trained_samples += this_batch_size # total number of samples processed so far
 
@@ -903,6 +900,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             penalty_grads_final = []
             penalty_env = penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz) # normalized per env for macro-batch, unweighted
             for pind in range(len(penalty_grads)):
+                print(pind, penalty_grads[pind].norm())
                 dPenalty_dTheta_env = penalty_grads[pind]  # per env sum of dPenalty/dTheta over macro-batch per parameter, unweighted, shape (I,J,K,param_numel)
                 pen = penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz, keep_halves=True)
                 total_grad_flat     = \
