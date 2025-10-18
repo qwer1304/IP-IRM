@@ -832,7 +832,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                     continue
                                 grads = grads.detach().view(-1)
                                 loss_grads[_j][j,partition_num,env] += grads
-                                print("1", _j, linear_idx, grads)
+                                print("1", _j, linear_idx, grads.size())
                             linear_idx += num_partitions * args.env_num # prepare for penalty grads
                         # penalty
                         if do_penalty:
@@ -845,7 +845,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                     continue
                                 grads = grads.detach().view(-1)
                                 penalty_grads[_j][j,partition_num,env] += grads
-                                print("1", _j, linear_idx, grads)
+                                print("2", _j, linear_idx, grads.size())
                 # end if not args.baseline:
                 loss_module.post_micro_batch()
                 loss_module.prepare_for_free()
