@@ -795,7 +795,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 grads_all = torch.autograd.grad(
                     differentiate_this,
                     tuple(net.parameters()),
-                    retain_graph=False,  # no need to keep graph for next loss
+                    create_graph=True,
+                    retain_graph=True,  # no need to keep graph for next loss
                     allow_unused=True,
                     grad_outputs=grad_outputs, 
                     is_grads_batched=True
