@@ -847,14 +847,14 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                 penalty_grads[_j][j,partition_num,env] += grads
                 # end if not args.baseline:
                 print()
-                print(14,penalty_grads[14][0,0,0].norm()
-                print(14,penalty_grads[14][0,0,1].norm()
-                print(14,penalty_grads[14][0,1,0].norm()
-                print(14,penalty_grads[14][0,1,1].norm()
-                print(14,penalty_grads[14][1,0,0].norm()
-                print(14,penalty_grads[14][1,0,1].norm()
-                print(14,penalty_grads[14][1,1,0].norm()
-                print(14,penalty_grads[14][1,1,1].norm()
+                print(14,penalty_grads[14][0,0,0].norm())
+                print(14,penalty_grads[14][0,0,1].norm())
+                print(14,penalty_grads[14][0,1,0].norm())
+                print(14,penalty_grads[14][0,1,1].norm())
+                print(14,penalty_grads[14][1,0,0].norm())
+                print(14,penalty_grads[14][1,0,1].norm())
+                print(14,penalty_grads[14][1,1,0].norm())
+                print(14,penalty_grads[14][1,1,1].norm())
                 loss_module.post_micro_batch()
                 loss_module.prepare_for_free()
                 
