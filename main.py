@@ -923,9 +923,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 tau_low, tau_high = args.penalty_grad_project
                 alpha = torch.clip((cos_Lp.abs() - tau_low) / (tau_high - tau_low), 0, 1)
                 if alpha > 0.:
-                    delta_Lp = L_grads_flat_weighted.dot(p_grads_flat_weighted)
+                    dot_Lp = L_grads_flat_weighted.dot(p_grads_flat_weighted)
                     nL = L_grads_flat_weighted.norm()
-                    proj = (delta_Lp / (nL * nL + 1e-12)) * L_grads_flat_weighted
+                    proj = (dot_Lp / (nL * nL + 1e-12)) * L_grads_flat_weighted
                     g_p_rot = p_grads_flat_weighted - alpha * proj
                     g_p_rot = g_p_rot * (penalty_grad_norm_weighted / (g_p_rot.norm() + 1e-12))
                     p_grads_flat_weighted = g_p_rot 
@@ -935,7 +935,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
 
             """
             print()
-            print(f'{cos_Lp.item():.4f}', f'{alpha:.4f}', delta_Lp, f'{p_grads_flat_weighted.norm().item():.4f}') 
+            print(f'{cos_Lp.item():.4f}', f'{alpha:.4f}', dot_Lp, f'{p_grads_flat_weighted.norm().item():.4f}') 
             """
         
         # Compute dot products & cosines
@@ -965,7 +965,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             dot_lp = ngl * ngp * cos_lp
             dot_kp = ngk * ngp * cos_kp
         else:
-            ngk = loss_keep_grad_norm_weighted
+            ngk      = loss_keep_grad_norm_weighted
             ngl      = loss_grad_norm_weighted
             ngp      = penalty_grad_norm_weighted
             dot_lk   = delta_lk
@@ -1026,15 +1026,27 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         penalty_weighted   *= penalty_grad_scaler 
         """
 
-        for pind, p in enumerate(net.parameters()):
+        for pind, p in enumerate(net.parameters()):        
             total_grad_flat_weighted = (  loss_keep_grads_final[pind] * loss_keep_weight * loss_keep_grad_scaler
                                         + loss_grads_final[pind]      * loss_weight      * loss_grad_scaler
                                         + penalty_grads_final[pind]   * penalty_weight   * penalty_grad_scaler
                                        )
+
+            g_L = loss_grads_final[pind]      * loss_weight      * loss_grad_scaler
+            g_P = penalty_grads_final[pind]   * penalty_weight   * penalty_grad_scaler
+            g_t = total_grad_flat_weighted
+            cos_LP = F.cosine_similarity(g_L, g_P, dim=0)
+            cos_tL = F.cosine_similarity(g_t, g_L, dim=0)
+            cos_tP = F.cosine_similarity(g_t, g_P, dim=0)
+            dominance = cos_tL - cos_tP  # >0 => loss-dominated; <0 => penalty-dominated
+
+            print()
+            print(f"cos(L,P)={cos_LP.item():.8f}, cos(total,L)={cos_tL.item():.8f}, cos(total,P)={cos_tP.item():.8f}, dominance {dominance:.2f}")
+
             if p.grad is None:
                 p.grad  = total_grad_flat_weighted.view(p.shape)
             else:
-                p.grad += total_grad_flat_weighted.view(p.shape)                
+                p.grad += total_grad_flat_weighted.view(p.shape)
         
         # -----------------------
         # Step 3: optimizer step
@@ -1184,7 +1196,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         ngl2                  = ngl2.item()
         ngp2                  = ngp2.item()
         cos_Lp                = cos_Lp.item()
-        delta_Lp              = delta_Lp.item()
+        dot_Lp                = dot_Lp.item()
 
         # True loss reflecting progress does NOT include balancing scalers
         loss_batch_weighted = (loss_keep_weighted + # loss_keep_aggregator is a scalar normalized over macro-batch
@@ -1213,7 +1225,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                    f' dot: ll {ngl2:.2e} lk {dot_lk:.2e} lp {dot_lp:.2e} kk {ngk2:.2e} kp {dot_kp:.2e} pp {ngp2:.2e}' + \
                    f' w/v: k {w_k:.4f}/{v_k:.4f} l {w_l:.4f}/{v_l:.4f} p {w_p:.4f}/{v_p:.4f}' + \
                    f' decr: l {loss_decrease_cond:.2e} k {loss_keep_decrease_cond:.2e} p {penalty_decrease_cond:.2e}' + \
-                   f' gn_loss {gradnorm_loss:.4e} rates: {gradnorm_rates_str} gn_gpm: {gn_pm} Lp: cos {cos_Lp:.4f} delta {delta_Lp:.3e}'
+                   f' gn_loss {gradnorm_loss:.4e} rates: {gradnorm_rates_str} gn_gpm: {gn_pm} Lp: cos {cos_Lp:.4f} delta {dot_Lp:.3e}'
         desc_str += loss_module.get_debug_info_str()
         train_bar.set_description(desc_str)
 
@@ -1231,7 +1243,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                             ' rates {}'
                             .format(gradnorm_rates_str) + 
                             ' decr l {:.2e} k {:.2e} p {:.2e} gn_gpm {} Lp cos {:4f} delta {:.3e}'
-                            .format(loss_decrease_cond, loss_keep_decrease_cond, penalty_decrease_cond, gn_pm, cos_Lp, delta_Lp),
+                            .format(loss_decrease_cond, loss_keep_decrease_cond, penalty_decrease_cond, gn_pm, cos_Lp, dot_Lp),
                             log_file=log_file)
                                         
         # Prepare for next iteration
