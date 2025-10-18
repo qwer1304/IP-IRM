@@ -941,9 +941,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             print(f'{cos_Lp.item():.4f}', f'{alpha:.4f}', dot_Lp, f'{p_grads_flat_weighted.norm().item():.4f}') 
             """
         
-        print()
-        print(12, penalty_grads_final[12], 13, penalty_grads_final[13])
-
         # Compute dot products & cosines
         delta_lk = l_grads_flat_weighted.dot(l_keep_grads_flat_weighted)       
         delta_lp = l_grads_flat_weighted.dot(p_grads_flat_weighted)
@@ -1041,6 +1038,10 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
 
             g_L = loss_grads_final[pind]      * loss_weight      * loss_grad_scaler
             g_P = penalty_grads_final[pind]   * penalty_weight   * penalty_grad_scaler
+
+            print(12, penalty_grads_final[12], g_P)
+            print(13, penalty_grads_final[13], g_P)
+
             g_t = total_grad_flat_weighted
             cos_LP = F.cosine_similarity(g_L, g_P, dim=0)
             cos_tL = F.cosine_similarity(g_t, g_L, dim=0)
