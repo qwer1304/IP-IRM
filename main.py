@@ -1011,14 +1011,14 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             # this can CHANGE the relative rank of the weights!!! Let's not do this for the time being
             #normalized_scales = {k: w[v] for k,v in task_names_2_klp.items()} 
         
-        loss_keep_grad_scaler = normalized_scales['loss_keep'] if 'loss_keep' in normalized_scales \
+        loss_keep_grad_scaler = normalized_scales['loss_keep'] if do_gradnorm \
                                                                else torch.tensor(args.gradnorm_scalers['loss_keep'], dtype=torch.float, device=device)
-        loss_grad_scaler      = normalized_scales['loss']      if 'loss'      in normalized_scales \
+        loss_grad_scaler      = normalized_scales['loss']      if do_gradnorm \
                                                                else torch.tensor(args.gradnorm_scalers['loss'], dtype=torch.float, device=device)
-        penalty_grad_scaler   = normalized_scales['penalty']   if 'penalty'   in normalized_scales \
+        penalty_grad_scaler   = normalized_scales['penalty']   if do_gradnorm \
                                                                else torch.tensor(args.gradnorm_scalers['penalty'], dtype=torch.float, device=device)
         print()
-        print(normalized_scales, args.gradnorm_scalers, loss_keep_grad_scaler, loss_grad_scaler, penalty_grad_scaler)
+        print(do_gradnorm, args.gradnorm, normalized_scales, args.gradnorm_scalers, loss_keep_grad_scaler, loss_grad_scaler, penalty_grad_scaler)
         exit(1)
                         
         """
