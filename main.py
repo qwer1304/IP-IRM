@@ -835,7 +835,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                 loss_grads[_j][j,partition_num,env] += grads
                             linear_idx += num_partitions * args.env_num # prepare for penalty grads
                         # penalty
-                        print()
                         if do_penalty:
                             # flatten and accumulate per parameter
                             for _j, g in enumerate(grads_all):
@@ -846,7 +845,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                     continue
                                 grads = grads.detach().view(-1)
                                 penalty_grads[_j][j,partition_num,env] += grads
-                                print(_j, penalty_grads[_j][j,partition_num,env].norm())
                 # end if not args.baseline:
                 loss_module.post_micro_batch()
                 loss_module.prepare_for_free()
@@ -863,7 +861,12 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             torch.cuda.empty_cache()
         # end for j in range(idxs):
         torch.cuda.empty_cache()
-
+        print()
+        for pind in range(len(penalty_grads)):
+            print(penalty_grads[pind][0,0,0].norm())
+            print(penalty_grads[pind][0,0,1].norm())
+            print(penalty_grads[pind][1,0,0].norm())
+            print(penalty_grads[pind][1,0,1].norm())
         trained_samples += this_batch_size # total number of samples processed so far
 
         gradients_accumulation_step += 1
