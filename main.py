@@ -234,6 +234,7 @@ class IRMCalculator(BaseCalculator):
                  * penalties[j, ..., None]
                  / num_env 
                 ).sum(dim=(0,1)) / num_partitions  # shape (param_numel,)
+            print("x", x)
             if i == 0:
                 total_grad_flat = x
             else:
@@ -897,7 +898,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             print()
             penalty_grads_final = []
             penalty_env = penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz) # normalized per env for macro-batch, unweighted
-            print("penalty_env", penalty_env.size(), penalty_env)
             for pind in range(len(penalty_grads)):
                 dPenalty_dTheta_env = penalty_grads[pind]  # per env sum of dPenalty/dTheta over macro-batch per parameter, unweighted, shape (I,J,K,param_numel)
                 pen = penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz, keep_halves=True)
