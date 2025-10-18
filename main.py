@@ -124,7 +124,7 @@ class BaseCalculator:
     def penalty_finalize(self, grads, szs):
         raise NotImplementedError
 
-    def penalty_grads_finalize(self, grads, penalties, szs):
+    def penalty_grads_finalize(self, grads, penalties, szs, **kwargs):
         raise NotImplementedError
 
     @staticmethod
@@ -150,7 +150,7 @@ class VRExCalculator(BaseCalculator):
         
         return ((penalties / szs - mu)**2) # normalized per env for macro-batch, (1, num_partitions, num_envs)
 
-    def penalty_grads_finalize(self, grads, penalties, szs):
+    def penalty_grads_finalize(self, grads, penalties, szs, **kwargs):
         """
         Given dPenalty/dTheta, Penalty per half, per env and their sizes calculate the combined gradient.
         dV/dTheta = 2/E*sum_e((Loss_e - mu) * grad_e), where mu = 1/E*sum_e(Loss_e) 
@@ -216,7 +216,7 @@ class IRMCalculator(BaseCalculator):
             penalties[1] /= szs[1]
             return penalties
 
-    def penalty_grads_finalize(self, grads, penalties, szs):
+    def penalty_grads_finalize(self, grads, penalties, szs, debug=False, **kwargs):
         """
         Given dPenalty/dTheta, Penalty per half, per env and their sizes calculate the combined gradient.
             grads:      dPenalty/dTheta per half, per env, unnormalized, unweighted
@@ -234,12 +234,13 @@ class IRMCalculator(BaseCalculator):
                  * penalties[j, ..., None]
                  / num_env 
                 ).sum(dim=(0,1)) / num_partitions  # shape (param_numel,)
-            print("x", x)
             if i == 0:
                 total_grad_flat = x
             else:
                 total_grad_flat += x
 
+        if debug:
+            print("total_grad_flat", total_grad_flat)
         return total_grad_flat
 
     @staticmethod
@@ -907,7 +908,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                     penalty_calculator.penalty_grads_finalize(
                         dPenalty_dTheta_env, 
                         pen, 
-                        halves_sz
+                        halves_sz,
+                        debug=(pind == 12) or (pind == 13)
                     )  
                 penalty_grads_final.append(total_grad_flat.detach().clone())
             p_grads_flat_weighted = torch.cat([g.detach().clone() for g in penalty_grads_final if g is not None]) * penalty_weight    
