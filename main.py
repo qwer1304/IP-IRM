@@ -821,7 +821,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                         partition_num, env = _split // args.env_num, _split % args.env_num 
                         linear_idx = _split
                         if do_loss:
-                            print("1", _split, partition_num, env, linear_idx)
                             # flatten and accumulate per parameter
                             # 'grads_all' is a tuple w/ an entry per parameter.
                             # each entry is a tensor w/ 1st dim = 'grad_outputs.size(0)' and other dims matching the parameter
@@ -833,10 +832,10 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                     continue
                                 grads = grads.detach().view(-1)
                                 loss_grads[_j][j,partition_num,env] += grads
+                                print("1", _j, linear_idx, grads)
                             linear_idx += num_partitions * args.env_num # prepare for penalty grads
                         # penalty
                         if do_penalty:
-                            print("2", _split, partition_num, env, linear_idx)
                             # flatten and accumulate per parameter
                             for _j, g in enumerate(grads_all):
                                 if g is None:
@@ -846,6 +845,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                     continue
                                 grads = grads.detach().view(-1)
                                 penalty_grads[_j][j,partition_num,env] += grads
+                                print("1", _j, linear_idx, grads)
                 # end if not args.baseline:
                 loss_module.post_micro_batch()
                 loss_module.prepare_for_free()
