@@ -730,9 +730,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                     penalties_samples = penalty_calculator.penalty(losses_samples, reduction='none')
                     differentiate_this.append(penalties_samples)
                     print()
-                    print(losses_samples)
-                    print(penalties_samples)
-                    exit(1)
+                    print(j,i,losses_samples)
+                    print(j,i,penalties_samples)
 
                 if do_loss or do_penalty:
                     for partition_num, partition in enumerate(partitions):
