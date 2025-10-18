@@ -1011,9 +1011,12 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             # this can CHANGE the relative rank of the weights!!! Let's not do this for the time being
             #normalized_scales = {k: w[v] for k,v in task_names_2_klp.items()} 
         
-        loss_keep_grad_scaler = normalized_scales['loss_keep'] if 'loss_keep' in normalized_scales else torch.tensor(1.0, dtype=torch.float, device=device)
-        loss_grad_scaler      = normalized_scales['loss']      if 'loss'      in normalized_scales else torch.tensor(1.0, dtype=torch.float, device=device)
-        penalty_grad_scaler   = normalized_scales['penalty']   if 'penalty'   in normalized_scales else torch.tensor(1.0, dtype=torch.float, device=device)
+        loss_keep_grad_scaler = normalized_scales['loss_keep'] if 'loss_keep' in normalized_scales \
+                                                               else torch.tensor(args.gradnorm_scalers['loss_keep'], dtype=torch.float, device=device)
+        loss_grad_scaler      = normalized_scales['loss']      if 'loss'      in normalized_scales \
+                                                               else torch.tensor(args.gradnorm_scalers['loss'], dtype=torch.float, device=device)
+        penalty_grad_scaler   = normalized_scales['penalty']   if 'penalty'   in normalized_scales \
+                                                               else torch.tensor(args.gradnorm_scalers['penalty'], dtype=torch.float, device=device)
                         
         """
         Don't multiply individual task's loss by scaler, since it's misleading
@@ -1674,6 +1677,10 @@ if __name__ == '__main__':
                         action=utils.ParseMixed, types=[str, float, str, float, str, float],
                         metavar='tau dictionary k-v pairs',    
                         help='loss divisors')
+    parser.add_argument('--gradnorm_scalers', default=['loss_keep', 1.0, 'loss', 1.0, 'penalty', 1.0], nargs=2*3, type=str,
+                        action=utils.ParseMixed, types=[str, float, str, float, str, float],
+                        metavar='scalers dictionary k-v pairs',    
+                        help='loss scalers when gradnorm inactive')
     parser.add_argument('--gradnorm_debug', type=str, default=None, choices=['gn', 'opt'], nargs='*', help="debug gradnorm", metavar='gn, optimize')
     parser.add_argument('--gradnorm_Gscaler', default=1.0, type=float, help='gradnorm loss scaler')
     parser.add_argument('--gradnorm_beta', default=1.0, type=float, help='gradnorm softplus')
@@ -1689,6 +1696,7 @@ if __name__ == '__main__':
     # args parse
     args = parser.parse_args()
     args.gradnorm_tau = {args.gradnorm_tau[i]: args.gradnorm_tau[i+1] for i in range(0,len(args.gradnorm_tau),2)} if args.gradnorm_tau is not None else None
+    args.gradnorm_scalers = {args.gradnorm_scalers[i]: args.gradnorm_scalers[i+1] for i in range(0,len(args.gradnorm_scalers),2)} if args.gradnorm_scalers is not None else None
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
