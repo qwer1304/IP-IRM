@@ -907,7 +907,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                         pen, 
                         halves_sz,
                     ) 
-                print(2,pind, penalty_grads[pind].norm(), total_grad_flat.norm())
+                print(2,pind, dPenalty_dTheta_env.norm(), pen, halves_sz, total_grad_flat.norm())
                 penalty_grads_final.append(total_grad_flat.detach().clone())
             p_grads_flat_weighted = torch.cat([g.detach().clone() for g in penalty_grads_final if g is not None]) * penalty_weight 
             penalty_grad_norm_weighted = p_grads_flat_weighted.norm()
