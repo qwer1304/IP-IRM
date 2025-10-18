@@ -908,8 +908,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                         pen, 
                         halves_sz,
                     ) 
-                if (pind==13) or (pind==14):
-                    print(pind, total_grad_flat.norm())
+                if (pind>=12) and (pind<=14):
+                    print(pind, pen, dPenalty_dTheta_env.norm())
                 penalty_grads_final.append(total_grad_flat.detach().clone())
             p_grads_flat_weighted = torch.cat([g.detach().clone() for g in penalty_grads_final if g is not None]) * penalty_weight 
             penalty_grad_norm_weighted = p_grads_flat_weighted.norm()
@@ -1032,7 +1032,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         penalty_weighted   *= penalty_grad_scaler 
         """
 
-        print()
         for pind, p in enumerate(net.parameters()):        
             total_grad_flat_weighted = (  loss_keep_grads_final[pind] * loss_keep_weight * loss_keep_grad_scaler
                                         + loss_grads_final[pind]      * loss_weight      * loss_grad_scaler
@@ -1042,17 +1041,13 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             g_L = loss_grads_final[pind]      * loss_weight      * loss_grad_scaler
             g_P = penalty_grads_final[pind]   * penalty_weight   * penalty_grad_scaler
 
-            if (pind==13) or (pind==14):
-                print(pind, penalty_grads_final[pind])
-                print(pind, "norm", (penalty_grads_final[pind]*1e20).norm())
-
             g_t = total_grad_flat_weighted
             cos_LP = F.cosine_similarity(g_L, g_P, dim=0)
             cos_tL = F.cosine_similarity(g_t, g_L, dim=0)
             cos_tP = F.cosine_similarity(g_t, g_P, dim=0)
             dominance = cos_tL - cos_tP  # >0 => loss-dominated; <0 => penalty-dominated
 
-            print(f"pind {pind} g_L norm {g_L.norm():.4e} g_P norm {g_P.norm():.4e}")
+            #print(f"pind {pind} g_L norm {g_L.norm():.4e} g_P norm {g_P.norm():.4e}")
             #print(f"cos(L,P)={cos_LP.item():.4e}, cos(total,L)={cos_tL.item():.4e}, cos(total,P)={cos_tP.item():.4e}, dominance {dominance:.2f}")
 
             if p.grad is None:
