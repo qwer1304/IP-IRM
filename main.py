@@ -872,22 +872,11 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             loss_env = loss_aggregator.sum(dim=0, keepdim=True) / partition_sz  # per env for macro-batch, normalized per env, unweighted
         else:
             loss_env = torch.tensor(0, dtype=torch.float, device=device)
-        print()
-        for pind in range(len(penalty_grads)):
-            print(1,penalty_grads[pind][0,0,0].norm())
-            print(1,penalty_grads[pind][0,0,1].norm())
-            print(1,penalty_grads[pind][1,0,0].norm())
-            print(1,penalty_grads[pind][1,0,1].norm())
         if do_penalty:
             penalty_env = penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz) # normalized per env for macro-batch, unweighted
         else:
             penalty_env = torch.tensor(0, dtype=torch.float, device=device)
 
-        for pind in range(len(penalty_grads)):
-            print(2,penalty_grads[pind][0,0,0].norm())
-            print(2,penalty_grads[pind][0,0,1].norm())
-            print(2,penalty_grads[pind][1,0,0].norm())
-            print(2,penalty_grads[pind][1,0,1].norm())
         l_keep_grads_flat_weighted = torch.cat([g.detach().clone() for g in loss_keep_grads_final if g is not None]) * loss_keep_weight
         loss_keep_grad_norm_weighted = l_keep_grads_flat_weighted.norm() # weighted, can be 0
         
@@ -905,17 +894,12 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             loss_grads_final = [torch.tensor(0., dtype=torch.float, device=device)] * len(loss_grads)
             loss_grad_norm_weighted = torch.tensor(0., dtype=torch.float, device=device)
 
-        print()
-        for pind in range(len(penalty_grads)):
-            print(3,penalty_grads[pind][0,0,0].norm())
-            print(3,penalty_grads[pind][0,0,1].norm())
-            print(3,penalty_grads[pind][1,0,0].norm())
-            print(3,penalty_grads[pind][1,0,1].norm())
         if do_penalty:
             penalty_grads_final = []
             penalty_env = penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz) # normalized per env for macro-batch, unweighted
             for pind in range(len(penalty_grads)):
                 dPenalty_dTheta_env = penalty_grads[pind]  # per env sum of dPenalty/dTheta over macro-batch per parameter, unweighted, shape (I,J,K,param_numel)
+                print(pind, penalty_grads[pind].norm())
                 pen = penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz, keep_halves=True)
                 total_grad_flat     = \
                     penalty_calculator.penalty_grads_finalize(
