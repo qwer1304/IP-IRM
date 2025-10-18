@@ -835,6 +835,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                 loss_grads[_j][j,partition_num,env] += grads
                             linear_idx += num_partitions * args.env_num # prepare for penalty grads
                         # penalty
+                        print()
                         if do_penalty:
                             # flatten and accumulate per parameter
                             for _j, g in enumerate(grads_all):
@@ -845,6 +846,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                     continue
                                 grads = grads.detach().view(-1)
                                 penalty_grads[_j][j,partition_num,env] += grads
+                                print(_j, grads.norm())
                 # end if not args.baseline:
                 loss_module.post_micro_batch()
                 loss_module.prepare_for_free()
@@ -900,7 +902,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             penalty_grads_final = []
             penalty_env = penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz) # normalized per env for macro-batch, unweighted
             for pind in range(len(penalty_grads)):
-                print(pind, penalty_grads[pind].norm())
                 dPenalty_dTheta_env = penalty_grads[pind]  # per env sum of dPenalty/dTheta over macro-batch per parameter, unweighted, shape (I,J,K,param_numel)
                 pen = penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz, keep_halves=True)
                 total_grad_flat     = \
