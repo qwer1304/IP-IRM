@@ -915,7 +915,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         # rotate penalty gradient if it's orthogonal enough to losses' gradients
         cos_Lp     = torch.tensor(0., dtype=torch.float, device=device)
         alpha      = torch.tensor(0., dtype=torch.float, device=device)
-        delta_Lp   = torch.tensor(0., dtype=torch.float, device=device)
+        dot_Lp   = torch.tensor(0., dtype=torch.float, device=device)
         if do_penalty and (args.penalty_grad_project is not None):
             L_grads_flat_weighted = l_keep_grads_flat_weighted + l_grads_flat_weighted
             cos_Lp   = F.cosine_similarity(L_grads_flat_weighted, p_grads_flat_weighted, dim=0)
@@ -1026,6 +1026,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         penalty_weighted   *= penalty_grad_scaler 
         """
 
+        print()
         for pind, p in enumerate(net.parameters()):        
             total_grad_flat_weighted = (  loss_keep_grads_final[pind] * loss_keep_weight * loss_keep_grad_scaler
                                         + loss_grads_final[pind]      * loss_weight      * loss_grad_scaler
@@ -1040,8 +1041,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             cos_tP = F.cosine_similarity(g_t, g_P, dim=0)
             dominance = cos_tL - cos_tP  # >0 => loss-dominated; <0 => penalty-dominated
 
-            print()
-            print(f"cos(L,P)={cos_LP.item():.8f}, cos(total,L)={cos_tL.item():.8f}, cos(total,P)={cos_tP.item():.8f}, dominance {dominance:.2f}")
+            print(f"cos(L,P)={cos_LP.item():.4e}, cos(total,L)={cos_tL.item():.4e}, cos(total,P)={cos_tP.item():.4e}, dominance {dominance:.2f}")
 
             if p.grad is None:
                 p.grad  = total_grad_flat_weighted.view(p.shape)
