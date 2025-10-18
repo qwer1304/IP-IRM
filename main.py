@@ -1697,8 +1697,6 @@ if __name__ == '__main__':
     args = parser.parse_args()
     args.gradnorm_tau = {args.gradnorm_tau[i]: args.gradnorm_tau[i+1] for i in range(0,len(args.gradnorm_tau),2)} if args.gradnorm_tau is not None else None
     args.gradnorm_scalers = {args.gradnorm_scalers[i]: args.gradnorm_scalers[i+1] for i in range(0,len(args.gradnorm_scalers),2)} if args.gradnorm_scalers is not None else None
-    print(args.gradnorm_scalers)
-    exit(1)
     
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
