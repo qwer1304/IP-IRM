@@ -1017,10 +1017,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                                                else torch.tensor(args.gradnorm_scalers['loss'], dtype=torch.float, device=device)
         penalty_grad_scaler   = normalized_scales['penalty']   if do_gradnorm \
                                                                else torch.tensor(args.gradnorm_scalers['penalty'], dtype=torch.float, device=device)
-        print()
-        print(do_gradnorm, args.gradnorm, normalized_scales, args.gradnorm_scalers, loss_keep_grad_scaler, loss_grad_scaler, penalty_grad_scaler)
-        exit(1)
-                        
         """
         Don't multiply individual task's loss by scaler, since it's misleading
         Only multiply the gradients since this is what determines how tasks' losses are updated
