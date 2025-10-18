@@ -1041,7 +1041,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
 
             if (pind==13) or (pind==14):
                 print(pind, penalty_grads_final[pind])
-                print(pind, "norm", 1e20*penalty_grads_final[pind].norm())
+                print(pind, "norm", (penalty_grads_final[pind]*1e20).norm())
 
             g_t = total_grad_flat_weighted
             cos_LP = F.cosine_similarity(g_L, g_P, dim=0)
