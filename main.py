@@ -815,7 +815,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                         grads = grads.detach().view(-1)
                         loss_keep_grads_final[_j] += grads
 
-                print()
                 if do_loss or do_penalty:
                     for _split in range((num_grads - num_baseline_repeates) // max(1,num_split_repeates)):
                         partition_num, env = _split // args.env_num, _split % args.env_num 
@@ -832,7 +831,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                     continue
                                 grads = grads.detach().view(-1)
                                 loss_grads[_j][j,partition_num,env] += grads
-                                print("1", _j, linear_idx, grads[:5])
                             linear_idx += num_partitions * args.env_num # prepare for penalty grads
                         # penalty
                         if do_penalty:
@@ -845,11 +843,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                     continue
                                 grads = grads.detach().view(-1)
                                 penalty_grads[_j][j,partition_num,env] += grads
-                                print("2", _j, linear_idx, grads[:5])
                 # end if not args.baseline:
                 loss_module.post_micro_batch()
                 loss_module.prepare_for_free()
-                exit(1)
                 
                 # free memory of micro-batch
                 del batch_micro, indexs, losses_samples, grads, g, grads_all, differentiate_this
@@ -898,10 +894,12 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             loss_grad_norm_weighted = torch.tensor(0., dtype=torch.float, device=device)
 
         if do_penalty:
+            print()
             penalty_grads_final = []
             penalty_env = penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz) # normalized per env for macro-batch, unweighted
             for pind in range(len(penalty_grads)):
                 dPenalty_dTheta_env = penalty_grads[pind]  # per env sum of dPenalty/dTheta over macro-batch per parameter, unweighted, shape (I,J,K,param_numel)
+                print("dPenalty_dTheta_env", pind, dPenalty_dTheta_env.norm())
                 total_grad_flat     = \
                     penalty_calculator.penalty_grads_finalize(
                         dPenalty_dTheta_env, 
