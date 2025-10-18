@@ -933,10 +933,10 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                     grad_lengths = [len(p) for p in penalty_grads_final] 
                     penalty_grads_final = list(torch.split(p_grads_flat_weighted, grad_lengths, dim=0))                   
 
-            #"""
+            """
             print()
             print(f'{cos_Lp.item():.4f}', f'{alpha:.4f}', delta_Lp, f'{p_grads_flat_weighted.norm().item():.4f}') 
-            #"""
+            """
         
         # Compute dot products & cosines
         delta_lk = l_grads_flat_weighted.dot(l_keep_grads_flat_weighted)       
@@ -1183,8 +1183,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         ngk2                  = ngk2.item()
         ngl2                  = ngl2.item()
         ngp2                  = ngp2.item()
-        cos_Lp                = cos_Lp.item()           if do_gradnorm else 0.
-        delta_Lp              = delta_Lp.item()         if do_gradnorm else 0. 
+        cos_Lp                = cos_Lp.item()
+        delta_Lp              = delta_Lp.item()
 
         # True loss reflecting progress does NOT include balancing scalers
         loss_batch_weighted = (loss_keep_weighted + # loss_keep_aggregator is a scalar normalized over macro-batch
