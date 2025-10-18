@@ -467,7 +467,7 @@ class SimSiamLossModule(LossModule):
             loss = loss.sum()
         return loss
 
-def gradnorm_clamp_scalers_for_progress(norm2_dict, dot_dict, scaler_dict, ema=False):
+def clamp_scalers_for_progress(norm2_dict, dot_dict, scaler_dict, ema=False):
     def consistent_dots(dot_dict, norm2_dict, eps=1e-12):
         for (i,j) in [('k','l'), ('k','p'), ('l','p')]:
             ub = (norm2_dict[i] * norm2_dict[j]).sqrt() + eps
@@ -513,7 +513,7 @@ def gradnorm_clamp_scalers_for_progress(norm2_dict, dot_dict, scaler_dict, ema=F
     scaler_dict['k'], scaler_dict['l'], scaler_dict['p'] = normalize_weights(scaler_dict['k'], scaler_dict['l'], scaler_dict['p'])
     return  scaler_dict  
 
-def gradnorm_clamp_scalers_for_progress_ema_safe(norm2, dot, scaler, eps=1e-12, do_print=False):
+def clamp_scalers_for_progress_ema_safe(norm2, dot, scaler, eps=1e-12, do_print=False):
 
     def consistent_dots(dot_dict, norm2_dict, eps=1e-12):
         for (i,j) in [('k','l'), ('k','p'), ('l','p')]:
@@ -984,17 +984,17 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         normalized_scales = {}
         gradnorm_rates = torch.zeros(int(args.penalty_weight>0) + int(do_loss) + int(do_keep_loss), dtype=torch.float, device=device)
         losses_dict, grad_norms_dict = {}, {}
-        if do_gradnorm:
-            if do_penalty:
-                losses_dict['penalty']       = penalty_weighted
-                grad_norms_dict['penalty']   = ngp
-            if do_loss:
-                losses_dict['loss']          = loss_weighted
-                grad_norms_dict['loss']      = ngl
-            if do_keep_loss:
-                losses_dict['loss_keep']     = loss_keep_weighted
-                grad_norms_dict['loss_keep'] = ngk            
+        if do_penalty:
+            losses_dict['penalty']       = penalty_weighted
+            grad_norms_dict['penalty']   = ngp
+        if do_loss:
+            losses_dict['loss']          = loss_weighted
+            grad_norms_dict['loss']      = ngl
+        if do_keep_loss:
+            losses_dict['loss_keep']     = loss_keep_weighted
+            grad_norms_dict['loss_keep'] = ngk            
                     
+        if do_gradnorm:
             normalized_scales, gradnorm_loss, gradnorm_rates = gradnorm_balancer.compute_weights_and_loss(losses_dict, grad_norms_dict)
             """
             print()
@@ -1003,20 +1003,21 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                    [f'{k}: {gradnorm_rates[i].item()}' for i,k in enumerate(task_names)], 
                    [f'{k} {gradnorm_balancer.task_weights[k].item()}' for k in task_names])
             """
+        else:
+            normalized_scales = {k: torch.tensor(v, dtype=torch.float, device=device) for k,v in args.gradnorm_scalers.items()}
+
+        if args.clamp_weights_for_progress:
             dot_dict    = {'kl': dot_lk, 'kp': dot_kp, 'lp': dot_lp}
             norm2_dict  = {'k':  ngk2,   'l':  ngl2,   'p':  ngp2}
             scaler_dict = {v: normalized_scales[k] for k,v in task_names_2_klp.items()}
-            #w = gradnorm_clamp_scalers_for_progress(norm2_dict, dot_dict, scaler_dict, ema=(args.ema is not None))
-            w = gradnorm_clamp_scalers_for_progress_ema_safe(norm2_dict, dot_dict, scaler_dict, do_print=False)
-            # this can CHANGE the relative rank of the weights!!! Let's not do this for the time being
-            #normalized_scales = {k: w[v] for k,v in task_names_2_klp.items()} 
+            #w = clamp_scalers_for_progress(norm2_dict, dot_dict, scaler_dict, ema=(args.ema is not None))
+            w = clamp_scalers_for_progress_ema_safe(norm2_dict, dot_dict, scaler_dict, do_print=args.debug)
+            # this can CHANGE the relative rank of the weights!!!
+            normalized_scales = {k: w[v] for k,v in task_names_2_klp.items()} 
         
-        loss_keep_grad_scaler = normalized_scales['loss_keep'] if do_gradnorm \
-                                                               else torch.tensor(args.gradnorm_scalers['loss_keep'], dtype=torch.float, device=device)
-        loss_grad_scaler      = normalized_scales['loss']      if do_gradnorm \
-                                                               else torch.tensor(args.gradnorm_scalers['loss'], dtype=torch.float, device=device)
-        penalty_grad_scaler   = normalized_scales['penalty']   if do_gradnorm \
-                                                               else torch.tensor(args.gradnorm_scalers['penalty'], dtype=torch.float, device=device)
+        loss_keep_grad_scaler = normalized_scales['loss_keep'] 
+        loss_grad_scaler      = normalized_scales['loss']
+        penalty_grad_scaler   = normalized_scales['penalty']
         """
         Don't multiply individual task's loss by scaler, since it's misleading
         Only multiply the gradients since this is what determines how tasks' losses are updated
@@ -1057,11 +1058,11 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 gn_pm += p.grad.sign() 
 
         train_optimizer.step()
-        train_optimizer.zero_grad(set_to_none=True)     # clear gradients at beginning of next gradients batch
+        train_optimizer.zero_grad(set_to_none=True)        # clear gradients at beginning of next gradients batch
         if do_gradnorm:
-            gradnorm_optimizer.zero_grad(set_to_none=True)  # clear gradients
+            gradnorm_optimizer.zero_grad(set_to_none=True) # clear gradients
             gradnorm_loss.backward()
-            gradnorm_balancer.remove_common_mode_hook()         # remove common-mode from grads
+            gradnorm_balancer.remove_common_mode_hook()    # remove common-mode from grads
 
             # actual computed grads after backward:
             if args.gradnorm_debug and 'gn' in args.gradnorm_debug:
@@ -1671,7 +1672,6 @@ if __name__ == '__main__':
     parser.add_argument('--gradnorm', action="store_true", help="use gradnorm")
     parser.add_argument('--gradnorm_epoch', default=0, type=int, help='gradnorm start epoch')
     parser.add_argument('--gradnorm_alpha', default=1.0, type=float, help='gradnorm alpha')
-    parser.add_argument('--penalty_grad_project', type=float, nargs=2, default=None, help="project penalty grad for orthogonality", metavar="[tau_low, tau_high]")
     parser.add_argument('--gradnorm_tau', default=None, nargs=2*3, type=str,
                         action=utils.ParseMixed, types=[str, float, str, float, str, float],
                         metavar='tau dictionary k-v pairs',    
@@ -1692,6 +1692,10 @@ if __name__ == '__main__':
     parser.add_argument('--gradnorm_rescale_weights', action="store_true", help="rescale weights before starting")
     parser.add_argument('--gradnorm_huber_delta', default=1e-2, type=float, help='gradnorm Huber delta')
 
+    parser.add_argument('--clamp_weights_for_progress', action="store_true", help="clamp loss' weights for progress")
+    parser.add_argument('--penalty_grad_project', type=float, nargs=2, default=None, help="project penalty grad for orthogonality", metavar="[tau_low, tau_high]")
+    assert not (args.clamp_weights_for_progress and (args.penalty_grad_project is not None)), "Using weight clamping and projection is mutually exclusive"
+    
     # args parse
     args = parser.parse_args()
     args.gradnorm_tau = {args.gradnorm_tau[i]: args.gradnorm_tau[i+1] for i in range(0,len(args.gradnorm_tau),2)} if args.gradnorm_tau is not None else None
