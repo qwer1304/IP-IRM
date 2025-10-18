@@ -897,7 +897,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             print()
             penalty_grads_final = []
             penalty_env = penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz) # normalized per env for macro-batch, unweighted
-            print(12, penalty_grads[12].norm(), 13, penalty_grads[13].norm()
+            print(12, penalty_grads[12].norm(), 13, penalty_grads[13].norm())
             for pind in range(len(penalty_grads)):
                 dPenalty_dTheta_env = penalty_grads[pind]  # per env sum of dPenalty/dTheta over macro-batch per parameter, unweighted, shape (I,J,K,param_numel)
                 total_grad_flat     = \
