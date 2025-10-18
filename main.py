@@ -913,8 +913,10 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 if (pind == 12) or (pind == 13):
                     print(pind, total_grad_flat.size(), total_grad_flat)                 
                 penalty_grads_final.append(total_grad_flat.detach().clone())
-            p_grads_flat_weighted = torch.cat([g.detach().clone() for g in penalty_grads_final if g is not None]) * penalty_weight    
+            p_grads_flat_weighted = torch.cat([g.detach().clone() for g in penalty_grads_final if g is not None]) * penalty_weight 
+            print(12, p_grads_flat_weighted[12], 13, p_grads_flat_weighted[13])
             penalty_grad_norm_weighted = p_grads_flat_weighted.norm()
+            print(penalty_grad_norm_weighted.size(), penalty_grad_norm_weighted)                 
         else:
             p_grads_flat_weighted = torch.zeros_like(l_keep_grads_flat_weighted)
             penalty_grads_final = [torch.tensor(0., dtype=torch.float, device=device)] * len(penalty_grads)
