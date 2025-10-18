@@ -815,11 +815,13 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                         grads = grads.detach().view(-1)
                         loss_keep_grads_final[_j] += grads
 
+                print()
                 if do_loss or do_penalty:
                     for _split in range((num_grads - num_baseline_repeates) // max(1,num_split_repeates)):
                         partition_num, env = _split // args.env_num, _split % args.env_num 
                         linear_idx = _split
                         if do_loss:
+                            print("1", _split, partition_num, env, linear_idx)
                             # flatten and accumulate per parameter
                             # 'grads_all' is a tuple w/ an entry per parameter.
                             # each entry is a tensor w/ 1st dim = 'grad_outputs.size(0)' and other dims matching the parameter
@@ -834,6 +836,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                             linear_idx += num_partitions * args.env_num # prepare for penalty grads
                         # penalty
                         if do_penalty:
+                            print("2", _split, partition_num, env, linear_idx)
                             # flatten and accumulate per parameter
                             for _j, g in enumerate(grads_all):
                                 if g is None:
@@ -1041,7 +1044,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             cos_tP = F.cosine_similarity(g_t, g_P, dim=0)
             dominance = cos_tL - cos_tP  # >0 => loss-dominated; <0 => penalty-dominated
 
-            print(f"pind {pind} g_L norm {g_L.norm():.4e} g_P norm {g_P.norm():.4e}")
+            #print(f"pind {pind} g_L norm {g_L.norm():.4e} g_P norm {g_P.norm():.4e}")
             #print(f"cos(L,P)={cos_LP.item():.4e}, cos(total,L)={cos_tL.item():.4e}, cos(total,P)={cos_tP.item():.4e}, dominance {dominance:.2f}")
 
             if p.grad is None:
