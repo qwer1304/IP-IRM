@@ -1041,7 +1041,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
 
             if (pind==13) or (pind==14):
                 print(pind, penalty_grads_final[pind])
-                print(pind, "norm", penalty_grads_final[pind].norm())
+                print(pind, "norm", penalty_grads_final[pind].dot(penalty_grads_final[pind]).sqrt())
 
             g_t = total_grad_flat_weighted
             cos_LP = F.cosine_similarity(g_L, g_P, dim=0)
@@ -1049,7 +1049,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             cos_tP = F.cosine_similarity(g_t, g_P, dim=0)
             dominance = cos_tL - cos_tP  # >0 => loss-dominated; <0 => penalty-dominated
 
-            #print(f"pind {pind} g_L norm {g_L.norm():.4e} g_P norm {g_P.norm():.4e}")
+            print(f"pind {pind} g_L norm {g_L.norm():.4e} g_P norm {g_P.norm():.4e}")
             #print(f"cos(L,P)={cos_LP.item():.4e}, cos(total,L)={cos_tL.item():.4e}, cos(total,P)={cos_tP.item():.4e}, dominance {dominance:.2f}")
 
             if p.grad is None:
