@@ -896,31 +896,27 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             loss_grad_norm_weighted = torch.tensor(0., dtype=torch.float, device=device)
 
         if do_penalty:
-            print()
             penalty_grads_final = []
             penalty_env = penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz) # normalized per env for macro-batch, unweighted
             for pind in range(len(penalty_grads)):
                 dPenalty_dTheta_env = penalty_grads[pind]  # per env sum of dPenalty/dTheta over macro-batch per parameter, unweighted, shape (I,J,K,param_numel)
                 pen = penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz, keep_halves=True)
-                if (pind == 12) or (pind == 13):
-                    print(pind, pen.size(), pen)
                 total_grad_flat     = \
                     penalty_calculator.penalty_grads_finalize(
                         dPenalty_dTheta_env, 
                         pen, 
                         halves_sz,
                     )  
-                if (pind == 12) or (pind == 13):
-                    print(pind, total_grad_flat.size(), total_grad_flat)                 
                 penalty_grads_final.append(total_grad_flat.detach().clone())
             p_grads_flat_weighted = torch.cat([g.detach().clone() for g in penalty_grads_final if g is not None]) * penalty_weight 
-            print(12, p_grads_flat_weighted[12], 13, p_grads_flat_weighted[13])
             penalty_grad_norm_weighted = p_grads_flat_weighted.norm()
-            print(penalty_grad_norm_weighted.size(), penalty_grad_norm_weighted)                 
         else:
             p_grads_flat_weighted = torch.zeros_like(l_keep_grads_flat_weighted)
             penalty_grads_final = [torch.tensor(0., dtype=torch.float, device=device)] * len(penalty_grads)
             penalty_grad_norm_weighted = torch.tensor(0., dtype=torch.float, device=device)
+            
+        print()
+        print(12, penalty_grads_final[12], 13, penalty_grads_final[13])
 
         # rotate penalty gradient if it's orthogonal enough to losses' gradients
         cos_Lp     = torch.tensor(0., dtype=torch.float, device=device)
