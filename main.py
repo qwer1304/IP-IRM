@@ -729,9 +729,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 if do_penalty:
                     penalties_samples = penalty_calculator.penalty(losses_samples, reduction='none')
                     differentiate_this.append(penalties_samples)
-                    print()
-                    print(j,i,losses_samples)
-                    print(j,i,penalties_samples)
 
                 if do_loss or do_penalty:
                     for partition_num, partition in enumerate(partitions):
@@ -849,6 +846,15 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                 grads = grads.detach().view(-1)
                                 penalty_grads[_j][j,partition_num,env] += grads
                 # end if not args.baseline:
+                print()
+                print(14,penalty_grads[14][0,0,0].norm()
+                print(14,penalty_grads[14][0,0,1].norm()
+                print(14,penalty_grads[14][0,1,0].norm()
+                print(14,penalty_grads[14][0,1,1].norm()
+                print(14,penalty_grads[14][1,0,0].norm()
+                print(14,penalty_grads[14][1,0,1].norm()
+                print(14,penalty_grads[14][1,1,0].norm()
+                print(14,penalty_grads[14][1,1,1].norm()
                 loss_module.post_micro_batch()
                 loss_module.prepare_for_free()
                 
