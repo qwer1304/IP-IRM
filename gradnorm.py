@@ -239,7 +239,8 @@ class GradNormLossBalancer(nn.Module):
 
         w_prev      = self.w_prev
         if w_prev is not None:
-            progress    = (normalized_weights - w_prev).abs().mean() # weights are normalized to T and >= 0
+            progress    = [normalized_weights[k] - w_prev[k] for k in normalized_weights.keys()]
+            progress    = torch.cat(progress, dim=0).abs().mean() # weights are normalized to T and >= 0
         else:
             progress    = torch.tensor(1., dtype=torch.float)
         self.w_prev = normalized_weights
