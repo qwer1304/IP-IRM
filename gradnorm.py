@@ -385,7 +385,7 @@ class GradNormLossBalancer(nn.Module):
     def remove_common_mode_hook(self, _grads=None):
         # This function will be called AFTER backward
         if _grads is None:
-            grads = [p.grad for p in self.task_weights.values()]
+            grads = [p.grad for p in self.task_weights.values() if p.grad is not None]
             g_mean = sum(grads) / len(grads)
             for p in self.task_weights.values():
                 p.grad.data -= g_mean
