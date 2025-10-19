@@ -1035,10 +1035,17 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
 
         if args.debug:
             print()
+
+        if False:
+            al = 1 - alternating_gradients_update
+            ap = 0 + alternating_gradients_update
+        else:
+            al = 1
+            ap = 1
         for pind, p in enumerate(net.parameters()):        
-            total_grad_flat_weighted = (  loss_keep_grads_final[pind] * loss_keep_weight * loss_keep_grad_scaler * (1 - alternating_gradients_update)
-                                        + loss_grads_final[pind]      * loss_weight      * loss_grad_scaler      * (1 - alternating_gradients_update)
-                                        + penalty_grads_final[pind]   * penalty_weight   * penalty_grad_scaler   * alternating_gradients_update
+            total_grad_flat_weighted = (  loss_keep_grads_final[pind] * loss_keep_weight * loss_keep_grad_scaler * al
+                                        + loss_grads_final[pind]      * loss_weight      * loss_grad_scaler      * al
+                                        + penalty_grads_final[pind]   * penalty_weight   * penalty_grad_scaler   * ap
                                        )
 
             if args.debug:
