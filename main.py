@@ -1196,6 +1196,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         dot_lk                = dot_lk.item()               
         dot_lp                = dot_lp.item()
         dot_kp                = dot_kp.item()
+        cos_lk                = cos_lk.item()               
+        cos_lp                = cos_lp.item()
+        cos_kp                = cos_kp.item()
         gradnorm_loss         = gradnorm_loss.item()    if do_gradnorm else 0.
         gradnorm_rates        = gradnorm_rates.tolist() if do_gradnorm else []
         ngk2                  = ngk2.item()
@@ -1229,6 +1232,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                    f' {args.penalty_type} {total_irm_loss_weighted/trained_samples:.4g}' + \
                    f' LR {train_optimizer.param_groups[0]["lr"]:.4f} PW {penalty_weight_orig:.4f}' + \
                    f' dot: ll {ngl2:.2e} lk {dot_lk:.2e} lp {dot_lp:.2e} kk {ngk2:.2e} kp {dot_kp:.2e} pp {ngp2:.2e}' + \
+                   f' cos: lk {cos_lk:.3e} lp {cos_lp:.3e} kp {cos_kp:.2e}' + \
                    f' w/v: k {w_k:.4f}/{v_k:.4f} l {w_l:.4f}/{v_l:.4f} p {w_p:.4f}/{v_p:.4f}' + \
                    f' decr: l {loss_decrease_cond:.2e} k {loss_keep_decrease_cond:.2e} p {penalty_decrease_cond:.2e}' + \
                    f' gn_loss {gradnorm_loss:.4e} rates: {gradnorm_rates_str} gn_gpm: {gn_pm} Lp: cos {cos_Lp:.4f} delta {dot_Lp:.3e}'
