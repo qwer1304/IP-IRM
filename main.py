@@ -916,12 +916,11 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             penalty_grad_norm_weighted = torch.tensor(0., dtype=torch.float, device=device)
             
         # rotate penalty gradient if it's orthogonal enough to losses' gradients
-        cos_Lp     = torch.tensor(0., dtype=torch.float, device=device)
-        alpha      = torch.tensor(0., dtype=torch.float, device=device)
+        L_grads_flat_weighted = l_keep_grads_flat_weighted + l_grads_flat_weighted
+        cos_Lp   = F.cosine_similarity(L_grads_flat_weighted, p_grads_flat_weighted, dim=0)
         dot_Lp   = torch.tensor(0., dtype=torch.float, device=device)
         if do_penalty and (args.penalty_grad_project is not None):
-            L_grads_flat_weighted = l_keep_grads_flat_weighted + l_grads_flat_weighted
-            cos_Lp   = F.cosine_similarity(L_grads_flat_weighted, p_grads_flat_weighted, dim=0)
+            alpha      = torch.tensor(0., dtype=torch.float, device=device)
             if cos_Lp < 0:
                 tau_low, tau_high = args.penalty_grad_project
                 alpha = torch.clip((cos_Lp.abs() - tau_low) / (tau_high - tau_low), 0, 1)
