@@ -46,18 +46,7 @@ class GradNormLossBalancer(nn.Module):
         self.gradnorm_loss_lambda = gradnorm_loss_lambda
         self.huber_delta = huber_delta
         
-        # --- persistent state for pathological state detection
-        # --- configurable thresholds ---
-        self.window_size     = 5        # number of consecutive batches to monitor
-        self.required_count  = 4        # how many in the window must be all-negative
-        self.min_mag         = 1e-4     # ignore tiny grad values as numerical noise
-        self.cooldown_period = 2 * self.window_size
-
-        self.gn_bad_buffer            = collections.deque(maxlen=self.window_size)
-        self.gn_last_mitigation_batch = -9999
-        self.batch_idx                = 0
-
-        self.w                        = 0
+        self.w_prev = None
 
     def reset_weights(self, new_initial_weights):
         for k, new_val in new_initial_weights.items():
@@ -247,55 +236,12 @@ class GradNormLossBalancer(nn.Module):
         all_positive = (expected_v_grad[significant_mask] > 0).all()
         mixed        = not (all_negative or all_positive)
 
-        this_batch_bad = 0
-        if significant_mask.sum() > 0:
-            # pathological if *all* significant 'expected_v_grad' are negative.
-            # sometimes also when they're all positive
-            if all_negative:
-                this_batch_bad = -1
-            if all_positive:
-                E = expected_v_grad[significant_mask].cpu().detach().numpy()
-                w = (veights / veights.sum()).cpu().numpy()
-                delta_w_norm = np.linalg.norm(w - self.w)
-                eq_metric = np.std(E) / (abs(E.mean()) + 1e-8)
-                w_prev = self.w 
-                self.w = w
-                if (eq_metric > 0.1) or (delta_w_norm > 1e-3):
-                    this_batch_bad = 1
-
-        # store in rolling window
-        self.gn_bad_buffer.append(this_batch_bad)
-
-        # determine if persistent pathology
-        if len(self.gn_bad_buffer) == self.window_size:
-            count_bad = sum(self.gn_bad_buffer)
-            persistent_bad = (abs(count_bad) >= self.required_count)
+        w_prev      = self.w_prev
+        if w_prev is not None:
+            progress    = (normalized_weights - w_prev).abs().mean() # weights are normalized to T and >= 0
         else:
-            persistent_bad = False
-
-        # --- mitigation (only once per cooldown) ---
-        if persistent_bad:
-            msg_bad = 'all-negative' if count_bad < 0 else 'all-positive'
-            warnings.warn(f"[GN WARNING] Persistent {msg_bad} detected: ({count_bad}/{self.window_size})")
-
-            """
-            DON'T APLLY MITIGATION YET!!!!!!!!!!!
-            if (self.batch_idx - self.gn_last_mitigation_batch) > self.cooldown_period:
-                # Option A: reduce GN learning rate
-                for gparam_group in gn_optimizer.param_groups:
-                    gparam_group['lr'] *= 0.5
-                print(f"  -> gn_optimizer.lr *= 0.5 "
-                      f"(now {gn_optimizer.param_groups[0]['lr']})")
-
-                # Option B (alternative): halve Gscaler
-                # Gscaler *= 0.5
-
-                # Option C (alternative): double tau_p
-                # tau_p *= 2
-                self.gn_last_mitigation_batch = batch_idx
-            """
-
-        self.batch_idx += 1
+            progress    = torch.tensor(1., dtype=torch.float)
+        self.w_prev = normalized_weights
 
         if self.debug and 'gn' in self.debug:
             with np.printoptions(precision=8):
@@ -312,11 +258,9 @@ class GradNormLossBalancer(nn.Module):
                 print("normed_weights:\t", np.array([normalized_weights[k].cpu().item() for k in self.task_names]))
                 print("gradnorm_loss:\t", gradnorm_loss.cpu().detach().numpy())
                 print(f"all_neg {all_negative.numpy()} all_pos {all_positive.numpy()} mixed {mixed}" +
-                      f" sgnfcnt_msk {np.array(significant_mask.tolist())} prsst_bad {persistent_bad}")
-                if all_positive:
-                    print(f"eqlbrm/rnwy dtct: w {w} w_prev {w_prev} |w-w_p| {delta_w_norm} eq_metric {eq_metric}")
+                      f" sgnfcnt_msk {np.array(significant_mask.tolist())}")
 
-        return normalized_weights, gradnorm_loss, smoothed_rates
+        return normalized_weights, gradnorm_loss, smoothed_rates, progress
 
     # --------------------------------------------
     # Custom state_dict for GradNorm-specific data

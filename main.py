@@ -923,14 +923,13 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         # rotate penalty gradient if it's orthogonal enough to losses' gradients
         L_grads_flat_weighted = l_keep_grads_flat_weighted + l_grads_flat_weighted
         cos_Lp   = F.cosine_similarity(L_grads_flat_weighted, p_grads_flat_weighted, dim=0)
-        dot_Lp   = torch.tensor(0., dtype=torch.float, device=device)
+        dot_Lp   = L_grads_flat_weighted.dot(p_grads_flat_weighted)
         if do_penalty and (args.penalty_grad_project is not None):
             alpha      = torch.tensor(0., dtype=torch.float, device=device)
             if cos_Lp < 0:
                 tau_low, tau_high = args.penalty_grad_project
                 alpha = torch.clip((cos_Lp.abs() - tau_low) / (tau_high - tau_low), 0, 1)
                 if alpha > 0.:
-                    dot_Lp = L_grads_flat_weighted.dot(p_grads_flat_weighted)
                     nL = L_grads_flat_weighted.norm()
                     proj = (dot_Lp / (nL * nL + 1e-12)) * L_grads_flat_weighted
                     g_p_rot = p_grads_flat_weighted - alpha * proj
@@ -1002,7 +1001,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             grad_norms_dict['loss_keep'] = ngk            
                     
         if do_gradnorm:
-            normalized_scales, gradnorm_loss, gradnorm_rates = gradnorm_balancer.compute_weights_and_loss(losses_dict, grad_norms_dict)
+            normalized_scales, gradnorm_loss, gradnorm_rates, gradnorm_progress = gradnorm_balancer.compute_weights_and_loss(losses_dict, grad_norms_dict)
             """
             print()
             print([f'{k}: {v.item()}' for k,v in normalized_scales.items()], 
@@ -1012,6 +1011,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             """
         else:
             normalized_scales = {k: torch.tensor(v, dtype=torch.float, device=device) for k,v in args.gradnorm_scalers.items()}
+            gradnorm_progress = torch.tensor(1.0, dtype=torch.float)
 
         if args.clamp_weights_for_progress:
             dot_dict    = {'kl': dot_lk, 'kp': dot_kp, 'lp': dot_lp}
@@ -1217,6 +1217,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         ngp2                  = ngp2.item()
         cos_Lp                = cos_Lp.item()
         dot_Lp                = dot_Lp.item()
+        gradnorm_progress     = gradnorm_progress.item()
 
         # True loss reflecting progress does NOT include balancing scalers
         loss_batch_weighted = (loss_keep_weighted + # loss_keep_aggregator is a scalar normalized over macro-batch
@@ -1246,7 +1247,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                    f' cos: lk {cos_lk:.3e} lp {cos_lp:.3e} kp {cos_kp:.2e}' + \
                    f' w/v: k {w_k:.4f}/{v_k:.4f} l {w_l:.4f}/{v_l:.4f} p {w_p:.4f}/{v_p:.4f}' + \
                    f' decr: l {loss_decrease_cond:.2e} k {loss_keep_decrease_cond:.2e} p {penalty_decrease_cond:.2e}' + \
-                   f' gn_loss {gradnorm_loss:.4e} rates: {gradnorm_rates_str} gn_gpm: {gn_pm} Lp: cos {cos_Lp:.4f} delta {dot_Lp:.3e}'
+                   f' gn_loss {gradnorm_loss:.4e} rates: {gradnorm_rates_str} gn_gpm: {gn_pm} Lp: cos {cos_Lp:.4f}' + \
+                   f' dot {dot_Lp:.3e} gn_prgrs {gradnorm_progress:.4f}'
         desc_str += loss_module.get_debug_info_str()
         train_bar.set_description(desc_str)
 
