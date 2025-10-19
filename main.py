@@ -1022,9 +1022,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             # this can CHANGE the relative rank of the weights!!!
             normalized_scales = {k: w[v] for k,v in task_names_2_klp.items()} 
         
-        loss_keep_grad_scaler = normalized_scales['loss_keep'] 
-        loss_grad_scaler      = normalized_scales['loss']
-        penalty_grad_scaler   = normalized_scales['penalty']
+        loss_keep_grad_scaler = normalized_scales['loss_keep'] if do_keep_loss else 1.0
+        loss_grad_scaler      = normalized_scales['loss']      if do_loss      else 1.0
+        penalty_grad_scaler   = normalized_scales['penalty']   if do_penalty   else 1.0
         """
         Don't multiply individual task's loss by scaler, since it's misleading
         Only multiply the gradients since this is what determines how tasks' losses are updated
