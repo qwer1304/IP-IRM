@@ -614,8 +614,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
     gpu_batch_size               = args.micro_batch_size
     gpu_accum_steps              = ceil(loader_batch_size / gpu_batch_size) # better round up 
 
-    gradients_accumulation_step = 0
-    total_samples               = len(train_loader.dataset)
+    gradients_accumulation_step  = 0
+    alternating_gradients_update = 0
+    total_samples                = len(train_loader.dataset)
     
     trained_samples          = 0
     total_keep_loss_weighted = 0.0
@@ -1033,9 +1034,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         if args.debug:
             print()
         for pind, p in enumerate(net.parameters()):        
-            total_grad_flat_weighted = (  loss_keep_grads_final[pind] * loss_keep_weight * loss_keep_grad_scaler
-                                        + loss_grads_final[pind]      * loss_weight      * loss_grad_scaler
-                                        + penalty_grads_final[pind]   * penalty_weight   * penalty_grad_scaler
+            total_grad_flat_weighted = (  loss_keep_grads_final[pind] * loss_keep_weight * loss_keep_grad_scaler * (1 - alternating_gradients_update)
+                                        + loss_grads_final[pind]      * loss_weight      * loss_grad_scaler      * (1 - alternating_gradients_update)
+                                        + penalty_grads_final[pind]   * penalty_weight   * penalty_grad_scaler   * alternating_gradients_update
                                        )
 
             if args.debug:
@@ -1259,6 +1260,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                         
         # Prepare for next iteration
         gradients_accumulation_step = 0
+        alternating_gradients_update = 0 if alternating_gradients_update > 0 else 1
         penalty_aggregator.zero_()
         loss_keep_aggregator.zero_()
         loss_aggregator.zero_()
