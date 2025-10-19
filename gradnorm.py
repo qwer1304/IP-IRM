@@ -388,7 +388,8 @@ class GradNormLossBalancer(nn.Module):
             grads = [p.grad for p in self.task_weights.values() if p.grad is not None]
             g_mean = sum(grads) / len(grads)
             for p in self.task_weights.values():
-                p.grad.data -= g_mean
+                if p.grad is not None:
+                    p.grad.data -= g_mean
         else:
             g_mean  = sum(_grads) / len(_grads)
             _grads -= g_mean
