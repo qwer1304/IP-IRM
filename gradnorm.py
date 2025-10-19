@@ -46,7 +46,8 @@ class GradNormLossBalancer(nn.Module):
         self.gradnorm_loss_lambda = gradnorm_loss_lambda
         self.huber_delta = huber_delta
         
-        self.w_prev = None
+        self.min_mag = 1e-4     # ignore tiny grad values as numerical noise
+        self.w_prev  = None
 
     def reset_weights(self, new_initial_weights):
         for k, new_val in new_initial_weights.items():
