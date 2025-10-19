@@ -288,7 +288,9 @@ class SimSiamIRMCalculator(IRMCalculator):
         device = self.loss_module.representations[0].device
         # one scalar (requires grad)
         batch_size = self.loss_module.logits(idxs=idxs).size(0)
-        s = torch.ones(batch_size, device=device, requires_grad=True)  # one s per sample
+        #s = torch.ones(batch_size, device=device, requires_grad=True)  # one s per sample
+        s = torch.tensor(1.0, requires_grad=True, device=device)
+        s = s.expand(batch_size)        
         # Compute g_i in a CE-specific way
 
         g_i = torch.autograd.grad(
@@ -1886,7 +1888,7 @@ if __name__ == '__main__':
     initial_weights = {'penalty': torch.tensor(1.0, dtype=torch.float, device=device)}
     if args.penalty_cont > 0:
         initial_weights['loss'] = torch.tensor(1.0, dtype=torch.float, device=device)
-    if args.penalty_keep_cont > 0:
+    if args.keep_cont and (args.penalty_keep_cont > 0):
         initial_weights['loss_keep'] = torch.tensor(1.0, dtype=torch.float, device=device)
     gradnorm_balancer = gn.GradNormLossBalancer(initial_weights, alpha=args.gradnorm_alpha, device=device, smoothing=False, 
                             tau=args.gradnorm_tau, eps=1e-8, debug=args.gradnorm_debug, beta=args.gradnorm_beta, 
