@@ -262,7 +262,7 @@ class GradNormLossBalancer(nn.Module):
                 print("gradnorm_loss:\t", gradnorm_loss.cpu().detach().numpy())
                 print(f"all_neg {all_negative.numpy()} all_pos {all_positive.numpy()} mixed {mixed}" +
                       f" sgnfcnt_msk {np.array(significant_mask.tolist())}")
-                eps_GN = r / (avgG * rates + 1e-12)).mean()
+                eps_GN = (r / (avgG * rates + 1e-12)).mean()
                 eq     = (self.eps_GN_prev is not None) and (eps_GN < 0.03) and ((deps_GN := (eps_GN - self.eps_GN_prev).abs()) < 1e-4)
                 if eq:
                     print(f"\tGN equilibrium reached, eps_GN {eps_GN.item()} deps_GN(t) {deps_GN.item()}")
