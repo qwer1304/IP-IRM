@@ -579,6 +579,7 @@ def clamp_scalers_for_progress_ema_safe(norm2, dot, scaler, eps=1e-12, do_print=
 
 def group_name_moco(name: str) -> str:
     """Map param name to logical block for MoCo w/ ResNet backbone and g projection head."""
+    name = name.removeprefix("module.")
     if name.startswith("f.conv1") or name.startswith("f.bn1"):
         return "stem"
     if name.startswith("f.layer1"):
@@ -653,7 +654,6 @@ def analyze_grad_alignment_moco_flexible(
 
     # iterate model.named_parameters for deterministic grouping/order
     for name, param in model.named_parameters():
-        print(name)
         if name not in grad_task_dict or name not in grad_irm_dict:
             continue
         gL = grad_task_dict[name]
