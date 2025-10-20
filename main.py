@@ -604,6 +604,7 @@ def _ensure_grad_dict(model, grads: Union[Dict[str, torch.Tensor], List[torch.Te
         grad_dict = grads
     else:
         # list-like: zip model.named_parameters() with grads list
+        print("entering else")
         grad_dict = {}
         it = iter(grads)
         for (name, p) in model.named_parameters():
@@ -614,6 +615,7 @@ def _ensure_grad_dict(model, grads: Union[Dict[str, torch.Tensor], List[torch.Te
                 raise ValueError("grads list shorter than model.parameters()")
             grad_dict[name] = g
         # ensure no extra grads left
+        print("after 1st loop")
         try:
             next(it)
             raise ValueError("grads list longer than model.parameters()")
@@ -645,7 +647,9 @@ def analyze_grad_alignment_moco_flexible(
         out = analyze_grad_alignment_moco_flexible(model, grad_task_list, grad_irm_list)
     """
     # normalize inputs to dicts keyed by parameter name
+    print("before _ensure_grad_dict(model, grads_task)"
     grad_task_dict = _ensure_grad_dict(model, grads_task)
+    print("before _ensure_grad_dict(model, grads_irm)"
     grad_irm_dict  = _ensure_grad_dict(model, grads_irm)
 
     stats = defaultdict(lambda: {'cos': [], 'weight': [], 'g_task_norms': [], 'g_irm_norms': []})
