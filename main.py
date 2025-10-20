@@ -23,6 +23,8 @@ import traceback
 import sys
 import time
 import warnings
+from collections import defaultdict
+from typing import Union, List, Dict
 
 def get_negative_mask(batch_size):
     negative_mask = torch.ones((batch_size, 2 * batch_size), dtype=bool)
@@ -575,6 +577,154 @@ def clamp_scalers_for_progress_ema_safe(norm2, dot, scaler, eps=1e-12, do_print=
     scaler['p'] = 3 * w_p / ssum
     return scaler
 
+def group_name_moco(name: str) -> str:
+    """Map param name to logical block for MoCo w/ ResNet backbone and g projection head."""
+    if name.startswith("f.conv1") or name.startswith("f.bn1"):
+        return "stem"
+    if name.startswith("f.layer1"):
+        return "layer1"
+    if name.startswith("f.layer2"):
+        return "layer2"
+    if name.startswith("f.layer3"):
+        return "layer3"
+    if name.startswith("f.layer4"):
+        return "layer4"
+    if name.startswith("g."):
+        return "proj_head"
+    return "other"
+
+def _ensure_grad_dict(model, grads: Union[Dict[str, torch.Tensor], List[torch.Tensor]]):
+    """
+    Convert grads (dict or list) into an ordered dict mapping parameter name -> grad tensor.
+    If grads is a list, it must be in the same order as model.parameters().
+    """
+    grad_dict = {}
+    if isinstance(grads, dict):
+        # assume keys are param names
+        grad_dict = grads
+    else:
+        # list-like: zip model.named_parameters() with grads list
+        grad_dict = {}
+        it = iter(grads)
+        for (name, p) in model.named_parameters():
+            try:
+                g = next(it)
+            except StopIteration:
+                raise ValueError("grads list shorter than model.parameters()")
+            grad_dict[name] = g
+        # ensure no extra grads left
+        try:
+            next(it)
+            raise ValueError("grads list longer than model.parameters()")
+        except StopIteration:
+            pass
+    return grad_dict
+
+def analyze_grad_alignment_moco_flexible(
+    model,
+    grads_task: Union[Dict[str, torch.Tensor], List[torch.Tensor]],
+    grads_irm:  Union[Dict[str, torch.Tensor], List[torch.Tensor]],
+    conflict_thresh: float = -0.5,
+    eps: float = 1e-12
+):
+    """
+    Flexible analyzer: accepts grads as dicts (name->tensor) or lists (same order as model.parameters()).
+    Returns:
+      {
+        'global': {cos_global, dot_global, norm_task, norm_irm, progress},
+        'blocks': { block_name: {cos_mean, cos_weighted, cos_std, frac_conflict,
+                                 g_task_norm_sum, g_irm_norm_sum, n_params} }
+      }
+    Notes:
+      - grads list entries may be flattened or not; function flattens internally.
+      - If grads are lists, they must align with model.named_parameters() order.
+    Example usage:
+        grad_task_list = [p.grad.detach().flatten() for p in model.parameters()]
+        grad_irm_list  = [grad_irm_for_param.detach().flatten() for grad_irm_for_param in some_list]
+        out = analyze_grad_alignment_moco_flexible(model, grad_task_list, grad_irm_list)
+    """
+    # normalize inputs to dicts keyed by parameter name
+    grad_task_dict = _ensure_grad_dict(model, grads_task)
+    grad_irm_dict  = _ensure_grad_dict(model, grads_irm)
+
+    stats = defaultdict(lambda: {'cos': [], 'weight': [], 'g_task_norms': [], 'g_irm_norms': []})
+    g_task_all, g_irm_all = [], []
+
+    # iterate model.named_parameters for deterministic grouping/order
+    for name, param in model.named_parameters():
+        if name not in grad_task_dict or name not in grad_irm_dict:
+            continue
+        gL = grad_task_dict[name]
+        gP = grad_irm_dict[name]
+        if gL is None or gP is None:
+            continue
+        # flatten (safe if already 1D)
+        gLf = gL.flatten()
+        gPf = gP.flatten()
+        if gLf.numel() == 0 or gPf.numel() == 0:
+            continue
+
+        # accumulate for global
+        g_task_all.append(gLf)
+        g_irm_all.append(gPf)
+
+        # per-param cosine and norms
+        cos = F.cosine_similarity(gLf, gPf, dim=0, eps=eps).item()
+        normL = gLf.norm().item()
+        normP = gPf.norm().item()
+        weight = normL * normP
+
+        group = group_name_moco(name)
+        stats[group]['cos'].append(cos)
+        stats[group]['weight'].append(weight)
+        stats[group]['g_task_norms'].append(normL)
+        stats[group]['g_irm_norms'].append(normP)
+
+    # === Global metrics ===
+    if len(g_task_all) > 0:
+        g_task_flat = torch.cat(g_task_all)
+        g_irm_flat  = torch.cat(g_irm_all)
+        dot_global = float(torch.dot(g_task_flat, g_irm_flat).item())
+        cos_global = float(F.cosine_similarity(g_task_flat, g_irm_flat, dim=0, eps=eps).item())
+        norm_task  = float(g_task_flat.norm().item())
+        norm_irm   = float(g_irm_flat.norm().item())
+    else:
+        dot_global = cos_global = norm_task = norm_irm = float('nan')
+
+    # === Per-block aggregation ===
+    results_blocks = {}
+    for group, d in stats.items():
+        if len(d['cos']) == 0:
+            continue
+        cos_tensor = torch.tensor(d['cos'], dtype=torch.float64)
+        weight = torch.tensor(d['weight'], dtype=torch.float64)
+        cos_mean = float(cos_tensor.mean().item())
+        cos_weighted = float(((cos_tensor * weight).sum() / (weight.sum() + eps)).item())
+        cos_std = float(cos_tensor.std(unbiased=False).item())
+        frac_conflict = float((cos_tensor < conflict_thresh).float().mean().item())
+        g_task_norm_sum = float(sum(d['g_task_norms']))
+        g_irm_norm_sum = float(sum(d['g_irm_norms']))
+
+        results_blocks[group] = {
+            'cos_mean': cos_mean,
+            'cos_weighted': cos_weighted,
+            'cos_std': cos_std,
+            'frac_conflict': frac_conflict,
+            'g_task_norm_sum': g_task_norm_sum,
+            'g_irm_norm_sum': g_irm_norm_sum,
+            'n_params': len(d['cos'])
+        }
+
+    return {
+        'global': {
+            'cos_global': cos_global,
+            'dot_global': dot_global,
+            'norm_task': norm_task,
+            'norm_irm': norm_irm
+        },
+        'blocks': results_blocks
+    }
+
 # ssl training with IP-IRM
 def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, **kwargs):
 
@@ -924,6 +1074,21 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         L_grads_flat_weighted = l_keep_grads_flat_weighted + l_grads_flat_weighted
         cos_Lp   = F.cosine_similarity(L_grads_flat_weighted, p_grads_flat_weighted, dim=0)
         dot_Lp   = L_grads_flat_weighted.dot(p_grads_flat_weighted)
+        
+        
+        if args.debug:
+            alignment_stats = analyze_grad_alignment_moco_flexible(net, L_grads_flat_weighted, p_grads_flat_weighted)
+            print()
+            print(f"GLOBAL: cos={alignment_stats['global']['cos_global']:+.3f}, "
+                  f"dot={alignment_stats['global']['dot_global']:.3e}, "
+                  f"progress={alignment_stats['global']['progress']}")
+
+            print("\nPER BLOCK:")
+            for b, s in alignment_stats['blocks'].items():
+                print(f"{b:10s} | cos_w_mean={s['cos_weighted']:+.3f} | "
+                      f"conflict={s['frac_conflict']*100:5.1f}% | "
+                      f"||task||={s['g_task_norm_sum']:.2f} | ||irm||={s['g_irm_norm_sum']:.2f}")
+        
         if do_penalty and (args.penalty_grad_project is not None):
             alpha      = torch.tensor(0., dtype=torch.float, device=device)
             if cos_Lp < 0:
