@@ -598,6 +598,7 @@ def _ensure_grad_dict(model, grads: Union[Dict[str, torch.Tensor], List[torch.Te
     Convert grads (dict or list) into an ordered dict mapping parameter name -> grad tensor.
     If grads is a list, it must be in the same order as model.parameters().
     """
+    assert isinstance(grads, dict) or isinstance(grads, list), f"Grads must be dict or list. Got {type(grads)}"
     grad_dict = {}
     if isinstance(grads, dict):
         # assume keys are param names
@@ -1040,7 +1041,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         else:
             penalty_env = torch.tensor(0, dtype=torch.float, device=device)
 
-        l_keep_grads_flat_weighted = torch.cat([g.detach().clone() for g in loss_keep_grads_final if g is not None]) * loss_keep_weight
+        loss_keep_grads_final_weighted = [g.detach().clone() * loss_keep_weight for g in loss_keep_grads_final if g is not None]
+        l_keep_grads_flat_weighted = torch.cat(loss_keep_grads_final_weighted) 
         loss_keep_grad_norm_weighted = l_keep_grads_flat_weighted.norm() # weighted, can be 0
         
         # Environments gradients
@@ -1050,7 +1052,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 dLoss_dTheta_env = loss_grads[pind]     # per env sum of dCont/dTheta, shape (I,J,K,param_numel), unweighted
                 total_grad_flat  = loss_module.loss_grads_finalize(dLoss_dTheta_env, loss_env, halves_sz)
                 loss_grads_final.append(total_grad_flat)
-            l_grads_flat_weighted = torch.cat([g.detach().clone() for g in loss_grads_final if g is not None]) * loss_weight
+            loss_grads_final_weighted = [g.detach().clone() * loss_weight for g in loss_grads_final if g is not None]
+            l_grads_flat_weighted = torch.cat(loss_grads_final_weighted) 
             loss_grad_norm_weighted = l_grads_flat_weighted.norm()
         else:
             l_grads_flat_weighted = torch.zeros_like(l_keep_grads_flat_weighted)
@@ -1070,7 +1073,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                         halves_sz,
                     ) 
                 penalty_grads_final.append(total_grad_flat.detach().clone())
-            p_grads_flat_weighted = torch.cat([g.detach().clone() for g in penalty_grads_final if g is not None]) * penalty_weight 
+            penalty_grads_final_weighted = [g.detach().clone() * penalty_weight for g in penalty_grads_final if g is not None]
+            p_grads_flat_weighted = torch.cat(penalty_grads_final_weighted)
             penalty_grad_norm_weighted = p_grads_flat_weighted.norm()
         else:
             p_grads_flat_weighted = torch.zeros_like(l_keep_grads_flat_weighted)
@@ -1078,6 +1082,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             penalty_grad_norm_weighted = torch.tensor(0., dtype=torch.float, device=device)
             
         # rotate penalty gradient if it's orthogonal enough to losses' gradients
+        Loss_grads_flat_weighted = [loss_keep_grads_final_weighted[p] + loss_grads_final_weighted[p] for p in range(len(loss_grads_final_weighted))]
         L_grads_flat_weighted = l_keep_grads_flat_weighted + l_grads_flat_weighted
         cos_Lp   = F.cosine_similarity(L_grads_flat_weighted, p_grads_flat_weighted, dim=0)
         dot_Lp   = L_grads_flat_weighted.dot(p_grads_flat_weighted)
@@ -1086,7 +1091,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         if args.debug:
             print()
             print("entering analyze_grad_alignment_moco_flexible")
-            alignment_stats = analyze_grad_alignment_moco_flexible(net, L_grads_flat_weighted, p_grads_flat_weighted)
+            alignment_stats = analyze_grad_alignment_moco_flexible(net, Loss_grads_flat_weighted, penalty_grads_final_weighted)
             print(f"GLOBAL: cos={alignment_stats['global']['cos_global']:+.3f}, "
                   f"dot={alignment_stats['global']['dot_global']:.3e}, "
                   f"progress={alignment_stats['global']['progress']}")
