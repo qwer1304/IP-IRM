@@ -2145,16 +2145,17 @@ if __name__ == '__main__':
                 updated_split = torch.randn((len(update_data), args.env_num), requires_grad=True, device=device)
             else:
                 updated_split = torch.randn((len(update_data), args.env_num), requires_grad=True, device=device)
-                print()
-                print(len(update_data))
-                exit(1)
                 if args.offline:
                     upd_loader = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, prefetch_factor=u_pf, shuffle=False, 
                         drop_last=False, pin_memory=True, persistent_workers=u_pw)
                 else:
                     upd_loader = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, prefetch_factor=u_pf, shuffle=True,
                         drop_last=True, pin_memory=True, persistent_workers=u_pw)
+            print()
+            print("Before",updated_split.size())
             updated_split = train_partition(model, upd_loader, updated_split, random_init=args.random_init, args=args)
+            print("After",updated_split.size())
+            exit(1)
             updated_split_all = [updated_split.clone().detach()]
             upd_loader = None
             gc.collect()              # run Python's garbage collector
