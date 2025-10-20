@@ -653,6 +653,7 @@ def analyze_grad_alignment_moco_flexible(
 
     # iterate model.named_parameters for deterministic grouping/order
     for name, param in model.named_parameters():
+        print(name)
         if name not in grad_task_dict or name not in grad_irm_dict:
             continue
         gL = grad_task_dict[name]
@@ -1083,7 +1084,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         
         if args.debug:
             print()
-            print("entering analyze_grad_alignment_moco_flexible")
             alignment_stats = analyze_grad_alignment_moco_flexible(net, Loss_grads_flat_weighted, penalty_grads_final_weighted)
             print(f"GLOBAL: cos={alignment_stats['global']['cos_global']:+.3f}, "
                   f"dot={alignment_stats['global']['dot_global']:.3e} "
