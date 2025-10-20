@@ -46,8 +46,9 @@ class GradNormLossBalancer(nn.Module):
         self.gradnorm_loss_lambda = gradnorm_loss_lambda
         self.huber_delta = huber_delta
         
-        self.min_mag = 1e-4     # ignore tiny grad values as numerical noise
-        self.w_prev  = None
+        self.min_mag     = 1e-4     # ignore tiny grad values as numerical noise
+        self.w_prev      = None
+        self.eps_GN_prev = None
 
     def reset_weights(self, new_initial_weights):
         for k, new_val in new_initial_weights.items():
@@ -237,7 +238,7 @@ class GradNormLossBalancer(nn.Module):
         all_positive = (expected_v_grad[significant_mask] > 0).all()
         mixed        = not (all_negative or all_positive)
 
-        w_prev      = self.w_prev
+        w_prev          = self.w_prev
         if w_prev is not None:
             progress    = [normalized_weights[k] - w_prev[k] for k in normalized_weights.keys()]
             progress    = torch.stack(progress).abs().mean() # weights are normalized to T and >= 0
@@ -261,6 +262,11 @@ class GradNormLossBalancer(nn.Module):
                 print("gradnorm_loss:\t", gradnorm_loss.cpu().detach().numpy())
                 print(f"all_neg {all_negative.numpy()} all_pos {all_positive.numpy()} mixed {mixed}" +
                       f" sgnfcnt_msk {np.array(significant_mask.tolist())}")
+                eps_GN = r / (avgG * rates + 1e-12)).mean()
+                eq     = (self.eps_GN_prev is not None) and (eps_GN < 0.03) and ((deps_GN := (eps_GN - self.eps_GN_prev).abs()) < 1e-4)
+                if eq:
+                    print(f"\tGN equilibrium reached, eps_GN {eps_GN.item()} deps_GN(t) {deps_GN.item()}")
+                self.eps_GN_prev = eps_GN
 
         return normalized_weights, gradnorm_loss, smoothed_rates, progress
 

@@ -1082,9 +1082,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         v_p                   = gradnorm_balancer.task_weights['penalty'].item()
         
         gn_pm = 0
-        for _, p in enumerate(gradnorm_balancer.parameters()):
+        for pind, p in enumerate(gradnorm_balancer.parameters()):
             if p.grad is not None:
-                gn_pm += p.grad.sign() 
+                gn_pm += (2**pind)*(p.grad.sign()) 
 
         train_optimizer.step()
         train_optimizer.zero_grad(set_to_none=True)        # clear gradients at beginning of next gradients batch
@@ -1248,7 +1248,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                    f' w/v: k {w_k:.4f}/{v_k:.4f} l {w_l:.4f}/{v_l:.4f} p {w_p:.4f}/{v_p:.4f}' + \
                    f' decr: l {loss_decrease_cond:.2e} k {loss_keep_decrease_cond:.2e} p {penalty_decrease_cond:.2e}' + \
                    f' gn_loss {gradnorm_loss:.4e} rates: {gradnorm_rates_str} gn_gpm: {gn_pm} Lp: cos {cos_Lp:.4f}' + \
-                   f' dot {dot_Lp:.3e} gn_prgrs {gradnorm_progress:.4f}'
+                   f' dot {dot_Lp:.3e} gn_prgrs {gradnorm_progress:.6g}'
         desc_str += loss_module.get_debug_info_str()
         train_bar.set_description(desc_str)
 
