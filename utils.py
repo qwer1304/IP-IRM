@@ -973,8 +973,6 @@ def assign_features(feature1, feature2, idxs, split, env_idx):
 
 
 def assign_idxs(idxs, split, env_idx):
-    print()
-    print(idxs.max(), split.size(), env_idx)
     group_assign = split[idxs].argmax(dim=1)
     select_idx = torch.where(group_assign==env_idx)[0]
     return select_idx
