@@ -1087,6 +1087,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             alignment_stats = analyze_grad_alignment_moco_flexible(net, Loss_grads_flat_weighted, penalty_grads_final_weighted)
             print(f"GLOBAL: cos={alignment_stats['global']['cos_global']:+.3f}, "
                   f"dot={alignment_stats['global']['dot_global']:.3e} "
+                 )
 
             print("\nPER BLOCK:")
             for b, s in alignment_stats['blocks'].items():
