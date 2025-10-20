@@ -872,7 +872,8 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
             soft_split_print = soft_split_all[:1].clone().detach()
             if epoch > 0:
                 print('\rUpdating Env [%d/%d] [%d/%d] Loss: %.2f Cont_Risk: %.2f Inv_Risk: %.2f Cons_Risk: %.2f Cnt: %d Lr: %.4f Inv_Mode: %s Soft Split: [%s]'
-                      %(epoch, 100, training_num, len(trainloader.dataset), sum(risk_all_list)/len(risk_all_list), sum(risk_cont_all_list)/len(risk_cont_all_list), sum(risk_penalty_all_list)/len(risk_penalty_all_list),
+                      %(epoch, 100, training_num, len(trainloader.dataset), sum(risk_all_list)/len(risk_all_list), sum(risk_cont_all_list)/len(risk_cont_all_list), 
+                        sum(risk_penalty_all_list)/len(risk_penalty_all_list),
                         sum(risk_constrain_all_list)/len(risk_constrain_all_list), cnt, pre_optimizer.param_groups[0]['lr'], irm_mode, 
                         ", ".join("%.4f" % v for v in F.softmax(soft_split_print, dim=-1)[0].tolist()),
                        ), end='', flush=True)
@@ -894,7 +895,7 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
             cnt += 1
 
         if epoch > 50 and cnt >= 5 or epoch == 60:
-            write_log('\nLoss not down. Break down training.  Epoch: %d  Loss: %.2f' %(best_epoch, low_loss), log_file=log_file, print_=True)
+            write_log('\nLoss not down. Stop training. Epoch: %d  Loss: %.2f' %(best_epoch, low_loss), log_file=log_file, print_=True)
             write_log('Updating Env [%d/%d] [%d/%d]  Loss: %.2f  Cont_Risk: %.2f  Inv_Risk: %.2f  Cons_Risk: %.2f  Cnt: %d  Lr: %.4f  Inv_Mode: %s'
                       %(epoch, 100, training_num, len(trainloader.dataset), sum(risk_all_list)/len(risk_all_list), sum(risk_cont_all_list)/len(risk_cont_all_list), sum(risk_penalty_all_list)/len(risk_penalty_all_list),
                         sum(risk_constrain_all_list)/len(risk_constrain_all_list), cnt, pre_optimizer.param_groups[0]['lr'], irm_mode), log_file=log_file)
@@ -972,6 +973,8 @@ def assign_features(feature1, feature2, idxs, split, env_idx):
 
 
 def assign_idxs(idxs, split, env_idx):
+    print()
+    print(idxs.max(), split.size(), env_idx)
     group_assign = split[idxs].argmax(dim=1)
     select_idx = torch.where(group_assign==env_idx)[0]
     return select_idx

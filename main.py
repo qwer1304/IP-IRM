@@ -1056,8 +1056,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
 
         if do_penalty:
             penalty_grads_final = []
-            penalty_env = penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz) # normalized per env for macro-batch, unweighted
-            pen = penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz, keep_halves=True)
+            pen = penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz, keep_halves=True) # normalized per env for macro-batch, unweighted
             for pind in range(len(penalty_grads)):
                 dPenalty_dTheta_env = penalty_grads[pind]  # per env sum of dPenalty/dTheta over macro-batch per parameter, unweighted, shape (I,J,K,param_numel)
                 total_grad_flat     = \
@@ -1402,6 +1401,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         total_env_loss_weighted  += (loss_weight      * loss_env.mean()).item()      * this_batch_size * gradients_accumulation_steps
         total_loss_weighted      += loss_batch_weighted.item()                       * this_batch_size * gradients_accumulation_steps
         
+        # if cond > 0, the corresponding quantity would decrease
         loss_decrease_cond      = loss_grad_scaler      * ngl2 + loss_keep_grad_scaler*dot_lk + penalty_grad_scaler*dot_lp
         loss_keep_decrease_cond = loss_keep_grad_scaler * ngk2 + loss_grad_scaler*dot_lk      + penalty_grad_scaler*dot_kp
         penalty_decrease_cond   = penalty_grad_scaler   * ngl2 + loss_keep_grad_scaler*dot_kp + loss_grad_scaler*dot_lp
@@ -1467,7 +1467,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
     # end for batch_index, data_env in enumerate(train_bar):
     return total_loss_weighted / trained_samples
 
-def train_update_split(net, update_loader, soft_split, random_init=False, args=None):
+def train_partition(net, update_loader, soft_split, random_init=False, args=None):
     utils.write_log('Start Maximizing ...', log_file, print_=True)
     
     transform = update_loader.dataset.transform
@@ -1493,7 +1493,7 @@ def train_update_split(net, update_loader, soft_split, random_init=False, args=N
                 ncols=args.ncols,               # total width available
                 dynamic_ncols=False,            # disable autosizing
                 bar_format=bar_format,          # request bar width
-                desc='train_update_split(): Feature extracting'
+                desc='train_partition(): Feature extracting'
             )
             for pos_, target, Index in train_bar:
                 pos_ = pos_.cuda(non_blocking=True)
@@ -2146,7 +2146,7 @@ if __name__ == '__main__':
                 else:
                     upd_loader = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, prefetch_factor=u_pf, shuffle=True,
                         drop_last=True, pin_memory=True, persistent_workers=u_pw)
-            updated_split = train_update_split(model, upd_loader, updated_split, random_init=args.random_init, args=args)
+            updated_split = train_partition(model, upd_loader, updated_split, random_init=args.random_init, args=args)
             updated_split_all = [updated_split.clone().detach()]
             upd_loader = None
             gc.collect()              # run Python's garbage collector
@@ -2216,7 +2216,7 @@ if __name__ == '__main__':
             else:
                 upd_loader = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, prefetch_factor=u_pf, shuffle=True, pin_memory=True, 
                     drop_last=True, persistent_workers=u_pw)
-            updated_split = train_update_split(model, upd_loader, updated_split, random_init=args.random_init, args=args)
+            updated_split = train_partition(model, upd_loader, updated_split, random_init=args.random_init, args=args)
             upd_loader = shutdown_loader(upd_loader)
             gc.collect()              # run Python's garbage collector
             updated_split_all.append(updated_split)
