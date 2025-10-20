@@ -1513,8 +1513,8 @@ def train_partition(net, update_loader, soft_split, random_init=False, args=None
                 feature_2, out_2 = net(pos_2)
                 feature_bank_1.append(out_1.cpu())
                 feature_bank_2.append(out_2.cpu())
-        feature1 = torch.cat(feature_bank_1, 0)
-        feature2 = torch.cat(feature_bank_2, 0)
+        feature1 = torch.cat(feature_bank_1, dim=0)
+        feature2 = torch.cat(feature_bank_2, dim=0)
         updated_split = utils.auto_split_offline(feature1, feature2, soft_split, temperature, args.irm_temp, loss_mode='v2', irm_mode=args.irm_mode,
                                          irm_weight=args.irm_weight_maxim, constrain=args.constrain, cons_relax=args.constrain_relax, nonorm=args.nonorm, 
                                          log_file=log_file, batch_size=uo_bs, num_workers=uo_nw, prefetch_factor=uo_pf, persistent_workers=uo_pw)
@@ -2140,7 +2140,7 @@ if __name__ == '__main__':
     
     # update partition for the first time, if we need one
     if not args.baseline:
-        if True or (not resumed) or (resumed and (updated_split is None) and ((args.penalty_cont > 0) or (args.penalty_weight > 0))):  
+        if (not resumed) or (resumed and (updated_split is None) and ((args.penalty_cont > 0) or (args.penalty_weight > 0))):  
             if args.dataset != "ImageNet":
                 updated_split = torch.randn((len(update_data), args.env_num), requires_grad=True, device=device)
             else:
@@ -2151,11 +2151,7 @@ if __name__ == '__main__':
                 else:
                     upd_loader = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, prefetch_factor=u_pf, shuffle=True,
                         drop_last=True, pin_memory=True, persistent_workers=u_pw)
-            print()
-            print("Before",updated_split.size())
             updated_split = train_partition(model, upd_loader, updated_split, random_init=args.random_init, args=args)
-            print("After",updated_split.size())
-            exit(1)
             updated_split_all = [updated_split.clone().detach()]
             upd_loader = None
             gc.collect()              # run Python's garbage collector
@@ -2203,6 +2199,9 @@ if __name__ == '__main__':
         # Minimize step
         if not args.baseline:
             upd_split = updated_split_all if args.retain_group else updated_split
+            print()
+            print([len(s) for s in updated_split_all])
+            exit(1)
         else:
             upd_split = None
             updated_split = None
