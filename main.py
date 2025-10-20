@@ -2140,11 +2140,14 @@ if __name__ == '__main__':
     
     # update partition for the first time, if we need one
     if not args.baseline:
-        if (not resumed) or (resumed and (updated_split is None) and ((args.penalty_cont > 0) or (args.penalty_weight > 0))):  
+        if True or (not resumed) or (resumed and (updated_split is None) and ((args.penalty_cont > 0) or (args.penalty_weight > 0))):  
             if args.dataset != "ImageNet":
                 updated_split = torch.randn((len(update_data), args.env_num), requires_grad=True, device=device)
             else:
                 updated_split = torch.randn((len(update_data), args.env_num), requires_grad=True, device=device)
+                print()
+                print(len(update_data))
+                exit(1)
                 if args.offline:
                     upd_loader = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, prefetch_factor=u_pf, shuffle=False, 
                         drop_last=False, pin_memory=True, persistent_workers=u_pw)
