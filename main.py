@@ -605,18 +605,15 @@ def _ensure_grad_dict(model, grads: Union[Dict[str, torch.Tensor], List[torch.Te
         grad_dict = grads
     else:
         # list-like: zip model.named_parameters() with grads list
-        print("entering else")
         grad_dict = {}
         it = iter(grads)
         for (name, p) in model.named_parameters():
-            print("_ensure_grad_dict", name)
             try:
                 g = next(it)
             except StopIteration:
                 raise ValueError("grads list shorter than model.parameters()")
             grad_dict[name] = g
         # ensure no extra grads left
-        print("after 1st loop")
         try:
             next(it)
             raise ValueError("grads list longer than model.parameters()")
@@ -648,9 +645,7 @@ def analyze_grad_alignment_moco_flexible(
         out = analyze_grad_alignment_moco_flexible(model, grad_task_list, grad_irm_list)
     """
     # normalize inputs to dicts keyed by parameter name
-    print("before _ensure_grad_dict(model, grads_task)"
     grad_task_dict = _ensure_grad_dict(model, grads_task)
-    print("before _ensure_grad_dict(model, grads_irm)"
     grad_irm_dict  = _ensure_grad_dict(model, grads_irm)
 
     stats = defaultdict(lambda: {'cos': [], 'weight': [], 'g_task_norms': [], 'g_irm_norms': []})
@@ -658,7 +653,6 @@ def analyze_grad_alignment_moco_flexible(
 
     # iterate model.named_parameters for deterministic grouping/order
     for name, param in model.named_parameters():
-        print(name)
         if name not in grad_task_dict or name not in grad_irm_dict:
             continue
         gL = grad_task_dict[name]
@@ -701,7 +695,6 @@ def analyze_grad_alignment_moco_flexible(
     # === Per-block aggregation ===
     results_blocks = {}
     for group, d in stats.items():
-        print(group)
         if len(d['cos']) == 0:
             continue
         cos_tensor = torch.tensor(d['cos'], dtype=torch.float64)
