@@ -894,7 +894,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
 
                             # split mb: 'idxs' are indices into 'indexs' that correspond to domain 'env' in 'partition'
                             print()
-                            print(indexs.max().item(), partition.size(), env, partition_num, len(partitions), [len(p) for p in partitions], i, j)
+                            print(indexs.max().item(), partition.size(), env, partition_num, 
+                                  len(partitions), [len(p) for p in partitions], i, j, indexs_batch.max().item())
                             
                             idxs = utils.assign_idxs(indexs, partition, env)
 
