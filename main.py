@@ -607,6 +607,7 @@ def _ensure_grad_dict(model, grads: Union[Dict[str, torch.Tensor], List[torch.Te
         grad_dict = {}
         it = iter(grads)
         for (name, p) in model.named_parameters():
+            print("_ensure_grad_dict", name)
             try:
                 g = next(it)
             except StopIteration:
@@ -652,6 +653,7 @@ def analyze_grad_alignment_moco_flexible(
 
     # iterate model.named_parameters for deterministic grouping/order
     for name, param in model.named_parameters():
+        print(name)
         if name not in grad_task_dict or name not in grad_irm_dict:
             continue
         gL = grad_task_dict[name]
@@ -694,6 +696,7 @@ def analyze_grad_alignment_moco_flexible(
     # === Per-block aggregation ===
     results_blocks = {}
     for group, d in stats.items():
+        print(group)
         if len(d['cos']) == 0:
             continue
         cos_tensor = torch.tensor(d['cos'], dtype=torch.float64)
@@ -1077,8 +1080,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         
         
         if args.debug:
-            alignment_stats = analyze_grad_alignment_moco_flexible(net, L_grads_flat_weighted, p_grads_flat_weighted)
             print()
+            print("entering analyze_grad_alignment_moco_flexible")
+            alignment_stats = analyze_grad_alignment_moco_flexible(net, L_grads_flat_weighted, p_grads_flat_weighted)
             print(f"GLOBAL: cos={alignment_stats['global']['cos_global']:+.3f}, "
                   f"dot={alignment_stats['global']['dot_global']:.3e}, "
                   f"progress={alignment_stats['global']['progress']}")
