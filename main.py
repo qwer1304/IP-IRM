@@ -219,7 +219,7 @@ class IRMCalculator(BaseCalculator):
             penalties_copy[1] /= szs[1]
             return penalties_copy
 
-    def penalty_grads_finalize(self, grads, penalties, szs, debug=False, reduction='sum', **kwargs):
+    def penalty_grads_finalize(self, grads, penalties, szs, debug=False, reduction='sum', sigma=None, **kwargs):
         """
         Given dPenalty/dTheta, Penalty per half, per env and their sizes calculate the combined gradient.
             grads:      dPenalty/dTheta per half, per env, unnormalized, unweighted
@@ -231,10 +231,12 @@ class IRMCalculator(BaseCalculator):
 
         num_halves, num_partitions, num_env = szs.size()
 
+        sigma = sigma if sigma else 0.
+        eps = sigma * torch.randn_like(penalties)
         for i in range(num_halves):
             j = (i + num_halves + 1) % num_halves
             x = (  (grads[i] / szs[i, ..., None])
-                 * penalties[j, ..., None]
+                 * (penalties[j, ..., None] + eps[j, ..., None])
                  / num_env 
                 )
             if reduction == 'sum':
@@ -1052,10 +1054,10 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             loss_grads_final = []
             for pind, _ in enumerate(net.parameters()):
                 dLoss_dTheta_env = loss_grads[pind]     # per env sum of dCont/dTheta, shape (I,J,K,param_numel), unweighted
-                total_grad_flat  = loss_module.loss_grads_finalize(dLoss_dTheta_env, loss_env, halves_sz, reduction='none')
+                total_grad_flat  = loss_module.loss_grads_finalize(dLoss_dTheta_env, loss_env, halves_sz)
                 loss_grads_final.append(total_grad_flat)
             loss_grads_final_weighted = [g.detach().clone() * loss_weight for g in loss_grads_final if g is not None]
-            l_grads_flat_weighted = torch.cat([g.sum((0,1,2)) for g in loss_grads_final_weighted]) 
+            l_grads_flat_weighted = torch.cat([g for g in loss_grads_final_weighted]) 
             loss_grad_norm_weighted = l_grads_flat_weighted.norm()
         else:
             l_grads_flat_weighted = torch.zeros_like(l_keep_grads_flat_weighted)
@@ -1072,28 +1074,17 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                         dPenalty_dTheta_env, 
                         pen, 
                         halves_sz,
-                        reduction='none',
+                        sigma=1e-6,
                     ) 
                 penalty_grads_final.append(total_grad_flat.detach().clone())
             penalty_grads_final_weighted = [g.detach().clone() * penalty_weight for g in penalty_grads_final if g is not None]
-            p_grads_flat_weighted = torch.cat([g.sum((0,1)) for g in penalty_grads_final_weighted])
+            p_grads_flat_weighted = torch.cat([g for g in penalty_grads_final_weighted])
             penalty_grad_norm_weighted = p_grads_flat_weighted.norm()
         else:
             p_grads_flat_weighted = torch.zeros_like(l_keep_grads_flat_weighted)
             penalty_grads_final = [torch.tensor(0., dtype=torch.float, device=device)] * len(penalty_grads)
             penalty_grad_norm_weighted = torch.tensor(0., dtype=torch.float, device=device)
             
-        
-        print()
-        p_grad0 = penalty_grads_final_weighted[0].sum((0))[0] 
-        p_grad1 = penalty_grads_final_weighted[0].sum((0))[1] 
-        l_grad0 = loss_grads_final_weighted[0].sum((0,1))[0] 
-        l_grad1 = loss_grads_final_weighted[0].sum((0,1))[1] 
-
-        print(f"p {F.cosine_similarity(p_grad0,p_grad1,dim=0)} l {F.cosine_similarity(l_grad0,l_grad1,dim=0)}") 
-        print(f"p {p_grad0.norm()}, {p_grad1.norm()} l {l_grad0.norm()} {l_grad1.norm()}") 
-        exit(1)
-        
         Loss_grads_flat_weighted = [loss_keep_grads_final_weighted[p] + loss_grads_final_weighted[p] for p in range(len(loss_grads_final_weighted))]
         L_grads_flat_weighted = l_keep_grads_flat_weighted + l_grads_flat_weighted
         cos_Lp   = F.cosine_similarity(L_grads_flat_weighted, p_grads_flat_weighted, dim=0)
