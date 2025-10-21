@@ -1088,10 +1088,11 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         p_grad1 = penalty_grads_final_weighted[0].sum((0,1))[1] 
         l_grad0 = loss_grads_final_weighted[0].sum((0))[0] 
         l_grad1 = loss_grads_final_weighted[0].sum((0))[1] 
-        cos_lp0   = F.cosine_similarity(p_grad0, p_grad0, dim=0)
-        cos_lp1   = F.cosine_similarity(p_grad1, p_grad1, dim=0)
+        cos_lp0   = F.cosine_similarity(l_grad0, p_grad0, dim=0)
+        cos_lp1   = F.cosine_similarity(l_grad1, p_grad1, dim=0)
         print()
         print(f"cos_lp0 {cos_lp0.item()} cos_lp1 {cos_lp1.item()}")
+        exit(1)
         
         Loss_grads_flat_weighted = [loss_keep_grads_final_weighted[p] + loss_grads_final_weighted[p] for p in range(len(loss_grads_final_weighted))]
         L_grads_flat_weighted = l_keep_grads_flat_weighted + l_grads_flat_weighted
