@@ -1085,7 +1085,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             
         
         print()
-        print("penalty_grads_final_weighted {penalty_grads_final_weighted[0].size()} loss_grads_final_weighted {loss_grads_final_weighted[0].size()}")
+        print(f"penalty_grads_final_weighted {penalty_grads_final_weighted[0].size()} loss_grads_final_weighted {loss_grads_final_weighted[0].size()}")
         p_grad0 = penalty_grads_final_weighted[0].sum((0,1))[0] 
         p_grad1 = penalty_grads_final_weighted[0].sum((0,1))[1] 
         l_grad0 = loss_grads_final_weighted[0].sum((0))[0] 
