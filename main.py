@@ -1090,20 +1090,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         l_grad0 = loss_grads_final_weighted[0].sum((0,1))[0] 
         l_grad1 = loss_grads_final_weighted[0].sum((0,1))[1] 
 
-        M1 = (loss_grads_final_weighted[0].sum(0)[:,0,:] + penalty_grads_final_weighted[0][:,0,:]).to('cpu')  # shape (2, D)
-        M2 = (loss_grads_final_weighted[0].sum(0)[:,1,:] + penalty_grads_final_weighted[0][:,1,:]).to('cpu')  # shape (2, D)
-        # SVD basis for M1 span
-        U1, S1, Vt1 = torch.linalg.svd(M1, full_matrices=False)
-        rank1 = (S1 > 1e-8).sum().item()
-        basis1 = Vt1[:rank1, :]           # shape (rank1, D)
-
-        # Project each row of M2 onto span(basis1)
-        proj = (M2 @ basis1.T) @ basis1   # (E2 x rank1) @ (rank1 x D) -> (E2 x D)
-        residuals = torch.norm(M2 - proj, dim=1)   # absolute residual per env
-        rel_res = residuals / (torch.norm(M2, dim=1).clamp_min(1e-12))  # relative residuals
-
-        print("relative residuals per env (P2 projected on span(P1)):", rel_res.tolist())
-
+        print(f"norms 0 {p_grad0+l_grad0.norm()} 1 {p_grad1 + l_grad1.norm()}") 
         exit(1)
         
         Loss_grads_flat_weighted = [loss_keep_grads_final_weighted[p] + loss_grads_final_weighted[p] for p in range(len(loss_grads_final_weighted))]
