@@ -912,7 +912,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                 sampls_left = N - args.drop_samples
                                 if samples_left < 2:
                                     samples_left = 2
-                                drop_idxs = torch.randint(low=0, len(idxs), size=(N - samples_left,))
+                                drop_idxs = torch.randint(0, len(idxs), (N - samples_left,))
                                 mask = torch.ones_like(idxs, dtype=torch.bool)
                                 mask[drop_idxs] = False
                                 idxs = idxs[mask]  
