@@ -906,9 +906,11 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                             if do_loss:
                                 # compute unnormalized micro-batch loss
                                 loss = losses_samples[idxs].sum(dim=0).detach()
+                                print("loss", j, partition_num, env, loss)
                                 loss_aggregator[j,partition_num,env] += loss # unnormalized, before penalty scaler
                             if do_penalty:
                                 penalty = penalties_samples[idxs].sum(dim=0).detach()
+                                print("penalty", j, partition_num, env, penalty)
                                 penalty_aggregator[j,partition_num,env] += penalty # unnormalized penalty components before penalty scaler
 
                             # gradients
@@ -992,6 +994,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                 if grads is None:
                                     continue
                                 grads = grads.detach().view(-1)
+                                print("loss grad", i, partition_num, env, grads.norm().item())
                                 loss_grads[_j][j,partition_num,env] += grads
                             linear_idx += num_partitions * args.env_num # prepare for penalty grads
                         # penalty
@@ -1004,6 +1007,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                 if grads is None:
                                     continue
                                 grads = grads.detach().view(-1)
+                                print("penalty grad", i, partition_num, env, grads.norm().item())
                                 penalty_grads[_j][j,partition_num,env] += grads
                 # end if not args.baseline:
                 loss_module.post_micro_batch()
@@ -2094,7 +2098,10 @@ if __name__ == '__main__':
              args.start_epoch, best_acc1, best_epoch,
              updated_split, updated_split_all, ema_, gradnorm_balancer, gradnorm_optimizer) = \
                 load_checkpoint(args.resume, model, model_momentum, optimizer, gradnorm_balancer, gradnorm_optimizer)
- 
+                
+            
+            # dummy for debug multiple partitions
+            updated_split_all.append(torch.randn((len(update_data), args.env_num), requires_grad=True, device=device))
             assert all([len(s) == len(update_data) for s in updated_split_all]), "Parititons from checkpoint different length from dataset" 
             if (ema_ is not None) and (args.ema == 'retain'): # exists in checkpoint
                 ema = ema_
