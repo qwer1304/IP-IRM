@@ -904,11 +904,22 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
 
                             # split mb: 'idxs' are indices into 'indexs' that correspond to domain 'env' in 'partition'
                             idxs = utils.assign_idxs(indexs, partition, env)
-                            
+
                             if (N := len(idxs)) == 0:
                                 continue
-
-                            halves_sz[j,partition_num,env] += N # update number of elements in environment
+                            
+                            if args.drop_samples:
+                                sampls_left = N - args.drop_samples
+                                if samples_left < 2:
+                                    samples_left = 2
+                                drop_idxs = torch.randint(low=0, len(idxs), size=(N - samples_left,))
+                                mask = torch.ones_like(idxs, dtype=torch.bool)
+                                mask[drop_idxs] = False
+                                idxs = idxs[mask]  
+                            else:
+                                sampls_left = N
+                            
+                            halves_sz[j,partition_num,env] += samples_left # update number of elements in environment
                             
                             # losses
                             if do_loss:
@@ -1796,6 +1807,7 @@ if __name__ == '__main__':
     parser.add_argument('--ssl_type', default='MoCo', type=str, choices=['MoCo', 'SimSiam'], help='SSL type')    
     parser.add_argument('--penalty_type', default='IRM', type=str, choices=['IRM', 'VREx'], help='Penalty type')        
     parser.add_argument('--penalty_sigma', default='None', type=float, help='Noise level to inject into penalty')        
+    parser.add_argument('--drop_samples', default='None', type=int, help='# of samples to drop to break equilibrium')        
 
     parser.add_argument('--feature_dim', default=128, type=int, help='Feature dim for latent vector')
     parser.add_argument('--temperature', default=0.5, type=float, help='Temperature used in softmax')
