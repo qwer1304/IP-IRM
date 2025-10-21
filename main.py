@@ -1090,7 +1090,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         l_grad0 = loss_grads_final_weighted[0].sum((0,1))[0] 
         l_grad1 = loss_grads_final_weighted[0].sum((0,1))[1] 
 
-        cos_pooled = F.cosine_similarity(l_grad0 + p_grad0, l_grad1 + p_grad1)
+        cos_pooled = F.cosine_similarity(l_grad0 + p_grad0, l_grad1 + p_grad1, dim=0)
         print(f"cos_pooled {cos_ppoled}")
 
         exit(1)
