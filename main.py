@@ -1021,12 +1021,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         torch.cuda.empty_cache()
         trained_samples += this_batch_size # total number of samples processed so far
         
-        print()
-        for pind in [0, 10]:
-            cos0 = F.cosine_similarity(penalty_grads[pind][0,0,0], penalty_grads[pind][0,1,0], dim=0, eps=1e-12).item()
-            cos1 = F.cosine_similarity(penalty_grads[pind][0,0,1], penalty_grads[pind][0,1,1], dim=0, eps=1e-12).item()
-            print("par", pind, cos0, cos1)   
-                        
         gradients_accumulation_step += 1
         if gradients_accumulation_step < gradients_accumulation_steps:
             continue
