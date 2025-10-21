@@ -219,7 +219,7 @@ class IRMCalculator(BaseCalculator):
             penalties_copy[1] /= szs[1]
             return penalties_copy
 
-    def penalty_grads_finalize(self, grads, penalties, szs, debug=False, **kwargs):
+    def penalty_grads_finalize(self, grads, penalties, szs, debug=False, reduction='sum', **kwargs):
         """
         Given dPenalty/dTheta, Penalty per half, per env and their sizes calculate the combined gradient.
             grads:      dPenalty/dTheta per half, per env, unnormalized, unweighted
@@ -236,7 +236,11 @@ class IRMCalculator(BaseCalculator):
             x = (  (grads[i] / szs[i, ..., None])
                  * penalties[j, ..., None]
                  / num_env 
-                ).sum(dim=(0,1)) / num_partitions  # shape (param_numel,)
+                )
+            if reduction == 'sum':
+                x = x.sum(dim=(0,1)) / num_partitions  # shape (param_numel,)
+            elif reduction == 'none':
+                pass
             if i == 0:
                 total_grad_flat = x
             else:
@@ -343,7 +347,7 @@ class LossModule:
         return ""
 
 
-    def loss_grads_finalize(self, grads, losses, szs):
+    def loss_grads_finalize(self, grads, losses, szs, reduction='sum'):
         """
             grads:  Penalty per half, unnormalized per env, weighted
             losses: Losses per half, normalized per env, unweighted
@@ -353,7 +357,11 @@ class LossModule:
         total_grad_flat  = (  grads  
                             / szs[..., None] 
                             / num_env
-                           ).sum(dim=(0,1,2))        # shape (param_numel,)
+                           )
+        if reduction == 'sum':
+            total_grad_flat = total_grad_flat.sum(dim=(0,1,2))        # shape (param_numel,)
+        elif reduction == 'none'
+            pass                                                      # shape (half, part, env, param_numel)
         return total_grad_flat
 
 # ---------------------------
@@ -1036,7 +1044,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             penalty_env = torch.tensor(0, dtype=torch.float, device=device)
 
         loss_keep_grads_final_weighted = [g.detach().clone() * loss_keep_weight for g in loss_keep_grads_final if g is not None]
-        l_keep_grads_flat_weighted = torch.cat(loss_keep_grads_final_weighted) 
+        l_keep_grads_flat_weighted = torch.cat(loss_keep_grads_final_weighted) # cat all grads of all pars into one long vector
         loss_keep_grad_norm_weighted = l_keep_grads_flat_weighted.norm() # weighted, can be 0
         
         # Environments gradients
@@ -1044,10 +1052,10 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             loss_grads_final = []
             for pind, _ in enumerate(net.parameters()):
                 dLoss_dTheta_env = loss_grads[pind]     # per env sum of dCont/dTheta, shape (I,J,K,param_numel), unweighted
-                total_grad_flat  = loss_module.loss_grads_finalize(dLoss_dTheta_env, loss_env, halves_sz)
+                total_grad_flat  = loss_module.loss_grads_finalize(dLoss_dTheta_env, loss_env, halves_sz, reduction='none')
                 loss_grads_final.append(total_grad_flat)
             loss_grads_final_weighted = [g.detach().clone() * loss_weight for g in loss_grads_final if g is not None]
-            l_grads_flat_weighted = torch.cat(loss_grads_final_weighted) 
+            l_grads_flat_weighted = torch.cat(loss_grads_final_weighted.sum((0,1,2))) 
             loss_grad_norm_weighted = l_grads_flat_weighted.norm()
         else:
             l_grads_flat_weighted = torch.zeros_like(l_keep_grads_flat_weighted)
@@ -1064,16 +1072,27 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                         dPenalty_dTheta_env, 
                         pen, 
                         halves_sz,
+                        reduction='none',
                     ) 
                 penalty_grads_final.append(total_grad_flat.detach().clone())
             penalty_grads_final_weighted = [g.detach().clone() * penalty_weight for g in penalty_grads_final if g is not None]
-            p_grads_flat_weighted = torch.cat(penalty_grads_final_weighted)
+            p_grads_flat_weighted = torch.cat(penalty_grads_final_weighted.sum((0,1)))
             penalty_grad_norm_weighted = p_grads_flat_weighted.norm()
         else:
             p_grads_flat_weighted = torch.zeros_like(l_keep_grads_flat_weighted)
             penalty_grads_final = [torch.tensor(0., dtype=torch.float, device=device)] * len(penalty_grads)
             penalty_grad_norm_weighted = torch.tensor(0., dtype=torch.float, device=device)
             
+        
+        p_grad0 = penalty_grads_final_weighted[0].sum((0,1))[0] 
+        p_grad1 = penalty_grads_final_weighted[0].sum((0,1))[1] 
+        l_grad0 = loss_grads_final_weighted[0].sum((0))[0] 
+        l_grad1 = loss_grads_final_weighted[0].sum((0))[1] 
+        cos_lp0   = F.cosine_similarity(p_grad0, p_grad0, dim=0)
+        cos_lp1   = F.cosine_similarity(p_grad1, p_grad1, dim=0)
+        print()
+        print(f"cos_lp0 {cos_lp0.item()} cos_lp1 {cos_lp1.item()}")
+        
         Loss_grads_flat_weighted = [loss_keep_grads_final_weighted[p] + loss_grads_final_weighted[p] for p in range(len(loss_grads_final_weighted))]
         L_grads_flat_weighted = l_keep_grads_flat_weighted + l_grads_flat_weighted
         cos_Lp   = F.cosine_similarity(L_grads_flat_weighted, p_grads_flat_weighted, dim=0)
