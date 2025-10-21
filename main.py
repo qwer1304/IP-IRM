@@ -360,7 +360,7 @@ class LossModule:
                            )
         if reduction == 'sum':
             total_grad_flat = total_grad_flat.sum(dim=(0,1,2))        # shape (param_numel,)
-        elif reduction == 'none'
+        elif reduction == 'none':
             pass                                                      # shape (half, part, env, param_numel)
         return total_grad_flat
 
