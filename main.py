@@ -1022,11 +1022,10 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         trained_samples += this_batch_size # total number of samples processed so far
         
         print()
-        for i in [0, 10]:
-            for j in range(penalty_grads[i].size(0)):
-                for par in range(penalty_grads[i].size(1)):
-                    for env in range(penalty_grads[i].size(2)):
-                        print("par", i, "penalty_grads", j, par, env, penalty_grads[i][j,par,env,0].norm().item())   
+        for pind in [0, 10]:
+            cos0 = F.cosine_similarity(penalty_grads[pind][0,0,0], penalty_grads[pind][0,1,0], dim=0, eps=eps).item())
+            cos1 = F.cosine_similarity(penalty_grads[pind][0,0,1], penalty_grads[pind][0,1,1], dim=0, eps=eps).item())
+            print("par", pind, cos0, cos1)   
                         
         gradients_accumulation_step += 1
         if gradients_accumulation_step < gradients_accumulation_steps:
