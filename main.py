@@ -894,8 +894,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
 
                             # split mb: 'idxs' are indices into 'indexs' that correspond to domain 'env' in 'partition'
                             idxs = utils.assign_idxs(indexs, partition, env)
-                            print()
-                            print("idxs", idxs)
                             
                             if (N := len(idxs)) == 0:
                                 continue
@@ -906,11 +904,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                             if do_loss:
                                 # compute unnormalized micro-batch loss
                                 loss = losses_samples[idxs].sum(dim=0).detach()
-                                print("loss", j, partition_num, env, loss)
                                 loss_aggregator[j,partition_num,env] += loss # unnormalized, before penalty scaler
                             if do_penalty:
                                 penalty = penalties_samples[idxs].sum(dim=0).detach()
-                                print("penalty", j, partition_num, env, penalty)
                                 penalty_aggregator[j,partition_num,env] += penalty # unnormalized penalty components before penalty scaler
 
                             # gradients
@@ -1026,7 +1022,14 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         # end for j in range(idxs):
         torch.cuda.empty_cache()
         trained_samples += this_batch_size # total number of samples processed so far
-
+        
+        print()
+        for i in [0, 10]:
+            for j in range(penalty_grads[i].size(0)):
+                for par in range(penalty_grads[i].size(1)):
+                    for env in range(penalty_grads[i].size(2)):
+                        print("par", i, "penalty_grads", j, par, env, penalty_grads[0][j,par,env,0].norm().item())   
+                        
         gradients_accumulation_step += 1
         if gradients_accumulation_step < gradients_accumulation_steps:
             continue
