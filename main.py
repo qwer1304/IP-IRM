@@ -1055,7 +1055,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 total_grad_flat  = loss_module.loss_grads_finalize(dLoss_dTheta_env, loss_env, halves_sz, reduction='none')
                 loss_grads_final.append(total_grad_flat)
             loss_grads_final_weighted = [g.detach().clone() * loss_weight for g in loss_grads_final if g is not None]
-            l_grads_flat_weighted = torch.cat(loss_grads_final_weighted.sum((0,1,2))) 
+            l_grads_flat_weighted = torch.cat([g.sum((0,1,2)) for g in loss_grads_final_weighted]) 
             loss_grad_norm_weighted = l_grads_flat_weighted.norm()
         else:
             l_grads_flat_weighted = torch.zeros_like(l_keep_grads_flat_weighted)
@@ -1076,7 +1076,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                     ) 
                 penalty_grads_final.append(total_grad_flat.detach().clone())
             penalty_grads_final_weighted = [g.detach().clone() * penalty_weight for g in penalty_grads_final if g is not None]
-            p_grads_flat_weighted = torch.cat(penalty_grads_final_weighted.sum((0,1)))
+            p_grads_flat_weighted = torch.cat([g.sum((0,1)) for g in penalty_grads_final_weighted])
             penalty_grad_norm_weighted = p_grads_flat_weighted.norm()
         else:
             p_grads_flat_weighted = torch.zeros_like(l_keep_grads_flat_weighted)
