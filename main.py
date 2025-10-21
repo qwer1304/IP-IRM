@@ -1084,6 +1084,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             penalty_grad_norm_weighted = torch.tensor(0., dtype=torch.float, device=device)
             
         
+        print()
+        print("penalty_grads_final_weighted {penalty_grads_final_weighted[0].size()} loss_grads_final_weighted {loss_grads_final_weighted[0].size()}")
         p_grad0 = penalty_grads_final_weighted[0].sum((0,1))[0] 
         p_grad1 = penalty_grads_final_weighted[0].sum((0,1))[1] 
         l_grad0 = loss_grads_final_weighted[0].sum((0))[0] 
@@ -1091,7 +1093,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         print(f"p_grad0 {p_grad0.size()} p_grad1 {p_grad1.size()} l_grad0 {l_grad0.size()} l_grad1 {l_grad1.size()}")
         cos_lp0   = F.cosine_similarity(l_grad0, p_grad0, dim=0)
         cos_lp1   = F.cosine_similarity(l_grad1, p_grad1, dim=0)
-        print()
         print(f"cos_lp0 {cos_lp0.item()} cos_lp1 {cos_lp1.item()}")
         exit(1)
         
