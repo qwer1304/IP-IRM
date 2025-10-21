@@ -1074,7 +1074,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                         dPenalty_dTheta_env, 
                         pen, 
                         halves_sz,
-                        sigma=1e-6,
+                        sigma=args.penalty_sigma,
                     ) 
                 penalty_grads_final.append(total_grad_flat.detach().clone())
             penalty_grads_final_weighted = [g.detach().clone() * penalty_weight for g in penalty_grads_final if g is not None]
@@ -1795,6 +1795,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train IP-IRM')
     parser.add_argument('--ssl_type', default='MoCo', type=str, choices=['MoCo', 'SimSiam'], help='SSL type')    
     parser.add_argument('--penalty_type', default='IRM', type=str, choices=['IRM', 'VREx'], help='Penalty type')        
+    parser.add_argument('--penalty_sigma', default='None', type=float, help='Noise level to inject into penalty')        
+
     parser.add_argument('--feature_dim', default=128, type=int, help='Feature dim for latent vector')
     parser.add_argument('--temperature', default=0.5, type=float, help='Temperature used in softmax')
     parser.add_argument('--tau_plus', default=0.1, type=float, help='Positive class priorx')
