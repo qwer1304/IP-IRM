@@ -892,10 +892,12 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                     for partition_num, partition in enumerate(partitions):
                         for env in range(args.env_num):
 
-                            # split mb: 'idxs' are indices into 'indexs' that correspond to domain 'env' in 'partition'
+                            # split mb: 'idxs' is a mask over 'indexs' that correspond to domain 'env' in 'partition'
                             idxs = utils.assign_idxs(indexs, partition, env)
-
-                            if (N := len(idxs)) == 0:
+                            print()
+                            print("idxs", idxs)
+                            
+                            if (N := sum(idxs)) == 0:
                                 continue
 
                             halves_sz[j,partition_num,env] += N # update number of elements in environment
@@ -912,14 +914,12 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                             # gradients
                             linear_idx = torch.tensor(partition_num*args.env_num + env, dtype=torch.int, device=device)
                             offset = 0
-                            mask = torch.zeros(num_samples, dtype=torch.float, device=device)
-                            mask[idxs] = 1.0
                             if do_loss:
-                                grad_outputs[linear_idx][offset:offset+num_samples] = mask # unweighted
+                                grad_outputs[linear_idx][offset:offset+num_samples] = float(idxs) # unweighted
                                 linear_idx += num_partitions * args.env_num
                                 offset += num_samples
                             if do_penalty:
-                                grad_outputs[linear_idx][offset:offset+num_samples] = mask # unweighted
+                                grad_outputs[linear_idx][offset:offset+num_samples] = float(idxs, dtype=torch.float, device=device) # unweighted
                                 offset += num_samples
                         # end for env in range(args.env_num):
                     # end for partition_num, partition in enumerate(partitions):
@@ -1074,12 +1074,10 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             penalty_grads_final = [torch.tensor(0., dtype=torch.float, device=device)] * len(penalty_grads)
             penalty_grad_norm_weighted = torch.tensor(0., dtype=torch.float, device=device)
             
-        # rotate penalty gradient if it's orthogonal enough to losses' gradients
         Loss_grads_flat_weighted = [loss_keep_grads_final_weighted[p] + loss_grads_final_weighted[p] for p in range(len(loss_grads_final_weighted))]
         L_grads_flat_weighted = l_keep_grads_flat_weighted + l_grads_flat_weighted
         cos_Lp   = F.cosine_similarity(L_grads_flat_weighted, p_grads_flat_weighted, dim=0)
         dot_Lp   = L_grads_flat_weighted.dot(p_grads_flat_weighted)
-        
         
         if args.debug:
             print()
@@ -1094,6 +1092,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                       f"conflict={s['frac_conflict']*100:5.1f}% | "
                       f"||task||={s['g_task_norm_sum']:.2f} | ||irm||={s['g_irm_norm_sum']:.2f}")
         
+        # rotate penalty gradient if it's orthogonal enough to losses' gradients
         if do_penalty and (args.penalty_grad_project is not None):
             alpha      = torch.tensor(0., dtype=torch.float, device=device)
             if cos_Lp < 0:
