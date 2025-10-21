@@ -2108,7 +2108,7 @@ if __name__ == '__main__':
                 
             
             # dummy for debug multiple partitions
-            updated_split_all.append(torch.randn((len(update_data), args.env_num), requires_grad=True, device=device))
+            # updated_split_all.append(torch.randn((len(update_data), args.env_num), requires_grad=True, device=device))
             assert all([len(s) == len(update_data) for s in updated_split_all]), "Parititons from checkpoint different length from dataset" 
             if (ema_ is not None) and (args.ema == 'retain'): # exists in checkpoint
                 ema = ema_
