@@ -993,6 +993,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                 loss_grads[_j][j,partition_num,env] += grads
                             linear_idx += num_partitions * args.env_num # prepare for penalty grads
                         # penalty
+                        print()
                         if do_penalty:
                             # flatten and accumulate per parameter
                             for _j, g in enumerate(grads_all):
@@ -1002,6 +1003,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                 if grads is None:
                                     continue
                                 grads = grads.detach().view(-1)
+                                print(f"pen_grad par {_j} half {j} part {partition_num} env {env} lin_idx {linear_idx} grad {grads.norm().item()}")
                                 penalty_grads[_j][j,partition_num,env] += grads
                 # end if not args.baseline:
                 loss_module.post_micro_batch()
