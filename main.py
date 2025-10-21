@@ -892,12 +892,12 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                     for partition_num, partition in enumerate(partitions):
                         for env in range(args.env_num):
 
-                            # split mb: 'idxs' is a mask over 'indexs' that correspond to domain 'env' in 'partition'
+                            # split mb: 'idxs' are indices into 'indexs' that correspond to domain 'env' in 'partition'
                             idxs = utils.assign_idxs(indexs, partition, env)
                             print()
                             print("idxs", idxs)
                             
-                            if (N := sum(idxs)) == 0:
+                            if (N := len(idxs)) == 0:
                                 continue
 
                             halves_sz[j,partition_num,env] += N # update number of elements in environment
@@ -914,12 +914,14 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                             # gradients
                             linear_idx = torch.tensor(partition_num*args.env_num + env, dtype=torch.int, device=device)
                             offset = 0
+                            mask = torch.zeros(num_samples, dtype=torch.float, device=device)
+                            mask[idxs] = 1.0
                             if do_loss:
-                                grad_outputs[linear_idx][offset:offset+num_samples] = float(idxs) # unweighted
+                                grad_outputs[linear_idx][offset:offset+num_samples] = mask # unweighted
                                 linear_idx += num_partitions * args.env_num
                                 offset += num_samples
                             if do_penalty:
-                                grad_outputs[linear_idx][offset:offset+num_samples] = float(idxs, dtype=torch.float, device=device) # unweighted
+                                grad_outputs[linear_idx][offset:offset+num_samples] = mask # unweighted
                                 offset += num_samples
                         # end for env in range(args.env_num):
                     # end for partition_num, partition in enumerate(partitions):
