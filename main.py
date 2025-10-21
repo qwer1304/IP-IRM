@@ -1806,8 +1806,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train IP-IRM')
     parser.add_argument('--ssl_type', default='MoCo', type=str, choices=['MoCo', 'SimSiam'], help='SSL type')    
     parser.add_argument('--penalty_type', default='IRM', type=str, choices=['IRM', 'VREx'], help='Penalty type')        
-    parser.add_argument('--penalty_sigma', default='None', type=float, help='Noise level to inject into penalty')        
-    parser.add_argument('--drop_samples', default='None', type=int, help='# of samples to drop to break equilibrium')        
+    parser.add_argument('--penalty_sigma', default=None, type=float, help='Noise level to inject into penalty')        
+    parser.add_argument('--drop_samples', default=None, type=int, help='# of samples to drop to break equilibrium')        
 
     parser.add_argument('--feature_dim', default=128, type=int, help='Feature dim for latent vector')
     parser.add_argument('--temperature', default=0.5, type=float, help='Temperature used in softmax')
