@@ -915,9 +915,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                             
                             sampls_left = N
                             if args.drop_samples:
-                                samples_left = N - args.drop_samples
-                                if samples_left < 2:
-                                    samples_left = 2
+                                samples_left = max(N - args.drop_samples, 2)
                                 samples_to_drop = max(N - samples_left, 0)
                                 if samples_to_drop > 0:
                                     drop_idxs = torch.randint(0, len(idxs), (samples_to_drop,))
