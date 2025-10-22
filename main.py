@@ -913,16 +913,17 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                             if (N := len(idxs)) == 0:
                                 continue
                             
+                            sampls_left = N
                             if args.drop_samples:
                                 samples_left = N - args.drop_samples
                                 if samples_left < 2:
                                     samples_left = 2
-                                drop_idxs = torch.randint(0, len(idxs), (N - samples_left,))
-                                mask = torch.ones_like(idxs, dtype=torch.bool)
-                                mask[drop_idxs] = False
-                                idxs = idxs[mask]  
-                            else:
-                                sampls_left = N
+                                samples_to_drop = max(N - samples_left, 0)
+                                if samples_to_drop > 0:
+                                    drop_idxs = torch.randint(0, len(idxs), (samples_to_drop,))
+                                    mask = torch.ones_like(idxs, dtype=torch.bool)
+                                    mask[drop_idxs] = False
+                                    idxs = idxs[mask] 
                             
                             halves_sz[j,partition_num,env] += samples_left # update number of elements in environment
                             
