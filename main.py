@@ -155,16 +155,21 @@ class VRExCalculator(BaseCalculator):
     def penalty_grads_finalize(self, grads, penalties, szs, **kwargs):
         """
         Given dPenalty/dTheta, Penalty per half, per env and their sizes calculate the combined gradient.
-        dV/dTheta = 2/E*sum_e((Loss_e - mu) * grad_e), where mu = 1/E*sum_e(Loss_e) 
+        dV/dTheta = d/dTheta(1/E*(Loss_e - 1/E*sum_j(Loss_j))^2) = 
+                    2/E*sum_e((Loss_e - mu) * (grad_e - mu_grad), 
+                    where: mu = 1/E*sum_e(Loss_e), mu_grad = 1/E*sum_e(grad_e), 
+                           Loss_e = 1/N_e*sum_i(L_{e,i}), grad_e = 1/N_e*sum_i(grad_{e,i})
             grads:      dPenalty/dTheta per half, per env, unnormalized (1,num_partitions,num_envs,parnums), unweighted
             penalties:  Penalty per half, normalized per env, (1,num_partitions,num_envs), unweighted
-            szs:        sizes of halves of environments
+            szs:        sizes of halves of environments (single half required)
         """
         
-        _, num_partitions, num_env    = szs.size()
-        mu      = penalties.mean(dim=[0,2], keepdim=True) # (1,num_env,1)
-        x       = (2 * (penalties[..., None] - mu[..., None]) 
-                     * (grads / szs[..., None]) 
+        num_halves, num_partitions, num_env = szs.size()
+        assert num_halves == 1, "VREx number of halves should be 1"
+        mu      = penalties.sum(dim=2, keepdim=True) /  num_env        # (1,num_partitions,1)
+        mu_grad = grads.sum(dim=2, keepdim=True)     / (num_env * szs) # (1,num_partitions,1)
+        x       = (2 * (penalties[..., None]   - mu[..., None]) 
+                     * (grads / szs[..., None] - mu_grad[..., None]) 
                      / num_env
                   ).sum(dim=(0,1,2)) / num_partitions # (parnums,)
             
