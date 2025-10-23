@@ -2152,7 +2152,7 @@ if __name__ == '__main__':
 
     # training loop
     # start epoch is what the user provided, if provided, or from checkpoint, if exists, or 1 (default)
-    epoch = args.start_epoch if args.start_epoch else start_epoch
+    start_epoch = args.start_epoch if args.start_epoch else start_epoch
 
     if args.evaluate:
         print(f"Staring evaluation name: {args.name}")
@@ -2177,7 +2177,7 @@ if __name__ == '__main__':
     
     # update partition for the first time, if we need one
     if not args.baseline:
-        if (epoch == 1) or (not resumed) or (resumed and (updated_split is None) and ((args.penalty_cont > 0) or (args.penalty_weight > 0))):  
+        if (start_epoch == 1) or (not resumed) or (resumed and (updated_split is None) and ((args.penalty_cont > 0) or (args.penalty_weight > 0))):  
             if args.dataset != "ImageNet":
                 updated_split = torch.randn((len(update_data), args.env_num), requires_grad=True, device=device)
             else:
@@ -2229,7 +2229,7 @@ if __name__ == '__main__':
             it._shutdown_workers()
         return None
 
-    for epoch in range(args.start_epoch, epochs + 1):
+    for epoch in range(start_epoch, epochs + 1):
         if train_loader is None:
             train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, shuffle=True, 
                                 pin_memory=True, persistent_workers=tr_pw, drop_last=tr_dl)
