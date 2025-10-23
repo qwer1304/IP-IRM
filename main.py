@@ -148,9 +148,9 @@ class VRExCalculator(BaseCalculator):
             penalties:  Penalty per half, per env, unnormalized (1,num_partitions,num_envs)
             szs:        sizes of halves of environments
         """
-        mu = (penalties / szs).mean(dim=[0,2], keepdim=True) # (1,num_partitions,1)
+        mu = (penalties / (szs+1e-12)).mean(dim=[0,2], keepdim=True) # (1,num_partitions,1)
         
-        return ((penalties / szs - mu)**2) # normalized per env for macro-batch, (1, num_partitions, num_envs)
+        return ((penalties / (szs+1e-12) - mu)**2) # normalized per env for macro-batch, (1, num_partitions, num_envs)
 
     def penalty_grads_finalize(self, grads, penalties, szs, **kwargs):
         """
@@ -167,9 +167,9 @@ class VRExCalculator(BaseCalculator):
         num_halves, num_partitions, num_env = szs.size()
         assert num_halves == 1, "VREx number of halves should be 1"
         mu      = penalties.sum(dim=2, keepdim=True) /  num_env        # (1,num_partitions,1)
-        mu_grad = grads.sum(dim=2, keepdim=True)     / (num_env * szs) # (1,num_partitions,1)
+        mu_grad = grads.sum(dim=2, keepdim=True)     / (num_env * (szs+1e-12)) # (1,num_partitions,1)
         x       = (2 * (penalties[..., None]   - mu[..., None]) 
-                     * (grads / szs[..., None] - mu_grad[..., None]) 
+                     * (grads / (szs[..., None]+1e-12) - mu_grad[..., None]) 
                      / num_env
                   ).sum(dim=(0,1,2)) / num_partitions # (parnums,)
             
@@ -217,11 +217,11 @@ class IRMCalculator(BaseCalculator):
         
     def penalty_finalize(self, penalties, szs, keep_halves=False):
         if not keep_halves:
-            return (penalties[0] / szs[0]) * (penalties[1] / szs[1])  # normalized per env for macro-batch 
+            return (penalties[0] / (szs[0]+1e-12)) * (penalties[1] / (szs[1]+1e-12))  # normalized per env for macro-batch 
         else:
             penalties_copy = penalties.clone()
-            penalties_copy[0] /= szs[0]
-            penalties_copy[1] /= szs[1]
+            penalties_copy[0] /= (szs[0]+1e-12)
+            penalties_copy[1] /= (szs[1]+1e-12)
             return penalties_copy
 
     def penalty_grads_finalize(self, grads, penalties, szs, debug=False, reduction='sum', sigma=None, **kwargs):
@@ -240,7 +240,7 @@ class IRMCalculator(BaseCalculator):
         eps = sigma * torch.randn_like(penalties)
         for i in range(num_halves):
             j = (i + num_halves + 1) % num_halves
-            x = (  (grads[i] / szs[i, ..., None])
+            x = (  (grads[i] / (szs[i, ..., None]+1e-12))
                  * (penalties[j, ..., None] + eps[j, ..., None])
                  / num_env 
                 )
@@ -364,7 +364,7 @@ class LossModule:
         """
         num_env = prod(szs.size())
         total_grad_flat  = (  grads  
-                            / szs[..., None] 
+                            / (szs[..., None]+1e-12) 
                             / num_env
                            )
         if reduction == 'sum':
@@ -1182,8 +1182,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             dot_kp   = delta_kp
         
         # This awlays holds because we compute it from cosines
-        print()
-        print(loss_grad_norm_weighted, args.ema, emas)
         assert dot_lk.abs() <= ngk * ngl, f"ngk {ngk}, ngl {ngl}, lk {dot_lk.abs()}" 
         assert dot_lp.abs() <= ngl * ngp, f"ngl {ngl}, ngp {ngp}, lp {dot_lp.abs()}"
         assert dot_kp.abs() <= ngk * ngp, f"ngk {ngk}, ngp {ngp}, lpk {dot_lp.abs()}"
