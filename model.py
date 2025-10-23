@@ -179,11 +179,13 @@ class SimSiam(nn.Module):
 
         # Load pretrained weights (if provided)
         if state_dict is not None:
-            # Handle MoCo checkpoints (strip encoder_q prefix)
+            # Handle MoCo / SimSiam checkpoints (strip encoder_q prefix)
             new_state_dict = {}
             for k, v in state_dict.items():
                 if k.startswith("module.encoder_q."):
                     k = k[len("module.encoder_q."):]
+                if k.startswith("module."):
+                    k = k[len("module."):]
                 new_state_dict[k] = v
 
             msg = self.f.load_state_dict(new_state_dict, strict=False)
