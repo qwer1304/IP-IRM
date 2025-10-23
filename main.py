@@ -1272,9 +1272,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         w_k                   = loss_keep_grad_scaler.item()
         w_l                   = loss_grad_scaler.item()
         w_p                   = penalty_grad_scaler.item()
-        v_k                   = gradnorm_balancer.task_weights['loss_keep'].item()
-        v_l                   = gradnorm_balancer.task_weights['loss'].item()
-        v_p                   = gradnorm_balancer.task_weights['penalty'].item()
+        v_k                   = gradnorm_balancer.task_weights['loss_keep'].item() if 'loss_keep' in gradnorm_balancer.task_weights else 0.
+        v_l                   = gradnorm_balancer.task_weights['loss'].item()      if 'loss'      in gradnorm_balancer.task_weights else 0.
+        v_p                   = gradnorm_balancer.task_weights['penalty'].item()   if 'penalty'   in gradnorm_balancer.task_weights else 0.
         
         gn_pm = 0
         for pind, p in enumerate(gradnorm_balancer.parameters()):
