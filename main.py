@@ -300,8 +300,6 @@ class SimSiamIRMCalculator(IRMCalculator):
     def penalty(self, losses, **kwargs):
         device = self.loss_module._representations[0].device
         # one scalar (requires grad)
-                self._representations = (z1, z2, p1, p2)
-
         batch_size = self.loss_module.representations(idxs=idxs)[0].size(0)
         #s = torch.ones(batch_size, device=device, requires_grad=True)  # one s per sample
         s = torch.tensor(1.0, requires_grad=True, device=device)
