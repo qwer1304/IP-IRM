@@ -188,6 +188,8 @@ class SimSiam(nn.Module):
                     k = k[len("module.encoder."):]
                 if k.startswith("module."):
                     k = k[len("module."):]
+                if k.startswith("predictor."):
+                    continue
                 new_state_dict[k] = v
 
             msg = self.f.load_state_dict(new_state_dict, strict=False)
