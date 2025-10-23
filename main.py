@@ -297,7 +297,7 @@ class SimSiamIRMCalculator(IRMCalculator):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    def penalty(self, losses, **kwargs):
+    def penalty(self, losses, idxs=None, **kwargs):
         device = self.loss_module._representations[0].device
         # one scalar (requires grad)
         batch_size = self.loss_module.representations(idxs=idxs)[0].size(0)
