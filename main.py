@@ -1885,7 +1885,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--resume', default='', type=str, metavar='PATH',
                     help='path to latest checkpoint (default: none)')
-    parser.add_argument('--start-epoch', default=1, type=int, metavar='N',
+    parser.add_argument('--start-epoch', default=None, type=int, metavar='N',
                     help='manual epoch number (useful on restarts)')
     parser.add_argument('--save_root', type=str, default='save', help='root dir for saving')
     parser.add_argument('--checkpoint_freq', default=3, type=int, metavar='N',
@@ -2115,10 +2115,11 @@ if __name__ == '__main__':
     best_acc1 = 0
     best_epoch = 0
     resumed = False
+    start_epoch = 1
     if args.resume:
         if os.path.isfile(args.resume):
             (model, model_momentum, optimizer, queue,
-             args.start_epoch, best_acc1, best_epoch,
+             start_epoch, best_acc1, best_epoch,
              updated_split, updated_split_all, ema_, gradnorm_balancer, gradnorm_optimizer) = \
                 load_checkpoint(args.resume, model, model_momentum, optimizer, gradnorm_balancer, gradnorm_optimizer)
                 
@@ -2143,7 +2144,8 @@ if __name__ == '__main__':
             print("=> no checkpoint found at '{}'".format(args.resume))
 
     # training loop
-    epoch = args.start_epoch
+    # start epoch is what the user provided, if provided, or from checkpoint, if exists, or 1 (default)
+    epoch = args.start_epoch if args.start_epoch else start_epoch
 
     if args.evaluate:
         print(f"Staring evaluation name: {args.name}")
@@ -2168,7 +2170,7 @@ if __name__ == '__main__':
     
     # update partition for the first time, if we need one
     if not args.baseline:
-        if (not resumed) or (resumed and (updated_split is None) and ((args.penalty_cont > 0) or (args.penalty_weight > 0))):  
+        if (epoch == 1) or (not resumed) or (resumed and (updated_split is None) and ((args.penalty_cont > 0) or (args.penalty_weight > 0))):  
             if args.dataset != "ImageNet":
                 updated_split = torch.randn((len(update_data), args.env_num), requires_grad=True, device=device)
             else:
