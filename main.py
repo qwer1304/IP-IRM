@@ -298,9 +298,11 @@ class SimSiamIRMCalculator(IRMCalculator):
         super().__init__(*args, **kwargs)
 
     def penalty(self, losses, **kwargs):
-        device = self.loss_module.representations[0].device
+        device = self.loss_module._representations[0].device
         # one scalar (requires grad)
-        batch_size = self.loss_module.logits(idxs=idxs).size(0)
+                self._representations = (z1, z2, p1, p2)
+
+        batch_size = self.loss_module.representations(idxs=idxs)[0].size(0)
         #s = torch.ones(batch_size, device=device, requires_grad=True)  # one s per sample
         s = torch.tensor(1.0, requires_grad=True, device=device)
         s = s.expand(batch_size)        
@@ -474,13 +476,13 @@ class SimSiamLossModule(LossModule):
         _, z2 = self.net(x2)
         p1 = self.net.module.predictor(z1)
         p2 = self.net.module.predictor(z2)
-        self.representations = (z1, z2, p1, p2)
+        self._representations = (z1, z2, p1, p2)
 
     def compute_loss_micro(self, idxs=None, scale=1.0, reduction='sum'):
         """
         Computes unnormalized loss of a micro-batch
         """
-        z1, z2, p1, p2 = self.representations
+        z1, z2, p1, p2 = self._representations
         if idxs is None:
             idxs = torch.arange(z1.size(0), device=z1.device)
         # symmetric SimSiam loss (neg cosine, average two directions)
@@ -490,6 +492,11 @@ class SimSiamLossModule(LossModule):
         if reduction == 'sum':
             loss = loss.sum()
         return loss
+
+    def representations(self, idxs=None):
+        if idxs is None:
+            idxs = torch.arange(self._representations[0].size(0), device=self._representations.device)
+        return tuple(r[idxs] for r in self._representations)
 
 def clamp_scalers_for_progress(norm2_dict, dot_dict, scaler_dict, ema=False):
     def consistent_dots(dot_dict, norm2_dict, eps=1e-12):
