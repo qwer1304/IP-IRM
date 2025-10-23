@@ -205,7 +205,7 @@ class SimSiam(nn.Module):
             print("\tProjector: Missing keys (ignoring fc):", [k for k in msg.missing_keys if not k.startswith("fc.")])
             print("\tProjector: Unexpected keys (ignoring fc):", [k for k in msg.unexpected_keys if not k.startswith("fc.")])
 
-            msg self.predictor.load_state_dict(predictor_state_dict, strict=False)
+            msg = self.predictor.load_state_dict(predictor_state_dict, strict=False)
             print("\tPredictor: Missing keys (ignoring fc):", [k for k in msg.missing_keys if not k.startswith("fc.")])
             print("\tPredictor: Unexpected keys (ignoring fc):", [k for k in msg.unexpected_keys if not k.startswith("fc.")])
     
