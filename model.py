@@ -165,6 +165,8 @@ class SimSiam(nn.Module):
 
         # Backbone
         self.f = resnet50(weights=None)
+        self.projector =  projection_MLP(2048, hidden_dim=512, out_dim=feature_dim)
+        self.predictor = prediction_MLP(in_dim=feature_dim, hidden_dim=int(feature_dim/2), out_dim=feature_dim)
 
         # Modify input layers for CIFAR/STL if needed
         if image_class != 'ImageNet':
@@ -180,28 +182,32 @@ class SimSiam(nn.Module):
         # Load pretrained weights (if provided)
         if state_dict is not None:
             # Handle MoCo / SimSiam checkpoints (strip encoder_q prefix)
-            new_state_dict = {}
+            backbone_state_dict = {}
+            predictor_state_dict = {}
+            projector_state_dict = {}
             for k, v in state_dict.items():
-                if k.startswith("module.encoder_q."):
-                    k = k[len("module.encoder_q."):]
                 if k.startswith("module.encoder."):
                     k = k[len("module.encoder."):]
-                if k.startswith("module."):
-                    k = k[len("module."):]
-                if k.startswith("predictor."):
-                    continue
-                new_state_dict[k] = v
+                    backbone_state_dict[k] = v
+                if k.startswith("module.predictor."):
+                    k = k[len("module.encoder."):]
+                    predictor_state_dict[k] = v
+                if k.startswith("module.fc."):
+                    k = k[len("module.fc."):]
+                    projector_state_dict[k] = v
 
-            msg = self.f.load_state_dict(new_state_dict, strict=False)
-
+            msg = self.f.load_state_dict(backbone_state_dict, strict=False)
             # Don't care about fc layer from pretrained
-            print("\tMissing keys (ignoring fc):", [k for k in msg.missing_keys if not k.startswith("fc.")])
-            print("\tUnexpected keys (ignoring fc):", [k for k in msg.unexpected_keys if not k.startswith("fc.")])
+            print("\tBackbone: Missing keys (ignoring fc):", [k for k in msg.missing_keys if not k.startswith("fc.")])
+            print("\tBackbone: Unexpected keys (ignoring fc):", [k for k in msg.unexpected_keys if not k.startswith("fc.")])
 
+            msg = self.projector.load_state_dict(projector_state_dict, strict=False)
+            print("\tProjector: Missing keys (ignoring fc):", [k for k in msg.missing_keys if not k.startswith("fc.")])
+            print("\tProjector: Unexpected keys (ignoring fc):", [k for k in msg.unexpected_keys if not k.startswith("fc.")])
 
-        self.projector = projection_MLP(2048, hidden_dim=512, out_dim=feature_dim)
-
-        self.predictor = prediction_MLP(in_dim=feature_dim, hidden_dim=int(feature_dim/2), out_dim=feature_dim)
+            msg self.predictor.load_state_dict(predictor_state_dict, strict=False)
+            print("\tPredictor: Missing keys (ignoring fc):", [k for k in msg.missing_keys if not k.startswith("fc.")])
+            print("\tPredictor: Unexpected keys (ignoring fc):", [k for k in msg.unexpected_keys if not k.startswith("fc.")])
     
     def forward(self, x):
 
