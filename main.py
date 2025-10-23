@@ -493,7 +493,7 @@ class SimSiamLossModule(LossModule):
 
     def representations(self, idxs=None):
         if idxs is None:
-            idxs = torch.arange(self._representations[0].size(0), device=self._representations.device)
+            idxs = torch.arange(self._representations[0].size(0), device=self._representations[0].device)
         return tuple(r[idxs] for r in self._representations)
 
 def clamp_scalers_for_progress(norm2_dict, dot_dict, scaler_dict, ema=False):
