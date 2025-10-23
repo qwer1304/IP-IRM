@@ -304,8 +304,10 @@ class SimSiamIRMCalculator(IRMCalculator):
         #s = torch.ones(batch_size, device=device, requires_grad=True)  # one s per sample
         s = torch.tensor(1.0, requires_grad=True, device=device)
         s = s.expand(batch_size)        
-        # Compute g_i in a CE-specific way
 
+        # Compute g_i in a CE-specific way
+        losses = self.loss_module.compute_loss_micro(idxs=idxs, **kwargs)
+        grad_outputs = torch.ones(1, losses.size(0), device=device)
         g_i = torch.autograd.grad(
             losses * s, # losses is a tensor of scalars
             s,
