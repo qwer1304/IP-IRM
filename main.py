@@ -2125,12 +2125,13 @@ if __name__ == '__main__':
             
             # dummy for debug multiple partitions
             # updated_split_all.append(torch.randn((len(update_data), args.env_num), requires_grad=True, device=device))
-            assert all([len(s) == len(update_data) for s in updated_split_all]), "Parititons from checkpoint different length from dataset" 
-            if (ema_ is not None) and (args.ema == 'retain'): # exists in checkpoint
-                ema = ema_
-            ema.set_active(args.ema) # set to what the user has currently set
-            # gradnorm restores only attributes needed to continue running. arguments are taken from  user args
-            gradnorm_balancer.set_tau(args.gradnorm_tau) # always set tau to currently provided value; also converts None to values
+            if not args.baseline:
+                assert all([len(s) == len(update_data) for s in updated_split_all]), "Parititons from checkpoint different length from dataset" 
+                if (ema_ is not None) and (args.ema == 'retain'): # exists in checkpoint
+                    ema = ema_
+                ema.set_active(args.ema) # set to what the user has currently set
+                # gradnorm restores only attributes needed to continue running. arguments are taken from  user args
+                gradnorm_balancer.set_tau(args.gradnorm_tau) # always set tau to currently provided value; also converts None to values
 
             # use current LR, not the one from checkpoint
             for param_group in optimizer.param_groups:
