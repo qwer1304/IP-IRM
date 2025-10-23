@@ -773,7 +773,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
     do_loss      = (not args.baseline) and (loss_weight > 0)
     do_keep_loss = (args.keep_cont)    and (loss_keep_weight > 0)
     do_penalty   = (not args.baseline) and (penalty_weight > 0)
-    do_gradnorm  =  args.gradnorm      and (epoch >= args.gradnorm_epoch)
+    do_gradnorm  = (not args.baseline) and args.gradnorm  and (epoch >= args.gradnorm_epoch)
 
     task_names   = gradnorm_balancer.task_names # list
     task_names_2_klp = {'loss_keep': 'k', 'loss': 'l', 'penalty': 'p'}
