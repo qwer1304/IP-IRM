@@ -1071,13 +1071,13 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 dLoss_dTheta_env = loss_grads[pind]     # per env sum of dCont/dTheta, shape (I,J,K,param_numel), unweighted
                 total_grad_flat  = loss_module.loss_grads_finalize(dLoss_dTheta_env, loss_env, halves_sz)
                 loss_grads_final.append(total_grad_flat)
-            loss_grads_final_weighted = [g.detach().clone() * loss_weight for g in loss_grads_final if g is not None]
             l_grads_flat_weighted = torch.cat([g for g in loss_grads_final_weighted]) 
             loss_grad_norm_weighted = l_grads_flat_weighted.norm()
         else:
             l_grads_flat_weighted = torch.zeros_like(l_keep_grads_flat_weighted)
             loss_grads_final = [torch.tensor(0., dtype=torch.float, device=device)] * len(loss_grads)
             loss_grad_norm_weighted = torch.tensor(0., dtype=torch.float, device=device)
+        loss_grads_final_weighted = [g.detach().clone() * loss_weight for g in loss_grads_final if g is not None]
 
         if do_penalty:
             penalty_grads_final = []
