@@ -190,7 +190,7 @@ class SimSiam(nn.Module):
                     k = k[len("module.encoder."):]
                     backbone_state_dict[k] = v
                 if k.startswith("module.predictor."):
-                    k = k[len("module.encoder."):]
+                    k = k[len("module.predictor."):]
                     predictor_state_dict[k] = v
                 if k.startswith("module.fc."):
                     k = k[len("module.fc."):]
