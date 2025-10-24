@@ -99,18 +99,18 @@ class projection_MLP(nn.Module):
         This MLP has 3 layers.
         '''
         self.layer1 = nn.Sequential(
-            nn.Linear(in_dim, hidden_dim),
+            nn.Linear(in_dim, hidden_dim, bias=False),
             nn.BatchNorm1d(hidden_dim),
             nn.ReLU(inplace=True)
         )
         self.layer2 = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim),
+            nn.Linear(hidden_dim, hidden_dim, bias=False),
             nn.BatchNorm1d(hidden_dim),
             nn.ReLU(inplace=True)
         )
         self.layer3 = nn.Sequential(
-            nn.Linear(hidden_dim, out_dim),
-            nn.BatchNorm1d(out_dim)
+            nn.Linear(hidden_dim, out_dim, bias=False),
+            nn.BatchNorm1d(out_dim, affine=False)
         )
         self.num_layers = 3
     
@@ -143,7 +143,7 @@ class prediction_MLP(nn.Module):
         bottleneck structure (ablation in supplement). 
         """
         self.layer1 = nn.Sequential(
-            nn.Linear(in_dim, hidden_dim),
+            nn.Linear(in_dim, hidden_dim, bias=False),
             nn.BatchNorm1d(hidden_dim),
             nn.ReLU(inplace=True)
         )
