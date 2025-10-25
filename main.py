@@ -1095,6 +1095,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             loss_grad_norm_weighted = torch.tensor(0., dtype=torch.float, device=device)
 
         if do_penalty:
+            print()
             penalty_grads_final = []
             pen = penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz, keep_halves=True) # normalized per env for macro-batch, unweighted
             for pind in range(len(penalty_grads)):
@@ -1106,6 +1107,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                         halves_sz,
                         sigma=args.penalty_sigma,
                     ) 
+                print(pind, total_grad_flat.norm(), pen)
                 penalty_grads_final.append(total_grad_flat.detach().clone())
             penalty_grads_final_weighted = [g.detach().clone() * penalty_weight * args.Lscaler for g in penalty_grads_final if g is not None]
             p_grads_flat_weighted = torch.cat([g for g in penalty_grads_final_weighted])
@@ -1458,7 +1460,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                    f' cos: lk {cos_lk:.3e} lp {cos_lp:.3e} kp {cos_kp:.2e}' + \
                    f' w/v: k {w_k:.4f}/{v_k:.4f} l {w_l:.4f}/{v_l:.4f} p {w_p:.4f}/{v_p:.4f}' + \
                    f' decr: l {loss_decrease_cond:.2e} k {loss_keep_decrease_cond:.2e} p {penalty_decrease_cond:.2e}' + \
-                   f' gn_loss {gradnorm_loss:.4e} rates: {gradnorm_rates_str} gn_gpm: {gn_pm} Lp: cos {cos_Lp:.4f}' + \
+                   f' gn_loss {gradnorm_loss:.4e} rates: {gradnorm_rates_str} gn_gpm: {gn_pm} Lp: cos {cos_Lp:.3e}' + \
                    f' dot {dot_Lp:.3e} gn_prgrs {gradnorm_progress:.6g}'
         desc_str += loss_module.get_debug_info_str()
         train_bar.set_description(desc_str)
