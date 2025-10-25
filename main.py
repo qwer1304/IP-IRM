@@ -143,20 +143,20 @@ class VRExCalculator(BaseCalculator):
     def penalty(self, loss, *args, **kwargs):
         return loss
         
-    def penalty_finalize(self, penalties, szs, **kwargs):
+    def penalty_finalize(self, risks, szs, for_grads=False, **kwargs):
         """
-            penalties:  Penalty per half, per env, unnormalized (1,num_partitions,num_envs)
+            risks:      risk per half, per env, unnormalized (1,num_partitions,num_envs)
             szs:        sizes of halves of environments
         """
-        mu = (penalties / (szs+1e-12)).mean(dim=[0,2], keepdim=True) # (1,num_partitions,1)
-        print("penalties", penalties.tolist())
-        print("mu", mu.tolist())
-        
-        return ((penalties / (szs+1e-12) - mu)**2) # normalized per env for macro-batch, (1, num_partitions, num_envs)
+        if not for_grads:
+            mu = (risks / (szs+1e-12)).mean()    # ()
+            return (risks / (szs+1e-12) - mu)**2 # normalized per env for macro-batch, (1, num_partitions, num_envs)
+        else:
+            return risks / (szs+1e-12)
 
     def penalty_grads_finalize(self, grads, penalties, szs, **kwargs):
         """
-        Given dPenalty/dTheta, Penalty per half, per env and their sizes calculate the combined gradient.
+        Given dLoss/dTheta, Loss per half, per env and their sizes calculate the combined gradient.
         dV/dTheta = d/dTheta(1/E*(Loss_e - 1/E*sum_j(Loss_j))^2) = 
                     2/E*sum_e((Loss_e - mu) * (grad_e - mu_grad) =
                     2/E*sum_e((Loss_e - mu) * grad_e
@@ -175,9 +175,9 @@ class VRExCalculator(BaseCalculator):
         
         num_halves, num_partitions, num_env = szs.size()
         assert num_halves == 1, "VREx number of halves should be 1"
-        mu = penalties.sum(dim=2, keepdim=True) /  num_env  # (1,num_partitions,1)
         
-        x  = (2 * (penalties[..., None] - mu[..., None]) 
+        mu = penalties.mean() # ()
+        x  = (2 * (penalties[..., None] - mu) 
                 * (grads / (szs[..., None]+1e-12)) 
                 / num_env
              ).sum(dim=(0,1,2)) / num_partitions            # (parnums,)
@@ -224,8 +224,8 @@ class IRMCalculator(BaseCalculator):
         """
         raise NotImplementedError
         
-    def penalty_finalize(self, penalties, szs, keep_halves=False):
-        if not keep_halves:
+    def penalty_finalize(self, penalties, szs, for_grads=False):
+        if not for_grads:
             return (penalties[0] / (szs[0]+1e-12)) * (penalties[1] / (szs[1]+1e-12))  # normalized per env for macro-batch 
         else:
             penalties_copy = penalties.clone()
@@ -1099,7 +1099,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         if do_penalty:
             print()
             penalty_grads_final = []
-            pen = penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz, keep_halves=True) # normalized per env for macro-batch, unweighted
+            pen = penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz, for_grads=True) # normalized per env for macro-batch, unweighted
             for pind in range(len(penalty_grads)):
                 dPenalty_dTheta_env = penalty_grads[pind]  # per env sum of dPenalty/dTheta over macro-batch per parameter, unweighted, shape (I,J,K,param_numel)
                 total_grad_flat     = \
@@ -1110,6 +1110,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                         sigma=args.penalty_sigma,
                     ) 
                 penalty_grads_final.append(total_grad_flat.detach().clone())
+                print(pind, total_grad_flat)
             penalty_grads_final_weighted = [g.detach().clone() * penalty_weight * args.Lscaler for g in penalty_grads_final if g is not None]
             p_grads_flat_weighted = torch.cat([g for g in penalty_grads_final_weighted])
             penalty_grad_norm_weighted = p_grads_flat_weighted.norm()
