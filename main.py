@@ -141,6 +141,13 @@ class VRExCalculator(BaseCalculator):
         super().__init__(*args, **kwargs)
 
     def penalty(self, loss, *args, **kwargs):
+        """
+        This is a hack, since we cannot calculate the true penalty:
+        P = 1/E*sum_e(Loss_e - mu)**2 = 1/E*sum_e(Loss_e**2 - mu**2)
+        Note that if we returned the uncentered penalty Loss_e**2, it'd be hard to 
+        calculate mu_e since mu_e**2 != sum_i(Loss_{e,i})**2, but sum_i(Loss_{e,i})**2
+        """
+
         return loss
         
     def penalty_finalize(self, risks, szs, for_grads=False, **kwargs):

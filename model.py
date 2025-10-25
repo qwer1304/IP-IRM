@@ -92,12 +92,12 @@ class Model(nn.Module):
 class projection_MLP(nn.Module):
     def __init__(self, in_dim, hidden_dim=2048, out_dim=2048):
         super().__init__()
-        ''' page 3 baseline setting
+        """ page 3 baseline setting
         Projection MLP. The projection MLP (in f) has BN ap-
         plied to each fully-connected (fc) layer, including its out- 
         put fc. Its output fc has no ReLU. The hidden fc is 2048-d. 
         This MLP has 3 layers.
-        '''
+        """
         self.layer1 = nn.Sequential(
             nn.Linear(in_dim, hidden_dim, bias=False),
             nn.BatchNorm1d(hidden_dim),
@@ -201,7 +201,7 @@ class SimSiam(nn.Module):
             print("\tUnexpected keys (ignoring fc):", [k for k in msg.unexpected_keys if not k.startswith("fc.")])
 
 
-        self.projector = projection_MLP(2048, hidden_dim=512, out_dim=feature_dim)
+        self.projector = projection_MLP(dim_mlp, hidden_dim=512, out_dim=feature_dim)
 
         self.predictor = prediction_MLP(in_dim=feature_dim, hidden_dim=int(feature_dim/2), out_dim=feature_dim)
     
