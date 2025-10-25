@@ -1097,7 +1097,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             loss_grad_norm_weighted = torch.tensor(0., dtype=torch.float, device=device)
 
         if do_penalty:
-            print()
             penalty_grads_final = []
             pen = penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz, for_grads=True) # normalized per env for macro-batch, unweighted
             for pind in range(len(penalty_grads)):
@@ -1110,7 +1109,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                         sigma=args.penalty_sigma,
                     ) 
                 penalty_grads_final.append(total_grad_flat.detach().clone())
-                print(pind, total_grad_flat.norm(), pen)
             penalty_grads_final_weighted = [g.detach().clone() * penalty_weight * args.Lscaler for g in penalty_grads_final if g is not None]
             p_grads_flat_weighted = torch.cat([g for g in penalty_grads_final_weighted])
             penalty_grad_norm_weighted = p_grads_flat_weighted.norm()
