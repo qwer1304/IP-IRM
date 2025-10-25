@@ -1068,7 +1068,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         else:
             penalty_env = torch.tensor(0, dtype=torch.float, device=device)
 
-        loss_keep_grads_final_weighted = [g.detach().clone() * loss_keep_weight for g in loss_keep_grads_final if g is not None]
+        loss_keep_grads_final_weighted = [g.detach().clone() * loss_keep_weight * args.Lscaler for g in loss_keep_grads_final if g is not None]
         l_keep_grads_flat_weighted = torch.cat(loss_keep_grads_final_weighted) # cat all grads of all pars into one long vector
         loss_keep_grad_norm_weighted = l_keep_grads_flat_weighted.norm() # weighted, can be 0
         
@@ -1079,7 +1079,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 dLoss_dTheta_env = loss_grads[pind]     # per env sum of dCont/dTheta, shape (I,J,K,param_numel), unweighted
                 total_grad_flat  = loss_module.loss_grads_finalize(dLoss_dTheta_env, loss_env, halves_sz)
                 loss_grads_final.append(total_grad_flat)
-            loss_grads_final_weighted = [g.detach().clone() * loss_weight for g in loss_grads_final if g is not None]
+            loss_grads_final_weighted = [g.detach().clone() * loss_weight * args.Lscaler for g in loss_grads_final if g is not None]
             l_grads_flat_weighted = torch.cat([g for g in loss_grads_final_weighted]) 
             loss_grad_norm_weighted = l_grads_flat_weighted.norm()
         else:
@@ -1101,7 +1101,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                         sigma=args.penalty_sigma,
                     ) 
                 penalty_grads_final.append(total_grad_flat.detach().clone())
-            penalty_grads_final_weighted = [g.detach().clone() * penalty_weight for g in penalty_grads_final if g is not None]
+            penalty_grads_final_weighted = [g.detach().clone() * penalty_weight * args.Lscaler for g in penalty_grads_final if g is not None]
             p_grads_flat_weighted = torch.cat([g for g in penalty_grads_final_weighted])
             penalty_grad_norm_weighted = p_grads_flat_weighted.norm()
         else:
@@ -1250,7 +1250,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             total_grad_flat_weighted = (   loss_keep_grads_final[pind] * loss_keep_weight * loss_keep_grad_scaler * al
                                          + loss_grads_final[pind]      * loss_weight      * loss_grad_scaler      * al
                                          + penalty_grads_final[pind]   * penalty_weight   * penalty_grad_scaler   * ap
-                                       ) * args.Lscaler
+                                       )
 
             if args.debug:
                 g_L = loss_grads_final[pind]      * loss_weight      * loss_grad_scaler
@@ -1443,10 +1443,10 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         gradnorm_rates_str = " ".join([f'{n} {r:.4f}' for n,r in zip([task_names_2_klp[k] for k in task_names], gradnorm_rates)]) if do_gradnorm else ""  
         desc_str = f'Epoch [{epoch}/{epochs}] [{trained_samples}/{total_samples}]' + \
                    f' {args.ssl_type}' + \
-                   f' Total {total_loss_weighted/trained_samples:.6g}' + \
-                   f' Keep {total_keep_loss_weighted/trained_samples:.6g}' + \
-                   f' Env {total_env_loss_weighted/trained_samples:.6g}' + \
-                   f' {args.penalty_type} {total_irm_loss_weighted/trained_samples:.6g}' + \
+                   f' Total {total_loss_weighted/trained_samples:.3e}' + \
+                   f' Keep {total_keep_loss_weighted/trained_samples:.3e}' + \
+                   f' Env {total_env_loss_weighted/trained_samples:.3e}' + \
+                   f' {args.penalty_type} {total_irm_loss_weighted/trained_samples:.3e}' + \
                    f' LR {train_optimizer.param_groups[0]["lr"]:.4f} PW {penalty_weight_orig:.4f}' + \
                    f' dot: ll {ngl2:.2e} lk {dot_lk:.2e} lp {dot_lp:.2e} kk {ngk2:.2e} kp {dot_kp:.2e} pp {ngp2:.2e}' + \
                    f' cos: lk {cos_lk:.3e} lp {cos_lp:.3e} kp {cos_kp:.2e}' + \
