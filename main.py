@@ -149,6 +149,8 @@ class VRExCalculator(BaseCalculator):
             szs:        sizes of halves of environments
         """
         mu = (penalties / (szs+1e-12)).mean(dim=[0,2], keepdim=True) # (1,num_partitions,1)
+        print("penalties", penalties.tolist())
+        print("mu", mu.tolist())
         
         return ((penalties / (szs+1e-12) - mu)**2) # normalized per env for macro-batch, (1, num_partitions, num_envs)
 
@@ -1107,7 +1109,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                         halves_sz,
                         sigma=args.penalty_sigma,
                     ) 
-                print(pind, total_grad_flat.norm(), pen)
                 penalty_grads_final.append(total_grad_flat.detach().clone())
             penalty_grads_final_weighted = [g.detach().clone() * penalty_weight * args.Lscaler for g in penalty_grads_final if g is not None]
             p_grads_flat_weighted = torch.cat([g for g in penalty_grads_final_weighted])
