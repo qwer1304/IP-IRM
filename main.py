@@ -166,10 +166,11 @@ class VRExCalculator(BaseCalculator):
         
         num_halves, num_partitions, num_env = szs.size()
         assert num_halves == 1, "VREx number of halves should be 1"
-        mu      = penalties.sum(dim=2, keepdim=True) /  num_env        # (1,num_partitions,1)
-        mu_grad = grads.sum(dim=2, keepdim=True)     / (num_env * (szs+1e-12)) # (1,num_partitions,1)
-        x       = (2 * (penalties[..., None]   - mu[..., None]) 
-                     * (grads / (szs[..., None]+1e-12) - mu_grad[..., None]) 
+        mu      = penalties.sum(dim=2, keepdim=True) /  num_env                           # (1,num_partitions,1)
+        mu_grad = grads.sum(dim=2, keepdim=True)     / (num_env * (szs[..., None]+1e-12)) # (1,num_partitions,1,parnums)
+        
+        x       = (2 * (penalties[..., None]           - mu[..., None]) 
+                     * (grads / (szs[..., None]+1e-12) - mu_grad) 
                      / num_env
                   ).sum(dim=(0,1,2)) / num_partitions # (parnums,)
             
