@@ -156,7 +156,14 @@ class VRExCalculator(BaseCalculator):
         """
         Given dPenalty/dTheta, Penalty per half, per env and their sizes calculate the combined gradient.
         dV/dTheta = d/dTheta(1/E*(Loss_e - 1/E*sum_j(Loss_j))^2) = 
-                    2/E*sum_e((Loss_e - mu) * (grad_e - mu_grad), 
+                    2/E*sum_e((Loss_e - mu) * (grad_e - mu_grad) =
+                    2/E*sum_e((Loss_e - mu) * grad_e
+                    because:
+                        2/E*sum_e((Loss_e - mu) * (grad_e - mu_grad) = 
+                            2/E*[sum_e((Loss_e - mu)*grad_e) - sum_e((Loss_e - mu)*mu_grad)] =
+                            2/E*[sum_e((Loss_e - mu)*grad_e) - sum_e(Loss_e - mu)*mu_grad]    =
+                            2/E*[sum_e((Loss_e - mu)*grad_e) - 0*mu_grad] =
+                            2/E*sum_e((Loss_e - mu)*grad_e) 
                     where: mu = 1/E*sum_e(Loss_e), mu_grad = 1/E*sum_e(grad_e), 
                            Loss_e = 1/N_e*sum_i(L_{e,i}), grad_e = 1/N_e*sum_i(grad_{e,i})
             grads:      dPenalty/dTheta per half, per env, unnormalized (1,num_partitions,num_envs,parnums), unweighted
@@ -166,13 +173,12 @@ class VRExCalculator(BaseCalculator):
         
         num_halves, num_partitions, num_env = szs.size()
         assert num_halves == 1, "VREx number of halves should be 1"
-        mu      = penalties.sum(dim=2, keepdim=True) /  num_env                           # (1,num_partitions,1)
-        mu_grad = grads.sum(dim=2, keepdim=True)     / (num_env * (szs[..., None]+1e-12)) # (1,num_partitions,1,parnums)
+        mu = penalties.sum(dim=2, keepdim=True) /  num_env  # (1,num_partitions,1)
         
-        x       = (2 * (penalties[..., None]           - mu[..., None]) 
-                     * (grads / (szs[..., None]+1e-12) - mu_grad) 
-                     / num_env
-                  ).sum(dim=(0,1,2)) / num_partitions # (parnums,)
+        x  = (2 * (penalties[..., None] - mu[..., None]) 
+                * (grads / (szs[..., None]+1e-12)) 
+                / num_env
+             ).sum(dim=(0,1,2)) / num_partitions            # (parnums,)
             
         total_grad_flat = x
         return total_grad_flat
