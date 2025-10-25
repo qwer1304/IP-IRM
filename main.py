@@ -1443,9 +1443,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         gradnorm_rates_str = " ".join([f'{n} {r:.4f}' for n,r in zip([task_names_2_klp[k] for k in task_names], gradnorm_rates)]) if do_gradnorm else ""  
         desc_str = f'Epoch [{epoch}/{epochs}] [{trained_samples}/{total_samples}]' + \
                    f' {args.ssl_type}' + \
-                   f' Total {total_loss_weighted/trained_samples:.4f}' + \
-                   f' Keep {total_keep_loss_weighted/trained_samples:.4f}' + \
-                   f' Env {total_env_loss_weighted/trained_samples:.4f}' + \
+                   f' Total {total_loss_weighted/trained_samples:.6g}' + \
+                   f' Keep {total_keep_loss_weighted/trained_samples:.6g}' + \
+                   f' Env {total_env_loss_weighted/trained_samples:.6g}' + \
                    f' {args.penalty_type} {total_irm_loss_weighted/trained_samples:.4g}' + \
                    f' LR {train_optimizer.param_groups[0]["lr"]:.4f} PW {penalty_weight_orig:.4f}' + \
                    f' dot: ll {ngl2:.2e} lk {dot_lk:.2e} lp {dot_lp:.2e} kk {ngk2:.2e} kp {dot_kp:.2e} pp {ngp2:.2e}' + \
