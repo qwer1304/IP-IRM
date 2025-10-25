@@ -1247,10 +1247,10 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             al = 1
             ap = 1
         for pind, p in enumerate(net.parameters()):        
-            total_grad_flat_weighted = (  loss_keep_grads_final[pind] * loss_keep_weight * loss_keep_grad_scaler * al
-                                        + loss_grads_final[pind]      * loss_weight      * loss_grad_scaler      * al
-                                        + penalty_grads_final[pind]   * penalty_weight   * penalty_grad_scaler   * ap
-                                       )
+            total_grad_flat_weighted = (   loss_keep_grads_final[pind] * loss_keep_weight * loss_keep_grad_scaler * al
+                                         + loss_grads_final[pind]      * loss_weight      * loss_grad_scaler      * al
+                                         + penalty_grads_final[pind]   * penalty_weight   * penalty_grad_scaler   * ap
+                                       ) * args.Lscaler
 
             if args.debug:
                 g_L = loss_grads_final[pind]      * loss_weight      * loss_grad_scaler
@@ -1862,6 +1862,7 @@ if __name__ == '__main__':
     parser.add_argument('--penalty_weight', default=1.0, type=float, help='penalty weight')
     parser.add_argument('--penalty_cont', default=1.0, type=float, help='cont penalty weight')
     parser.add_argument('--penalty_keep_cont', default=1.0, type=float, help='cont keep penalty weight')
+    parser.add_argument('--Lscaler', default=1.0, type=float, help='Global scaler for losses gards')
     parser.add_argument('--penalty_iters', default=0, type=int, help='penalty weight start iteration')
     parser.add_argument('--increasing_weight', nargs=5, type=float, default=None, help='increasing penalty weight', 
             metavar='penalty_warmup, scale, speed, eps, debug')
