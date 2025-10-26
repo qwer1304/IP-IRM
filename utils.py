@@ -745,9 +745,9 @@ def auto_split(net, update_loader, soft_split_all, temperature, irm_temp, loss_m
                 else:
                     if cons_relax: # relax constrain to make item num of groups no more than 2:1
                         """
-                        Don't let the model's global prediction distribution get too peaky — stay at least roughly balanced (entropy >= 0.6365). 
+                        Don't let the model's global prediction distribution get too peaky - stay at least roughly balanced (entropy >= 0.6365). 
                         If it starts collapsing, push it back.
-                        For 2 classes, H([0.55,0.45])~0.688, H([0.7,0.3])~0.611. So 0.6365 corresponds roughly to a 65–35 class split.                        
+                        For 2 classes, H([0.55,0.45])~0.688, H([0.7,0.3])~0.611. So 0.6365 corresponds roughly to a 65-35 class split.                        
                         """
                         constrain_loss = torch.relu(0.6365 - cal_entropy(param_split.mean(0), dim=0))
                     else:
