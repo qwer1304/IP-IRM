@@ -1095,7 +1095,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         if do_loss:
             loss_grads_final = []
             for pind, _ in enumerate(net.parameters()):
-                dLoss_dTheta_env = loss_grads[pind] * weights_env[..., None]  # per env sum of dCont/dTheta, shape (I,J,K,param_numel), unweighted
+                dLoss_dTheta_env = loss_grads[pind] * weight_env[..., None]  # per env sum of dCont/dTheta, shape (I,J,K,param_numel), unweighted
                 total_grad_flat  = loss_module.loss_grads_finalize(dLoss_dTheta_env, loss_env, halves_sz)
                 loss_grads_final.append(total_grad_flat)
             loss_grads_final_weighted = [g.detach().clone() * loss_weight * args.Lscaler for g in loss_grads_final if g is not None]
@@ -1111,7 +1111,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             penalty_grads_final = []
             pen = penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz, for_grads=True) # normalized per env for macro-batch, unweighted
             for pind in range(len(penalty_grads)):
-                dPenalty_dTheta_env = penalty_grads[pind] * weights_env[..., None] # per env sum of dPenalty/dTheta over macro-batch per parameter, unweighted, shape (I,J,K,param_numel)
+                dPenalty_dTheta_env = penalty_grads[pind] * weight_env[..., None] # per env sum of dPenalty/dTheta over macro-batch per parameter, unweighted, shape (I,J,K,param_numel)
                 total_grad_flat     = \
                     penalty_calculator.penalty_grads_finalize(
                         dPenalty_dTheta_env, 
