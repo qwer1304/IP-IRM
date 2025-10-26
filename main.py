@@ -1073,6 +1073,10 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         if gradients_accumulation_step < gradients_accumulation_steps:
             continue
 
+        deltas = (2.0 * torch.rand(1, num_partitions, args.env_num, device=device) - 1.0) * args.weight_env_eps  # random in [-eps, eps]
+        deltas -= deltas.mean()  # mean-zero so overall scale unchanged
+        weight_env = 1.0 + deltas
+
         if do_loss:
             partition_sz = halves_sz.sum(dim=0, keepdim=True) # (1,J,K) # sizes of envs in macro-batch
             loss_env = loss_aggregator.sum(dim=0, keepdim=True) / partition_sz  # per env for macro-batch, normalized per env, unweighted
@@ -1091,7 +1095,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         if do_loss:
             loss_grads_final = []
             for pind, _ in enumerate(net.parameters()):
-                dLoss_dTheta_env = loss_grads[pind]     # per env sum of dCont/dTheta, shape (I,J,K,param_numel), unweighted
+                dLoss_dTheta_env = loss_grads[pind] * weights_env[..., None]  # per env sum of dCont/dTheta, shape (I,J,K,param_numel), unweighted
                 total_grad_flat  = loss_module.loss_grads_finalize(dLoss_dTheta_env, loss_env, halves_sz)
                 loss_grads_final.append(total_grad_flat)
             loss_grads_final_weighted = [g.detach().clone() * loss_weight * args.Lscaler for g in loss_grads_final if g is not None]
@@ -1107,7 +1111,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             penalty_grads_final = []
             pen = penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz, for_grads=True) # normalized per env for macro-batch, unweighted
             for pind in range(len(penalty_grads)):
-                dPenalty_dTheta_env = penalty_grads[pind]  # per env sum of dPenalty/dTheta over macro-batch per parameter, unweighted, shape (I,J,K,param_numel)
+                dPenalty_dTheta_env = penalty_grads[pind] * weights_env[..., None] # per env sum of dPenalty/dTheta over macro-batch per parameter, unweighted, shape (I,J,K,param_numel)
                 total_grad_flat     = \
                     penalty_calculator.penalty_grads_finalize(
                         dPenalty_dTheta_env, 
@@ -1350,75 +1354,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                warnings.warn(f"[GN WARNING] All unnormalized weights clamped to {bound}. Resetting.")
                gradnorm_balancer.rescale_weights()
                utils.reset_optimizer(gradnorm_optimizer)
-
-            """
-            # config
-            V_target = float(len(v_params))   # target sum of v (e.g., T)
-            min_frac = 0.1                    # if sum(v) < min_frac * V_target -> rescale up
-            max_frac = 10.0                   # if sum(v) > max_frac * V_target -> rescale down
-            rescale_every = 50                # optional periodic check (or trigger by condition)
-            cooldown_steps = 200
-            _eps = 1e-12
-
-            # persistent (init once)
-            if 'last_v_rescale_step' not in globals():
-                last_v_rescale_step = -9999
-            if 'global_step' not in globals():
-                global_step = 0
-
-            def maybe_rescale_v(v_params, v_optimizer):
-                global last_v_rescale_step, global_step
-
-                with torch.no_grad():
-                    v_vals = torch.stack([p.detach().flatten() for p in v_params])
-                    # if v are scalars, this gives shape (T, 1) -> flatten
-                    # compute sum over tasks (assume each v is scalar param)
-                    V_sum = float(sum(p.item() if p.numel()==1 else p.detach().sum().item() for p in v_params))
-
-                    if (global_step - last_v_rescale_step) < cooldown_steps:
-                        return False
-
-                    if not ( (V_sum < min_frac * V_target) or (V_sum > max_frac * V_target) or (global_step % rescale_every == 0) ):
-                        return False
-
-                    alpha = V_target / (V_sum + _eps)
-                    if abs(alpha - 1.0) < 1e-6:
-                        return False
-
-                    # apply scaling to v parameters
-                    for p in v_params:
-                        p.data.mul_(alpha)
-
-                    # IMPORTANT: scale optimizer state for v parameters consistently
-                    # handle common optimizers: SGD (momentum buffer), Adam (exp avg of grads / sqr)
-                    opt_state = v_optimizer.state
-                    for p in v_params:
-                        state = opt_state.get(p, None)
-                        if state is None:
-                            continue
-                        # scale momentum buffer if present
-                        if 'momentum_buffer' in state:
-                            state['momentum_buffer'].mul_(alpha)
-                        # Adam-like buffers
-                        if 'exp_avg' in state:
-                            state['exp_avg'].mul_(alpha)
-                        if 'exp_avg_sq' in state:
-                            # exp_avg_sq scales like grad^2; if you scaled v (not grads),
-                            # best to scale exp_avg_sq by alpha**2 if it actually holds gradient units.
-                            # But here we scale buffers consistent with how p was scaled:
-                            state['exp_avg_sq'].mul_(alpha**2)
-
-                    last_v_rescale_step = global_step
-                    return True
-
-            # call in training loop:
-            # ...
-            # after updating v (or periodically), call:
-            rescaled = maybe_rescale_v(v_params, v_optimizer)
-            if rescaled:
-                print(f"[v-rescale] step={global_step} scaled v by {alpha:.3g}")
-            global_step += 1
-            """
 
         ngk                   = ngk.item()
         ngl                   = ngl.item()
@@ -1882,6 +1817,7 @@ if __name__ == '__main__':
     parser.add_argument('--increasing_weight', nargs=5, type=float, default=None, help='increasing penalty weight', 
             metavar='penalty_warmup, scale, speed, eps, debug')
     parser.add_argument('--env_num', default=2, type=int, help='num of the environments')
+    parser.add_argument('--weight_env_eps', default=0., type=float, help='eps for per-env grad noise')
 
     parser.add_argument('--maximize_iter', default=30, type=int, help='when maximize iteration')
     parser.add_argument('--irm_mode', default='v1', type=str, help='irm mode when maximizing')

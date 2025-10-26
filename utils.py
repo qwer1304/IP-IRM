@@ -738,11 +738,22 @@ def auto_split(net, update_loader, soft_split_all, temperature, irm_temp, loss_m
 
             if constrain: # constrain to avoid the imbalance problem
                 if nonorm:
+                    """
+                    Each example should have confident (low-entropy) predictions, but across the batch they should be evenly distributed across classes.
+                    """
                     constrain_loss = 0.2*(- cal_entropy(param_split.mean(0), dim=0) + cal_entropy(param_split, dim=1).mean())
                 else:
                     if cons_relax: # relax constrain to make item num of groups no more than 2:1
+                        """
+                        Don't let the model's global prediction distribution get too peaky — stay at least roughly balanced (entropy >= 0.6365). 
+                        If it starts collapsing, push it back.
+                        For 2 classes, H([0.55,0.45])~0.688, H([0.7,0.3])~0.611. So 0.6365 corresponds roughly to a 65–35 class split.                        
+                        """
                         constrain_loss = torch.relu(0.6365 - cal_entropy(param_split.mean(0), dim=0))
                     else:
+                        """
+                        Rewards diversity across the batch — it is more positive when the model collapses to one class. 
+                        """
                         constrain_loss = - cal_entropy(param_split.mean(0), dim=0)#  + cal_entropy(param_split, dim=1).mean()
                 risk_final += constrain_loss
 
