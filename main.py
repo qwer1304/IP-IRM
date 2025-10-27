@@ -1143,7 +1143,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 total_grad_flat  = loss_module.loss_grads_finalize(dLoss_dTheta_env, loss_env, halves_sz, reduction='none') # (J,K,param_numel)
                 total_grad_flat  = convert_to_list(total_grad_flat)
                 total_grad_flat  = rotate_gradients_per_env(total_grad_flat, device=device)
-                total_grad_flat  = torch.cat(total_grad_flat, dim=1).sum(1)
+                total_grad_flat  = torch.cat(total_grad_flat, dim=0).sum(0)
                 loss_grads_final.append(total_grad_flat)
             loss_grads_final_weighted = [g.detach().clone() * loss_weight * args.Lscaler for g in loss_grads_final if g is not None]
             l_grads_flat_weighted = torch.cat([g for g in loss_grads_final_weighted]) 
@@ -1169,7 +1169,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                     ) 
                 total_grad_flat  = convert_to_list(total_grad_flat)
                 total_grad_flat  = rotate_gradients_per_env(total_grad_flat, device=device)
-                total_grad_flat  = torch.cat(total_grad_flat, dim=1).sum(1)
+                total_grad_flat  = torch.cat(total_grad_flat, dim=0).sum(0)
                 penalty_grads_final.append(total_grad_flat.detach().clone())
             penalty_grads_final_weighted = [g.detach().clone() * penalty_weight * args.Lscaler for g in penalty_grads_final if g is not None]
             p_grads_flat_weighted = torch.cat([g for g in penalty_grads_final_weighted])
