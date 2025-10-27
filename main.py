@@ -1140,9 +1140,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             loss_grads_final = []
             for pind, _ in enumerate(net.parameters()):
                 dLoss_dTheta_env = loss_grads[pind] * loss_weight_env[..., None]  # per env sum of dCont/dTheta, shape (I,J,K,param_numel), unweighted
-                reduction = 'none' if args.grad_rotate is not None else 'sum'
+                reduction = 'none' if (args.grad_rotate is not None) and args.grad_rotate[0] > 0. else 'sum'
                 total_grad_flat  = loss_module.loss_grads_finalize(dLoss_dTheta_env, loss_env, halves_sz, reduction=reduction)
-                if args.grad_rotate is not None:
+                if reduction == 'none':
                     total_grad_flat  = convert_to_list(total_grad_flat.sum(dim=0))  # (I,J,K,param_numel)
                     total_grad_flat  = rotate_gradients_per_env(total_grad_flat, device=device, eps=args.grad_rotate[0])
                     total_grad_flat  = torch.stack(total_grad_flat, dim=0).sum(0) # (param_numel,)
@@ -1161,7 +1161,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             pen = penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz, for_grads=True) # normalized per env for macro-batch, unweighted
             for pind in range(len(penalty_grads)):
                 dPenalty_dTheta_env = penalty_grads[pind] * penalty_weight_env[..., None] # per env sum of dPenalty/dTheta over macro-batch per parameter, unweighted, shape (I,J,K,param_numel)
-                reduction = 'none' if args.grad_rotate is not None else 'sum'
+                reduction = 'none' if (args.grad_rotate is not None) and args.grad_rotate[1] > 0. else 'sum'
                 total_grad_flat     = \
                     penalty_calculator.penalty_grads_finalize(
                         dPenalty_dTheta_env, 
@@ -1170,7 +1170,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                         sigma=args.penalty_sigma,
                         reduction=reduction
                     )                                                                     
-                if args.grad_rotate is not None: # (J,K,paramnum)
+                if reduction == 'none': # (J,K,parnum)
                     total_grad_flat  = convert_to_list(total_grad_flat)
                     total_grad_flat  = rotate_gradients_per_env(total_grad_flat, device=device, eps=args.grad_rotate[1])
                     total_grad_flat  = torch.stack(total_grad_flat, dim=0).sum(0) # (paramnum,)
