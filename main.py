@@ -1164,7 +1164,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             loss_grads_final = []
             for pind, _ in enumerate(net.parameters()):
                 dLoss_dTheta_env = loss_grads[pind] * loss_weight_env[..., None]  # per env sum of dCont/dTheta, shape (I,J,K,param_numel), unweighted
-                reduction = 'none' if (args.grad_rotate is not None) and args.grad_rotate[0] > 0. else 'sum'
+                reduction = 'sum' #'none' if (args.grad_rotate is not None) and args.grad_rotate[0] > 0. else 'sum'
                 total_grad_flat  = loss_module.loss_grads_finalize(dLoss_dTheta_env, loss_env, halves_sz, reduction=reduction)
                 if reduction == 'none':
                     total_grad_flat  = convert_to_list(total_grad_flat.sum(dim=0))  # (J,K,param_numel)
