@@ -161,7 +161,7 @@ class VRExCalculator(BaseCalculator):
         else:
             return risks / (szs+1e-12)
 
-    def penalty_grads_finalize(self, grads, penalties, szs, , reduction='sum', **kwargs):
+    def penalty_grads_finalize(self, grads, penalties, szs, reduction='sum', **kwargs):
         """
         Given dLoss/dTheta, Loss per half, per env and their sizes calculate the combined gradient.
         dV/dTheta = d/dTheta(1/E*(Loss_e - 1/E*sum_j(Loss_j))^2) = 
