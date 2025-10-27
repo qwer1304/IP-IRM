@@ -1099,27 +1099,27 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         l_keep_grads_flat_weighted = torch.cat(loss_keep_grads_final_weighted) # cat all grads of all pars into one long vector
         loss_keep_grad_norm_weighted = l_keep_grads_flat_weighted.norm() # weighted, can be 0
         
-    def rotate_gradients_per_env(grads, eps=0.03, device=None):
-        """
-        grads: list of tensors [g_env0, g_env1, ..., g_env{E-1}]
-               each flattened to shape (D,)
-        eps:   small rotation strength (~radians)
-        returns: list of rotated gradients
-        """
-        rotated = []
-        for g in grads:
-            g = g.to(device)
-            v = torch.randn_like(g)           # random rotation axis
-            v = v - (v @ g) / (g @ g + 1e-12) * g  # make v normal to g
-            v = F.normalize(v, dim=0)
+        def rotate_gradients_per_env(grads, eps=0.03, device=None):
+            """
+            grads: list of tensors [g_env0, g_env1, ..., g_env{E-1}]
+                   each flattened to shape (D,)
+            eps:   small rotation strength (~radians)
+            returns: list of rotated gradients
+            """
+            rotated = []
+            for g in grads:
+                g = g.to(device)
+                v = torch.randn_like(g)           # random rotation axis
+                v = v - (v @ g) / (g @ g + 1e-12) * g  # make v normal to g
+                v = F.normalize(v, dim=0)
 
-            # simple 2D rotation in span{g, v}
-            cos_theta = torch.cos(torch.tensor(eps, device=device))
-            sin_theta = torch.sin(torch.tensor(eps, device=device))
-            g_rot = cos_theta * g + sin_theta * (torch.norm(g) * v)
+                # simple 2D rotation in span{g, v}
+                cos_theta = torch.cos(torch.tensor(eps, device=device))
+                sin_theta = torch.sin(torch.tensor(eps, device=device))
+                g_rot = cos_theta * g + sin_theta * (torch.norm(g) * v)
 
-            rotated.append(g_rot)
-        return rotated
+                rotated.append(g_rot)
+            return rotated
 
         def convert_to_list(x):
             x_flat = x.view(-1, x.shape[2])  # shape: (I*J, K)
@@ -1135,7 +1135,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             x = x_flat.view(I, J, K)
             return x
 
-# Environments gradients
+        # Environments gradients
         if do_loss:
             loss_grads_final = []
             for pind, _ in enumerate(net.parameters()):
