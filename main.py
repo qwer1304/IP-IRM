@@ -189,10 +189,10 @@ class VRExCalculator(BaseCalculator):
                 / num_env
              ) / num_partitions            # (parnums,)
             
-        if reduction='sum':
+        if reduction == 'sum':
             x = s.sum(dim=(0,1,2))
-        elif reduction='none':
-            x = x.squeeze(0) # remove halves dims
+        elif reduction == 'none':
+            x = x.squeeze(0) # remove halves dim
         
         total_grad_flat = x
         return total_grad_flat
