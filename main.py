@@ -1199,7 +1199,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 if reduction == 'none': # (J,K,parnum)
                     total_grad_flat  = convert_to_list(total_grad_flat)
                     #total_grad_flat  = rotate_gradients_per_env(total_grad_flat, device=device, eps=args.grad_rotate[1])
-                    total_grad_flat = rotate_pen_toward_orthogonal(total_grad_flat, loss_grad_flat)
+                    total_grad_flat = rotate_pen_toward_orthogonal(total_grad_flat, loss_grad_flat, theta=args.grad_rotate[1])
                     total_grad_flat  = torch.stack(total_grad_flat, dim=0).sum(0) # (paramnum,)
                 penalty_grads_final.append(total_grad_flat.detach().clone())
             penalty_grads_final_weighted = [g.detach().clone() * penalty_weight * args.Lscaler for g in penalty_grads_final if g is not None]
