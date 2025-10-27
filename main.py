@@ -1142,8 +1142,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 dLoss_dTheta_env = loss_grads[pind] * loss_weight_env[..., None]  # per env sum of dCont/dTheta, shape (I,J,K,param_numel), unweighted
                 total_grad_flat  = loss_module.loss_grads_finalize(dLoss_dTheta_env, loss_env, halves_sz, reduction='none') # (I,J,K,param_numel)
                 total_grad_flat  = convert_to_list(total_grad_flat.sum(dim=0))
-                print(len(total_grad_flat), total_grad_flat[0].size())
-                exit(1)
                 total_grad_flat  = rotate_gradients_per_env(total_grad_flat, device=device)
                 total_grad_flat  = torch.cat(total_grad_flat, dim=0).sum(0)
                 loss_grads_final.append(total_grad_flat)
@@ -1168,7 +1166,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                         halves_sz,
                         sigma=args.penalty_sigma,
                         reduction='none'
-                    ) 
+                    )                                                                     # (J,K,paramnum)
                 total_grad_flat  = convert_to_list(total_grad_flat)
                 total_grad_flat  = rotate_gradients_per_env(total_grad_flat, device=device)
                 total_grad_flat  = torch.cat(total_grad_flat, dim=0).sum(0)
