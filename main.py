@@ -161,7 +161,7 @@ class VRExCalculator(BaseCalculator):
         else:
             return risks / (szs+1e-12)
 
-    def penalty_grads_finalize(self, grads, penalties, szs, **kwargs):
+    def penalty_grads_finalize(self, grads, penalties, szs, , reduction='sum', **kwargs):
         """
         Given dLoss/dTheta, Loss per half, per env and their sizes calculate the combined gradient.
         dV/dTheta = d/dTheta(1/E*(Loss_e - 1/E*sum_j(Loss_j))^2) = 
@@ -187,8 +187,13 @@ class VRExCalculator(BaseCalculator):
         x  = (2 * (penalties[..., None] - mu) 
                 * (grads / (szs[..., None]+1e-12)) 
                 / num_env
-             ).sum(dim=(0,1,2)) / num_partitions            # (parnums,)
+             ) / num_partitions            # (parnums,)
             
+        if reduction='sum':
+            x = s.sum(dim=(0,1,2))
+        elif reduction='none':
+            x = x.squeeze(0) # remove halves dims
+        
         total_grad_flat = x
         return total_grad_flat
 
@@ -1094,12 +1099,51 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         l_keep_grads_flat_weighted = torch.cat(loss_keep_grads_final_weighted) # cat all grads of all pars into one long vector
         loss_keep_grad_norm_weighted = l_keep_grads_flat_weighted.norm() # weighted, can be 0
         
-        # Environments gradients
+    def rotate_gradients_per_env(grads, eps=0.03, device=None):
+        """
+        grads: list of tensors [g_env0, g_env1, ..., g_env{E-1}]
+               each flattened to shape (D,)
+        eps:   small rotation strength (~radians)
+        returns: list of rotated gradients
+        """
+        rotated = []
+        for g in grads:
+            g = g.to(device)
+            v = torch.randn_like(g)           # random rotation axis
+            v = v - (v @ g) / (g @ g + 1e-12) * g  # make v normal to g
+            v = F.normalize(v, dim=0)
+
+            # simple 2D rotation in span{g, v}
+            cos_theta = torch.cos(torch.tensor(eps, device=device))
+            sin_theta = torch.sin(torch.tensor(eps, device=device))
+            g_rot = cos_theta * g + sin_theta * (torch.norm(g) * v)
+
+            rotated.append(g_rot)
+        return rotated
+
+        def convert_to_list(x):
+            x_flat = x.view(-1, x.shape[2])  # shape: (I*J, K)
+            # Step 2: Unbind along the first dimension
+            x_list = list(torch.unbind(x_flat, dim=0)) # order (0,0),(0,1),...,(0,J-1),(1,0),...,(I-1,J-1)
+            return x_list
+
+        def convert_to_tensor(x_list, I, J):
+            # Stack the list into a single tensor
+            K = x_list[0].size(0)
+            x_flat = torch.stack(x_list, dim=0)  # shape: (I*J, K)
+            # Reshape back to (I, J, K)
+            x = x_flat.view(I, J, K)
+            return x
+
+# Environments gradients
         if do_loss:
             loss_grads_final = []
             for pind, _ in enumerate(net.parameters()):
                 dLoss_dTheta_env = loss_grads[pind] * loss_weight_env[..., None]  # per env sum of dCont/dTheta, shape (I,J,K,param_numel), unweighted
-                total_grad_flat  = loss_module.loss_grads_finalize(dLoss_dTheta_env, loss_env, halves_sz)
+                total_grad_flat  = loss_module.loss_grads_finalize(dLoss_dTheta_env, loss_env, halves_sz, reduction='none') # (J,K,param_numel)
+                total_grad_flat  = convert_to_list(total_grad_flat)
+                total_grad_flat  = rotate_gradients_per_env(total_grad_flat, device=device)
+                total_grad_flat  = torch.cat(total_grad_flat, dim=1).sum(1)
                 loss_grads_final.append(total_grad_flat)
             loss_grads_final_weighted = [g.detach().clone() * loss_weight * args.Lscaler for g in loss_grads_final if g is not None]
             l_grads_flat_weighted = torch.cat([g for g in loss_grads_final_weighted]) 
@@ -1121,7 +1165,11 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                         pen, 
                         halves_sz,
                         sigma=args.penalty_sigma,
+                        reduction='none'
                     ) 
+                total_grad_flat  = convert_to_list(total_grad_flat)
+                total_grad_flat  = rotate_gradients_per_env(total_grad_flat, device=device)
+                total_grad_flat  = torch.cat(total_grad_flat, dim=1).sum(1)
                 penalty_grads_final.append(total_grad_flat.detach().clone())
             penalty_grads_final_weighted = [g.detach().clone() * penalty_weight * args.Lscaler for g in penalty_grads_final if g is not None]
             p_grads_flat_weighted = torch.cat([g for g in penalty_grads_final_weighted])
