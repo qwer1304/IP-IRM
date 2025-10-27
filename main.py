@@ -1140,10 +1140,12 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             loss_grads_final = []
             for pind, _ in enumerate(net.parameters()):
                 dLoss_dTheta_env = loss_grads[pind] * loss_weight_env[..., None]  # per env sum of dCont/dTheta, shape (I,J,K,param_numel), unweighted
-                total_grad_flat  = loss_module.loss_grads_finalize(dLoss_dTheta_env, loss_env, halves_sz, reduction='none') # (I,J,K,param_numel)
-                total_grad_flat  = convert_to_list(total_grad_flat.sum(dim=0))
-                total_grad_flat  = rotate_gradients_per_env(total_grad_flat, device=device)
-                total_grad_flat  = torch.stack(total_grad_flat, dim=0).sum(0)
+                reduction = 'none' if args.grad_rotate is not None else 'sum'
+                total_grad_flat  = loss_module.loss_grads_finalize(dLoss_dTheta_env, loss_env, halves_sz, reduction=reduction)
+                if args.grad_rotate is not None:
+                    total_grad_flat  = convert_to_list(total_grad_flat.sum(dim=0))  # (I,J,K,param_numel)
+                    total_grad_flat  = rotate_gradients_per_env(total_grad_flat, device=device, eps=args.grad_rotate[0])
+                    total_grad_flat  = torch.stack(total_grad_flat, dim=0).sum(0) # (param_numel,)
                 loss_grads_final.append(total_grad_flat)
             loss_grads_final_weighted = [g.detach().clone() * loss_weight * args.Lscaler for g in loss_grads_final if g is not None]
             l_grads_flat_weighted = torch.cat([g for g in loss_grads_final_weighted]) 
@@ -1159,17 +1161,19 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             pen = penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz, for_grads=True) # normalized per env for macro-batch, unweighted
             for pind in range(len(penalty_grads)):
                 dPenalty_dTheta_env = penalty_grads[pind] * penalty_weight_env[..., None] # per env sum of dPenalty/dTheta over macro-batch per parameter, unweighted, shape (I,J,K,param_numel)
+                reduction = 'none' if args.grad_rotate is not None else 'sum'
                 total_grad_flat     = \
                     penalty_calculator.penalty_grads_finalize(
                         dPenalty_dTheta_env, 
                         pen, 
                         halves_sz,
                         sigma=args.penalty_sigma,
-                        reduction='none'
-                    )                                                                     # (J,K,paramnum)
-                total_grad_flat  = convert_to_list(total_grad_flat)
-                total_grad_flat  = rotate_gradients_per_env(total_grad_flat, device=device)
-                total_grad_flat  = torch.stack(total_grad_flat, dim=0).sum(0)
+                        reduction=reduction
+                    )                                                                     
+                if args.grad_rotate is not None: # (J,K,paramnum)
+                    total_grad_flat  = convert_to_list(total_grad_flat)
+                    total_grad_flat  = rotate_gradients_per_env(total_grad_flat, device=device, eps=args.grad_rotate[1])
+                    total_grad_flat  = torch.stack(total_grad_flat, dim=0).sum(0) # (paramnum,)
                 penalty_grads_final.append(total_grad_flat.detach().clone())
             penalty_grads_final_weighted = [g.detach().clone() * penalty_weight * args.Lscaler for g in penalty_grads_final if g is not None]
             p_grads_flat_weighted = torch.cat([g for g in penalty_grads_final_weighted])
@@ -1822,6 +1826,7 @@ if __name__ == '__main__':
     parser.add_argument('--penalty_type', default='IRM', type=str, choices=['IRM', 'VREx'], help='Penalty type')        
     parser.add_argument('--penalty_sigma', default=None, type=float, help='Noise level to inject into penalty')        
     parser.add_argument('--drop_samples', default=None, type=int, help='# of samples to drop to break equilibrium')        
+    parser.add_argument('--grad_rotate', default=None, type=float, nargs=2, help='rotate gradients')        
 
     parser.add_argument('--feature_dim', default=128, type=int, help='Feature dim for latent vector')
     parser.add_argument('--temperature', default=0.5, type=float, help='Temperature used in softmax')
