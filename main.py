@@ -888,6 +888,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
 
     train_optimizer.zero_grad(set_to_none=True) # clear gradients at the beginning 
     k = 0 # number of consecutive batches r_mag is within bounds
+    macro_batch_index = 0
 
     for batch_index, data_env in enumerate(train_bar):
 
@@ -1077,6 +1078,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         gradients_accumulation_step += 1
         if gradients_accumulation_step < gradients_accumulation_steps:
             continue
+        macro_batch_index           += 1
 
         deltas = (2.0 * torch.rand(1, num_partitions, args.env_num, device=device) - 1.0) * args.weight_env_eps  # random in [-eps, eps]
         deltas -= deltas.mean()  # mean-zero so overall scale unchanged
@@ -1199,7 +1201,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 if reduction == 'none': # (J,K,parnum)
                     total_grad_flat  = convert_to_list(total_grad_flat)
                     #total_grad_flat  = rotate_gradients_per_env(total_grad_flat, device=device, eps=args.grad_rotate[1])
-                    total_grad_flat = rotate_pen_toward_orthogonal(total_grad_flat, loss_grad_flat, theta=args.grad_rotate[1])
+                    total_grad_flat = rotate_pen_toward_orthogonal(total_grad_flat, loss_grad_flat, theta=args.grad_rotate[1] * (-1)**macro_batch_index)
                     total_grad_flat  = torch.stack(total_grad_flat, dim=0).sum(0) # (paramnum,)
                 penalty_grads_final.append(total_grad_flat.detach().clone())
             penalty_grads_final_weighted = [g.detach().clone() * penalty_weight * args.Lscaler for g in penalty_grads_final if g is not None]
@@ -1363,7 +1365,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 cos_tP = F.cosine_similarity(g_t, g_P, dim=0)
                 dominance = cos_tL - cos_tP  # >0 => loss-dominated; <0 => penalty-dominated
 
-                print(f"pind {pind} g_L norm {g_L.norm():.4e} g_P norm {g_P.norm():.4e}")
+                print(f"pind {pind} g_L norm {g_L.norm():.4e} g_P norm {g_P.norm():.4e}, g_t {g_t.norm()}")
                 print(f"cos(L,P)={cos_LP.item():.4e}, cos(total,L)={cos_tL.item():.4e}, cos(total,P)={cos_tP.item():.4e}, dominance {dominance:.2f}")
 
             if p.grad is None:
