@@ -1354,6 +1354,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                        )
 
             if args.debug:
+                print()
                 g_L = loss_grads_final[pind]      * loss_weight      * loss_grad_scaler
                 g_P = penalty_grads_final[pind]   * penalty_weight   * penalty_grad_scaler
                 g_t = total_grad_flat_weighted
@@ -1369,6 +1370,11 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 p.grad  = total_grad_flat_weighted.view(p.shape)
             else:
                 p.grad += total_grad_flat_weighted.view(p.shape)
+            if args.debug:
+                # Are grads present and nonzero?
+                print(pind, "requires_grad=", p.requires_grad,
+                      "grad is None?", p.grad is None,
+                      "grad norm=", None if p.grad is None else p.grad.norm().item())
         
         # -----------------------
         # Step 3: optimizer step
