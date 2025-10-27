@@ -1189,7 +1189,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 loss_grad_flat  = convert_to_list(loss_grad_flat.sum(dim=0))  # (J,K,param_numel)
 
                 dPenalty_dTheta_env = penalty_grads[pind] * penalty_weight_env[..., None] # per env sum of dPenalty/dTheta over macro-batch per parameter, unweighted, shape (I,J,K,param_numel)
-                reduction = 'none' if (args.grad_rotate is not None) and args.grad_rotate[1] > 0. else 'sum'
+                reduction = 'none' if (args.grad_rotate is not None) and args.grad_rotate[1] != 0. else 'sum'
                 total_grad_flat     = \
                     penalty_calculator.penalty_grads_finalize(
                         dPenalty_dTheta_env, 
