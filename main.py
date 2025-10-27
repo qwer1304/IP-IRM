@@ -941,7 +941,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                             if (N := len(idxs)) == 0:
                                 continue
                             
-                            sampls_left = N
+                            samples_left = N
                             if args.drop_samples:
                                 samples_left = max(N - args.drop_samples, 2)
                                 samples_to_drop = max(N - samples_left, 0)
