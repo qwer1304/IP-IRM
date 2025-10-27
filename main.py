@@ -1075,7 +1075,10 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
 
         deltas = (2.0 * torch.rand(1, num_partitions, args.env_num, device=device) - 1.0) * args.weight_env_eps  # random in [-eps, eps]
         deltas -= deltas.mean()  # mean-zero so overall scale unchanged
-        weight_env = 1.0 + deltas
+        loss_weight_env = 1.0 + deltas
+        deltas = (2.0 * torch.rand(1, num_partitions, args.env_num, device=device) - 1.0) * args.weight_env_eps  # random in [-eps, eps]
+        deltas -= deltas.mean()  # mean-zero so overall scale unchanged
+        penalty_weight_env = 1.0 + deltas
 
         if do_loss:
             partition_sz = halves_sz.sum(dim=0, keepdim=True) # (1,J,K) # sizes of envs in macro-batch
@@ -1095,7 +1098,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         if do_loss:
             loss_grads_final = []
             for pind, _ in enumerate(net.parameters()):
-                dLoss_dTheta_env = loss_grads[pind] * weight_env[..., None]  # per env sum of dCont/dTheta, shape (I,J,K,param_numel), unweighted
+                dLoss_dTheta_env = loss_grads[pind] * loss_weight_env[..., None]  # per env sum of dCont/dTheta, shape (I,J,K,param_numel), unweighted
                 total_grad_flat  = loss_module.loss_grads_finalize(dLoss_dTheta_env, loss_env, halves_sz)
                 loss_grads_final.append(total_grad_flat)
             loss_grads_final_weighted = [g.detach().clone() * loss_weight * args.Lscaler for g in loss_grads_final if g is not None]
@@ -1111,7 +1114,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             penalty_grads_final = []
             pen = penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz, for_grads=True) # normalized per env for macro-batch, unweighted
             for pind in range(len(penalty_grads)):
-                dPenalty_dTheta_env = penalty_grads[pind] * weight_env[..., None] # per env sum of dPenalty/dTheta over macro-batch per parameter, unweighted, shape (I,J,K,param_numel)
+                dPenalty_dTheta_env = penalty_grads[pind] * penalty_weight_env[..., None] # per env sum of dPenalty/dTheta over macro-batch per parameter, unweighted, shape (I,J,K,param_numel)
                 total_grad_flat     = \
                     penalty_calculator.penalty_grads_finalize(
                         dPenalty_dTheta_env, 
