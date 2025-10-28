@@ -1482,6 +1482,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         penalty_decrease_cond   = penalty_grad_scaler   * ngl2 + loss_keep_grad_scaler*dot_kp + loss_grad_scaler*dot_lp
 
         gradnorm_rates_str = " ".join([f'{n} {r:.4f}' for n,r in zip([task_names_2_klp[k] for k in task_names], gradnorm_rates)]) if do_gradnorm else ""  
+        if args.print_batch:
+            print() # this causes each tqdm update to be printed on a separare line
         desc_str = f'Epoch [{epoch}/{epochs}] [{trained_samples}/{total_samples}]' + \
                    f' {args.ssl_type}' + \
                    f' Total {total_loss_weighted/trained_samples:.3e}' + \
@@ -1920,6 +1922,7 @@ if __name__ == '__main__':
     parser.add_argument('--constrain_relax', action="store_true", default=False, help='relax the constrain?')
     parser.add_argument('--retain_group', action="store_true", default=False, help='retain the previous group assignments?')
     parser.add_argument('--debug', action="store_true", default=False, help='debug?')
+    parser.add_argument('--print_batch', action="store_true", default=False, help='print every batch')
     parser.add_argument('--nonorm', action="store_true", default=False, help='not use norm for contrastive loss when maximizing')
     parser.add_argument('--groupnorm', action="store_true", default=False, help='use group contrastive loss?')
     parser.add_argument('--offline', action="store_true", default=False, help='save feature at the beginning of the maximize?')
