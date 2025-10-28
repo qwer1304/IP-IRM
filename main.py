@@ -1759,9 +1759,6 @@ def load_checkpoint(path, model, model_momentum, optimizer, gradnorm_balancer, g
 
 
     # Restore main model
-    print()
-    print("model's keys")
-    print(model.state_dict().keys())
     msg_model = model.load_state_dict(checkpoint["state_dict"], strict=False)
 
     # Restore momentum model if applicable
