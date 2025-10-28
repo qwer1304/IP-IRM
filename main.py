@@ -1958,7 +1958,8 @@ if __name__ == '__main__':
     parser.add_argument('--lr', default=0.001, type=float, help='LR')
     parser.add_argument('--SGD_momentum', default=0.9, type=float, help='LR')
     parser.add_argument('--weight_decay', default=1e-6, type=float, help='weight decay')
-    
+    parser.add_argument('--betas', default=[0.9, 0.999], type=float, nargs=2, help='Adam betas')
+
     parser.add_argument('--ema', type=str, default=None, choices=['reinit', 'retain'], help="adjust gradients w/ EMA")
     parser.add_argument('--gradnorm', action="store_true", help="use gradnorm")
     parser.add_argument('--gradnorm_epoch', default=0, type=int, help='gradnorm start epoch')
@@ -2161,7 +2162,7 @@ if __name__ == '__main__':
                             gradnorm_loss_lambda=args.gradnorm_loss_lambda, huber_delta=args.gradnorm_huber_delta)
 
     if args.opt == "Adam":
-        optimizer          = optim.Adam(model.parameters(),             lr=args.lr, weight_decay=args.weight_decay)
+        optimizer          = optim.Adam(model.parameters(),             lr=args.lr, weight_decay=args.weight_decay, betas=args.betas)
         gradnorm_optimizer = optim.Adam(gradnorm_balancer.parameters(), lr=args.gradnorm_lr, weight_decay=args.gradnorm_weight_decay, betas=args.gradnorm_betas)        
     elif args.opt == 'SGD':
         optimizer          = optim.SGD(model.parameters(),             lr=args.lr, weight_decay=args.weight_decay, momentum=args.SGD_momentum)
