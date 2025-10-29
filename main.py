@@ -190,7 +190,7 @@ class VRExCalculator(BaseCalculator):
              ) / num_partitions            # (parnums,)
             
         if reduction == 'sum':
-            x = s.sum(dim=(0,1,2))
+            x = x.sum(dim=(0,1,2))
         elif reduction == 'none':
             x = x.squeeze(0) # remove halves dim
         
