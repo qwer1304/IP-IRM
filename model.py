@@ -130,8 +130,8 @@ class projection_MLP(nn.Module):
         return x 
 
 
-class prediction_MLP(nn.Module):
-    def __init__(self, in_dim=2048, hidden_dim=512, out_dim=2048, normalize=True): # bottleneck structure
+class prediction_MLP(nn.Module, normalize=True):
+    def __init__(self, in_dim=2048, hidden_dim=512, out_dim=2048): # bottleneck structure
         super().__init__()
         """
         page 3 baseline setting
