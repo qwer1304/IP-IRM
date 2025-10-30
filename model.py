@@ -127,10 +127,10 @@ class projection_MLP(nn.Module):
             x = self.layer3(x)
         else:
             raise Exception
-        return F.normalize(x, dim=-1) 
+        return x 
 
 
-class prediction_MLP(nn.Module):
+class prediction_MLP(nn.Module, normalize=True):
     def __init__(self, in_dim=2048, hidden_dim=512, out_dim=2048): # bottleneck structure
         super().__init__()
         """
@@ -157,7 +157,9 @@ class prediction_MLP(nn.Module):
     def forward(self, x):
         x = self.layer1(x)
         x = self.layer2(x)
-        return F.normalize(x, dim=-1) 
+        if normalize:
+            x = F.normalize(x, dim=-1)
+        return x 
 
 class SimSiam(nn.Module):
     def __init__(self, feature_dim=128, image_class='ImageNet', state_dict=None):
@@ -205,14 +207,14 @@ class SimSiam(nn.Module):
 
         self.predictor = prediction_MLP(in_dim=feature_dim, hidden_dim=int(feature_dim/2), out_dim=feature_dim)
     
-    def forward(self, x):
-
-        f = self.projector
-
+    def forward(self, x, normalize=True):
         x = self.f(x)
         feature = torch.flatten(x, start_dim=1)
         
+        f = self.projector
         z = f(feature)
-
-        return F.normalize(feature, dim=-1), F.normalize(z, dim=-1)
+        if normalize:
+            feature = F.normalize(feature, dim=-1)
+            z       = F.normalize(z, dim=-1)
+        return feature, z
         

@@ -327,7 +327,8 @@ class SimSiamIRMCalculator(IRMCalculator):
         s = s.expand(batch_size)        
 
         # Compute g_i in a CE-specific way
-        losses = self.loss_module.compute_loss_micro(idxs=idxs, **kwargs)
+        # normalize=False results in use of dot product instead of cosine difference 
+        losses = self.loss_module.compute_loss_micro(idxs=idxs, normalize=False, **kwargs)
         grad_outputs = torch.ones(1, losses.size(0), device=device)
         g_i = torch.autograd.grad(
             losses * s, # losses is a tensor of scalars
@@ -452,7 +453,7 @@ class MoCoLossModule(LossModule):
             idxs = torch.arange(self._logits.size(0), device=self._logits.device)
         return self.labels[idxs]
 
-    def compute_loss_micro(self, idxs=None, scale=1.0, temperature=None, reduction='sum'):
+    def compute_loss_micro(self, idxs=None, scale=1.0, temperature=None, reduction='sum', **kwargs):
         if idxs is None:
             idxs = torch.arange(self._logits.size(0), device=self._logits.device)
         # sum over batch, per env handled by driver
@@ -493,13 +494,13 @@ class SimSiamLossModule(LossModule):
         x1 = transform(pos)
         x2 = transform(pos)
 
-        _, z1 = self.net(x1)
-        _, z2 = self.net(x2)
-        p1 = self.net.module.predictor(z1)
-        p2 = self.net.module.predictor(z2)
+        _, z1 = self.net(x1, normalize=False)
+        _, z2 = self.net(x2, normalize=False)
+        p1 = self.net.module.predictor(z1, normalize=False)
+        p2 = self.net.module.predictor(z2, normalize=False)
         self._representations = (z1, z2, p1, p2)
 
-    def compute_loss_micro(self, idxs=None, scale=1.0, reduction='sum'):
+    def compute_loss_micro(self, idxs=None, scale=1.0, reduction='sum', normalize=True):
         """
         Computes unnormalized loss of a micro-batch
         """
@@ -507,8 +508,12 @@ class SimSiamLossModule(LossModule):
         if idxs is None:
             idxs = torch.arange(z1.size(0), device=z1.device)
         # symmetric SimSiam loss (neg cosine, average two directions)
-        loss_dir1 = - F.cosine_similarity(scale * p1[idxs], z2[idxs].detach(), dim=-1)
-        loss_dir2 = - F.cosine_similarity(scale * p2[idxs], z1[idxs].detach(), dim=-1)
+        if normalize:
+            loss_dir1 = - F.cosine_similarity(scale * p1[idxs], z2[idxs]).detach(), dim=-1)
+            loss_dir2 = - F.cosine_similarity(scale * p2[idxs], z1[idxs]).detach(), dim=-1)
+        else:
+            loss_dir1 = - F.dot(scale * p1[idxs], z2[idxs]).detach(), dim=-1)
+            loss_dir2 = - F.dot(scale * p2[idxs], z1[idxs]).detach(), dim=-1)
         loss = 0.5 * (loss_dir1 + loss_dir2)
         if reduction == 'sum':
             loss = loss.sum()
