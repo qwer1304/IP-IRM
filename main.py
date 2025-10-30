@@ -56,30 +56,35 @@ class FeatureQueue:
         self.dtype = dtype
 
         self.queue = F.normalize(torch.randn(queue_size, dim, device=device, dtype=dtype), dim=1)
+        self.indices = torch.arange(queue_size, device=device)
         self.write_ptr = 0  # write index - first index to write from
         self.read_ptr = 0  # read index - first index to read from 
 
     @torch.no_grad()
-    def update(self, k):
+    def update(self, k, idx):
         """
         Update the queue with new keys.
 
         Args:
-            k: torch.Tensor, shape [batch_size, dim]
-                New keys to enqueue.
+            k:    torch.Tensor, shape [batch_size, dim]
+                    New keys to enqueue.
+            idx:  torch.Tensor, shape [batch_size,]
+                    Indices of new keys to enqueue.
         """
         n = k.size(0)
         if n == 0:
             return
 
         if self.write_ptr + n <= self.queue_size:
-            self.queue[self.write_ptr:self.write_ptr+n] = k
+            indices = list(range(self.write_ptr, self.write_ptr+n))
             self.write_ptr = self.write_ptr + n
         else:  # wrap around
             first = self.queue_size - self.write_ptr
-            self.queue[self.write_ptr:] = k[:first]
-            self.queue[:n-first] = k[first:]
+            indices = list(range(self.write_ptr, self.queue_size)) + list(range(0, n-first))          
             self.write_ptr = n - first
+        indices = torch.tensor(indices, device=self.device)
+        self.queue[indices] = k
+        self.indices[indices] = idx
 
     def get(self, n=None, advance=True):
         """Return the current queue tensor."""
@@ -91,17 +96,18 @@ class FeatureQueue:
             assert (n <= self.queue_size) and (n > 0)
         
         if self.read_ptr + n <= self.queue_size:
-            k = self.queue[self.read_ptr:self.read_ptr+n]
+            indices = list(range(self.read_ptr, self.read_ptr+n))
             if advance:
                 self.read_ptr = self.read_ptr + n
         else:  # wrap around
             first = self.queue_size - self.read_ptr
-            k1 = self.queue[self.read_ptr:]
-            k2 = self.queue[:n-first]
-            k = torch.cat([k1,k2])
+            indices = list(range(self.read_ptr, self.queue_size)) + list(range(0, n-first))          
             if advance:
                 self.read_ptr = n - first
-        return k
+        indices = torch.tensor(indices, device=self.device)
+        k   = self.queue[indices]
+        idx = self.indices[indices]
+        return k, idx
 
 def microbatches(x, y, mb_size, min_size=2):
     # yields a micro-batch
