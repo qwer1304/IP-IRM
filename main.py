@@ -2210,6 +2210,7 @@ if __name__ == '__main__':
     # training loop
     # start epoch is what the user provided, if provided, or from checkpoint, if exists, or 1 (default)
     start_epoch = args.start_epoch if args.start_epoch else start_epoch
+    epoch = start_epoch # used from train_partition()
 
     if args.evaluate:
         print(f"Staring evaluation name: {args.name}")
@@ -2233,7 +2234,6 @@ if __name__ == '__main__':
         gradnorm_balancer.rescale_weights()
     
     # update partition for the first time, if we need one
-    epoch = start_epoch # used from train_partition()
     if not args.baseline:
         if (not resumed) or (resumed and (updated_split is None) and ((args.penalty_cont > 0) or (args.penalty_weight > 0))):  
             if args.dataset != "ImageNet":
