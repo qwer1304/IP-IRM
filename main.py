@@ -780,10 +780,10 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
 
     net.train()
     for m in model.modules():
-        if isinstance(m, torch.nn.BatchNorm2d) or isinstance(m, torch.nn.BatchNorm1d):
-            m.eval()               # use stored running stats
-            m.requires_grad_(False)  # freeze affine params (weight, bias)    
-    
+        if isinstance(m, (nn.BatchNorm2d, nn.BatchNorm1d)):
+            m.eval()                 # use stored running stats
+            m.track_running_stats = False
+        
     if isinstance(partitions, list): # if retain previous partitions
         assert args.retain_group
     else:
