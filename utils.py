@@ -736,7 +736,7 @@ def auto_split(net, update_loader, soft_split_all, temperature, irm_temp, loss_m
                 cont_loss_epoch = torch.stack(loss_cont_list).mean()
                 risk_final = - (cont_loss_epoch + irm_weight*inv_loss_epoch)
 
-            if constrain: # constrain to avoid the imbalance problem
+            if constrain > 0.: # constrain to avoid the imbalance problem
                 if nonorm:
                     """
                     Each example should have confident (low-entropy) predictions, but across the batch they should be evenly distributed across classes.
@@ -755,7 +755,7 @@ def auto_split(net, update_loader, soft_split_all, temperature, irm_temp, loss_m
                         Rewards diversity across the batch - it is more positive when the model collapses to one class. 
                         """
                         constrain_loss = - cal_entropy(param_split.mean(0), dim=0)#  + cal_entropy(param_split, dim=1).mean()
-                risk_final += constrain_loss
+                risk_final += constrain * constrain_loss
 
 
             pre_optimizer.zero_grad()

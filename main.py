@@ -1924,7 +1924,7 @@ if __name__ == '__main__':
     parser.add_argument('--irm_weight_maxim', default=1, type=float, help='irm weight in maximizing')
     parser.add_argument('--irm_temp', default=0.5, type=float, help='irm loss temperature')
     parser.add_argument('--random_init', action="store_true", default=False, help='random initialization before every time update?')
-    parser.add_argument('--constrain', action="store_true", default=False, help='make num of 2 group samples similar?')
+    parser.add_argument('--constrain', type=float, default=0., help='weight of contrain to make two envs similar sized')
     parser.add_argument('--constrain_relax', action="store_true", default=False, help='relax the constrain?')
     parser.add_argument('--retain_group', action="store_true", default=False, help='retain the previous group assignments?')
     parser.add_argument('--debug', action="store_true", default=False, help='debug?')
