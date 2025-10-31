@@ -752,7 +752,8 @@ def auto_split(net, update_loader, soft_split_all, temperature, irm_temp, loss_m
                         constrain_loss = torch.relu(0.6365 - cal_entropy(param_split.mean(0), dim=0))
                     else:
                         """
-                        Rewards diversity across the batch - it is more positive when the model collapses to one class. 
+                        Rewards diversity across the batch - entropy is smaller when the model collapses to one class. 
+                        So (- entropy) is more negative when there's diversity.
                         """
                         constrain_loss = - cal_entropy(param_split.mean(0), dim=0)#  + cal_entropy(param_split, dim=1).mean()
                 risk_final += constrain_loss

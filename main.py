@@ -515,11 +515,11 @@ class SimSiamLossModule(LossModule):
             idxs = torch.arange(z1.size(0), device=z1.device)
         # symmetric SimSiam loss (neg cosine, average two directions)
         if normalize:
-            loss_dir1 = - F.cosine_similarity(scale * p1[idxs], z2[idxs]).detach(), dim=-1)
-            loss_dir2 = - F.cosine_similarity(scale * p2[idxs], z1[idxs]).detach(), dim=-1)
+            loss_dir1 = - F.cosine_similarity(scale * p1[idxs], z2[idxs].detach(), dim=-1)
+            loss_dir2 = - F.cosine_similarity(scale * p2[idxs], z1[idxs].detach(), dim=-1)
         else:
-            loss_dir1 = - F.dot(scale * p1[idxs], z2[idxs]).detach(), dim=-1)
-            loss_dir2 = - F.dot(scale * p2[idxs], z1[idxs]).detach(), dim=-1)
+            loss_dir1 = - F.dot(scale * p1[idxs], z2[idxs].detach(), dim=-1)
+            loss_dir2 = - F.dot(scale * p2[idxs], z1[idxs].detach(), dim=-1)
         loss = 0.5 * (loss_dir1 + loss_dir2)
         if reduction == 'sum':
             loss = loss.sum()
