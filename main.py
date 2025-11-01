@@ -2178,7 +2178,7 @@ if __name__ == '__main__':
         #FIX ME!!!!!!!!!
         #optimizer          = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay, betas=args.betas)
         optimizer = optim.Adam([
-            {'params': model.module.f.parameters(), 'lr': 1e-5},
+            {'params': model.module.f.parameters(), 'lr': 1e-4},
             {'params': model.module.projector.parameters(), 'lr': 1e-4},
             {'params': model.module.predictor.parameters(), 'lr': 1e-4}
         ], weight_decay=args.weight_decay, betas=args.betas)
