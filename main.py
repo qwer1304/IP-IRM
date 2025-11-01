@@ -779,13 +779,12 @@ def analyze_grad_alignment_moco_flexible(
 def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, **kwargs):
 
     net.train()
-    """
-    for m in model.modules():
-        if isinstance(m, (nn.BatchNorm2d, nn.BatchNorm1d)):
-            m.eval()                 # use stored running stats
-            m.track_running_stats = False
-    """
-        
+    if not args.adapt_bn:
+        for m in model.modules():
+            if isinstance(m, (nn.BatchNorm2d, nn.BatchNorm1d)):
+                m.eval()                 # use stored running stats
+                m.track_running_stats = False
+            
     if isinstance(partitions, list): # if retain previous partitions
         assert args.retain_group
     else:
@@ -933,7 +932,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                     MoCo:    generate two views, get their embeddings from respective encoders, normalize them, etc
                     SimSiam: generate two views, get their projections and predictions, etc
                 """
-                loss_module.pre_micro_batch(batch_micro, transform=transform, normalize=False)
+                loss_module.pre_micro_batch(batch_micro, transform=transform, normalize=(loss_type == 'moco'))
 
                 # compute unnormalized micro-batch loss
                 losses_samples = loss_module.compute_loss_micro(reduction='none')
@@ -2013,6 +2012,11 @@ if __name__ == '__main__':
     parser.add_argument('--clamp_weights_for_progress', action="store_true", help="clamp loss' weights for progress")
     parser.add_argument('--penalty_grad_project', type=float, nargs=2, default=None, help="project penalty grad for orthogonality", metavar="[tau_low, tau_high]")
     
+    parser.add_argument('--adapt_bn', action="store_true", help="adapt BN layers")
+    parser.add_argument('--featurizer_lr', type=float, default=0.0, help="featurizer LR")
+    parser.add_argument('--projector_lr', type=float, default=0.0, help="projector LR")
+    parser.add_argument('--predictor_lr', type=float, default=0.0, help="predictor LR")
+    
     # args parse
     args = parser.parse_args()
     args.gradnorm_tau = {args.gradnorm_tau[i]: args.gradnorm_tau[i+1] for i in range(0,len(args.gradnorm_tau),2)} if args.gradnorm_tau is not None else None
@@ -2190,17 +2194,20 @@ if __name__ == '__main__':
     if args.opt == "Adam":
         #FIX ME!!!!!!!!!
         #optimizer          = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay, betas=args.betas)
+        params = []
         if args.ssl_type.lower() == "simsiam":
-            optimizer = optim.Adam([
-                {'params': model.module.f.parameters(), 'lr': 1e-4},
-                {'params': model.module.projector.parameters(), 'lr': 1e-4},
-                {'params': model.module.predictor.parameters(), 'lr': 1e-4}
-            ], weight_decay=args.weight_decay, betas=args.betas)
+            if args.featurizer_lr > 0:
+                params.append({'params': model.module.f.parameters(), 'lr': args.featurizer_lr})
+            if args.projector_lr > 0:
+                params.append({'params': model.module.projector.parameters(), 'lr': args.projector_lr})
+            if args.predictor_lr > 0:
+                params.append({'params': model.module.predictor.parameters(), 'lr': args.predictor_lr})
         else:
-            optimizer = optim.Adam([
-                {'params': model.module.f.parameters(), 'lr': 1e-4},
-                {'params': model.module.g.parameters(), 'lr': 1e-4},
-            ], weight_decay=args.weight_decay, betas=args.betas)
+            if args.featurizer_lr > 0:
+                params.append({'params': model.module.f.parameters(), 'lr': args.featurizer_lr})
+            if args.projector_lr > 0:
+                params.append({'params': model.module.g.parameters(), 'lr': args.projector_lr})
+        optimizer = optim.Adam(params, weight_decay=args.weight_decay, betas=args.betas)
 
         gradnorm_optimizer = optim.Adam(gradnorm_balancer.parameters(), lr=args.gradnorm_lr, weight_decay=args.gradnorm_weight_decay, betas=args.gradnorm_betas)        
     elif args.opt == 'SGD':
