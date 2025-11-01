@@ -8,7 +8,7 @@ import torch
 import torch.optim as optim
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, random_split
 
 from tqdm.auto import tqdm
 
@@ -1966,6 +1966,7 @@ if __name__ == '__main__':
     parser.add_argument('--norandgray', action="store_true", default=False, help='skip rand gray transform')
     parser.add_argument('--evaluate', action="store_true", default=False, help='only evaluate')
     parser.add_argument('--extract_features', action="store_true", help="extract features for post processiin during evaluate")
+    parser.add_argument('--split_train_for_test', type=float, nargs=2, help="fractions to split training data into train/val for evaluation")
 
     parser.add_argument('--opt', choices=['Adam', 'SGD'], default='Adam', help='Optimizer to use')
     parser.add_argument('--lr', default=0.001, type=float, help='LR')
@@ -2230,11 +2231,19 @@ if __name__ == '__main__':
     epoch = start_epoch # used from train_partition()
 
     if args.evaluate:
-        print(f"Staring evaluation name: {args.name}")
+        print(f"Starting evaluation name: {args.name}")
         print('eval on val data')
+        if args.split_train_for_test:
+            mem_data = random_split(memory_data, args.split_train_for_test)
+            memory_data = mem_data[0]
         memory_loader = DataLoader(memory_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
             pin_memory=True, persistent_workers=te_pw)
         feauture_bank, feature_labels = get_feature_bank(model, memory_loader, args, progress=True, prefix="Evaluate:")
+        if args.split_train_for_test:
+            print('eval on train data')
+            train_loader = DataLoader(mem_data[1], batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
+                pin_memory=True, persistent_workers=te_pw)
+            train_acc_1, train_acc_5 = test(model, feauture_bank, feature_labels, trtain_loader, args, progress=True, prefix="Train:")
         val_loader = DataLoader(val_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=True, 
             pin_memory=True, persistent_workers=te_pw)
         val_acc_1, val_acc_5 = test(model, feauture_bank, feature_labels, val_loader, args, progress=True, prefix="Val:")
