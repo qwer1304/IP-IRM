@@ -2174,7 +2174,7 @@ if __name__ == '__main__':
                             gradnorm_loss_lambda=args.gradnorm_loss_lambda, huber_delta=args.gradnorm_huber_delta)
 
     if args.opt == "Adam":
-        optimizer          = optim.Adam([model.projector.parameters(), model.predictor.parameters()], lr=args.lr, weight_decay=args.weight_decay, betas=args.betas)
+        optimizer          = optim.Adam([model.module.projector.parameters(), model.module.predictor.parameters()], lr=args.lr, weight_decay=args.weight_decay, betas=args.betas)
         gradnorm_optimizer = optim.Adam(gradnorm_balancer.parameters(), lr=args.gradnorm_lr, weight_decay=args.gradnorm_weight_decay, betas=args.gradnorm_betas)        
     elif args.opt == 'SGD':
         optimizer          = optim.SGD(model.parameters(),             lr=args.lr, weight_decay=args.weight_decay, momentum=args.SGD_momentum)
