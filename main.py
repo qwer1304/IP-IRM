@@ -1613,9 +1613,12 @@ def get_feature_bank(net, memory_data_loader, args, progress=False, prefix="Test
     net.eval()
     
     if isinstance(memory_data_loader.dataset, Subset):
-        transform = memory_data_loader.dataset.dataset.transform 
+        dataset = memory_data_loader.dataset.dataset
+        idcs    = memory_data_loader.dataset.indices
     else:
-        transform = memory_data_loader.dataset.transform
+        dataset = memory_data_loader.dataset
+        idcs    = list(range(len(dataset)))
+    transform = dataset.transform
     feature_bank = []
     
     with torch.no_grad():
@@ -1644,14 +1647,13 @@ def get_feature_bank(net, memory_data_loader, args, progress=False, prefix="Test
         # [D, N]
         feature_bank = torch.cat(feature_bank, dim=0).t().contiguous() # places feature_bank on cuda
         # [N]
-        dataset = memory_data_loader.dataset
         if hasattr(dataset, "labels"):
-            labels = dataset.labels
+            labels = dataset.labels[idcs]
         else:
             if dataset.target_transform is not None:
-                labels = [dataset.target_transform(t) for t in dataset.targets]
+                labels = [dataset.target_transform(t) for t in dataset.targets[idcs]]
             else:
-                labels = dataset.targets        
+                labels = dataset.targets[idcs]       
         feature_labels = torch.tensor(labels, device=feature_bank.device)
 
     return feature_bank, feature_labels
