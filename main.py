@@ -1815,6 +1815,7 @@ def load_checkpoint(path, model, model_momentum, optimizer, gradnorm_balancer, g
         msg_gradnorm = "gradnorm not used"
 
     # Restore optimizer (if available)
+    #FIX ME!!!!!!!!!
     if False and "optimizer" in checkpoint and checkpoint["optimizer"] is not None:
 
         checkpoint["optimizer"]["param_groups"] = optimizer.param_groups  # keep current hparams
@@ -2174,8 +2175,8 @@ if __name__ == '__main__':
                             gradnorm_loss_lambda=args.gradnorm_loss_lambda, huber_delta=args.gradnorm_huber_delta)
 
     if args.opt == "Adam":
+        #FIX ME!!!!!!!!!
         #optimizer          = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay, betas=args.betas)
-
         optimizer = optim.Adam([
             {'params': model.module.f.parameters(), 'lr': 1e-5},
             {'params': model.module.projector.parameters(), 'lr': 1e-4},
@@ -2212,8 +2213,11 @@ if __name__ == '__main__':
                 gradnorm_balancer.set_tau(args.gradnorm_tau) # always set tau to currently provided value; also converts None to values
 
             # use current LR, not the one from checkpoint
+            """
+            FIX ME!!!!!!!!!
             for param_group in optimizer.param_groups:
                 param_group['lr'] = args.lr
+            """
             for param_group in gradnorm_optimizer.param_groups:
                 param_group['lr'] = args.lr
             resumed = True
