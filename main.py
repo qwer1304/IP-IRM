@@ -2248,7 +2248,7 @@ if __name__ == '__main__':
             print('eval on train data')
             train_loader = DataLoader(mem_data[1], batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
                 pin_memory=True, persistent_workers=te_pw)
-            train_acc_1, train_acc_5 = test(model, feauture_bank, feature_labels, trtain_loader, args, progress=True, prefix="Train:")
+            train_acc_1, train_acc_5 = test(model, feauture_bank, feature_labels, train_loader, args, progress=True, prefix="Train:")
         print('eval on val data')
         val_loader = DataLoader(val_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=True, 
             pin_memory=True, persistent_workers=te_pw)
