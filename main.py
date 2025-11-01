@@ -1612,7 +1612,10 @@ def train_partition(net, update_loader, soft_split, random_init=False, args=None
 def get_feature_bank(net, memory_data_loader, args, progress=False, prefix="Test:"):
     net.eval()
     
-    transform = memory_data_loader.dataset.transform
+    if isinstance(memory_data_loader.dataset, "Subset"):
+        transform = memory_data_loader.dataset.dataset.transform 
+    else:
+        transform = memory_data_loader.dataset.transform
     feature_bank = []
     
     with torch.no_grad():
@@ -1966,7 +1969,7 @@ if __name__ == '__main__':
     parser.add_argument('--norandgray', action="store_true", default=False, help='skip rand gray transform')
     parser.add_argument('--evaluate', action="store_true", default=False, help='only evaluate')
     parser.add_argument('--extract_features', action="store_true", help="extract features for post processiin during evaluate")
-    parser.add_argument('--split_train_for_test', type=float, nargs=2, help="fractions to split training data into train/val for evaluation")
+    parser.add_argument('--split_train_for_test', type=float, default=None, nargs=2, help="fractions to split training data into train/val for evaluation")
 
     parser.add_argument('--opt', choices=['Adam', 'SGD'], default='Adam', help='Optimizer to use')
     parser.add_argument('--lr', default=0.001, type=float, help='LR')
