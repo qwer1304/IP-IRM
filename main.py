@@ -2190,7 +2190,7 @@ if __name__ == '__main__':
     if args.opt == "Adam":
         #FIX ME!!!!!!!!!
         #optimizer          = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay, betas=args.betas)
-        if args.ssl_type.lower() = "simsiam":
+        if args.ssl_type.lower() == "simsiam":
             optimizer = optim.Adam([
                 {'params': model.module.f.parameters(), 'lr': 1e-4},
                 {'params': model.module.projector.parameters(), 'lr': 1e-4},
