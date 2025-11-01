@@ -1678,11 +1678,17 @@ def test(net, feature_bank, feature_labels, test_data_loader, args, progress=Fal
         else:
            test_bar = test_data_loader
     
-        transform = test_data_loader.dataset.transform
-        target_transform = test_data_loader.dataset.target_transform
+        if isinstance(test_data_loader.dataset, Subset):
+            dataset = test_data_loader.dataset.dataset
+            idcs    = test_data_loader.dataset.indices
+        else:
+            dataset = test_data_loader.dataset
+            idcs    = list(range(len(dataset)))
+        transform = dataset.transform
+        target_transform = dataset.target_transform
     
         if args.extract_features:
-            test_data_loader.dataset.target_transform = None
+            dataset.target_transform = None
 
         feature_list = []
         pred_labels_list = []
