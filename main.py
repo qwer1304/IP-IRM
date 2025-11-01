@@ -779,12 +779,12 @@ def analyze_grad_alignment_moco_flexible(
 def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, **kwargs):
 
     net.train()
-    #"""
+    """
     for m in model.modules():
         if isinstance(m, (nn.BatchNorm2d, nn.BatchNorm1d)):
             m.eval()                 # use stored running stats
             m.track_running_stats = False
-    #"""
+    """
         
     if isinstance(partitions, list): # if retain previous partitions
         assert args.retain_group
@@ -1815,7 +1815,7 @@ def load_checkpoint(path, model, model_momentum, optimizer, gradnorm_balancer, g
         msg_gradnorm = "gradnorm not used"
 
     # Restore optimizer (if available)
-    if "optimizer" in checkpoint and checkpoint["optimizer"] is not None:
+    if False and "optimizer" in checkpoint and checkpoint["optimizer"] is not None:
 
         checkpoint["optimizer"]["param_groups"] = optimizer.param_groups  # keep current hparams
         optimizer.load_state_dict(checkpoint["optimizer"])
@@ -2177,8 +2177,9 @@ if __name__ == '__main__':
         #optimizer          = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay, betas=args.betas)
 
         optimizer = optim.Adam([
-            {'params': model.module.projector.parameters(), 'lr': args.lr},
-            {'params': model.module.predictor.parameters(), 'lr': args.lr}
+            {'params': model.module.f.parameters(), 'lr': 1e-5},
+            {'params': model.module.projector.parameters(), 'lr': 1e-4},
+            {'params': model.module.predictor.parameters(), 'lr': 1e-4}
         ], weight_decay=args.weight_decay, betas=args.betas)
 
         gradnorm_optimizer = optim.Adam(gradnorm_balancer.parameters(), lr=args.gradnorm_lr, weight_decay=args.gradnorm_weight_decay, betas=args.gradnorm_betas)        
