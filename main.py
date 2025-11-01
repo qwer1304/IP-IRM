@@ -779,10 +779,12 @@ def analyze_grad_alignment_moco_flexible(
 def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, **kwargs):
 
     net.train()
+    """
     for m in model.modules():
         if isinstance(m, (nn.BatchNorm2d, nn.BatchNorm1d)):
             m.eval()                 # use stored running stats
             m.track_running_stats = False
+    """
         
     if isinstance(partitions, list): # if retain previous partitions
         assert args.retain_group
@@ -2172,7 +2174,7 @@ if __name__ == '__main__':
                             gradnorm_loss_lambda=args.gradnorm_loss_lambda, huber_delta=args.gradnorm_huber_delta)
 
     if args.opt == "Adam":
-        optimizer          = optim.Adam(model.parameters(),             lr=args.lr, weight_decay=args.weight_decay, betas=args.betas)
+        optimizer          = optim.Adam([model.projector.parameters(), model.predictor.parameters()], lr=args.lr, weight_decay=args.weight_decay, betas=args.betas)
         gradnorm_optimizer = optim.Adam(gradnorm_balancer.parameters(), lr=args.gradnorm_lr, weight_decay=args.gradnorm_weight_decay, betas=args.gradnorm_betas)        
     elif args.opt == 'SGD':
         optimizer          = optim.SGD(model.parameters(),             lr=args.lr, weight_decay=args.weight_decay, momentum=args.SGD_momentum)
