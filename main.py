@@ -779,12 +779,12 @@ def analyze_grad_alignment_moco_flexible(
 def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, **kwargs):
 
     net.train()
-    """
+    #"""
     for m in model.modules():
         if isinstance(m, (nn.BatchNorm2d, nn.BatchNorm1d)):
             m.eval()                 # use stored running stats
             m.track_running_stats = False
-    """
+    #"""
         
     if isinstance(partitions, list): # if retain previous partitions
         assert args.retain_group
