@@ -1648,12 +1648,13 @@ def get_feature_bank(net, memory_data_loader, args, progress=False, prefix="Test
         feature_bank = torch.cat(feature_bank, dim=0).t().contiguous() # places feature_bank on cuda
         # [N]
         if hasattr(dataset, "labels"):
-            labels = dataset.labels[idcs]
+            labels = [dataset.labels[i] for i in indcs]
         else:
+            targets = [dataset.targets[i] for i in idcs]
             if dataset.target_transform is not None:
-                labels = [dataset.target_transform(t) for t in dataset.targets[idcs]]
+                labels = [dataset.target_transform(t) for t in targets]
             else:
-                labels = dataset.targets[idcs]       
+                labels = targets       
         feature_labels = torch.tensor(labels, device=feature_bank.device)
 
     return feature_bank, feature_labels
