@@ -1612,7 +1612,7 @@ def train_partition(net, update_loader, soft_split, random_init=False, args=None
 def get_feature_bank(net, memory_data_loader, args, progress=False, prefix="Test:"):
     net.eval()
     
-    if isinstance(memory_data_loader.dataset, "Subset"):
+    if isinstance(memory_data_loader.dataset, Subset):
         transform = memory_data_loader.dataset.dataset.transform 
     else:
         transform = memory_data_loader.dataset.transform
