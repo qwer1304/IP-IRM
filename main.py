@@ -2235,7 +2235,6 @@ if __name__ == '__main__':
 
     if args.evaluate:
         print(f"Starting evaluation name: {args.name}")
-        print('eval on val data')
         if args.split_train_for_test:
             mem_data = random_split(memory_data, args.split_train_for_test)
             memory_data = mem_data[0]
@@ -2247,6 +2246,7 @@ if __name__ == '__main__':
             train_loader = DataLoader(mem_data[1], batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
                 pin_memory=True, persistent_workers=te_pw)
             train_acc_1, train_acc_5 = test(model, feauture_bank, feature_labels, trtain_loader, args, progress=True, prefix="Train:")
+        print('eval on val data')
         val_loader = DataLoader(val_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=True, 
             pin_memory=True, persistent_workers=te_pw)
         val_acc_1, val_acc_5 = test(model, feauture_bank, feature_labels, val_loader, args, progress=True, prefix="Val:")
