@@ -2016,6 +2016,7 @@ if __name__ == '__main__':
     parser.add_argument('--featurizer_lr', type=float, default=0.0, help="featurizer LR")
     parser.add_argument('--projector_lr', type=float, default=0.0, help="projector LR")
     parser.add_argument('--predictor_lr', type=float, default=0.0, help="predictor LR")
+    parser.add_argument('--bn_momentum', type=float, default=0.1, help="BN momentum")
     
     # args parse
     args = parser.parse_args()
