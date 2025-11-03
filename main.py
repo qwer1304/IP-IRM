@@ -8,7 +8,7 @@ import torch
 import torch.optim as optim
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, random_split, Subset
 
 from tqdm.auto import tqdm
 
@@ -56,35 +56,30 @@ class FeatureQueue:
         self.dtype = dtype
 
         self.queue = F.normalize(torch.randn(queue_size, dim, device=device, dtype=dtype), dim=1)
-        self.indices = torch.arange(queue_size, device=device)
         self.write_ptr = 0  # write index - first index to write from
         self.read_ptr = 0  # read index - first index to read from 
 
     @torch.no_grad()
-    def update(self, k, idx):
+    def update(self, k):
         """
         Update the queue with new keys.
 
         Args:
-            k:    torch.Tensor, shape [batch_size, dim]
-                    New keys to enqueue.
-            idx:  torch.Tensor, shape [batch_size,]
-                    Indices of new keys to enqueue.
+            k: torch.Tensor, shape [batch_size, dim]
+                New keys to enqueue.
         """
         n = k.size(0)
         if n == 0:
             return
 
         if self.write_ptr + n <= self.queue_size:
-            indices = list(range(self.write_ptr, self.write_ptr+n))
+            self.queue[self.write_ptr:self.write_ptr+n] = k
             self.write_ptr = self.write_ptr + n
         else:  # wrap around
             first = self.queue_size - self.write_ptr
-            indices = list(range(self.write_ptr, self.queue_size)) + list(range(0, n-first))          
+            self.queue[self.write_ptr:] = k[:first]
+            self.queue[:n-first] = k[first:]
             self.write_ptr = n - first
-        indices = torch.tensor(indices, device=self.device)
-        self.queue[indices] = k
-        self.indices[indices] = idx
 
     def get(self, n=None, advance=True):
         """Return the current queue tensor."""
@@ -96,18 +91,17 @@ class FeatureQueue:
             assert (n <= self.queue_size) and (n > 0)
         
         if self.read_ptr + n <= self.queue_size:
-            indices = list(range(self.read_ptr, self.read_ptr+n))
+            k = self.queue[self.read_ptr:self.read_ptr+n]
             if advance:
                 self.read_ptr = self.read_ptr + n
         else:  # wrap around
             first = self.queue_size - self.read_ptr
-            indices = list(range(self.read_ptr, self.queue_size)) + list(range(0, n-first))          
+            k1 = self.queue[self.read_ptr:]
+            k2 = self.queue[:n-first]
+            k = torch.cat([k1,k2])
             if advance:
                 self.read_ptr = n - first
-        indices = torch.tensor(indices, device=self.device)
-        k   = self.queue[indices]
-        idx = self.indices[indices]
-        return k, idx
+        return k
 
 def microbatches(x, y, mb_size, min_size=2):
     # yields a micro-batch
@@ -785,7 +779,12 @@ def analyze_grad_alignment_moco_flexible(
 def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, **kwargs):
 
     net.train()
-    
+    if not args.adapt_bn:
+        for m in model.modules():
+            if isinstance(m, (nn.BatchNorm2d, nn.BatchNorm1d)):
+                m.eval()                 # use stored running stats
+                m.track_running_stats = False
+            
     if isinstance(partitions, list): # if retain previous partitions
         assert args.retain_group
     else:
@@ -933,7 +932,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                     MoCo:    generate two views, get their embeddings from respective encoders, normalize them, etc
                     SimSiam: generate two views, get their projections and predictions, etc
                 """
-                loss_module.pre_micro_batch(batch_micro, transform=transform, normalize=True)
+                loss_module.pre_micro_batch(batch_micro, transform=transform, normalize=(loss_type == 'moco'))
 
                 # compute unnormalized micro-batch loss
                 losses_samples = loss_module.compute_loss_micro(reduction='none')
@@ -1612,7 +1611,13 @@ def train_partition(net, update_loader, soft_split, random_init=False, args=None
 def get_feature_bank(net, memory_data_loader, args, progress=False, prefix="Test:"):
     net.eval()
     
-    transform = memory_data_loader.dataset.transform
+    if isinstance(memory_data_loader.dataset, Subset):
+        dataset = memory_data_loader.dataset.dataset
+        idcs    = memory_data_loader.dataset.indices
+    else:
+        dataset = memory_data_loader.dataset
+        idcs    = list(range(len(dataset)))
+    transform = dataset.transform
     feature_bank = []
     
     with torch.no_grad():
@@ -1641,14 +1646,14 @@ def get_feature_bank(net, memory_data_loader, args, progress=False, prefix="Test
         # [D, N]
         feature_bank = torch.cat(feature_bank, dim=0).t().contiguous() # places feature_bank on cuda
         # [N]
-        dataset = memory_data_loader.dataset
         if hasattr(dataset, "labels"):
-            labels = dataset.labels
+            labels = [dataset.labels[i] for i in indcs]
         else:
+            targets = [dataset.targets[i] for i in idcs]
             if dataset.target_transform is not None:
-                labels = [dataset.target_transform(t) for t in dataset.targets]
+                labels = [dataset.target_transform(t) for t in targets]
             else:
-                labels = dataset.targets        
+                labels = targets       
         feature_labels = torch.tensor(labels, device=feature_bank.device)
 
     return feature_bank, feature_labels
@@ -1672,11 +1677,17 @@ def test(net, feature_bank, feature_labels, test_data_loader, args, progress=Fal
         else:
            test_bar = test_data_loader
     
-        transform = test_data_loader.dataset.transform
-        target_transform = test_data_loader.dataset.target_transform
+        if isinstance(test_data_loader.dataset, Subset):
+            dataset = test_data_loader.dataset.dataset
+            idcs    = test_data_loader.dataset.indices
+        else:
+            dataset = test_data_loader.dataset
+            idcs    = list(range(len(dataset)))
+        transform = dataset.transform
+        target_transform = dataset.target_transform
     
         if args.extract_features:
-            test_data_loader.dataset.target_transform = None
+            dataset.target_transform = None
 
         feature_list = []
         pred_labels_list = []
@@ -1815,7 +1826,8 @@ def load_checkpoint(path, model, model_momentum, optimizer, gradnorm_balancer, g
         msg_gradnorm = "gradnorm not used"
 
     # Restore optimizer (if available)
-    if "optimizer" in checkpoint and checkpoint["optimizer"] is not None:
+    #FIX ME!!!!!!!!!
+    if False and "optimizer" in checkpoint and checkpoint["optimizer"] is not None:
 
         checkpoint["optimizer"]["param_groups"] = optimizer.param_groups  # keep current hparams
         optimizer.load_state_dict(checkpoint["optimizer"])
@@ -1930,7 +1942,7 @@ if __name__ == '__main__':
     parser.add_argument('--irm_weight_maxim', default=1, type=float, help='irm weight in maximizing')
     parser.add_argument('--irm_temp', default=0.5, type=float, help='irm loss temperature')
     parser.add_argument('--random_init', action="store_true", default=False, help='random initialization before every time update?')
-    parser.add_argument('--constrain', action="store_true", default=False, help='make num of 2 group samples similar?')
+    parser.add_argument('--constrain', type=float, default=0., help='weight of contrain to make two envs similar sized')
     parser.add_argument('--constrain_relax', action="store_true", default=False, help='relax the constrain?')
     parser.add_argument('--retain_group', action="store_true", default=False, help='retain the previous group assignments?')
     parser.add_argument('--debug', action="store_true", default=False, help='debug?')
@@ -1965,6 +1977,7 @@ if __name__ == '__main__':
     parser.add_argument('--norandgray', action="store_true", default=False, help='skip rand gray transform')
     parser.add_argument('--evaluate', action="store_true", default=False, help='only evaluate')
     parser.add_argument('--extract_features', action="store_true", help="extract features for post processiin during evaluate")
+    parser.add_argument('--split_train_for_test', type=float, default=None, nargs=2, help="fractions to split training data into train/val for evaluation")
 
     parser.add_argument('--opt', choices=['Adam', 'SGD'], default='Adam', help='Optimizer to use')
     parser.add_argument('--lr', default=0.001, type=float, help='LR')
@@ -1998,6 +2011,12 @@ if __name__ == '__main__':
 
     parser.add_argument('--clamp_weights_for_progress', action="store_true", help="clamp loss' weights for progress")
     parser.add_argument('--penalty_grad_project', type=float, nargs=2, default=None, help="project penalty grad for orthogonality", metavar="[tau_low, tau_high]")
+    
+    parser.add_argument('--adapt_bn', action="store_true", help="adapt BN layers")
+    parser.add_argument('--featurizer_lr', type=float, default=0.0, help="featurizer LR")
+    parser.add_argument('--projector_lr', type=float, default=0.0, help="projector LR")
+    parser.add_argument('--predictor_lr', type=float, default=0.0, help="predictor LR")
+    parser.add_argument('--bn_momentum', type=float, default=0.1, help="BN momentum")
     
     # args parse
     args = parser.parse_args()
@@ -2174,7 +2193,23 @@ if __name__ == '__main__':
                             gradnorm_loss_lambda=args.gradnorm_loss_lambda, huber_delta=args.gradnorm_huber_delta)
 
     if args.opt == "Adam":
-        optimizer          = optim.Adam(model.parameters(),             lr=args.lr, weight_decay=args.weight_decay, betas=args.betas)
+        #FIX ME!!!!!!!!!
+        #optimizer          = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay, betas=args.betas)
+        params = []
+        if args.ssl_type.lower() == "simsiam":
+            if args.featurizer_lr > 0:
+                params.append({'params': model.module.f.parameters(), 'lr': args.featurizer_lr})
+            if args.projector_lr > 0:
+                params.append({'params': model.module.projector.parameters(), 'lr': args.projector_lr})
+            if args.predictor_lr > 0:
+                params.append({'params': model.module.predictor.parameters(), 'lr': args.predictor_lr})
+        else:
+            if args.featurizer_lr > 0:
+                params.append({'params': model.module.f.parameters(), 'lr': args.featurizer_lr})
+            if args.projector_lr > 0:
+                params.append({'params': model.module.g.parameters(), 'lr': args.projector_lr})
+        optimizer = optim.Adam(params, weight_decay=args.weight_decay, betas=args.betas)
+
         gradnorm_optimizer = optim.Adam(gradnorm_balancer.parameters(), lr=args.gradnorm_lr, weight_decay=args.gradnorm_weight_decay, betas=args.gradnorm_betas)        
     elif args.opt == 'SGD':
         optimizer          = optim.SGD(model.parameters(),             lr=args.lr, weight_decay=args.weight_decay, momentum=args.SGD_momentum)
@@ -2205,8 +2240,11 @@ if __name__ == '__main__':
                 gradnorm_balancer.set_tau(args.gradnorm_tau) # always set tau to currently provided value; also converts None to values
 
             # use current LR, not the one from checkpoint
+            """
+            FIX ME!!!!!!!!!
             for param_group in optimizer.param_groups:
                 param_group['lr'] = args.lr
+            """
             for param_group in gradnorm_optimizer.param_groups:
                 param_group['lr'] = args.lr
             resumed = True
@@ -2216,13 +2254,22 @@ if __name__ == '__main__':
     # training loop
     # start epoch is what the user provided, if provided, or from checkpoint, if exists, or 1 (default)
     start_epoch = args.start_epoch if args.start_epoch else start_epoch
+    epoch = start_epoch # used from train_partition()
 
     if args.evaluate:
-        print(f"Staring evaluation name: {args.name}")
-        print('eval on val data')
+        print(f"Starting evaluation name: {args.name}")
+        if args.split_train_for_test:
+            mem_data = random_split(memory_data, args.split_train_for_test)
+            memory_data = mem_data[0]
         memory_loader = DataLoader(memory_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
             pin_memory=True, persistent_workers=te_pw)
         feauture_bank, feature_labels = get_feature_bank(model, memory_loader, args, progress=True, prefix="Evaluate:")
+        if args.split_train_for_test:
+            print('eval on train data')
+            train_loader = DataLoader(mem_data[1], batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
+                pin_memory=True, persistent_workers=te_pw)
+            train_acc_1, train_acc_5 = test(model, feauture_bank, feature_labels, train_loader, args, progress=True, prefix="Train:")
+        print('eval on val data')
         val_loader = DataLoader(val_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=True, 
             pin_memory=True, persistent_workers=te_pw)
         val_acc_1, val_acc_5 = test(model, feauture_bank, feature_labels, val_loader, args, progress=True, prefix="Val:")
@@ -2239,7 +2286,6 @@ if __name__ == '__main__':
         gradnorm_balancer.rescale_weights()
     
     # update partition for the first time, if we need one
-    epoch = start_epoch # used from train_partition()
     if not args.baseline:
         if (not resumed) or (resumed and (updated_split is None) and ((args.penalty_cont > 0) or (args.penalty_weight > 0))):  
             if args.dataset != "ImageNet":

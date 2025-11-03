@@ -736,7 +736,7 @@ def auto_split(net, update_loader, soft_split_all, temperature, irm_temp, loss_m
                 cont_loss_epoch = torch.stack(loss_cont_list).mean()
                 risk_final = - (cont_loss_epoch + irm_weight*inv_loss_epoch)
 
-            if constrain: # constrain to avoid the imbalance problem
+            if constrain > 0.: # constrain to avoid the imbalance problem
                 if nonorm:
                     """
                     Each example should have confident (low-entropy) predictions, but across the batch they should be evenly distributed across classes.
@@ -747,15 +747,20 @@ def auto_split(net, update_loader, soft_split_all, temperature, irm_temp, loss_m
                         """
                         Don't let the model's global prediction distribution get too peaky - stay at least roughly balanced (entropy >= 0.6365). 
                         If it starts collapsing, push it back.
-                        For 2 classes, H([0.55,0.45])~0.688, H([0.7,0.3])~0.611. So 0.6365 corresponds roughly to a 65-35 class split.                        
+                        For 2 classes, H([0.55,0.45])~0.688, H([0.7,0.3])~0.611. So 0.6365 corresponds roughly to a 65-35 class split.  
+                        So, for 99-1 split, entropy is ~ 0, so relu() gives ~ 0.6365, which increases total loss.
+                        For 50-50 split, entropy is ~ 0.69, so relu() gives 0, i.e., loss isn't increased.
+                        Net result is that splits better than 2:1 are capped and don't decrease the loss anymore.
                         """
                         constrain_loss = torch.relu(0.6365 - cal_entropy(param_split.mean(0), dim=0))
                     else:
                         """
-                        Rewards diversity across the batch - entropy is smaller when the model collapses to one class. 
-                        So (- entropy) is more negative when there's diversity.
+                        Rewards diversity across the batch - it is more positive when the model collapses to one class. 
+                        Here, entropy always > 0. It's bigger when there's MORE diversity (more even split), and its
+                        negation is SMALLER, i.e. loss goes DOWN.
                         """
                         constrain_loss = - cal_entropy(param_split.mean(0), dim=0)#  + cal_entropy(param_split, dim=1).mean()
+                constrain_loss *= constrain
                 risk_final += constrain_loss
 
 
@@ -863,7 +868,7 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
                 cont_loss_epoch = torch.stack(loss_cont_list).mean()
                 risk_final = - (cont_loss_epoch + irm_weight*inv_loss_epoch)
 
-            if constrain: # constrain to avoid the imbalance problem
+            if constrain > 0: # constrain to avoid the imbalance problem
                 if nonorm:
                     constrain_loss = 0.2*(- cal_entropy(param_split.mean(0), dim=0) + cal_entropy(param_split, dim=1).mean())
                 else:
@@ -871,6 +876,7 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
                         constrain_loss = torch.relu(0.6365 - cal_entropy(param_split.mean(0), dim=0))
                     else:
                         constrain_loss = - cal_entropy(param_split.mean(0), dim=0)#  + cal_entropy(param_split, dim=1).mean()
+                constrain_loss *= constrain
                 risk_final += constrain_loss
 
             pre_optimizer.zero_grad()

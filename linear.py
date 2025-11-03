@@ -198,6 +198,7 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
 
                         # Prepare output tensors
                         feature_mixed = torch.empty_like(feature)
+                        #  Each sample has (label_batch, label_permuted_batch, lambda) 
                         labels_mixed = torch.empty(target.size(0),3, device=target.device)
 
                         # Apply Mixup to selected samples
@@ -212,6 +213,7 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
                         feature_mixed, labels_mixed = feature_mixed.squeeze(), labels_mixed # labels_mix is a tensor (B,3)
                         out = net.module.fc(net.module.dropout(feature_mixed))
                         def loss_mixup(y, logits):
+                            # y: (label_batch, label_permuted_batch, lambda)
                             loss_a = loss_mixup_criterion(logits, y[:, 0].long())
                             loss_b = loss_mixup_criterion(logits, y[:, 1].long())
                             return ((1 - y[:, 2]) * loss_a + y[:, 2] * loss_b).mean()

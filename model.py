@@ -131,7 +131,7 @@ class projection_MLP(nn.Module):
 
 
 class prediction_MLP(nn.Module):
-    def __init__(self, in_dim=2048, hidden_dim=512, out_dim=2048, normalize=True): # bottleneck structure
+    def __init__(self, in_dim=2048, hidden_dim=512, out_dim=2048): # bottleneck structure
         super().__init__()
         """
         page 3 baseline setting
@@ -154,7 +154,7 @@ class prediction_MLP(nn.Module):
         The training is unstable and the loss oscillates.
         """
 
-    def forward(self, x):
+    def forward(self, x, normalize=True):
         x = self.layer1(x)
         x = self.layer2(x)
         if normalize:
