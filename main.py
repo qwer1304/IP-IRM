@@ -912,7 +912,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
     from full aggregators.
     """
     num_halves  = PenaltyCalculator.num_halves()
-    reduction = 'sum' if is_per_env else 'none'
 
     loss_aggregator      = torch.zeros((num_halves, num_partitions, args.env_num), dtype=torch.float, device=device) 
     penalty_aggregator   = torch.zeros((num_halves, num_partitions, args.env_num), dtype=torch.float, device=device) 
@@ -938,6 +937,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
     macro_batch_index = 0
 
     for batch_index, data_env in enumerate(train_bar):
+
+        reduction = 'sum' if is_per_env else 'none' # make sure it's the correct one
 
         data_batch, indexs_batch = data_env[0], data_env[-1] # 'data_batch' is an batch of images, 'indexs_batch' is their corresponding indices 
         this_batch_size = len(indexs_batch) # for the case drop_last=False
@@ -1014,9 +1015,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                     differentiate_this.append(losses_samples)
                                     loss = losses_samples.detach()
                                 else:
-                                    if batch_index >= 1:
-                                        print()
-                                        print(idxs, losses_samples, reduction)
                                     loss = losses_samples[idxs].sum(dim=0).detach()
                                 loss_aggregator[j,partition_num,env] += loss # unnormalized, before penalty scaler
                             if do_penalty:
