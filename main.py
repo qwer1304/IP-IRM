@@ -370,7 +370,7 @@ class LossModule:
     def __init__(self, net, device='cuda', **kwargs):
         self.net = net
 
-    def pre_batch(self, batch_data):
+    def pre_batch(self, batch_data, *args, **kwargs):
         pass
 
     def compute_loss_micro(self, batch_data):
