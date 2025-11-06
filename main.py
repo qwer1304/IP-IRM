@@ -102,6 +102,7 @@ class FeatureQueue:
             n = self.queue_size
         else: 
             assert (n <= self.queue_size) and (n > 0)
+        print(idx, self.indices)
         assert (idx and (self.indices is not None)) or ((not idx) and (self.indices is None))           
         
         if self.read_ptr + n <= self.queue_size:
