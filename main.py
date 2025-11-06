@@ -2231,7 +2231,7 @@ if __name__ == '__main__':
             p.requires_grad = False
         momentum = args.momentum              # momentum for model_momentum
         queue_size = args.queue_size
-        queue = FeatureQueue(queue_size, feature_dim, device=device, dtype=torch.float32)
+        queue = FeatureQueue(queue_size, feature_dim, device=device, dtype=torch.float32, indices=True)
     elif args.ssl_type.lower() == 'simsiam':
         model_momentum = None
         queue = None
