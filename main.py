@@ -438,8 +438,10 @@ class MoCoLossModule(LossModule):
             return
         _, indexs = self.queue.get(self.queue.queue_size - self.this_batch_size, advance=False, idx=True)
         self.neg_idxs = [[] for _ in partitions]
+        for p in partitions:
+            pass
 
-    def get_viewsxxx(self, pos, transform, normalize=True):
+    def get_view(self, pos, transform, normalize=True):
         pos_q = transform(pos)
         pos_k = transform(pos)
 
