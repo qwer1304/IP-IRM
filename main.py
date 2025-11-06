@@ -87,7 +87,7 @@ class FeatureQueue:
             self.write_ptr = self.write_ptr + n
         else:  # wrap around
             first = self.queue_size - self.write_ptr
-            indices = torch.cat(torch.arange(self.write_ptr, self.queue_size), torch.arange(0, n-first))
+            indices = torch.stack(torch.arange(self.write_ptr, self.queue_size), torch.arange(0, n-first), dim=0)
             self.write_ptr = n - first
         self.queue[indices] = k
         if idx:
@@ -110,7 +110,7 @@ class FeatureQueue:
                 self.read_ptr = self.read_ptr + n
         else:  # wrap around
             first = self.queue_size - self.read_ptr
-            indices = torch.cat(torch.arange(self.read_ptr, self.queue_size), torch.arange(0, n-first))
+            indices = torch.stack(torch.arange(self.read_ptr, self.queue_size), torch.arange(0, n-first), dim=0)
             if advance:
                 self.read_ptr = n - first
         k = self.queue[indices]
