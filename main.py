@@ -1016,7 +1016,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                 else:
                                     if batch_index >= 1:
                                         print()
-                                        print(idxs, loss_samples, reduction)
+                                        print(idxs, losses_samples, reduction)
                                     loss = losses_samples[idxs].sum(dim=0).detach()
                                 loss_aggregator[j,partition_num,env] += loss # unnormalized, before penalty scaler
                             if do_penalty:
