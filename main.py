@@ -440,7 +440,7 @@ class MoCoLossModule(LossModule):
         self.neg_idxs = [[] for _ in partitions]
         for p in partitions:
             for env in range(p.size(-1)):
-                self.neg_idxs.append(utils.assign_idxs(indexs, p, env))
+                self.neg_idxs[p].append(utils.assign_idxs(indexs, p, env))
 
     def get_views(self, pos, transform, normalize=True):
         pos_q = transform(pos)
