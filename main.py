@@ -1069,8 +1069,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
 
                     offset = 0 # use losses
                     grad_outputs[-1][offset:offset+num_samples]  = 1.0 / this_batch_size / gradients_accumulation_steps # unweighted
-                    # don't need to add to losses to be differentiated b/c it uses the same losses
-                    # differentiate_this.append(losses_samples)
+                    if is_per_env:
+                        differentiate_this.append(losses_samples)
 
                 differentiate_this = [t.reshape(-1) for t in differentiate_this] # ensure common shape of 1D tensors
                 differentiate_this = torch.cat(differentiate_this, dim=0) # cat losses and penalties into a single vector length 2B
