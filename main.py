@@ -839,13 +839,13 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
     else:
         penalty_weight = args.penalty_weight
         
-    loss_weight         = args.penalty_cont      * (1 if penalty_weight <= 1 else 1 / penalty_weight)
-    loss_keep_weight    = args.penalty_keep_cont * (1 if penalty_weight <= 1 else (1 / penalty_weight))
+    loss_weight         = args.penalty_cont          * (1 if penalty_weight <= 1 else 1 / penalty_weight)
+    loss_keep_weight    = max(args.penalty_keep_cont * (1 if penalty_weight <= 1 else (1 / penalty_weight)), int(args.baseline))
     penalty_weight_orig = penalty_weight
     penalty_weight      = 1 if penalty_weight > 1 else penalty_weight
     
     do_loss      = (not args.baseline) and (loss_weight > 0)
-    do_keep_loss = (args.keep_cont)    and (loss_keep_weight > 0)
+    do_keep_loss = (args.baseline)     or ((args.keep_cont)  and (loss_keep_weight > 0))
     do_penalty   = (not args.baseline) and (penalty_weight > 0)
     do_gradnorm  = (not args.baseline) and args.gradnorm  and (epoch >= args.gradnorm_epoch)
 
@@ -1069,8 +1069,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
 
                     offset = 0 # use losses
                     grad_outputs[-1][offset:offset+num_samples]  = 1.0 / this_batch_size / gradients_accumulation_steps # unweighted
-                    if is_per_env:
-                        differentiate_this.append(losses_samples)
 
                 differentiate_this = [t.reshape(-1) for t in differentiate_this] # ensure common shape of 1D tensors
                 differentiate_this = torch.cat(differentiate_this, dim=0) # cat losses and penalties into a single vector length 2B
