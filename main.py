@@ -79,7 +79,7 @@ class FeatureQueue:
         n = k.size(0)
         if n == 0:
             return
-        assert ((idx is not None) and (self.indices is not None)) or ((idx is None) and (self.indices is None))
+        assert ((idx is not None) and (self.indices is not None)) or (idx is None)
         assert len(idx) == k.size(0)
 
         if self.write_ptr + n <= self.queue_size:
