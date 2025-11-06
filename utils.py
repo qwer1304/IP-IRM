@@ -876,7 +876,7 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
                         constrain_loss = torch.relu(0.6365 - cal_entropy(param_split.mean(0), dim=0))
                     else:
                         constrain_loss = - cal_entropy(param_split.mean(0), dim=0)#  + cal_entropy(param_split, dim=1).mean()
-                constrain_loss *= constrain
+                constrain_loss = constrain * constrain_loss
                 risk_final += constrain_loss
 
             pre_optimizer.zero_grad()
