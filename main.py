@@ -434,10 +434,9 @@ class MoCoLossModule(LossModule):
         self.this_batch_size = len(batch_data)
         self.queue.get(self.this_batch_size) # advance read pointer
         
-        print()
-        print(partitions)
-        if partitions is None or (len(partitions) == 0):
+        if partitions is None or (len(partitions) == 0) or (partitions[0] is None):
             return
+        
         _, indexs = self.queue.get(self.queue.queue_size - self.this_batch_size, advance=False, idx=True)
         self.neg_idxs = [[] for _ in partitions]
         for pidx, p in enumerate(partitions):
