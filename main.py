@@ -972,7 +972,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                     MoCo:    generate two views, get their embeddings from respective encoders, normalize them, etc
                     SimSiam: generate two views, get their projections and predictions, etc
                 """
-                out_1, out_2 = loss_module.get_views(batch_micro, transform=transform, normalize=(loss_type == 'moco')
+                out_1, out_2 = loss_module.get_views(batch_micro, transform=transform, normalize=(loss_type == 'moco'))
                 
                 if do_keep_loss or (do_loss and not is_per_env):
                     # compute unnormalized micro-batch loss
