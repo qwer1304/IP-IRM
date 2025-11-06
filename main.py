@@ -993,7 +993,10 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
 
                             if (N := len(idxs)) == 0:
                                 if is_per_env:
-                                    differentiate_this.append(torch.zeros(1, dtype=torch.float, device=device)) # to keep autograd happy
+                                    if do_loss:
+                                        differentiate_this.append(torch.zeros(1, dtype=torch.float, device=device)) # dummy loss
+                                    if do_penalty:
+                                        differentiate_this.append(torch.zeros(1, dtype=torch.float, device=device)) # dummy penalty
                                 continue
                             
                             samples_left = N
@@ -1015,8 +1018,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                     # compute unnormalized micro-batch loss
                                     losses_samples = loss_module.compute_loss_micro(out_1[idxs], out_2[idxs], p=partition_num, env=env, reduction=reduction)
                                     differentiate_this.append(losses_samples)
-                                    print()
-                                    print(f"append loss_samples {losses_samples}")
                                     loss = losses_samples.detach()
                                 else:
                                     loss = losses_samples[idxs].sum(dim=0).detach()
@@ -1025,8 +1026,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                 if is_per_env:
                                     penalties_samples = penalty_calculator.penalty(losses_samples, reduction=reduction)
                                     differentiate_this.append(penalties_samples)
-                                    print()
-                                    print(f"append penalties_samples {penalties_samples}")
                                     penalty = penalties_samples.detach()
                                 else:
                                     penalty = penalties_samples[idxs].sum(dim=0).detach()
@@ -1035,7 +1034,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                             # gradients
                             linear_idx = torch.tensor(partition_num*args.env_num + env, dtype=torch.int, device=device)
                             if is_per_env:
-                                offset = int(do_keep_loss) # 1st loss is 
+                                offset = partition_num*args.env_num + env + int(do_keep_loss) # 1st loss is keep_loss
                                 mask = 1.0
                                 if do_loss:
                                     grad_outputs[linear_idx][offset:offset+num_samples] = mask # unweighted
@@ -1043,7 +1042,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                     offset += num_samples
                                 if do_penalty:
                                     grad_outputs[linear_idx][offset:offset+num_samples] = mask # unweighted
-                                    offset += num_samples
+                                    offset = 0 # for keep loss
                             else:
                                 offset = 0
                                 mask = torch.zeros(num_samples, dtype=torch.float, device=device)
@@ -1079,12 +1078,12 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 # 'grads_all' is a tuple w/ an entry per parameter.
                 # each entry is a tensor w/ 1st dim = 'grad_outputs.size(0)' and other dims matching the parameter
 
-                #"""
+                """
                 print()
                 print(f"num_samples {num_samples}, num_split_repeates {num_split_repeates}, num_baseline_repeates {num_baseline_repeates}, " +                                  
                       f"num_repeats {num_repeats}, num_grads {num_grads}, " + 
                       f"grad_outputs {grad_outputs.size()}, differentiate_this {differentiate_this.size()}")
-                #"""
+                """
 
                 grads_all = torch.autograd.grad(
                     differentiate_this,
