@@ -815,12 +815,14 @@ def analyze_grad_alignment_moco_flexible(
 def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, **kwargs):
 
     net.train()
-    if not args.adapt_bn:
-        for m in model.modules():
-            if isinstance(m, (nn.BatchNorm2d, nn.BatchNorm1d)):
+    for m in model.modules():
+        if isinstance(m, (torch.nn.BatchNorm3d, nn.BatchNorm2d, nn.BatchNorm1d)):
+            if not args.adapt_bn:
                 m.eval()                 # use stored running stats
                 m.track_running_stats = False
-            
+            else:
+                m.momentum = args.bn_momentum
+
     if isinstance(partitions, list): # if retain previous partitions
         assert args.retain_group
     else:
