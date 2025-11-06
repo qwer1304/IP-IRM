@@ -1014,8 +1014,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                     differentiate_this.append(losses_samples)
                                     loss = losses_samples.detach()
                                 else:
-                                    print()
-                                    print(idxs, losses_samples, reduction)
                                     loss = losses_samples[idxs].sum(dim=0).detach()
                                 loss_aggregator[j,partition_num,env] += loss # unnormalized, before penalty scaler
                             if do_penalty:
