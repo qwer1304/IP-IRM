@@ -36,7 +36,7 @@ def get_negative_mask(batch_size):
     return negative_mask
 
 class FeatureQueue:
-    def __init__(self, queue_size, dim, device=None, dtype=torch.float32):
+    def __init__(self, queue_size, dim, device=None, dtype=torch.float32, indices=False):
         """
         A circular queue for storing feature embeddings.
 
@@ -49,6 +49,8 @@ class FeatureQueue:
                 Device to store the queue on (default: same as k when first updated).
             dtype: torch.dtype
                 Data type of the queue (default: torch.float32).
+            indices: bool
+                Whether to store keys' indices 
         """
         self.queue_size = queue_size
         self.dim = dim
@@ -58,50 +60,64 @@ class FeatureQueue:
         self.queue = F.normalize(torch.randn(queue_size, dim, device=device, dtype=dtype), dim=1)
         self.write_ptr = 0  # write index - first index to write from
         self.read_ptr = 0  # read index - first index to read from 
+        
+        if indices:
+            self.indices = torch.randperm(self.queue_size, device=device)
+        else:
+            self.indices = None
 
     @torch.no_grad()
-    def update(self, k):
+    def update(self, k, idx=None):
         """
         Update the queue with new keys.
 
         Args:
-            k: torch.Tensor, shape [batch_size, dim]
-                New keys to enqueue.
+            k:   torch.Tensor, shape [batch_size, dim]
+                     New keys to enqueue.
+            idx: indices of keys  
         """
         n = k.size(0)
         if n == 0:
             return
+        assert ((idx is not None) and (self.indices is not None)) or ((idx is None) and (self.indices is None))
+        assert len(idx) == k.size(0)
 
         if self.write_ptr + n <= self.queue_size:
-            self.queue[self.write_ptr:self.write_ptr+n] = k
+            indices = torch.arange(self.write_ptr, self.write_ptr+n)
             self.write_ptr = self.write_ptr + n
         else:  # wrap around
             first = self.queue_size - self.write_ptr
-            self.queue[self.write_ptr:] = k[:first]
-            self.queue[:n-first] = k[first:]
+            indices = torch.cat(torch.arange(self.write_ptr, self.queue_size), torch.arange(0, n-first))
             self.write_ptr = n - first
+        self.queue[indices] = k
+        if idx:
+            self.indices[indices] = idx
 
-    def get(self, n=None, advance=True):
+    def get(self, n=None, advance=True, idx=False):
         """Return the current queue tensor."""
-        # n: if n>0    - number of elements from the current read location to return
-        #    if n=None - return the whole queue
+        # n:   if n>0    - number of elements from the current read location to return
+        #      if n=None - return the whole queue
+        # idx: also return the indices 
         if n is None:
             n = self.queue_size
         else: 
             assert (n <= self.queue_size) and (n > 0)
+        assert (idx and (self.indices is not None)) or (not idx) and (self.indices is None))           
         
         if self.read_ptr + n <= self.queue_size:
-            k = self.queue[self.read_ptr:self.read_ptr+n]
+            indices = torch.arange(self.read_ptr, self.read_ptr+n)
             if advance:
                 self.read_ptr = self.read_ptr + n
         else:  # wrap around
             first = self.queue_size - self.read_ptr
-            k1 = self.queue[self.read_ptr:]
-            k2 = self.queue[:n-first]
-            k = torch.cat([k1,k2])
+            indices = torch.cat(torch.arange(self.read_ptr, self.queue_size), torch.arange(0, n-first))
             if advance:
                 self.read_ptr = n - first
-        return k
+        k = self.queue[indices]
+        if idx:
+            return k, self.indices[indices]
+        else:
+            return k
 
 def microbatches(x, y, mb_size, min_size=2):
     # yields a micro-batch
@@ -357,9 +373,6 @@ class LossModule:
     def pre_batch(self, batch_data):
         pass
 
-    def pre_micro_batch(self, batch_data):
-        pass
-
     def compute_loss_micro(self, batch_data):
         raise NotImplementedError
 
@@ -410,17 +423,26 @@ class MoCoLossModule(LossModule):
         self.temperature = temperature or 1.0
         self.this_batch_size = 0
         self.debug = debug
+        self.neg_idxs = []
         if self.debug:
             self.total_pos = 0.0
             self.total_neg = 0.0
             self.total_maxneg = 0.0
             self.count = 0
 
-    def pre_batch(self, batch_data):
+    def pre_batch(self, batch_data, index_data, partitions, device='cuda'):
         self.this_batch_size = len(batch_data)
         self.queue.get(self.this_batch_size) # advance read pointer
+        
+        if partitions is None:
+            return
+        _, indexs = self.queue.get(self.queue.queue_size - self.this_batch_size, advance=False, idx=True)
+        self.neg_idxs = [[] for _ in partitions]
+        for p in partitions:
+            for env in p.size(-1):
+                self.neg_idxs.append(utils.assign_idxs(indexs, p, env)
 
-    def pre_micro_batch(self, pos, transform, normalize=True):
+    def get_views(self, pos, transform, normalize=True):
         pos_q = transform(pos)
         pos_k = transform(pos)
 
@@ -432,17 +454,8 @@ class MoCoLossModule(LossModule):
             if normalize:
                 out_k = F.normalize(out_k, dim=1)
         self.out_k = out_k # save in state for queue update at end of batch
-        
-        l_pos = torch.sum(out_q * out_k, dim=1, keepdim=True)
-        l_neg = torch.matmul(out_q, self.queue.get((self.queue.queue_size - self.this_batch_size), advance=False).t())
-        self._logits = torch.cat([l_pos, l_neg], dim=1)
-        self.labels = torch.zeros(self._logits.size(0), dtype=torch.long, device=self._logits.device)
-        if self.debug:
-            self.total_pos    += l_pos.mean().item() * l_pos.size(0)
-            self.total_neg    += l_neg.mean().item() * l_pos.size(0)
-            self.total_maxneg += l_neg.max().item()  * l_pos.size(0)
-            self.count        += l_pos.size(0)
-        
+        return out_q, out_k
+
     def logits(self, idxs=None):
         if idxs is None:
             idxs = torch.arange(self._logits.size(0), device=self._logits.device)
@@ -453,7 +466,20 @@ class MoCoLossModule(LossModule):
             idxs = torch.arange(self._logits.size(0), device=self._logits.device)
         return self.labels[idxs]
 
-    def compute_loss_micro(self, idxs=None, scale=1.0, temperature=None, reduction='sum', **kwargs):
+    def compute_loss_micro(self, out_q, out_k, p=None, env=None, idxs=None, scale=1.0, temperature=None, reduction='sum', **kwargs):
+        l_pos = torch.sum(out_q * out_k, dim=1, keepdim=True)
+        out_neg = self.queue.get((self.queue.queue_size - self.this_batch_size), advance=False)
+        if p is not None:
+            out_neg = out_neg[self.neg_idxs[p][env]]
+        l_neg = torch.matmul(out_q, out_neg.t())
+        self._logits = torch.cat([l_pos, l_neg], dim=1)
+        self.labels = torch.zeros(self._logits.size(0), dtype=torch.long, device=self._logits.device)
+        if self.debug:
+            self.total_pos    += l_pos.mean().item() * l_pos.size(0)
+            self.total_neg    += l_neg.mean().item() * l_pos.size(0)
+            self.total_maxneg += l_neg.max().item()  * l_pos.size(0)
+            self.count        += l_pos.size(0)
+
         if idxs is None:
             idxs = torch.arange(self._logits.size(0), device=self._logits.device)
         # sum over batch, per env handled by driver
@@ -483,6 +509,10 @@ class MoCoLossModule(LossModule):
         else:
             return ""
 
+    @staticmethod
+    def is_per_env():
+        return True
+
 # ---------------------------
 # SimSiam Loss Module
 # ---------------------------
@@ -490,21 +520,22 @@ class SimSiamLossModule(LossModule):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    def pre_micro_batch(self, pos, transform, normalize=True):
+    def get_views(self, pos, transform, normalize=True):
         x1 = transform(pos)
         x2 = transform(pos)
 
         _, z1 = self.net(x1, normalize=False)
         _, z2 = self.net(x2, normalize=False)
-        p1 = self.net.module.predictor(z1, normalize=False)
-        p2 = self.net.module.predictor(z2, normalize=False)
-        self._representations = (z1, z2, p1, p2)
+        
+        return z1, z2
 
-    def compute_loss_micro(self, idxs=None, scale=1.0, reduction='sum', normalize=True):
+    def compute_loss_micro(self, z_1, z_2, idxs=None, scale=1.0, reduction='sum', normalize=True, **kwargs):
         """
         Computes unnormalized loss of a micro-batch
         """
-        z1, z2, p1, p2 = self._representations
+        p1 = self.net.module.predictor(z1, normalize=False)
+        p2 = self.net.module.predictor(z2, normalize=False)
+        self._representations = (z1, z2, p1, p2)
         if idxs is None:
             idxs = torch.arange(z1.size(0), device=z1.device)
         # symmetric SimSiam loss (neg cosine, average two directions)
@@ -523,6 +554,10 @@ class SimSiamLossModule(LossModule):
         if idxs is None:
             idxs = torch.arange(self._representations[0].size(0), device=self._representations[0].device)
         return tuple(r[idxs] for r in self._representations)
+
+    @staticmethod
+    def is_per_env():
+        return False
 
 def clamp_scalers_for_progress(norm2_dict, dot_dict, scaler_dict, ema=False):
     def consistent_dots(dot_dict, norm2_dict, eps=1e-12):
@@ -853,7 +888,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
     else:
         raise ValueError(f"Unknown loss_type: {loss_type}")
 
-    loss_module = LossModule(net, debug=args.debug, **kwargs)
+    is_per_env  = LossModule.is_per_env()
+    loss_module = LossModule(net, debug=args.debug, **kwargs) 
 
     # IRM calculator selection
     if penalty_type == 'irm':
@@ -876,6 +912,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
     from full aggregators.
     """
     num_halves  = PenaltyCalculator.num_halves()
+    reduction = 'sum' if is_per_env else 'none'
 
     loss_aggregator      = torch.zeros((num_halves, num_partitions, args.env_num), dtype=torch.float, device=device) 
     penalty_aggregator   = torch.zeros((num_halves, num_partitions, args.env_num), dtype=torch.float, device=device) 
@@ -905,7 +942,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         data_batch, indexs_batch = data_env[0], data_env[-1] # 'data_batch' is an batch of images, 'indexs_batch' is their corresponding indices 
         this_batch_size = len(indexs_batch) # for the case drop_last=False
         
-        loss_module.pre_batch(data_batch)
+        loss_module.pre_batch(data_batch, index_batch, partitions)
 
         # -----------------------
         # Step 0: micro-batches
@@ -919,12 +956,15 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 batch_micro         = batch_micro.cuda(non_blocking=True)
                 indexs              = indexs.cuda(non_blocking=True)
 
-                num_samples           = len(batch_micro)
+                num_samples           = 1 if is_per_env else len(batch_micro)
                 num_split_repeates    = int(not args.baseline) * (int(loss_weight>0) + int(penalty_weight>0))
                 num_baseline_repeates = int(loss_keep_weight>0) * int(args.keep_cont)                                  
                 num_repeats           = max(num_split_repeates, num_baseline_repeates)
                 num_grads             = num_partitions * args.env_num * num_split_repeates + num_baseline_repeates
-                grad_outputs          = torch.zeros((num_grads, num_samples*num_repeats), dtype=torch.float, device=device) 
+                if is_per_env:
+                    grad_outputs          = torch.zeros((num_grads, num_grads), dtype=torch.float, device=device) 
+                else:
+                    grad_outputs          = torch.zeros((num_grads, num_samples*num_repeats), dtype=torch.float, device=device) 
                 differentiate_this    = []
 
                 """
@@ -932,14 +972,15 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                     MoCo:    generate two views, get their embeddings from respective encoders, normalize them, etc
                     SimSiam: generate two views, get their projections and predictions, etc
                 """
-                loss_module.pre_micro_batch(batch_micro, transform=transform, normalize=(loss_type == 'moco'))
-
-                # compute unnormalized micro-batch loss
-                losses_samples = loss_module.compute_loss_micro(reduction='none')
-                if do_loss or do_keep_loss:
+                out_1, out_2 = loss_module.get_views(batch_micro, transform=transform, normalize=(loss_type == 'moco')
+                
+                if do_keep_loss or (do_loss and not is_per_env):
+                    # compute unnormalized micro-batch loss
+                    losses_samples = loss_module.compute_loss_micro(out_1, out_2, reduction=reduction)
                     differentiate_this.append(losses_samples)
-                if do_penalty:
-                    penalties_samples = penalty_calculator.penalty(losses_samples, reduction='none')
+
+                if do_penalty and not is_per_env:
+                    penalties_samples = penalty_calculator.penalty(losses_samples, reduction=reduction)
                     differentiate_this.append(penalties_samples)
 
                 if do_loss or do_penalty:
@@ -967,24 +1008,44 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                             # losses
                             if do_loss:
                                 # compute unnormalized micro-batch loss
-                                loss = losses_samples[idxs].sum(dim=0).detach()
+                                if is_per_env:
+                                    # compute unnormalized micro-batch loss
+                                    losses_samples = loss_module.compute_loss_micro(out_1[idxs], out_2[idxs], p=partition_num, env=env, reduction=reduction)
+                                    differentiate_this.append(losses_samples)
+                                    loss = losses_samples.detach()
+                                else:
+                                    loss = losses_samples[idxs].sum(dim=0).detach()
                                 loss_aggregator[j,partition_num,env] += loss # unnormalized, before penalty scaler
                             if do_penalty:
-                                penalty = penalties_samples[idxs].sum(dim=0).detach()
+                                if is_per_env:
+                                    penalties_samples = penalty_calculator.penalty(losses_samples, reduction=reduction)
+                                    differentiate_this.append(penalties_samples)
+                                else:
+                                    penalty = penalties_samples[idxs].sum(dim=0).detach()
                                 penalty_aggregator[j,partition_num,env] += penalty # unnormalized penalty components before penalty scaler
 
                             # gradients
                             linear_idx = torch.tensor(partition_num*args.env_num + env, dtype=torch.int, device=device)
-                            offset = 0
-                            mask = torch.zeros(num_samples, dtype=torch.float, device=device)
-                            mask[idxs] = 1.0
-                            if do_loss:
-                                grad_outputs[linear_idx][offset:offset+num_samples] = mask # unweighted
-                                linear_idx += num_partitions * args.env_num
-                                offset += num_samples
-                            if do_penalty:
-                                grad_outputs[linear_idx][offset:offset+num_samples] = mask # unweighted
-                                offset += num_samples
+                            if is_per_env:
+                                mask = 1.0
+                                if do_loss:
+                                    grad_outputs[linear_idx][offset:offset+num_samples] = mask # unweighted
+                                    linear_idx += num_partitions * args.env_num
+                                    offset += num_samples
+                                if do_penalty:
+                                    grad_outputs[linear_idx][offset:offset+num_samples] = mask # unweighted
+                                    offset += num_samples
+                            else:
+                                offset = 0
+                                mask = torch.zeros(num_samples, dtype=torch.float, device=device)
+                                mask[idxs] = 1.0
+                                if do_loss:
+                                    grad_outputs[linear_idx][offset:offset+num_samples] = mask # unweighted
+                                    linear_idx += num_partitions * args.env_num
+                                    offset += num_samples
+                                if do_penalty:
+                                    grad_outputs[linear_idx][offset:offset+num_samples] = mask # unweighted
+                                    offset += num_samples
                         # end for env in range(args.env_num):
                     # end for partition_num, partition in enumerate(partitions):
                 # end if not args.baseline:
