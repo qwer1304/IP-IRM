@@ -1021,8 +1021,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                 if is_per_env:
                                     penalties_samples = penalty_calculator.penalty(losses_samples, reduction=reduction)
                                     differentiate_this.append(penalties_samples)
-                                else:
-                                    penalty = penalties_samples[idxs].sum(dim=0).detach()
+                                penalty = penalties_samples[idxs].sum(dim=0).detach()
                                 penalty_aggregator[j,partition_num,env] += penalty # unnormalized penalty components before penalty scaler
 
                             # gradients
