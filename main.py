@@ -2286,8 +2286,7 @@ if __name__ == '__main__':
     start_epoch = 1
     if args.resume:
         if os.path.isfile(args.resume):
-            # FIX ME!!!!!!!
-            (model, model_momentum, optimizer, _,
+            (model, model_momentum, optimizer, queue,
              start_epoch, best_acc1, best_epoch,
              updated_split, updated_split_all, ema_, gradnorm_balancer, gradnorm_optimizer) = \
                 load_checkpoint(args.resume, model, model_momentum, optimizer, gradnorm_balancer, gradnorm_optimizer)
