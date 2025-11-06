@@ -1026,6 +1026,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
 
                             # gradients
                             linear_idx = torch.tensor(partition_num*args.env_num + env, dtype=torch.int, device=device)
+                            offset = 0
                             if is_per_env:
                                 mask = 1.0
                                 if do_loss:
@@ -1036,7 +1037,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                     grad_outputs[linear_idx][offset:offset+num_samples] = mask # unweighted
                                     offset += num_samples
                             else:
-                                offset = 0
                                 mask = torch.zeros(num_samples, dtype=torch.float, device=device)
                                 mask[idxs] = 1.0
                                 if do_loss:
