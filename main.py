@@ -1072,6 +1072,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                     if is_per_env:
                         differentiate_this.append(losses_samples)
 
+                print()
+                print(differentiate_this)
                 differentiate_this = [t.reshape(-1) for t in differentiate_this] # ensure common shape of 1D tensors
                 differentiate_this = torch.cat(differentiate_this, dim=0) # cat losses and penalties into a single vector length 2B
 
