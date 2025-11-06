@@ -442,6 +442,9 @@ class MoCoLossModule(LossModule):
             for env in range(p.size(-1)):
                 self.neg_idxs.append(utils.assign_idxs(indexs, p, env)
 
+    def a(self):
+        pass
+
     def get_viewsxxx(self, pos, transform, normalize=True):
         pos_q = transform(pos)
         pos_k = transform(pos)
