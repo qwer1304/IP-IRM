@@ -1063,7 +1063,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                     # don't need to add to losses to be differentiated b/c it uses the same losses
                     # differentiate_this.append(losses_samples)
 
-                differentiate_this = torch.stack(differentiate_this, dim=0) # cat losses and penalties into a single vector length 2B
+                differentiate_this = torch.cat(differentiate_this, dim=0) # cat losses and penalties into a single vector length 2B
 
                 # compute all needed grads
                 # 'grads_all' is a tuple w/ an entry per parameter.
