@@ -102,7 +102,7 @@ class FeatureQueue:
             n = self.queue_size
         else: 
             assert (n <= self.queue_size) and (n > 0)
-        assert (idx and (self.indices is not None)) or (not idx) and (self.indices is None))           
+        assert (idx and (self.indices is not None)) or ((not idx) and (self.indices is None))           
         
         if self.read_ptr + n <= self.queue_size:
             indices = torch.arange(self.read_ptr, self.read_ptr+n)
