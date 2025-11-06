@@ -80,7 +80,7 @@ class FeatureQueue:
         if n == 0:
             return
         assert ((idx is not None) and (self.indices is not None)) or (idx is None)
-        assert len(idx) == k.size(0)
+        assert (idx is None) or (len(idx) == n), f"idx {idx} n {n}"
 
         if self.write_ptr + n <= self.queue_size:
             indices = torch.arange(self.write_ptr, self.write_ptr+n)
@@ -1063,8 +1063,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                     # don't need to add to losses to be differentiated b/c it uses the same losses
                     # differentiate_this.append(losses_samples)
 
-                print()
-                print(differentiate_this)
                 differentiate_this = torch.stack(differentiate_this, dim=0) # cat losses and penalties into a single vector length 2B
 
                 # compute all needed grads
