@@ -992,6 +992,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                             idxs = utils.assign_idxs(indexs, partition, env)
 
                             if (N := len(idxs)) == 0:
+                                if is_per_env:
+                                    differentiate_this.append(torch.zeros(1, dtype=torch.float, device=device)) # to keep autograd happy
                                 continue
                             
                             samples_left = N
