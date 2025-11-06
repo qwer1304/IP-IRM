@@ -529,7 +529,7 @@ class SimSiamLossModule(LossModule):
         
         return z1, z2
 
-    def compute_loss_micro(self, z_1, z_2, idxs=None, scale=1.0, reduction='sum', normalize=True, **kwargs):
+    def compute_loss_micro(self, z1, z2, idxs=None, scale=1.0, reduction='sum', normalize=True, **kwargs):
         """
         Computes unnormalized loss of a micro-batch
         """
