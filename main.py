@@ -1013,6 +1013,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                     # compute unnormalized micro-batch loss
                                     losses_samples = loss_module.compute_loss_micro(out_1[idxs], out_2[idxs], p=partition_num, env=env, reduction=reduction)
                                     differentiate_this.append(losses_samples)
+                                    print()
+                                    print(f"append loss_samples {losses_samples}")
                                     loss = losses_samples.detach()
                                 else:
                                     loss = losses_samples[idxs].sum(dim=0).detach()
@@ -1021,6 +1023,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                 if is_per_env:
                                     penalties_samples = penalty_calculator.penalty(losses_samples, reduction=reduction)
                                     differentiate_this.append(penalties_samples)
+                                    print()
+                                    print(f"append penalties_samples {penalties_samples}")
                                     penalty = penalties_samples.detach()
                                 else:
                                     penalty = penalties_samples[idxs].sum(dim=0).detach()
@@ -1066,8 +1070,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                     # don't need to add to losses to be differentiated b/c it uses the same losses
                     # differentiate_this.append(losses_samples)
 
-                differentiate_this_list = [t.reshape(-1) for t in differentiate_this] # ensure common shape of 1D tensors
-                differentiate_this = torch.cat(differentiate_this_list, dim=0) # cat losses and penalties into a single vector length 2B
+                differentiate_this = [t.reshape(-1) for t in differentiate_this] # ensure common shape of 1D tensors
+                differentiate_this = torch.cat(differentiate_this, dim=0) # cat losses and penalties into a single vector length 2B
 
                 # compute all needed grads
                 # 'grads_all' is a tuple w/ an entry per parameter.
@@ -1077,7 +1081,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 print()
                 print(f"num_samples {num_samples}, num_split_repeates {num_split_repeates}, num_baseline_repeates {num_baseline_repeates}, " +                                  
                       f"num_repeats {num_repeats}, num_grads {num_grads}, " + 
-                      f"grad_outputs {grad_outputs.size()}, differentiate_this {differentiate_this.size()} diff_list {differentiate_this_list}")
+                      f"grad_outputs {grad_outputs.size()}, differentiate_this {differentiate_this.size()}")
                 #"""
 
                 grads_all = torch.autograd.grad(
