@@ -446,7 +446,9 @@ class MoCoLossModule(LossModule):
                 # assign_idxs returns a tensor of indices into 'indexs' in 'env' in 'p'
                 self.neg_idxs[pidx].append(utils.assign_idxs(indexs, p, env)) # append the tensor of indices to envs list
 
-    def get_views(self, pos, transform, indexs=indexs, normalize=True):
+    def get_views(self, pos, transform, indexs=None, normalize=True):
+        assert indexs is not None, 'indexs cannot be None'
+        assert len(pos) == len(indexs), f"len(pos) {len(pos)} != len(indexs) {len(indexs)}"
         pos_q = transform(pos)
         pos_k = transform(pos)
 
