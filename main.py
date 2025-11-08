@@ -437,13 +437,16 @@ class MoCoLossModule(LossModule):
         if partitions is None or (len(partitions) == 0) or (partitions[0] is None):
             return
         
+        # get the dataset indices of samples in queue
         _, indexs = self.queue.get(self.queue.queue_size - self.this_batch_size, advance=False, idx=True)
+        # holds per-partition lists of per-env tensors of indices into the queue
         self.neg_idxs = [[] for _ in partitions]
         for pidx, p in enumerate(partitions):
             for env in range(p.size(-1)):
-                self.neg_idxs[pidx].append(utils.assign_idxs(indexs, p, env))
+                # assign_idxs returns a tensor of indices into 'indexs' in 'env' in 'p'
+                self.neg_idxs[pidx].append(utils.assign_idxs(indexs, p, env)) # append the tensor of indices to envs list
 
-    def get_views(self, pos, transform, normalize=True):
+    def get_views(self, pos, transform, indexs=indexs, normalize=True):
         pos_q = transform(pos)
         pos_k = transform(pos)
 
@@ -454,7 +457,9 @@ class MoCoLossModule(LossModule):
             _, out_k = self.net_momentum(pos_k)
             if normalize:
                 out_k = F.normalize(out_k, dim=1)
-        self.out_k = out_k # save in state for queue update at end of batch
+        # save in state for queue update at end of batch
+        self.out_k        = out_k 
+        self.out_k_indexs = indexs
         return out_q, out_k
 
     def logits(self, idxs=None):
@@ -471,7 +476,7 @@ class MoCoLossModule(LossModule):
         l_pos = torch.sum(out_q * out_k, dim=1, keepdim=True)
         out_neg = self.queue.get((self.queue.queue_size - self.this_batch_size), advance=False)
         if p is not None:
-            out_neg = out_neg[self.neg_idxs[p][env]]
+            out_neg = out_neg[self.neg_idxs[p][env]] # 'neg_idxs[p][env]' are the indices in queue of samples in 'env' in 'p'
         l_neg = torch.matmul(out_q, out_neg.t())
         self._logits = torch.cat([l_pos, l_neg], dim=1)
         self.labels = torch.zeros(self._logits.size(0), dtype=torch.long, device=self._logits.device)
@@ -489,7 +494,7 @@ class MoCoLossModule(LossModule):
         return loss
 
     def post_micro_batch(self):
-        self.queue.update(self.out_k.detach())
+        self.queue.update(self.out_k.detach(), idx=self.out_k_indexs)
 
     def post_batch(self):
         with torch.no_grad():
@@ -521,7 +526,7 @@ class SimSiamLossModule(LossModule):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    def get_views(self, pos, transform, normalize=True):
+    def get_views(self, pos, transform, normalize=True, **kwargs):
         x1 = transform(pos)
         x2 = transform(pos)
 
@@ -976,7 +981,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                     MoCo:    generate two views, get their embeddings from respective encoders, normalize them, etc
                     SimSiam: generate two views, get their projections and predictions, etc
                 """
-                out_1, out_2 = loss_module.get_views(batch_micro, transform=transform, normalize=(loss_type == 'moco'))
+                out_1, out_2 = loss_module.get_views(batch_micro, transform, indexs=indexs, normalize=(loss_type == 'moco'))
                 
                 if do_keep_loss or (do_loss and not is_per_env):
                     # compute unnormalized micro-batch loss

@@ -625,7 +625,7 @@ if __name__ == '__main__':
                     epoch=epoch,
                     best_acc1=best_acc1,
                     best_epoch=best_epoch,
-                    cuda_rng_state=None,
+                    cuda_rng_state=cuda_rng_state,
                     save_dir=save_dir,
                     is_best=is_best,
                     args=args
