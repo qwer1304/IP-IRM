@@ -90,7 +90,7 @@ class FeatureQueue:
             indices = torch.cat([torch.arange(self.write_ptr, self.queue_size), torch.arange(0, n-first)], dim=0)
             self.write_ptr = n - first
         self.queue[indices] = k
-        if idx:
+        if idx is not None:
             self.indices[indices] = idx
 
     def get(self, n=None, advance=True, idx=False):
