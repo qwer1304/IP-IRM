@@ -172,7 +172,8 @@ class VRExCalculator(BaseCalculator):
             szs:        sizes of halves of environments
         """
         if not for_grads:
-            mu = (risks / (szs+1e-12)).mean()    # ()
+            # 'mu' is per-partition, NOT for ALL partitions
+            mu = (risks / (szs+1e-12)).mean(dim=(0,2), keepdim=True)    # (1,num_partitions,1)
             return (risks / (szs+1e-12) - mu)**2 # normalized per env for macro-batch, (1, num_partitions, num_envs)
         else:
             return risks / (szs+1e-12)
@@ -199,8 +200,9 @@ class VRExCalculator(BaseCalculator):
         num_halves, num_partitions, num_env = szs.size()
         assert num_halves == 1, "VREx number of halves should be 1"
         
-        mu = penalties.mean() # ()
-        x  = (2 * (penalties[..., None] - mu) 
+        # 'mu' is per-partition, NOT for ALL partitions
+        mu = penalties.mean(dim=(0,2), keepdim=True) # (1,num_partitions,1)
+        x  = (2 * (penalties[..., None] - mu[..., None]) 
                 * (grads / (szs[..., None]+1e-12)) 
                 / num_env
              ) / num_partitions            # (parnums,)
