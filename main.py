@@ -1044,28 +1044,26 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                 penalty_aggregator[j,partition_num,env] += penalty # unnormalized penalty components before penalty scaler
 
                             # gradients
-                            linear_idx = torch.tensor(partition_num*args.env_num + env, dtype=torch.int, device=device)
+                            linear_idx = torch.tensor(partition_num*args.env_num + env, dtype=torch.int, device=device) # row index
                             if is_per_env:
-                                offset = partition_num*args.env_num + env + int(do_keep_loss) # 1st loss is keep_loss
+                                offset = partition_num*args.env_num + env + int(do_keep_loss) # 1st column is keep_loss
                                 mask = 1.0
                                 if do_loss:
                                     grad_outputs[linear_idx][offset:offset+num_samples] = mask # unweighted
-                                    linear_idx += num_partitions * args.env_num
-                                    offset += num_samples
+                                    linear_idx += num_partitions * args.env_num # same idx, bottom half of the table
+                                    offset += num_samples # offset to penalties
                                 if do_penalty:
                                     grad_outputs[linear_idx][offset:offset+num_samples] = mask # unweighted
-                                    offset = 0 # for keep loss
                             else:
                                 offset = 0
                                 mask = torch.zeros(num_samples, dtype=torch.float, device=device)
                                 mask[idxs] = 1.0
                                 if do_loss:
                                     grad_outputs[linear_idx][offset:offset+num_samples] = mask # unweighted
-                                    linear_idx += num_partitions * args.env_num
-                                    offset += num_samples
+                                    linear_idx += num_partitions * args.env_num # same idx, bottom half of the table
+                                    offset += num_samples # offset to penalties
                                 if do_penalty:
                                     grad_outputs[linear_idx][offset:offset+num_samples] = mask # unweighted
-                                    offset += num_samples
                         # end for env in range(args.env_num):
                     # end for partition_num, partition in enumerate(partitions):
                 # end if not args.baseline:
@@ -1078,7 +1076,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                     # grad_outputs: one per sample
                     loss_keep_aggregator += loss # before scaler
 
-                    offset = 0 # use losses
+                    offset = 0 # 1st column
                     grad_outputs[-1][offset:offset+num_samples]  = 1.0 / this_batch_size / gradients_accumulation_steps # unweighted
 
                 differentiate_this = [t.reshape(-1) for t in differentiate_this] # ensure common shape of 1D tensors
@@ -1107,10 +1105,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 if do_keep_loss: # global loss @ 1st partition
                     # 'grads_all' is a tuple w/ an entry per parameter.
                     # each entry is a tensor w/ 1st dim = 'grad_outputs.size(0)' and other dims matching the parameter
-
                     # flatten and accumulate per parameter
-                    # 'grads_all' is a tuple w/ an entry per parameter.
-                    # each entry is a tensor w/ 1st dim = 'grad_outputs.size(0)' and other dims matching the parameter
                     for _j, g in enumerate(grads_all):
                         if g is None:
                             continue
@@ -1123,7 +1118,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 if do_loss or do_penalty:
                     for _split in range((num_grads - num_baseline_repeates) // max(1,num_split_repeates)):
                         partition_num, env = _split // args.env_num, _split % args.env_num 
-                        linear_idx = _split
+                        linear_idx = _split # row index
                         if do_loss:
                             # flatten and accumulate per parameter
                             # 'grads_all' is a tuple w/ an entry per parameter.
@@ -2312,6 +2307,7 @@ if __name__ == '__main__':
             # updated_split_all.append(torch.randn((len(update_data), args.env_num), requires_grad=True, device=device))
             if not args.baseline:
                 if updated_split_all:
+                    print([len(s) for s in updated_split_all], len(update_data))
                     assert all([len(s) == len(update_data) for s in updated_split_all]), "Parititons from checkpoint different length from dataset" 
                 if (ema_ is not None) and (args.ema == 'retain'): # exists in checkpoint
                     ema = ema_
