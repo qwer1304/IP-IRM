@@ -2307,8 +2307,9 @@ if __name__ == '__main__':
             # updated_split_all.append(torch.randn((len(update_data), args.env_num), requires_grad=True, device=device))
             if not args.baseline:
                 if updated_split_all:
-                    print([len(s) for s in updated_split_all], len(update_data))
-                    assert all([len(s) == len(update_data) for s in updated_split_all]), "Parititons from checkpoint different length from dataset" 
+                    if not all([len(s) == len(update_data) for s in updated_split_all]):
+                        print([len(s) for s in updated_split_all], len(update_data))
+                        assert False, "Partitons from checkpoint have different length from dataset" 
                 if (ema_ is not None) and (args.ema == 'retain'): # exists in checkpoint
                     ema = ema_
                 ema.set_active(args.ema) # set to what the user has currently set
