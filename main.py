@@ -448,7 +448,7 @@ class MoCoLossModule(LossModule):
                 # assign_idxs returns a tensor of indices into 'indexs' in 'env' in 'p'
                 self.neg_idxs[pidx].append(utils.assign_idxs(indexs, p, env)) # append the tensor of indices to envs list
 
-    def get_views(self, pos, transform, indexs=None, normalize=True, do_logits=False, **kwargs):
+    def get_views(self, pos, transform, indexs=None, normalize=True, do_logits=True, **kwargs):
         assert indexs is not None, 'indexs cannot be None'
         assert len(pos) == len(indexs), f"len(pos) {len(pos)} != len(indexs) {len(indexs)}"
         pos_q = transform(pos)
@@ -484,7 +484,9 @@ class MoCoLossModule(LossModule):
             idxs = torch.arange(self._logits.size(0), device=self._logits.device)
         return self.labels[idxs]
 
-    def compute_loss_micro(self, out_q, out_k, p=None, env=None, idxs=None, scale=1.0, temperature=None, reduction='sum', logits_ready=False, **kwargs):
+    def compute_loss_micro(self, out_q, out_k, p=None, env=None, idxs=None, scale=1.0, temperature=None, reduction='sum', logits_ready=True, **kwargs):
+        if idxs is None:
+            idxs = torch.arange(out_q.size(0), device=out_q.device)
         if logits_ready:
             l_pos = self.l_pos
             l_neg = self.l_neg
@@ -504,8 +506,6 @@ class MoCoLossModule(LossModule):
             self.total_maxneg += l_neg.max().item()  * l_pos.size(0)
             self.count        += l_pos.size(0)
 
-        if idxs is None:
-            idxs = torch.arange(self._logits.size(0), device=self._logits.device)
         # sum over batch, per env handled by driver
         temperature = temperature or self.temperature
         loss = F.cross_entropy(scale * self._logits[idxs] / temperature, self.labels[idxs], reduction=reduction)
@@ -1042,7 +1042,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                 # compute unnormalized micro-batch loss
                                 if is_per_env:
                                     # compute unnormalized micro-batch loss
-                                    losses_samples = loss_module.compute_loss_micro(out_1[idxs], out_2[idxs], p=partition_num, env=env, reduction=reduction)
+                                    losses_samples = loss_module.compute_loss_micro(out_1[idxs], out_2[idxs], p=partition_num, env=env, reduction=reduction, idxs=idxs)
                                     differentiate_this.append(losses_samples)
                                     loss = losses_samples.detach()
                                 else:
