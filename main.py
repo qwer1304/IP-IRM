@@ -448,7 +448,7 @@ class MoCoLossModule(LossModule):
                 # assign_idxs returns a tensor of indices into 'indexs' in 'env' in 'p'
                 self.neg_idxs[pidx].append(utils.assign_idxs(indexs, p, env)) # append the tensor of indices to envs list
 
-    def get_views(self, pos, transform, indexs=None, normalize=True):
+    def get_views(self, pos, transform, indexs=None, normalize=True, do_logits=False, **kwargs):
         assert indexs is not None, 'indexs cannot be None'
         assert len(pos) == len(indexs), f"len(pos) {len(pos)} != len(indexs) {len(indexs)}"
         pos_q = transform(pos)
@@ -465,11 +465,12 @@ class MoCoLossModule(LossModule):
         self.out_k        = out_k 
         self.out_k_indexs = indexs
 
-        l_pos = torch.sum(out_q * out_k, dim=1, keepdim=True)
-        out_neg = self.queue.get((self.queue.queue_size - self.this_batch_size), advance=False)
-        l_neg = torch.matmul(out_q, out_neg.t())
-        self.l_pos = l_pos
-        self.l_neg = l_neg
+        if do_logits:
+            l_pos = torch.sum(out_q * out_k, dim=1, keepdim=True)
+            out_neg = self.queue.get((self.queue.queue_size - self.this_batch_size), advance=False)
+            l_neg = torch.matmul(out_q, out_neg.t())
+            self.l_pos = l_pos
+            self.l_neg = l_neg
 
         return out_q, out_k
 
@@ -483,14 +484,18 @@ class MoCoLossModule(LossModule):
             idxs = torch.arange(self._logits.size(0), device=self._logits.device)
         return self.labels[idxs]
 
-    def compute_loss_micro(self, out_q, out_k, p=None, env=None, idxs=None, scale=1.0, temperature=None, reduction='sum', **kwargs):
-        l_pos = self.l_pos # torch.sum(out_q * out_k, dim=1, keepdim=True)
-        # out_neg = self.queue.get((self.queue.queue_size - self.this_batch_size), advance=False)
-        l_neg = self.l_neg
-        if p is not None:
-            l_neg = l_neg[:, self.neg_idxs[p][env]]
-            #out_neg = out_neg[self.neg_idxs[p][env]] # 'neg_idxs[p][env]' are the indices in queue of samples in 'env' in 'p'
-        # l_neg = torch.matmul(out_q, out_neg.t())
+    def compute_loss_micro(self, out_q, out_k, p=None, env=None, idxs=None, scale=1.0, temperature=None, reduction='sum', logits_ready=False, **kwargs):
+        if logits_ready:
+            l_pos = self.l_pos
+            l_neg = self.l_neg
+            if p is not None:
+                l_neg = l_neg[:, self.neg_idxs[p][env]]
+        else:
+            l_pos = torch.sum(out_q * out_k, dim=1, keepdim=True)
+            out_neg = self.queue.get((self.queue.queue_size - self.this_batch_size), advance=False)
+            if p is not None:
+                out_neg = out_neg[self.neg_idxs[p][env]] # 'neg_idxs[p][env]' are the indices in queue of samples in 'env' in 'p'
+            l_neg = torch.matmul(out_q, out_neg.t())
         self._logits = torch.cat([l_pos, l_neg], dim=1)
         self.labels = torch.zeros(self._logits.size(0), dtype=torch.long, device=self._logits.device)
         if self.debug:
