@@ -464,6 +464,13 @@ class MoCoLossModule(LossModule):
         # save in state for queue update at end of batch
         self.out_k        = out_k 
         self.out_k_indexs = indexs
+
+        l_pos = torch.sum(out_q * out_k, dim=1, keepdim=True)
+        out_neg = self.queue.get((self.queue.queue_size - self.this_batch_size), advance=False)
+        l_neg = torch.matmul(out_q, out_neg.t())
+        self.l_pos = l_pos
+        self.l_neg = l_neg
+
         return out_q, out_k
 
     def logits(self, idxs=None):
@@ -477,11 +484,13 @@ class MoCoLossModule(LossModule):
         return self.labels[idxs]
 
     def compute_loss_micro(self, out_q, out_k, p=None, env=None, idxs=None, scale=1.0, temperature=None, reduction='sum', **kwargs):
-        l_pos = torch.sum(out_q * out_k, dim=1, keepdim=True)
-        out_neg = self.queue.get((self.queue.queue_size - self.this_batch_size), advance=False)
+        l_pos = self.l_pos # torch.sum(out_q * out_k, dim=1, keepdim=True)
+        # out_neg = self.queue.get((self.queue.queue_size - self.this_batch_size), advance=False)
+        l_neg = self.l_neg
         if p is not None:
-            out_neg = out_neg[self.neg_idxs[p][env]] # 'neg_idxs[p][env]' are the indices in queue of samples in 'env' in 'p'
-        l_neg = torch.matmul(out_q, out_neg.t())
+            l_neg = l_neg[:, self.neg_idxs[p][env]]
+            #out_neg = out_neg[self.neg_idxs[p][env]] # 'neg_idxs[p][env]' are the indices in queue of samples in 'env' in 'p'
+        # l_neg = torch.matmul(out_q, out_neg.t())
         self._logits = torch.cat([l_pos, l_neg], dim=1)
         self.labels = torch.zeros(self._logits.size(0), dtype=torch.long, device=self._logits.device)
         if self.debug:
@@ -1044,6 +1053,16 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                 penalty_aggregator[j,partition_num,env] += penalty # unnormalized penalty components before penalty scaler
 
                             # gradients
+                            """
+                            'grad_outputs' is a table w/ each row corresponding to a loss/penalty of an env in a partition.
+                            The top half coresponds to losses; the bottom half corresponds to penalties.
+                            The last row corresponds to loss_keep.
+                            For per_env losses (e.g., MoCo) each column corresponds to an env in a partition loss/penalty. 
+                            The 1st column corresponds to loss_keep if requested.
+                            For non-per-env losses (e.g., SimSiam) each column corresponds to a sample loss/penalty.
+                            The left half corresponds to losses; the right half corresponds to penalties.
+                            'grad_outputs[i,j]' is a multiplier of the [i,j]-th entry to differentiate.
+                            """
                             linear_idx = torch.tensor(partition_num*args.env_num + env, dtype=torch.int, device=device) # row index
                             if is_per_env:
                                 offset = partition_num*args.env_num + env + int(do_keep_loss) # 1st column is keep_loss
@@ -2020,11 +2039,13 @@ if __name__ == '__main__':
     parser.add_argument('--constrain', type=float, default=0., help='weight of contrain to make two envs similar sized')
     parser.add_argument('--constrain_relax', action="store_true", default=False, help='relax the constrain?')
     parser.add_argument('--retain_group', action="store_true", default=False, help='retain the previous group assignments?')
+    parser.add_argument('--nonorm', action="store_true", default=False, help='not use norm for contrastive loss when maximizing')
+    parser.add_argument('--offline', action="store_true", default=False, help='save feature at the beginning of the maximize?')
+    parser.add_argument('--partition_reinit', action="store_true", default=False, help='reinit partition')
+
     parser.add_argument('--debug', action="store_true", default=False, help='debug?')
     parser.add_argument('--print_batch', action="store_true", default=False, help='print every batch')
-    parser.add_argument('--nonorm', action="store_true", default=False, help='not use norm for contrastive loss when maximizing')
     parser.add_argument('--groupnorm', action="store_true", default=False, help='use group contrastive loss?')
-    parser.add_argument('--offline', action="store_true", default=False, help='save feature at the beginning of the maximize?')
     parser.add_argument('--keep_cont', action="store_true", default=False, help='keep original contrastive?')
     parser.add_argument('--pretrain_path', type=str, default=None, help='the path of pretrain model')
 
@@ -2364,7 +2385,7 @@ if __name__ == '__main__':
     
     # update partition for the first time, if we need one
     if not args.baseline:
-        if (not resumed) or (resumed and (updated_split is None) and ((args.penalty_cont > 0) or (args.penalty_weight > 0))):  
+        if (not resumed) or args.partition_reinit or (resumed and (updated_split is None) and ((args.penalty_cont > 0) or (args.penalty_weight > 0))):  
             if args.dataset != "ImageNet":
                 updated_split = torch.randn((len(update_data), args.env_num), requires_grad=True, device=device)
             else:
