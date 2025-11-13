@@ -375,6 +375,9 @@ class LossModule:
     def pre_batch(self, batch_data, *args, **kwargs):
         pass
 
+    def pre_micro_batch(self, batch_data):
+        pass
+
     def compute_loss_micro(self, batch_data):
         raise NotImplementedError
 
@@ -448,7 +451,7 @@ class MoCoLossModule(LossModule):
                 # assign_idxs returns a tensor of indices into 'indexs' in 'env' in 'p'
                 self.neg_idxs[pidx].append(utils.assign_idxs(indexs, p, env)) # append the tensor of indices to envs list
 
-    def get_views(self, pos, transform, indexs=None, normalize=True, do_logits=True, **kwargs):
+    def pre_micro_batch(self, pos, transform, normalize=True):
         assert indexs is not None, 'indexs cannot be None'
         assert len(pos) == len(indexs), f"len(pos) {len(pos)} != len(indexs) {len(indexs)}"
         pos_q = transform(pos)
@@ -461,18 +464,26 @@ class MoCoLossModule(LossModule):
             _, out_k = self.net_momentum(pos_k)
             if normalize:
                 out_k = F.normalize(out_k, dim=1)
+        
+        l_pos = torch.sum(out_q * out_k, dim=1, keepdim=True)
+        l_neg = torch.matmul(out_q, self.queue.get((self.queue.queue_size - self.this_batch_size), advance=False).t())
+        self._logits = torch.cat([l_pos, l_neg], dim=1)
+        self.labels = torch.zeros(self._logits.size(0), dtype=torch.long, device=self._logits.device)
+        if self.debug:
+            self.total_pos    += l_pos.mean().item() * l_pos.size(0)
+            self.total_neg    += l_neg.mean().item() * l_pos.size(0)
+            self.total_maxneg += l_neg.max().item()  * l_pos.size(0)
+            self.count        += l_pos.size(0)
+
         # save in state for queue update at end of batch
         self.out_k        = out_k 
         self.out_k_indexs = indexs
 
-        if do_logits:
-            l_pos = torch.sum(out_q * out_k, dim=1, keepdim=True)
-            out_neg = self.queue.get((self.queue.queue_size - self.this_batch_size), advance=False)
-            l_neg = torch.matmul(out_q, out_neg.t())
-            self.l_pos = l_pos
-            self.l_neg = l_neg
-
-        return out_q, out_k
+        l_pos = torch.sum(out_q * out_k, dim=1, keepdim=True)
+        out_neg = self.queue.get((self.queue.queue_size - self.this_batch_size), advance=False)
+        l_neg = torch.matmul(out_q, out_neg.t())
+        self.l_pos = l_pos
+        self.l_neg = l_neg
 
     def logits(self, idxs=None):
         if idxs is None:
@@ -484,20 +495,13 @@ class MoCoLossModule(LossModule):
             idxs = torch.arange(self._logits.size(0), device=self._logits.device)
         return self.labels[idxs]
 
-    def compute_loss_micro(self, out_q, out_k, p=None, env=None, idxs=None, scale=1.0, temperature=None, reduction='sum', logits_ready=True, **kwargs):
+    def compute_loss_micro(self, p=None, env=None, idxs=None, scale=1.0, temperature=None, reduction='sum', **kwargs):
         if idxs is None:
-            idxs = torch.arange(out_q.size(0), device=out_q.device)
-        if logits_ready:
-            l_pos = self.l_pos
-            l_neg = self.l_neg
-            if p is not None:
-                l_neg = l_neg[:, self.neg_idxs[p][env]]
-        else:
-            l_pos = torch.sum(out_q * out_k, dim=1, keepdim=True)
-            out_neg = self.queue.get((self.queue.queue_size - self.this_batch_size), advance=False)
-            if p is not None:
-                out_neg = out_neg[self.neg_idxs[p][env]] # 'neg_idxs[p][env]' are the indices in queue of samples in 'env' in 'p'
-            l_neg = torch.matmul(out_q, out_neg.t())
+            idxs = torch.arange(self._logits.size(0), device=self._logits.device)
+        l_pos = self.l_pos
+        l_neg = self.l_neg
+        if p is not None:
+            l_neg = l_neg[:, self.neg_idxs[p][env]]
         self._logits = torch.cat([l_pos, l_neg], dim=1)
         self.labels = torch.zeros(self._logits.size(0), dtype=torch.long, device=self._logits.device)
         if self.debug:
@@ -544,22 +548,21 @@ class SimSiamLossModule(LossModule):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    def get_views(self, pos, transform, normalize=True, **kwargs):
+    def pre_micro_batch(self, pos, transform, normalize=True):
         x1 = transform(pos)
         x2 = transform(pos)
 
         _, z1 = self.net(x1, normalize=False)
         _, z2 = self.net(x2, normalize=False)
-        
-        return z1, z2
-
-    def compute_loss_micro(self, z1, z2, idxs=None, scale=1.0, reduction='sum', normalize=True, **kwargs):
-        """
-        Computes unnormalized loss of a micro-batch
-        """
         p1 = self.net.module.predictor(z1, normalize=False)
         p2 = self.net.module.predictor(z2, normalize=False)
         self._representations = (z1, z2, p1, p2)
+
+    def compute_loss_micro(self, idxs=None, scale=1.0, reduction='sum', normalize=True):
+        """
+        Computes unnormalized loss of a micro-batch
+        """
+        z1, z2, p1, p2 = self._representations
         if idxs is None:
             idxs = torch.arange(z1.size(0), device=z1.device)
         # symmetric SimSiam loss (neg cosine, average two directions)
@@ -999,11 +1002,12 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                     MoCo:    generate two views, get their embeddings from respective encoders, normalize them, etc
                     SimSiam: generate two views, get their projections and predictions, etc
                 """
-                out_1, out_2 = loss_module.get_views(batch_micro, transform, indexs=indexs, normalize=(loss_type == 'moco'))
+                loss_module.pre_micro_batch(batch_micro, transform=transform, normalize=(loss_type == 'moco'))
                 
                 if do_keep_loss or (do_loss and not is_per_env):
                     # compute unnormalized micro-batch loss
-                    losses_samples = loss_module.compute_loss_micro(out_1, out_2, reduction=reduction)
+                    losses_samples = loss_module.compute_loss_micro(reduction=reduction)
+                    #losses_samples = loss_module.compute_loss_micro(out_1, out_2, reduction=reduction)
                     differentiate_this.append(losses_samples)
 
                 if do_penalty and not is_per_env:
@@ -1042,7 +1046,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                 # compute unnormalized micro-batch loss
                                 if is_per_env:
                                     # compute unnormalized micro-batch loss
-                                    losses_samples = loss_module.compute_loss_micro(out_1[idxs], out_2[idxs], p=partition_num, env=env, reduction=reduction, idxs=idxs)
+                                    losses_samples = loss_module.compute_loss_micro(p=partition_num, env=env, reduction=reduction, idxs=idxs)
+                                    #losses_samples = loss_module.compute_loss_micro(out_1[idxs], out_2[idxs], p=partition_num, env=env, reduction=reduction, idxs=idxs)
                                     differentiate_this.append(losses_samples)
                                     loss = losses_samples.detach()
                                 else:
