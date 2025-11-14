@@ -1007,7 +1007,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 if do_keep_loss or (do_loss and not is_per_env):
                     # compute unnormalized micro-batch loss
                     losses_samples = loss_module.compute_loss_micro(reduction=reduction)
-                    #losses_samples = loss_module.compute_loss_micro(out_1, out_2, reduction=reduction)
                     differentiate_this.append(losses_samples)
 
                 if do_penalty and not is_per_env:
@@ -1047,7 +1046,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                 if is_per_env:
                                     # compute unnormalized micro-batch loss
                                     losses_samples = loss_module.compute_loss_micro(p=partition_num, env=env, reduction=reduction, idxs=idxs)
-                                    #losses_samples = loss_module.compute_loss_micro(out_1[idxs], out_2[idxs], p=partition_num, env=env, reduction=reduction, idxs=idxs)
                                     differentiate_this.append(losses_samples)
                                     loss = losses_samples.detach()
                                 else:

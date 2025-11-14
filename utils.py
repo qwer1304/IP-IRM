@@ -803,8 +803,11 @@ def auto_split(net, update_loader, soft_split_all, temperature, irm_temp, loss_m
                         sum(risk_constrain_all_list)/len(risk_constrain_all_list), cnt, pre_optimizer.param_groups[0]['lr'], irm_mode), log_file=log_file)
             final_split_softmax = F.softmax(soft_split_best, dim=-1)
             write_log('%s' %(pretty_tensor_str(final_split_softmax)), log_file=log_file, print_=True)
-            group_assign = final_split_softmax.argmax(dim=1)
-            write_log('Debug:  group1 %d  group2 %d' %(group_assign.sum(), group_assign.size(0)-group_assign.sum()), log_file=log_file, print_=True)
+            group_assign = final_split_softmax.argmax(dim=1)           
+            num_groups = final_split_softmax.size(1)  # number of groups
+            counts = torch.bincount(group_assign, minlength=num_groups)
+            group_str = [f"group{i+1} {counts[i]}" for i in range(num_groups)]
+            write_log('Debug: ' + ' '.join(group_str), log_file=log_file, print_=True)
             return soft_split_best
 
 
