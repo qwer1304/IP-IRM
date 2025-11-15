@@ -581,6 +581,9 @@ if __name__ == '__main__':
 
     if args.evaluate:
         epoch = epochs
+        train_data  = utils.Imagenet(root=args.data + '/train', transform=test_transform, target_transform=target_transform, class_to_idx=class_to_idx)
+        train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, pin_memory=True, 
+            drop_last=False, persistent_workers=tr_pw, **kwargs)
         train_loss, train_acc_1, train_acc_5 = train_val(model, train_loader, None, tr_bs, args, dataset="train")
         test_loss, test_acc_1, test_acc_5 = train_val(model, test_loader, None, te_bs, args, dataset="test")
         if args.dataset == 'ImageNet':
