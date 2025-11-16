@@ -1813,13 +1813,19 @@ def test(net, feature_bank, feature_labels, test_data_loader, args, progress=Fal
             # compute cos similarity between each feature vector and feature bank ---> [B, N]
             sim_matrix = torch.mm(feature, feature_bank) # places sim_matrix on cuda
             # [B, K]
-            sim_weight, sim_indices = sim_matrix.topk(k=k, dim=-1)
+            # A namedtuple of (values, indices) is returned with the values and indices 
+            # of the largest k elements of each row of the input tensor in the given dimension dim.
+            sim_weight, sim_indices = sim_matrix.topk(k=args.k, dim=-1)
             # [B, K]
+            # The "original size" refers to the size of that dimension in the input tensor, after any necessary 
+            # prepending of 1s on the left to match number of requested dimensions.    
+            # For each sample, picks the top-k labels that correspond to the similarity matrix of that sample and the feature bank 
+            #                                                 (B,N)
             sim_labels = torch.gather(feature_labels.expand(data.size(0), -1), dim=-1, index=sim_indices)
-            sim_weight = (sim_weight / temperature).exp()
+            sim_weight = (sim_weight / args.knn_temp).exp()
 
             # counts for each class
-            one_hot_label = torch.zeros(data.size(0) * k, c, device=sim_labels.device)
+            one_hot_label = torch.zeros(data.size(0) * args.k, c, device=sim_labels.device)
             # [B*K, C]
             one_hot_label = one_hot_label.scatter(dim=-1, index=sim_labels.view(-1, 1).long(), value=1.0)
             # weighted score ---> [B, C]
@@ -1996,6 +2002,7 @@ if __name__ == '__main__':
     parser.add_argument('--temperature', default=0.5, type=float, help='Temperature used in softmax')
     parser.add_argument('--tau_plus', default=0.1, type=float, help='Positive class priorx')
     parser.add_argument('--k', default=200, type=int, help='Top k most similar images used to predict the label')
+    parser.add_argument('--knn_temp', default=0.5, type=float, help='Temperature used in KNN softmax')
     parser.add_argument('--dl_tr', default=[256, 4, 2, True, True], nargs=5, type=str,
                         action=utils.ParseMixed, types=[int, int, int, bool, bool],
                         metavar='DataLoader pars [batch_size, number_workers, prefetch_factor, persistent_workers, drop_last]',    

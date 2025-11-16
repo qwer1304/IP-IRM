@@ -482,7 +482,7 @@ if __name__ == '__main__':
 
         else:
             train_data  = utils.Imagenet(root=args.data + '/train', transform=train_transform, target_transform=target_transform, class_to_idx=class_to_idx)
-            if args.prune_sizes:
+            if args.prune_sizes: # prune dataset s.t. the number of samples per  label is the same
                 class SubsetProxy(Subset):
                     def __getattr__(self, name):
                         # called only if attribute not found in self
@@ -511,7 +511,7 @@ if __name__ == '__main__':
                     return dataset
                 train_data = dataset_prune_sizes(train_data)
                 
-            if args.weighted_loss:
+            if args.weighted_loss: # weight per-class loss w/ its inverse frequency
                 labels = train_data.targets if isinstance(train_data.targets, torch.Tensor) else torch.tensor(train_data.targets)
                 counts = torch.bincount(labels)
                 class_weights = 1.0 / counts.float()
