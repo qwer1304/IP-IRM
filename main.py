@@ -2346,6 +2346,8 @@ if __name__ == '__main__':
                     if not all([len(s) == len(update_data) for s in updated_split_all]):
                         print([len(s) for s in updated_split_all], len(update_data))
                         assert False, "Partitons from checkpoint have different length from dataset" 
+                    assert updated_split_all[0].size(-1) == args.env_num, \
+                        f"env_num in args {args.env_num} doesn't match that in partitions {updated_split_all[0].size(-1)}"
                 if (ema_ is not None) and (args.ema == 'retain'): # exists in checkpoint
                     ema = ema_
                 ema.set_active(args.ema) # set to what the user has currently set
