@@ -1583,8 +1583,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                loss_weighted        # mean over envs normalized over macro-batch
                               )
 
-        print()
-        print(loss_env.size())
         # total loss is sum of losses so far over entire batch aggregation period.
         total_keep_loss_weighted += (loss_keep_weight * loss_keep_aggregator).item() * this_batch_size * gradients_accumulation_steps
         total_irm_loss_weighted  += (penalty_weight   * penalty_env.mean()).item()   * this_batch_size * gradients_accumulation_steps
