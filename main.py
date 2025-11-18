@@ -2343,7 +2343,7 @@ if __name__ == '__main__':
             # updated_split_all.append(torch.randn((len(update_data), args.env_num), requires_grad=True, device=device))
             if not args.baseline:
                 if updated_split_all:
-                    if not all([len(s) == len(update_data) for s in updated_split_all]):
+                    if not all([len(s) == len(update_data) for s in updated_split_all]) and not args.evaluate:
                         print([len(s) for s in updated_split_all], len(update_data))
                         assert False, "Partitons from checkpoint have different length from dataset" 
                     assert updated_split_all[0].size(-1) == args.env_num, \
