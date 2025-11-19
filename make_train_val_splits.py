@@ -123,7 +123,7 @@ def main(args):
     os.makedirs(save_dir_test, exist_ok=True)
     
     # count number of samples in each class and domain
-    domains, classes, counts = count_domains(input_dir, args.domain_names-args.test_domain) 
+    domains, classes, counts = count_domains(input_dir, set(args.domain_names)-set([args.test_domain])) 
     # remove test domain
     balanced_counts, discarded_counts = prune_datasets(counts, min_count=args.min_size, val_fraction=1-args.train_split)
     print(balanced_counts)
