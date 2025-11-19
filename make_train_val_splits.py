@@ -150,6 +150,7 @@ def main(args):
                                     train_num = counts[env_idx, label_idx]
                                     train_idx = f_idx[:train_num]
                                     val_idx = f_idx[train_num:]
+                                    print(train_num, len(train_idx), len(val_idx))
                                     output_lab_dir = os.path.join(save_dir_train, label + '/')
                                     os.makedirs(output_lab_dir, exist_ok=True)
                                     for fp in [files[i] for i in train_idx]:
