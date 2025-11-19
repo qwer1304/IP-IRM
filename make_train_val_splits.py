@@ -41,6 +41,8 @@ def count_domains(root, domain_names):
         for d_entry in domains_iter:
             if not d_entry.is_dir():
                 continue
+            if d_entry.name not in domain_names:
+                continue
             di = d2i[d_entry.name]
             with os.scandir(d_entry.path) as labels_iter:
                 for l_entry in labels_iter:
