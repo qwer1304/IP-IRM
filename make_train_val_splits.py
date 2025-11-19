@@ -26,6 +26,7 @@ def count_domains(root, domain_names):
                         if l_entry.is_dir():
                             classes.add(l_entry.name)
 
+    print(domains, classes)
     domains = sorted(domains)
     classes = sorted(classes)
 
