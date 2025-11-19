@@ -7,7 +7,7 @@ import random
 import shutil
 from functools import partial
 
-def count_domains(root):
+def count_domains(root, domain_names):
     # discover domains and classes first
     # domains - list
     # classes - set
@@ -18,6 +18,8 @@ def count_domains(root):
     with os.scandir(root) as domains_iter:
         for d_entry in domains_iter:
             if d_entry.is_dir():
+                if d_entry.name not in domain_names:
+                    continue
                 domains.append(d_entry.name)
                 with os.scandir(d_entry.path) as labels_iter:
                     for l_entry in labels_iter:
@@ -121,10 +123,8 @@ def main(args):
     os.makedirs(save_dir_test, exist_ok=True)
     
     # count number of samples in each class and domain
-    domains, classes, counts = count_domains(input_dir) 
+    domains, classes, counts = count_domains(input_dir, args.domain_names) 
     # remove test domain
-    test_index = domains.index(args.test_domain)
-    counts = np.delete(counts, test_index, axis=0)
     balanced_counts, discarded_counts = prune_datasets(counts, min_count=args.min_size, val_fraction=1-args.train_split)
     print(balanced_counts)
     print(discarded_counts)
