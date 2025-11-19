@@ -144,7 +144,7 @@ def main(args):
                                     files = [f for f in fs if f.is_file()]
                                     num_files = len(files)
                                     f_idx = np.random.permutation(num_files)
-                                    train_num = counts(env_idx, label_idx)
+                                    train_num = counts[env_idx, label_idx]
                                     train_idx = f_idx[:train_num]
                                     val_idx = f_idx[train_num:]
                                     output_lab_dir = os.path.join(save_dir_train, label + '/')
