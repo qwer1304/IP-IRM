@@ -126,7 +126,8 @@ def main(args):
     test_index = domains.index(args.test_domain)
     counts = np.delete(counts, test_index, axis=0)
     balanced_counts, discarded_counts = prune_datasets(counts, min_count=args.min_size, val_fraction=1-args.train_split)
-    print(balanced_counts, discarded_counts)
+    print(balanced_counts)
+    print(discarded_counts)
 
     if args.select_method == 'train':
         with os.scandir(input_dir) as e:      # env_dir is directory of per-label sub-directories
