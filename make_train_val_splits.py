@@ -54,14 +54,13 @@ def count_domains(root, domain_names):
                     
     return domains, classes, counts
 
-def prune_datasets(counts, min_count=0, p=40, extreme_ratio=5, val_fraction=0.2):
+def prune_datasets(counts, min_count=0, p=40, extreme_ratio=5):
     """
     Parameters:
     counts: numpy array, (domain, class)
     min_count: int, remove tiny cells
     p: int, percentile for normal classes
     extreme_ratio, int, threshold to detect extreme dominance - if number of samples in a class in a domain > extreme_ratio*2nd_max_domain, prune to that #
-    val_fraction, float, fraction of remaining training samples to use for validation
     Returns:
         balanced_counts - numpy array (domain, class)
         discarded_counts - numpy array (domain, class)
@@ -127,7 +126,7 @@ def main(args):
     # count number of samples in each class and domain
     domains, classes, counts = count_domains(input_dir, set(args.domain_names)-set([args.test_domain])) 
     # remove test domain
-    balanced_counts, discarded_counts = prune_datasets(counts, min_count=args.min_size, val_fraction=1-args.train_split)
+    balanced_counts, discarded_counts = prune_datasets(counts, min_count=args.min_size)
     print(balanced_counts)
     print(discarded_counts)
 
@@ -148,6 +147,7 @@ def main(args):
                                     num_files = len(files)
                                     f_idx = np.random.permutation(num_files)
                                     train_num = balanced_counts[env_idx, label_idx]
+                                    train_num = int(train_num * args.train_split)
                                     train_idx = f_idx[:train_num]
                                     val_idx = f_idx[train_num:]
                                     print(train_num, len(train_idx), len(val_idx))
