@@ -9,9 +9,10 @@ from functools import partial
 
 def count_domains(root, domain_names):
     # discover domains and classes first
-    # domains - list
-    # classes - set
-    # counts - numpy array (domain, class)
+    # Returns:
+    #   domains - list
+    #   classes - set
+    #   counts - numpy array (domain, class)
     domains = []
     classes = set()
 
@@ -54,20 +55,22 @@ def count_domains(root, domain_names):
                     
     return domains, classes, counts
 
-def prune_datasets(counts, min_count=0, p=40, extreme_ratio=5):
+def prune_datasets(counts, min_count=0, p=40, extreme_ratio=5, p_floor=0):
     """
     Parameters:
-    counts: numpy array, (domain, class)
-    min_count: int, remove tiny cells
-    p: int, percentile for normal classes
-    extreme_ratio, int, threshold to detect extreme dominance - if number of samples in a class in a domain > extreme_ratio*2nd_max_domain, prune to that #
+        counts: numpy array, (domain, class)
+        min_count: int, remove tiny cells
+        p: int, percentile for normal classes
+        extreme_ratio, int, threshold to detect extreme dominance:
+            if number of samples in a class in a domain > extreme_ratio*2nd_max_domain, prune to that #
+        p_floor: number of samples NOT counted when calculating percentiles
     Returns:
         balanced_counts - numpy array (domain, class)
         discarded_counts - numpy array (domain, class)
     """
 
     # ---------------------------
-    # Step 1: Extract training domains (exclude L100)
+    # Step 1: Extract training domains
     # ---------------------------
     train_counts = counts.copy()
 
@@ -95,13 +98,13 @@ def prune_datasets(counts, min_count=0, p=40, extreme_ratio=5):
             second_largest = other_counts.max()
             for d in range(D):
                 if cls_counts[d] == max_count:
-                    balanced_counts[d, c] = second_largest
-        else:
-            # Normal class: cap by p-th percentile
-            nonzero_counts = cls_counts[cls_counts > 0]
-            cap = int(np.percentile(nonzero_counts, p))
-            for d in range(D):
-                balanced_counts[d, c] = min(cls_counts[d], cap)
+                    cls_counts[d] = second_largest
+
+        # Cap by p-th percentile
+        nonzero_counts = cls_counts[cls_counts > p_floor]
+        cap = int(np.percentile(nonzero_counts, p)) # get the # of samples which are the p-th perentile
+        for d in range(D):
+            balanced_counts[d, c] = min(cls_counts[d], cap)
 
     # ---------------------------
     # Step 3: Compute discarded samples (for validation)
@@ -123,22 +126,21 @@ def main(args):
     save_dir_test = output_dir + 'test/'
     os.makedirs(save_dir_test, exist_ok=True)
     
-    # count number of samples in each class and domain
+    # count number of samples in each class and training domain
     domains, classes, counts = count_domains(input_dir, set(args.domain_names)-set([args.test_domain])) 
-    # remove test domain
-    balanced_counts, discarded_counts = prune_datasets(counts, min_count=args.min_size)
+    balanced_counts, discarded_counts = prune_datasets(counts, min_count=args.min_size, p=args.p, p_floor=args.p_floor)
     print(balanced_counts)
     print(discarded_counts)
 
     if args.select_method == 'train':
-        with os.scandir(input_dir) as e:      # env_dir is directory of per-label sub-directories
-            for env_dir in e:
+        with os.scandir(input_dir) as e:
+            for env_dir in e:   # env_dir is directory of per-label sub-directories
                 if env_dir.name not in args.domain_names:
                     continue
                 if env_dir.name != args.test_domain:
                     env_idx = domains.index(env_dir.name)
-                    with os.scandir(env_dir) as l:    # lab_dir is a label sub-directory
-                        for lab_dir in l:
+                    with os.scandir(env_dir) as l:
+                        for lab_dir in l:   # lab_dir is a label sub-directory
                             if lab_dir.is_dir():
                                 label = lab_dir.name
                                 label_idx = classes.index(label)
@@ -149,8 +151,7 @@ def main(args):
                                     train_num = balanced_counts[env_idx, label_idx]
                                     train_num = int(train_num * args.train_split)
                                     train_idx = f_idx[:train_num]
-                                    val_idx = f_idx[train_num:]
-                                    print(train_num, len(train_idx), len(val_idx))
+                                    val_idx = f_idx[train_num:]   # rest of the files go to val
                                     output_lab_dir = os.path.join(save_dir_train, label + '/')
                                     os.makedirs(output_lab_dir, exist_ok=True)
                                     for fp in [files[i] for i in train_idx]:
@@ -202,6 +203,9 @@ if __name__ == "__main__":
     train_parser = subparsers.add_parser('train')
     train_parser.add_argument('--train_split', type=partial(bounded_type, min_val=0.0, max_val=1.0, cast_type=float), required=True)
     train_parser.add_argument('--min_size', type=int, default=0, help='min size of training split')
+    train_parser.add_argument('--p', type=int, default=40, help='percentile of samples to keep')
+    train_parser.add_argument('--p_floor', type=int, default=0, help='min number of samples to consider for percentiles')
+    train_parser.add_argument('--extreme_ratio', type=int, default=5, help='largest to 2nd largest domain ratio above which samples are capped')
 
     loo_parser = subparsers.add_parser('loo')
     loo_parser.add_argument('--val_domain', type=str, required=True)

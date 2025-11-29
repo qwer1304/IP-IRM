@@ -4,8 +4,11 @@ from collections import defaultdict
 import argparse
 
 
-def main(root):
+def count_domains(root):
     # discover domains and classes first
+    # domains - list
+    # classes - set
+    # counts - numpy array (domain, class)
     domains = []
     classes = set()
 
