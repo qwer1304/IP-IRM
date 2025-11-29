@@ -98,7 +98,7 @@ def prune_datasets(counts, min_count=0, p=40, extreme_ratio=5, p_floor=0):
             second_largest = other_counts.max()
             for d in range(D):
                 if cls_counts[d] == max_count:
-                    cls_counts[d] = second_largest
+                    cls_counts[d] = extreme_ratio * second_largest
 
         # Cap by p-th percentile
         nonzero_counts = cls_counts[cls_counts > p_floor]
