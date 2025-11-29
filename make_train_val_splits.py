@@ -102,6 +102,7 @@ def prune_datasets(counts, min_count=0, p=40, extreme_ratio=5, p_floor=0):
 
         # Cap by p-th percentile
         nonzero_counts = cls_counts[cls_counts > p_floor]
+        nonzero_counts = nonzero_counts[nonzero_counts > 0]
         cap = int(np.percentile(nonzero_counts, p)) # get the # of samples which are the p-th perentile
         for d in range(D):
             balanced_counts[d, c] = min(cls_counts[d], cap)
