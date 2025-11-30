@@ -1796,6 +1796,9 @@ def test(net, feature_bank, feature_labels, test_data_loader, args, progress=Fal
         pred_scores_list = []
         target_list = []
         target_raw_list = []
+        # For macro-accuracy computation
+        per_class_correct = torch.zeros(c, dtype=torch.long)
+        per_class_total   = torch.zeros(c, dtype=torch.long)
 
         for data, target in test_bar:
             data, target = data.cuda(non_blocking=True), target.cuda(non_blocking=True)
@@ -1811,6 +1814,7 @@ def test(net, feature_bank, feature_labels, test_data_loader, args, progress=Fal
 
             total_num += data.size(0)
             # compute cos similarity between each feature vector and feature bank ---> [B, N]
+            # feature & feature_bank are normalized
             sim_matrix = torch.mm(feature, feature_bank) # places sim_matrix on cuda
             # [B, K]
             # A namedtuple of (values, indices) is returned with the values and indices 
@@ -1834,9 +1838,24 @@ def test(net, feature_bank, feature_labels, test_data_loader, args, progress=Fal
             pred_labels = pred_scores.argsort(dim=-1, descending=True)
             total_top1 += torch.sum((pred_labels[:, :1] == target.unsqueeze(dim=-1)).any(dim=-1).float()).item()
             total_top5 += torch.sum((pred_labels[:, :5] == target.unsqueeze(dim=-1)).any(dim=-1).float()).item()
+
+            # predicted class is the top-1 label
+            pred = pred_labels[:, 0]   # [B]
+
+            # Loop-free update of per-class counts
+            # For each class c: count how many predictions & targets match
+            for cls in range(c):
+                mask = (target == cls)
+                if mask.any():
+                    per_class_total[cls] += mask.sum()
+                    per_class_correct[cls] += (pred[mask] == cls).sum()
+
             if progress:
-                test_bar.set_description('KNN {} Epoch: [{}/{}] Acc@1:{:.2f}% Acc@5:{:.2f}%'
-                                         .format(prefix, epoch, epochs, total_top1 / total_num * 100, total_top5 / total_num * 100))
+                # Avoid division by zero in rare cases
+                valid = per_class_total > 0
+                macro_acc = (per_class_correct[valid].float() / per_class_total[valid].float()).mean().item()
+                test_bar.set_description('KNN {} Epoch: [{}/{}] Acc@1:{:.2f}% Acc@5:{:.2f}% Macro-Acc:{:.2f}%'
+                                         .format(prefix, epoch, epochs, total_top1 / total_num * 100, total_top5 / total_num * 100, macro_acc * 100))
 
             # compute output
             if args.extract_features:
@@ -1847,6 +1866,10 @@ def test(net, feature_bank, feature_labels, test_data_loader, args, progress=Fal
                 pred_scores_list.append(pred_scores)
 
         # end for data, _, target in test_bar
+
+        # Avoid division by zero in rare cases
+        valid = per_class_total > 0
+        macro_acc = (per_class_correct[valid].float() / per_class_total[valid].float()).mean().item()
 
         if feature_list:
             feature = torch.cat(feature_list, dim=0)
@@ -1874,7 +1897,7 @@ def test(net, feature_bank, feature_labels, test_data_loader, args, progress=Fal
             utils.atomic_save(state, False, filename=fp)
             print(f"Dumped features into {fp}")
 
-    return total_top1 / total_num * 100, total_top5 / total_num * 100
+    return total_top1 / total_num * 100, total_top5 / total_num * 100, macro_acc * 100
     
 def load_checkpoint(path, model, model_momentum, optimizer, gradnorm_balancer, gradnorm_optimizer, device="cuda"):
     print("=> loading checkpoint '{}'".format(path))
@@ -2383,15 +2406,15 @@ if __name__ == '__main__':
             print('eval on train data')
             train_loader = DataLoader(mem_data[1], batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
                 pin_memory=True, persistent_workers=te_pw)
-            train_acc_1, train_acc_5 = test(model, feauture_bank, feature_labels, train_loader, args, progress=True, prefix="Train:")
+            train_acc_1, train_acc_5, train_macro_acc = test(model, feauture_bank, feature_labels, train_loader, args, progress=True, prefix="Train:")
         print('eval on val data')
         val_loader = DataLoader(val_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=True, 
             pin_memory=True, persistent_workers=te_pw)
-        val_acc_1, val_acc_5 = test(model, feauture_bank, feature_labels, val_loader, args, progress=True, prefix="Val:")
+        val_acc_1, val_acc_5, val_macro_acc = test(model, feauture_bank, feature_labels, val_loader, args, progress=True, prefix="Val:")
         print('eval on test data')
         test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=True, 
             pin_memory=True, persistent_workers=te_pw)
-        test_acc_1, test_acc_5 = test(model, feauture_bank, feature_labels, test_loader, args, progress=True, prefix="Test:")
+        test_acc_1, test_acc_5, test_macro_acc = test(model, feauture_bank, feature_labels, test_loader, args, progress=True, prefix="Test:")
         exit()
 
     if not args.resume and os.path.exists(log_file):
@@ -2508,18 +2531,18 @@ if __name__ == '__main__':
         if (epoch % args.test_freq == 0) or (epoch == epochs): # eval knn every test_freq epochs
             test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=True, 
                 pin_memory=False, persistent_workers=te_pw)
-            test_acc_1, test_acc_5 = test(model, feauture_bank, feature_labels, test_loader, args, progress=True, prefix="Test:")
+            test_acc_1, test_acc_5, test_macro_acc = test(model, feauture_bank, feature_labels, test_loader, args, progress=True, prefix="Test:")
             test_loader = shutdown_loader(test_loader)
             gc.collect()              # run Python's garbage collector
             txt_write = open("results/{}/{}/{}".format(args.dataset, args.name, 'knn_result.txt'), 'a')
-            txt_write.write('\ntest_acc@1: {}, test_acc@5: {}'.format(test_acc_1, test_acc_5))
+            txt_write.write('\ntest_acc@1: {}, test_acc@5: {}, test_macro_acc: {}'.format(test_acc_1, test_acc_5, test_macro_acc))
             torch.save(model.state_dict(), 'results/{}/{}/model_{}.pth'.format(args.dataset, args.name, epoch))
 
         if ((epoch % args.val_freq == 0) or (epoch == epochs)) and (args.dataset == 'ImageNet'):
             # evaluate on validation set
             val_loader = DataLoader(val_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=True, 
                 pin_memory=False, persistent_workers=te_pw)
-            acc1, _ = test(model, feauture_bank, feature_labels, val_loader, args, progress=True, prefix="Val:")
+            acc1, _, _ = test(model, feauture_bank, feature_labels, val_loader, args, progress=True, prefix="Val:")
             val_loader = shutdown_loader(val_loader)
             gc.collect()              # run Python's garbage collector
 
