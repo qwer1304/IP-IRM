@@ -1797,8 +1797,8 @@ def test(net, feature_bank, feature_labels, test_data_loader, args, progress=Fal
         target_list = []
         target_raw_list = []
         # For macro-accuracy computation
-        per_class_correct = torch.zeros(c, dtype=torch.long)
-        per_class_total   = torch.zeros(c, dtype=torch.long)
+        per_class_correct = torch.zeros(c, dtype=torch.long, device=feature_bank[0].device)
+        per_class_total   = torch.zeros(c, dtype=torch.long, device=feature_bank[0].device)
 
         for data, target in test_bar:
             data, target = data.cuda(non_blocking=True), target.cuda(non_blocking=True)
