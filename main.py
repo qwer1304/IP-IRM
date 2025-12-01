@@ -318,6 +318,9 @@ class CE_IRMCalculator(IRMCalculator):
         # Compute g_i in a CE-specific way
         # scaler (s) multiplies a tensor (B,logits), so need to unsqueeze dim=1
         losses = self.loss_module.compute_loss_micro(idxs=idxs, scale=s.unsqueeze(1), temperature=self.irm_temp, **kwargs)
+        print()
+        print(losses.size())
+        exit(-1)
         grad_outputs = torch.ones(1, losses.size(0), device=device)
         g_i = torch.autograd.grad(
             losses,
