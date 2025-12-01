@@ -324,6 +324,8 @@ class CE_IRMCalculator(IRMCalculator):
             s,
             create_graph=True,  # keep graph for next loss
         )
+        print()
+        print(g_i.size())
         # g_i is a tuple w/ entries corresponding to gradients w.r.t each parameter (here - s)
         # each entry is a tensor w/ dim=0 corresponding to each row in 'grad_outputs'
         # select 1st parameter (s) and squeeze out the dim dimension (which is 1)
