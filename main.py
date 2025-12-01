@@ -319,13 +319,10 @@ class CE_IRMCalculator(IRMCalculator):
         # scaler (s) multiplies a tensor (B,logits), so need to unsqueeze dim=1
         losses = self.loss_module.compute_loss_micro(idxs=idxs, scale=s.unsqueeze(1), temperature=self.irm_temp, **kwargs)
         # losses is a scalar
-        grad_outputs = torch.ones_like(losses)
         g_i = torch.autograd.grad(
             losses,
             s,
             create_graph=True,  # keep graph for next loss
-            grad_outputs=grad_outputs, 
-            is_grads_batched=True
         )
         # g_i is a tuple w/ entries corresponding to gradients w.r.t each parameter (here - s)
         # each entry is a tensor w/ dim=0 corresponding to each row in 'grad_outputs'
