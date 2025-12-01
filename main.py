@@ -324,8 +324,6 @@ class CE_IRMCalculator(IRMCalculator):
             s,
             create_graph=True,  # keep graph for next loss
         )
-        print()
-        print(g_i)
         # g_i is a tuple w/ entries corresponding to gradients w.r.t each parameter (here - s)
         g_i = g_i[0].squeeze(0).sum()
         return g_i
