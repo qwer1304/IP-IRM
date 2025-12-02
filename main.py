@@ -1295,10 +1295,10 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             print()
             for pind in range(len(penalty_grads)):
                 dLoss_dTheta_env = loss_grads[pind] * loss_weight_env[..., None]  # per env sum of dCont/dTheta, shape (I,J,K,param_numel), unweighted
-                loss_grad_flat  = loss_module.loss_grads_finalize(dLoss_dTheta_env, loss_env, halves_sz, reduction='none')
-                print(type(loss_grad_flat), loss_grad_flat.size())
+                loss_grad_flat  = loss_module.loss_grads_finalize(dLoss_dTheta_env, loss_env, halves_sz, reduction='none') # (I,J,K,param_numel)
+                print(1,type(loss_grad_flat), loss_grad_flat.size())
                 loss_grad_flat  = convert_to_list(loss_grad_flat.sum(dim=0))  # (J,K,param_numel)
-                print(type(loss_grad_flat), len(loss_grad_flat), loss_grad_flat[0].size())
+                print(2,type(loss_grad_flat), len(loss_grad_flat), loss_grad_flat[0].size())
 
                 dPenalty_dTheta_env = penalty_grads[pind] * penalty_weight_env[..., None] # per env sum of dPenalty/dTheta over macro-batch per parameter, unweighted, shape (I,J,K,param_numel)
                 reduction = 'none' if (args.grad_rotate is not None) else 'sum'
@@ -1311,15 +1311,15 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                         reduction=reduction
                     )                                                                     
                 if reduction == 'none': # (J,K,parnum)
-                    print(type(total_grad_flat), total_grad_flat.size())
+                    print(3,type(total_grad_flat), total_grad_flat.size())
                     total_grad_flat  = convert_to_list(total_grad_flat)
-                    print(type(total_grad_flat), len(total_grad_flat), total_grad_flat[0].size())
+                    print(4,type(total_grad_flat), len(total_grad_flat), total_grad_flat[0].size())
                     #total_grad_flat  = rotate_gradients_per_env(total_grad_flat, device=device, eps=args.grad_rotate[1])
                     theta = float(torch.empty(1).uniform_(min(args.grad_rotate), max(args.grad_rotate)).item())
                     total_grad_flat = rotate_pen_toward_orthogonal(total_grad_flat, loss_grad_flat, theta=theta)
-                    print(type(total_grad_flat), len(total_grad_flat), total_grad_flat[0].size())
+                    print(5,type(total_grad_flat), len(total_grad_flat), total_grad_flat[0].size())
                     total_grad_flat  = torch.stack(total_grad_flat, dim=0).sum(0) # (paramnum,)
-                    print(type(total_grad_flat), total_grad_flat.size())
+                    print(6,type(total_grad_flat), total_grad_flat.size())
                 penalty_grads_final.append(total_grad_flat.detach().clone())
             penalty_grads_final_weighted = [g.detach().clone() * penalty_weight * args.Lscaler for g in penalty_grads_final if g is not None]
             p_grads_flat_weighted = torch.cat([g for g in penalty_grads_final_weighted])
