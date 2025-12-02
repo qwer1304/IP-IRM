@@ -1296,7 +1296,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             for pind in range(len(penalty_grads)):
                 dPenalty_dTheta_env = penalty_grads[pind] * penalty_weight_env[..., None] # per env sum of dPenalty/dTheta over macro-batch per parameter, unweighted, shape (I,J,K,param_numel)
                 reduction = 'sum' # 'none' if (args.grad_rotate is not None) else 'sum'
-                total_grad_flat     = \ # (J,K,parnum) or (parnum) depending on 'reduction'
+                # (J,K,parnum) or (parnum) depending on 'reduction'
+                total_grad_flat     = \
                     penalty_calculator.penalty_grads_finalize(
                         dPenalty_dTheta_env, 
                         pen, 
