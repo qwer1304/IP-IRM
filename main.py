@@ -1318,7 +1318,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                         total_grad_flat  = torch.stack(total_grad_flat, dim=0).sum(0) # (paramnum,)
                     elif len(total_grad_flat.size()) == 1: # total_grad_flat size (parnum,)
                         theta = float(torch.empty(1).uniform_(min(args.grad_rotate), max(args.grad_rotate)).item())
-                        total_grad_flat = rotate_pen_toward_orthogonal([total_grad_flat], [loss_grad_flat], theta=theta)[0] # list w/ 1 element, w/ size (parnum,)
+                        total_grad_flat = rotate_pen_toward_orthogonal([total_grad_flat], [loss_grads_final[-1]], theta=theta)[0] # list w/ 1 element, w/ size (parnum,)
                 penalty_grads_final.append(total_grad_flat.detach().clone())
             penalty_grads_final_weighted = [g.detach().clone() * penalty_weight * args.Lscaler for g in penalty_grads_final if g is not None]
             p_grads_flat_weighted = torch.cat([g for g in penalty_grads_final_weighted])
