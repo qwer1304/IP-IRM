@@ -475,9 +475,6 @@ class MoCoLossModule(LossModule):
         self.out_k        = out_k 
         self.out_k_indexs = indexs
 
-        l_pos = torch.sum(out_q * out_k, dim=1, keepdim=True)
-        out_neg = self.queue.get((self.queue.queue_size - self.this_batch_size), advance=False)
-        l_neg = torch.matmul(out_q, out_neg.t())
         self.l_pos = l_pos
         self.l_neg = l_neg
 
@@ -492,6 +489,8 @@ class MoCoLossModule(LossModule):
         return self.labels[idxs]
 
     def compute_loss_micro(self, p=None, env=None, idxs=None, scale=1.0, temperature=None, reduction='sum', **kwargs):
+        # 'idxs' selects the POSITIVES in the batch
+        # 'p', 'env' select the NEGATIVES in the queue
         if idxs is None:
             idxs = torch.arange(self._logits.size(0), device=self._logits.device)
         l_pos = self.l_pos
