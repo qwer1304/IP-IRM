@@ -1690,8 +1690,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                          + penalty_grads_final[pind]   * penalty_weight   * penalty_grad_scaler   * ap
                                        )
 
-            print()
-            print(f"grad {pind} isfinite {total_grad_flat_weighted.isfinite().all()}")
             if args.debug:
                 print()
                 g_L = loss_grads_final[pind]      * loss_weight      * loss_grad_scaler
@@ -1709,6 +1707,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 p.grad  = total_grad_flat_weighted.view(p.shape)
             else:
                 p.grad += total_grad_flat_weighted.view(p.shape)
+            print()
+            print(f"grad {pind} isfinite {p.grad.isfinite().all()}")
             if args.debug:
                 # Are grads present and nonzero?
                 print(pind, "requires_grad=", p.requires_grad,
