@@ -1057,6 +1057,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 m.track_running_stats = True
             else:
                 m.train()                 # learn pars
+                m.track_running_stats = True
                 m.momentum = args.bn_momentum
 
     if isinstance(partitions, list): # if retain previous partitions
