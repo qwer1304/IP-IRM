@@ -2499,7 +2499,7 @@ if __name__ == '__main__':
 
     # model setup and optimizer config
     ssl_type = args.ssl_type.lower()
-    if ssl_type == 'moco' or ssl_type == mocosupcon:
+    if ssl_type == 'moco' or ssl_type == 'mocosupcon':
         model = ModelResnet(feature_dim, image_class=image_class, state_dict=state_dict).cuda()
     elif ssl_type == 'simsiam':
         model = SimSiam(feature_dim, image_class=image_class, state_dict=state_dict).cuda()
