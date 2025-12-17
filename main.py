@@ -515,6 +515,8 @@ class MoCoSupConLossModule(LossModule):
         _, out_q = self.net(pos_q)
         print()
         print('out_q isfinite', out_q.isfinite().all())
+        if not out_q.isfinite().all():
+            print(out_q)
         if normalize:
             out_q = F.normalize(out_q, dim=1)
         with torch.no_grad():
