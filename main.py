@@ -1734,7 +1734,12 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             if p.grad is not None:
                 gn_pm += (2**pind)*(p.grad.sign()) 
 
-        # train_optimizer.step()
+        train_optimizer.step()
+        print()
+        for n, p in net.named_parameters():
+            if p.ndim == 2:   # linear weights
+                if (p.norm(dim=1) == 0).any():
+                    print("Zero row in", n)
 
         train_optimizer.zero_grad(set_to_none=True)        # clear gradients at beginning of next gradients batch
         if do_gradnorm:
