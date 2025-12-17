@@ -580,7 +580,7 @@ class MoCoSupConLossModule(LossModule):
         l_neg = self.l_neg
         if p is not None:
             l_neg = l_neg[:, self.neg_idxs[p][env]]
-        self._logits = torch.cat([l_pos, l_neg], dim=1)
+        self._logits = torch.cat([l_pos, l_neg], dim=1) # (B,N'+1)
         self.labels = torch.zeros(self._logits.size(0), dtype=torch.long, device=self._logits.device)
         if self.debug:
             self.total_pos    += l_pos.mean().item() * l_pos.size(0)
@@ -589,9 +589,13 @@ class MoCoSupConLossModule(LossModule):
             self.count        += l_pos.size(0)
 
         # sum over batch, per env handled by driver
-        loss = F.cross_entropy(scale * self._logits[idxs], self.labels[idxs], reduction=reduction)
+        # get the samples that have positives
+        num_pos = self._logits[idxs].sum(dim=1)    # (B,)
+        valid = num_pos > 0
+
+        loss = F.cross_entropy(scale * self._logits[idxs][valid], self.labels[idxs][valid], reduction=reduction)
         print()
-        print(self._logits[idxs])
+        print(self._logits[idxs][valid])
         print(loss)
         return loss
 
