@@ -1224,6 +1224,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                     # compute unnormalized micro-batch loss
                     losses_samples = loss_module.compute_loss_micro(reduction=reduction)
                     differentiate_this.append(losses_samples)
+                    print()
+                    print(f'loss_samples, batch {batch_index} half {j}')
 
                 if do_penalty and not is_per_env:
                     penalties_samples = penalty_calculator.penalty(losses_samples, reduction=reduction)
@@ -1425,12 +1427,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             penalty_env = penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz) # normalized per env for macro-batch, unweighted
         else:
             penalty_env = torch.tensor(0, dtype=torch.float, device=device)
-
-        print()
-        for _j, g in enumerate(loss_keep_grads_final):
-            if g.isfinite().all() != True:
-                print(f'grad not final j={j}')
-                print(g)
 
         loss_keep_grads_final_weighted = [g.detach().clone() * loss_keep_weight * args.Lscaler for g in loss_keep_grads_final if g is not None]
         l_keep_grads_flat_weighted = torch.cat(loss_keep_grads_final_weighted) # cat all grads of all pars into one long vector
