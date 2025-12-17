@@ -590,7 +590,7 @@ class MoCoSupConLossModule(LossModule):
 
         # sum over batch, per env handled by driver
         # get the samples that have positives
-        num_pos = self._logits[idxs].sum(dim=1)    # (B,)
+        num_pos = torch.isfinite(self._logits[idxs]).sum(dim=1) # (B,)
         valid = num_pos > 0
 
         loss = F.cross_entropy(scale * self._logits[idxs][valid], self.labels[idxs][valid], reduction=reduction)
