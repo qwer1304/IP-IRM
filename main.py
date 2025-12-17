@@ -513,10 +513,13 @@ class MoCoSupConLossModule(LossModule):
         pos_k = transform(pos)
 
         _, out_q = self.net(pos_q)
+        print()
+        print('out_q isfinite', out_q.isfinite().all())
         if normalize:
             out_q = F.normalize(out_q, dim=1)
         with torch.no_grad():
             _, out_k = self.net_momentum(pos_k)
+            print('out_k isfinite', out_k.isfinite().all())
             if normalize:
                 out_k = F.normalize(out_k, dim=1)
         
@@ -1224,8 +1227,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                     # compute unnormalized micro-batch loss
                     losses_samples = loss_module.compute_loss_micro(reduction=reduction)
                     differentiate_this.append(losses_samples)
-                    print()
-                    print(f'loss_samples, batch {batch_index} half {j}')
 
                 if do_penalty and not is_per_env:
                     penalties_samples = penalty_calculator.penalty(losses_samples, reduction=reduction)
