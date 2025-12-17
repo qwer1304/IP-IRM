@@ -1430,7 +1430,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         for _j, g in loss_keep_grads_final:
             if g.isfinite().all() != True:
                 print(f'grad not final j={j}')
-                print(g
+                print(g)
 
         loss_keep_grads_final_weighted = [g.detach().clone() * loss_keep_weight * args.Lscaler for g in loss_keep_grads_final if g is not None]
         l_keep_grads_flat_weighted = torch.cat(loss_keep_grads_final_weighted) # cat all grads of all pars into one long vector
