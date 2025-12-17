@@ -55,11 +55,12 @@ class ModelResnet(nn.Module):
         # Extract backbone features
         feature = self.f(x)                      # [N, 2048] after avgpool & flatten
         out = self.g(feature)                    # projection head
+
         print()
         norms = out.norm(dim=1)
         print("model out min norm:", norms.min().item())
 
-        #return F.normalize(feature, dim=-1), F.normalize(out, dim=-1)
+        return F.normalize(feature, dim=-1), F.normalize(out, dim=-1)
 
 
 class Model(nn.Module):
