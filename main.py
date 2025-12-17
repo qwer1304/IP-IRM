@@ -513,15 +513,10 @@ class MoCoSupConLossModule(LossModule):
         pos_k = transform(pos)
 
         _, out_q = self.net(pos_q)
-        print()
-        print('out_q isfinite', out_q.isfinite().all())
-        if not out_q.isfinite().all():
-            print(pos_q)
         if normalize:
             out_q = F.normalize(out_q, dim=1)
         with torch.no_grad():
             _, out_k = self.net_momentum(pos_k)
-            print('out_k isfinite', out_k.isfinite().all())
             if normalize:
                 out_k = F.normalize(out_k, dim=1)
         
@@ -1695,6 +1690,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                          + penalty_grads_final[pind]   * penalty_weight   * penalty_grad_scaler   * ap
                                        )
 
+            print()
+            print(f"grad {pind} isfinite {p.isfinite().all()}")
             if args.debug:
                 print()
                 g_L = loss_grads_final[pind]      * loss_weight      * loss_grad_scaler
