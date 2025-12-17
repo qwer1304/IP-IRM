@@ -12,6 +12,7 @@ from torchvision.models import resnet50
 class ModelResnet(nn.Module):
     def __init__(self, feature_dim=128, image_class='ImageNet', state_dict=None):
         super().__init__()
+        print('ModelResnet')
 
         # Backbone
         self.f = resnet50(weights=None)
@@ -54,13 +55,17 @@ class ModelResnet(nn.Module):
         # Extract backbone features
         feature = self.f(x)                      # [N, 2048] after avgpool & flatten
         out = self.g(feature)                    # projection head
+        print()
+        norms = out.norm(dim=1)
+        print("model out min norm:", norms.min().item())
 
-        return F.normalize(feature, dim=-1), F.normalize(out, dim=-1)
+        #return F.normalize(feature, dim=-1), F.normalize(out, dim=-1)
 
 
 class Model(nn.Module):
     def __init__(self, feature_dim=128, image_class='ImageNet', state_dict=None):
         super(Model, self).__init__()
+        print('Model')
 
         self.f = []
         res50 = resnet50(weights=None) 
@@ -164,6 +169,7 @@ class prediction_MLP(nn.Module):
 class SimSiam(nn.Module):
     def __init__(self, feature_dim=128, image_class='ImageNet', state_dict=None):
         super().__init__()
+        print('SimSiam')
 
         # Backbone
         self.f = resnet50(weights=None)
