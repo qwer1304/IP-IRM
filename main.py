@@ -1055,7 +1055,9 @@ def analyze_grad_alignment_moco_flexible(
 def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, **kwargs):
 
     net.train()
-    for m in model.modules():
+    print()
+    print('adapt_bn',args.adapt_bn)
+    for m in net.modules():
         if isinstance(m, (torch.nn.BatchNorm3d, nn.BatchNorm2d, nn.BatchNorm1d)):
             if not args.adapt_bn:
                 m.eval()                 # use stored running stats
@@ -1735,13 +1737,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 gn_pm += (2**pind)*(p.grad.sign()) 
 
         train_optimizer.step()
-        for group in train_optimizer.param_groups:
-            for p in group["params"]:
-                state = train_optimizer.state[p]
-                for k, v in state.items():
-                    if torch.is_tensor(v) and not torch.isfinite(v).all():
-                        print("NaN in optimizer state:", k)
-
         train_optimizer.zero_grad(set_to_none=True)        # clear gradients at beginning of next gradients batch
         if do_gradnorm:
             gradnorm_optimizer.zero_grad(set_to_none=True) # clear gradients
