@@ -590,6 +590,9 @@ class MoCoSupConLossModule(LossModule):
 
         # sum over batch, per env handled by driver
         loss = F.cross_entropy(scale * self._logits[idxs], self.labels[idxs], reduction=reduction)
+        print()
+        print(self._logits[idxs])
+        print(loss)
         return loss
 
     def post_micro_batch(self):
