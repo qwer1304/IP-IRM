@@ -1427,7 +1427,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             penalty_env = torch.tensor(0, dtype=torch.float, device=device)
 
         print()
-        for _j, g in loss_keep_grads_final:
+        for _j, g in enumerate(loss_keep_grads_final):
             if g.isfinite().all() != True:
                 print(f'grad not final j={j}')
                 print(g)
