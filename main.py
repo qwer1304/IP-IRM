@@ -1736,8 +1736,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
 
         train_optimizer.step()
         print()
-        for n, p in net.named_parameters():
-            if torch.isnan(p).any():
+        for n, p in enumerate(net.parameters()):
+            if not torch.isfinite(p).all():
                 print("NaN param:", n)
 
         train_optimizer.zero_grad(set_to_none=True)        # clear gradients at beginning of next gradients batch
