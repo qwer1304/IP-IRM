@@ -1356,6 +1356,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                         if grads is None:
                             continue
                         grads = grads.detach().view(-1)
+                        if !grads.isfinite().all():
+                            print()
+                            print(f'grad not finite, j={_j}')
                         loss_keep_grads_final[_j] += grads
 
                 if do_loss or do_penalty:
