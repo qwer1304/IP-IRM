@@ -595,6 +595,7 @@ class MoCoSupConLossModule(LossModule):
 
         loss = F.cross_entropy(scale * self._logits[idxs][valid], self.labels[idxs][valid], reduction=reduction)
         print()
+        print(num_pos)
         print(self._logits[idxs][valid])
         print(loss)
         return loss
