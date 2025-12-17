@@ -1691,7 +1691,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                        )
 
             print()
-            print(f"grad {pind} isfinite {p.isfinite().all()}")
+            print(f"grad {pind} isfinite {total_grad_flat_weighted.isfinite().all()}")
             if args.debug:
                 print()
                 g_L = loss_grads_final[pind]      * loss_weight      * loss_grad_scaler
