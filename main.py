@@ -538,12 +538,13 @@ class MoCoSupConLossModule(LossModule):
         
         pos_mask = (y_batch[:, None] == y_all[None, :])   # (B,N)
         pos_mask[:, :len(y_batch)].fill_diagonal_(False)  # remove self-keys
+        num_pos = pos_mask.sum(dim=1, keepdim=True)
 
         # Replace non-positives with -inf
         pos_logits = logits.masked_fill(~pos_mask, -float("inf"))
         # One logit per anchor = logsumexp over positives
-        l_pos = torch.logsumexp(pos_logits, dim=1, keepdim=True)  # (B,1)
-
+        l_pos = torch.logsumexp(pos_logits, dim=1, keepdim=True) - num_pos.log() # (B,1)
+        
         l_neg = logits.masked_fill(pos_mask, -float("inf")) # (B,N)
         
         self._logits = torch.cat([l_pos, l_neg], dim=1) # (B,N+1)
@@ -594,11 +595,6 @@ class MoCoSupConLossModule(LossModule):
         valid = torch.isfinite(l_pos)
 
         loss = F.cross_entropy(scale * self._logits[idxs][valid], self.labels[idxs][valid], reduction=reduction)
-        print()
-        print(l_pos)
-        print(self._logits[idxs])
-        print(self._logits[idxs][valid])
-        print(loss)
         return loss
 
     def post_micro_batch(self):
