@@ -1734,11 +1734,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             if p.grad is not None:
                 gn_pm += (2**pind)*(p.grad.sign()) 
 
-        train_optimizer.step()
-        print()
-        for n, p in enumerate(net.parameters()):
-            if not torch.isfinite(p).all():
-                print("NaN param:", n)
+        # train_optimizer.step()
 
         train_optimizer.zero_grad(set_to_none=True)        # clear gradients at beginning of next gradients batch
         if do_gradnorm:
