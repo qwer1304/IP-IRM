@@ -673,15 +673,10 @@ class MoCoLossModule(LossModule):
         pos_k = transform(pos)
 
         _, out_q = self.net(pos_q)
-        print()
-        norms = out_q.norm(dim=1)
-        print("out_q min norm:", norms.min().item())
         if normalize:
             out_q = F.normalize(out_q, dim=1)
         with torch.no_grad():
             _, out_k = self.net_momentum(pos_k)
-            norms = out_k.norm(dim=1)
-            print("out_k min norm:", norms.min().item())
             if normalize:
                 out_k = F.normalize(out_k, dim=1)
         
