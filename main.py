@@ -543,7 +543,7 @@ class MoCoSupConLossModule(LossModule):
         # Replace non-positives with -inf
         pos_logits = logits.masked_fill(~pos_mask, -float("inf"))
         # One logit per anchor = logsumexp over positives
-        l_pos = torch.logsumexp(pos_logits, dim=1, keepdim=True) - num_pos.log() # (B,1)
+        l_pos = torch.logsumexp(pos_logits, dim=1, keepdim=True) #- num_pos.log() # (B,1)
         
         l_neg = logits.masked_fill(pos_mask, -float("inf")) # (B,N)
         
@@ -1054,8 +1054,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         if isinstance(m, (torch.nn.BatchNorm3d, nn.BatchNorm2d, nn.BatchNorm1d)):
             if not args.adapt_bn:
                 m.eval()                 # use stored running stats
-                m.track_running_stats = False
+                m.track_running_stats = True
             else:
+                m.train()                 # learn pars
                 m.momentum = args.bn_momentum
 
     if isinstance(partitions, list): # if retain previous partitions
