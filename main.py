@@ -1707,8 +1707,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 p.grad  = total_grad_flat_weighted.view(p.shape)
             else:
                 p.grad += total_grad_flat_weighted.view(p.shape)
-            print()
-            print(f"grad {pind} isfinite {p.grad.isfinite().all()}")
             if args.debug:
                 # Are grads present and nonzero?
                 print(pind, "requires_grad=", p.requires_grad,
@@ -1737,6 +1735,11 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 gn_pm += (2**pind)*(p.grad.sign()) 
 
         train_optimizer.step()
+        print()
+        for n, p in net.named_parameters():
+            if torch.isnan(p).any():
+                print("NaN param:", n)
+
         train_optimizer.zero_grad(set_to_none=True)        # clear gradients at beginning of next gradients batch
         if do_gradnorm:
             gradnorm_optimizer.zero_grad(set_to_none=True) # clear gradients
