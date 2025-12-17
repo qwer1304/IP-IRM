@@ -595,11 +595,6 @@ class MoCoSupConLossModule(LossModule):
         valid = torch.isfinite(l_pos)
 
         loss = F.cross_entropy(scale * self._logits[idxs][valid], self.labels[idxs][valid], reduction=reduction)
-        print()
-        print(l_pos)
-        print(valid)
-        print(self._logits[idxs][valid])
-        print(loss)
         return loss
 
     def post_micro_batch(self):
@@ -1055,8 +1050,6 @@ def analyze_grad_alignment_moco_flexible(
 def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, **kwargs):
 
     net.train()
-    print()
-    print('adapt_bn',args.adapt_bn)
     for m in net.modules():
         if isinstance(m, (torch.nn.BatchNorm3d, nn.BatchNorm2d, nn.BatchNorm1d)):
             if not args.adapt_bn:
