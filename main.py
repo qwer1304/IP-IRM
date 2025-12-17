@@ -595,6 +595,10 @@ class MoCoSupConLossModule(LossModule):
         valid = torch.isfinite(l_pos)
 
         loss = F.cross_entropy(scale * self._logits[idxs][valid], self.labels[idxs][valid], reduction=reduction)
+        print()
+        print(self._logits[idxs][valid])
+        print(self.labels[idxs][valid])
+        print(loss)
         return loss
 
     def post_micro_batch(self):
