@@ -1356,10 +1356,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                         if grads is None:
                             continue
                         grads = grads.detach().view(-1)
-                        if grads.isfinite().all() != True:
-                            print()
-                            print(f'grad not finite, j={_j}')
-                            print(grads)
                         loss_keep_grads_final[_j] += grads
 
                 if do_loss or do_penalty:
@@ -1429,6 +1425,12 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             penalty_env = penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz) # normalized per env for macro-batch, unweighted
         else:
             penalty_env = torch.tensor(0, dtype=torch.float, device=device)
+
+        print()
+        for _j, g in loss_keep_grads_final:
+            if g.isfinite().all() != True:
+                print(f'grad not final j={j}')
+                print(g
 
         loss_keep_grads_final_weighted = [g.detach().clone() * loss_keep_weight * args.Lscaler for g in loss_keep_grads_final if g is not None]
         l_keep_grads_flat_weighted = torch.cat(loss_keep_grads_final_weighted) # cat all grads of all pars into one long vector
