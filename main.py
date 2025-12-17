@@ -410,6 +410,215 @@ class LossModule:
         return total_grad_flat
 
 # ---------------------------
+# MoCo+SupCon Loss Module
+# ---------------------------
+class MoCoSupConLossModule(LossModule):
+    def __init__(self, *args, net_momentum=None, queue=None, temperature=None, debug=False, **kwargs):
+        super().__init__(*args, **kwargs)
+        assert net_momentum is not None
+        assert queue is not None
+        self.net_momentum = net_momentum
+        self.momentum = kwargs['momentum']
+        self.net_momentum.train()
+        self.queue = queue
+        self.temperature = temperature or 1.0
+        self.this_batch_size = 0
+        self.debug = debug
+        self.neg_idxs = []
+        if self.debug:
+            self.total_pos = 0.0
+            self.total_neg = 0.0
+            self.total_maxneg = 0.0
+            self.count = 0
+
+    def pre_batch(self, batch_data, index_data, partitions, device='cuda'):
+        self.this_batch_size = len(batch_data)
+        self.queue.get(self.this_batch_size) # advance read pointer
+        
+        if partitions is None or (len(partitions) == 0) or (partitions[0] is None):
+            return
+        
+        # get the dataset indices of samples in queue
+        _, indexs = self.queue.get(self.queue.queue_size - self.this_batch_size, advance=False, idx=True)
+        # holds per-partition lists of per-env tensors of indices into the queue
+        self.neg_idxs = [[] for _ in partitions]
+        for pidx, p in enumerate(partitions):
+            for env in range(p.size(-1)):
+                # assign_idxs returns a tensor of indices into 'indexs' in 'env' in 'p'
+                self.neg_idxs[pidx].append(utils.assign_idxs(indexs, p, env)) # append the tensor of indices to envs list
+
+    def pre_micro_batch(self, pos, transform, indexs=None, normalize=True, dataset=None, **kwargs):
+        # 'indexs' are samples indices in the dataset
+        """
+        Calculating SupCon w/ LogSumExp:
+        Step 1 - Write the positive term:
+            For a fixed anchor 'i' the positive part of SupCon is:
+               1/|P(i)| \sum_{p \in P(i)} logexp(s_{ip})
+               logexp(s_{ip}) = s_{ip}
+               Hence, 1/|P(i)| \sum_{p \in P(i)} s_{ip}
+        Step 2 - Rewrite the same quantity in the form used by the code
+            Now apply a pure algebraic identity (no approximations):
+                1/|P(i)| sum_{p \in P(i)} s_{ip} = A = B - [B - A] =
+                log(1/|P(i)| \sum_{p \in P(i)|} exp(s_{ip})) - [log(1/|P(i)| \sum_{p \in P(i)| exp(s_ip)) - 1/|P(i)| sum_{p \in P(i)} s_{ip}]
+            Now regroup:
+                log(\sum_{p \in P(i)|} exp(s_{ip})) - log(|P(i)|) - C_i
+            where:
+                C_i = log(1/|P(i)| \sum_{p \in P(i)| exp(s_{ip})) - 1/|P(i)| \sum_{p \in P(i)} s_{ip}
+            and C_i depends only on the positives of anchor i.
+        Step 3 - Plug Step 2 into the full SupCon loss:
+            Full SupCon loss for anchor i:
+                l_i = -1/|P(i)| \sum_{p \in P(i)} s_{ip} + log(\sum_{a \in A} exp(s_ia}))
+            Substitute the expression from Step 2:
+                1/|P(i)| sum_{p \in P(i)} s_{ip} = log(\sum_{p \in P(i)|} exp(s_ip)) - log(|P(i)|) - C_i
+            So:
+                l_i = -log(\sum_{p \in P(i)|} exp(s_ip)) + log(\sum_{a \in A} exp(s_ia})) + log(|P(i)|) + C_i
+        Step 4 - The code drops C_i
+            The implementation uses:
+                -logsum_pos + logsum_all - log(|P(i)|)
+           During training the gradients of this method and standard SupCon differ.
+            * The implementation is not algebraically identical to the definition
+            * It is a surrogate objective
+            * The surrogate has the same global minimizers as the original 
+            * It does not produce the same optimization path            
+        Step 5 - Why this helps TerraInc specifically
+            TerraInc has:
+                * strong domain shortcuts (background, color, texture)
+                * same-class / different-domain positives are hard
+                * many positives per anchor
+            Under LSE SupCon:
+                * same-domain positives stop contributing early
+                * hardest (cross-domain) positives dominate gradients
+                * embedding becomes domain-invariant
+            This is exactly why:
+                * kNN with large k improves
+                * class clusters become tighter
+                * domain leakage decreases
+        Step 6 - In the LSE SupCon surrogate, the gradient does not explicitly depend on |P(i)|.
+            As |P(i)| increases:
+                True SupCon:
+                    * each positive gets weaker pull
+                        dl / ds_{ip} = -1/|P(i)| + softmax_A(s_{ip})
+                        -> As |P(i)| grows, each positive is weakened, including the hard cross-domain ones.
+            LSE SupCon:
+                    * hardest positives still dominate
+                    * total pull does not dilute
+                    dl / ds_{ip} = -softmax_{P(i)}(s_{ip}) + softmax_A(s_{ip})                    
+                    -> Hard positives dominate regardless of how many easy (same-domain) positives exist.
+            LSE SupCon prevents easy same-domain positives from diluting the gradient, forcing alignment 
+            to the hardest cross-domain positives - exactly what TerraInc needs to break domain clustering.
+        """
+        assert indexs is not None, 'indexs cannot be None'
+        assert len(pos) == len(indexs), f"len(pos) {len(pos)} != len(indexs) {len(indexs)}"
+        pos_q = transform(pos)
+        pos_k = transform(pos)
+
+        _, out_q = self.net(pos_q)
+        if normalize:
+            out_q = F.normalize(out_q, dim=1)
+        with torch.no_grad():
+            _, out_k = self.net_momentum(pos_k)
+            if normalize:
+                out_k = F.normalize(out_k, dim=1)
+        
+        k_queue, idx_queue = self.queue.get((self.queue.queue_size - self.this_batch_size), advance=False, idx=True)
+        k_all = torch.cat([out_k, k_queue], dim=0) # (N,D), N=B+K 
+        
+        def get_targets(idcs, dataset, device):
+            targets = [dataset.targets[i] for i in idcs]
+            if dataset.target_transform is not None:
+                labels = [dataset.target_transform(t) for t in targets]
+            else:
+                labels = targets
+            return torch.tensor(labels, dtype=torch.long, device=device)
+        y_batch = get_targets(indexs, dataset, pos.device)
+        y_queue = get_targets(idx_queue, dataset, pos.device)
+        y_all = torch.cat([y_batch, y_queue], dim=0) # (N,)
+
+        logits = (out_q @ k_all.T) / self.temperature # (B,N)
+        
+        pos_mask = (y_batch[:, None] == y_all[None, :])   # (B,N)
+        pos_mask[:, :len(y_batch)].fill_diagonal_(False)  # remove self-keys
+
+        # Replace non-positives with -inf
+        pos_logits = logits.masked_fill(~pos_mask, -float("inf"))
+        # One logit per anchor = logsumexp over positives
+        l_pos = torch.logsumexp(pos_logits, dim=1, keepdim=True)  # (B,1)
+
+        l_neg = logits.masked_fill(pos_mask, -float("inf")) # (B,N)
+        
+        self._logits = torch.cat([l_pos, l_neg], dim=1) # (B,N+1)
+        self.labels = torch.zeros(self._logits.size(0), dtype=torch.long, device=self._logits.device)
+        if self.debug:
+            self.total_pos    += l_pos.mean().item() * l_pos.size(0)
+            self.total_neg    += l_neg.mean().item() * l_pos.size(0)
+            self.total_maxneg += l_neg.max().item()  * l_pos.size(0)
+            self.count        += l_pos.size(0)
+
+        # save in state for queue update at end of batch
+        self.out_k        = out_k 
+        self.out_k_indexs = indexs
+
+        self.l_pos = l_pos
+        self.l_neg = l_neg
+
+    def logits(self, idxs=None):
+        if idxs is None:
+            idxs = torch.arange(self._logits.size(0), device=self._logits.device)
+        return self._logits[idxs]
+        
+    def targets(self, idxs=None):
+        if idxs is None:
+            idxs = torch.arange(self._logits.size(0), device=self._logits.device)
+        return self.labels[idxs]
+
+    def compute_loss_micro(self, p=None, env=None, idxs=None, scale=1.0, temperature=None, reduction='sum', **kwargs):
+        # 'idxs' selects the POSITIVES in the batch
+        # 'p', 'env' select the NEGATIVES in the queue
+        if idxs is None:
+            idxs = torch.arange(self._logits.size(0), device=self._logits.device)
+        l_pos = self.l_pos
+        l_neg = self.l_neg
+        if p is not None:
+            l_neg = l_neg[:, self.neg_idxs[p][env]]
+        self._logits = torch.cat([l_pos, l_neg], dim=1)
+        self.labels = torch.zeros(self._logits.size(0), dtype=torch.long, device=self._logits.device)
+        if self.debug:
+            self.total_pos    += l_pos.mean().item() * l_pos.size(0)
+            self.total_neg    += l_neg.mean().item() * l_pos.size(0)
+            self.total_maxneg += l_neg.max().item()  * l_pos.size(0)
+            self.count        += l_pos.size(0)
+
+        # sum over batch, per env handled by driver
+        loss = F.cross_entropy(scale * self._logits[idxs], self.labels[idxs], reduction=reduction)
+        return loss
+
+    def post_micro_batch(self):
+        self.queue.update(self.out_k.detach(), idx=self.out_k_indexs)
+
+    def post_batch(self):
+        with torch.no_grad():
+            for param_q, param_k in zip(self.net.parameters(), self.net_momentum.parameters()):
+                param_k.mul_(self.momentum).add_(param_q, alpha=1.0 - self.momentum)
+        if self.debug:
+            self.total_pos = 0.0
+            self.total_neg = 0.0
+            self.total_maxneg = 0.0
+            self.count = 0
+
+    def get_debug_info_str(self):
+        if self.debug:
+            mean_pos = self.total_pos / self.count
+            mean_neg = self.total_neg / self.count
+            mean_maxneg = self.total_maxneg / self.count
+            return f' mean_pos: {mean_pos:.4f} mean_neg: {mean_neg:.4f} mean_maxneg: {mean_maxneg:.4f}'
+        else:
+            return ""
+
+    @staticmethod
+    def is_per_env():
+        return True
+
+# ---------------------------
 # MoCo Loss Module
 # ---------------------------
 class MoCoLossModule(LossModule):
@@ -447,7 +656,7 @@ class MoCoLossModule(LossModule):
                 # assign_idxs returns a tensor of indices into 'indexs' in 'env' in 'p'
                 self.neg_idxs[pidx].append(utils.assign_idxs(indexs, p, env)) # append the tensor of indices to envs list
 
-    def pre_micro_batch(self, pos, transform, indexs=None, normalize=True):
+    def pre_micro_batch(self, pos, transform, indexs=None, normalize=True, **kwargs):
         assert indexs is not None, 'indexs cannot be None'
         assert len(pos) == len(indexs), f"len(pos) {len(pos)} != len(indexs) {len(indexs)}"
         pos_q = transform(pos)
@@ -907,6 +1116,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
 
     if loss_type == 'moco':
         LossModule = MoCoLossModule
+    elif loss_type == 'mocosupcon':
+        LossModule = MoCoSupConLossModule
     elif loss_type == 'simsiam':
         LossModule = SimSiamLossModule
     else:
@@ -917,7 +1128,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
 
     # IRM calculator selection
     if penalty_type == 'irm':
-        if loss_type   == 'moco':
+        if loss_type   == 'moco' or loss_type == 'mocosupcon':
             PenaltyCalculator = CE_IRMCalculator
         elif loss_type == 'simsiam':
             PenaltyCalculator = SimSiamIRMCalculator
@@ -997,7 +1208,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                     MoCo:    generate two views, get their embeddings from respective encoders, normalize them, etc
                     SimSiam: generate two views, get their projections and predictions, etc
                 """
-                loss_module.pre_micro_batch(batch_micro, transform=transform, indexs=indexs, normalize=(loss_type == 'moco'))
+                loss_module.pre_micro_batch(batch_micro, transform=transform, indexs=indexs, normalize=(loss_type != 'supcon'), dataset=train_loader.dataset)
                 
                 if do_keep_loss or (do_loss and not is_per_env):
                     # compute unnormalized micro-batch loss
@@ -2015,7 +2226,7 @@ def load_checkpoint(path, model, model_momentum, optimizer, gradnorm_balancer, g
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train IP-IRM')
-    parser.add_argument('--ssl_type', default='MoCo', type=str, choices=['MoCo', 'SimSiam'], help='SSL type')    
+    parser.add_argument('--ssl_type', default='MoCo', type=str, choices=['MoCo', 'SimSiam', 'MoCoSupCon'], help='SSL type')    
     parser.add_argument('--penalty_type', default='IRM', type=str, choices=['IRM', 'VREx'], help='Penalty type')        
     parser.add_argument('--penalty_sigma', default=None, type=float, help='Noise level to inject into penalty')        
     parser.add_argument('--drop_samples', default=None, type=int, help='# of samples to drop to break equilibrium')        
@@ -2287,9 +2498,10 @@ if __name__ == '__main__':
         print('Using default model')
 
     # model setup and optimizer config
-    if args.ssl_type.lower() == 'moco':
+    ssl_type = args.ssl_type.lower()
+    if ssl_type == 'moco' or ssl_type == mocosupcon:
         model = ModelResnet(feature_dim, image_class=image_class, state_dict=state_dict).cuda()
-    elif args.ssl_type.lower() == 'simsiam':
+    elif ssl_type == 'simsiam':
         model = SimSiam(feature_dim, image_class=image_class, state_dict=state_dict).cuda()
     else:
         raise NotImplemented
@@ -2298,14 +2510,14 @@ if __name__ == '__main__':
 
     model = nn.DataParallel(model)
 
-    if args.ssl_type.lower() == 'moco':
+    if ssl_type == 'moco' or ssl_type == 'mocosupcon':
         model_momentum = copy.deepcopy(model)
         for p in model_momentum.parameters():
             p.requires_grad = False
         momentum = args.momentum              # momentum for model_momentum
         queue_size = args.queue_size
         queue = FeatureQueue(queue_size, feature_dim, device=device, dtype=torch.float32, indices=True)
-    elif args.ssl_type.lower() == 'simsiam':
+    elif ssl_type == 'simsiam':
         model_momentum = None
         queue = None
         momentum = None
@@ -2330,7 +2542,7 @@ if __name__ == '__main__':
         #FIX ME!!!!!!!!!
         #optimizer          = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay, betas=args.betas)
         params = []
-        if args.ssl_type.lower() == "simsiam":
+        if ssl_type == "simsiam":
             if args.featurizer_lr > 0:
                 params.append({'params': model.module.f.parameters(), 'lr': args.featurizer_lr})
             if args.projector_lr > 0:
@@ -2490,9 +2702,9 @@ if __name__ == '__main__':
             updated_split = None
             updated_split_all = None            
 
-        if args.ssl_type.lower() == 'moco':
+        if ssl_type == 'moco' or ssl_type == 'mocosupcon':
             kwargs = {'net_momentum': model_momentum, 'queue': queue, 'temperature': temperature, 'momentum': momentum}
-        elif args.ssl_type.lower() == 'simsiam':
+        elif ssl_type == 'simsiam':
             kwargs = {}
 
         train_loss = train_env(model, train_loader, optimizer, upd_split, tr_bs, args, **kwargs)
