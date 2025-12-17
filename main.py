@@ -538,7 +538,7 @@ class MoCoSupConLossModule(LossModule):
         
         pos_mask = (y_batch[:, None] == y_all[None, :])   # (B,N)
         pos_mask[:, :len(y_batch)].fill_diagonal_(False)  # remove self-keys
-        num_pos = pos_mask.sum(dim=1, keepdim=True)
+        num_pos = pos_mask.sum(dim=1, keepdim=True).clamp(min=1)
 
         # Replace non-positives with -inf
         pos_logits = logits.masked_fill(~pos_mask, -float("inf"))
