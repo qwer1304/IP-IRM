@@ -2735,9 +2735,9 @@ if __name__ == '__main__':
             utils.reset_optimizer(optimizer)
 
         feature_bank, feature_labels = None, None
-        if (epoch % args.test_freq == 0) or \
-           ((epoch % args.val_freq == 0) and (args.dataset == 'ImageNet')) or \
-           (epoch == epochs): # eval knn every test_freq/val_freq and last epochs
+        # eval knn every test_freq/val_freq and last epochs
+        if (                                 (epoch >= args.test_freq) and ((epoch % args.test_freq == 0) or (epoch == epochs))) or \
+           ((args.dataset == 'ImageNet') and (epoch >= args.val_freq)  and ((epoch % args.val_freq == 0)  or (epoch == epochs))):
             if train_loader is not None:
                 train_loader = shutdown_loader(train_loader)
                 gc.collect()
