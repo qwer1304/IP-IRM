@@ -130,6 +130,9 @@ def main(args):
     
     # count number of samples in each class and training domain
     domains, classes, counts = count_domains(input_dir, set(args.domain_names)-set([args.test_domain])) 
+    if args.count_only:
+        print(counts)
+        exit(1)
     balanced_counts, discarded_counts = prune_datasets(counts, min_count=args.min_size, p=args.p, p_floor=args.p_floor)
     print(balanced_counts)
     print(discarded_counts)
@@ -199,6 +202,7 @@ if __name__ == "__main__":
     parser.add_argument('--test_domain', type=str, required=True)
     parser.add_argument('--seed', type=int, default=0)
     parser.add_argument('--domain_names', type=str, nargs='+', required=True, help='Cannot be last before selection method')
+    parser.add_argument('--count_only', action='store_true', help='Only count domains')
 
     subparsers = parser.add_subparsers(dest='select_method', required=True)
 
