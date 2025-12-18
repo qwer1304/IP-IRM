@@ -86,7 +86,17 @@ class NetResnet(nn.Module):
 # train or test for one epoch
 def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test"):
     is_train = train_optimizer is not None
-    net.train() if is_train else net.eval()
+    if is_train:
+        net.train()
+        # Freeze BN stats
+        def freeze_bn(module):
+            if isinstance(module, torch.nn.modules.batchnorm._BatchNorm):
+                module.eval()               # stop running stats updates
+                module.weight.requires_grad = False
+                module.bias.requires_grad = False
+        net.apply(freeze_bn)
+    else: 
+        net.eval()
     
     transform = data_loader.dataset.transform
     target_transform = data_loader.dataset.target_transform
@@ -595,11 +605,6 @@ if __name__ == '__main__':
     
     else:
         for epoch in range(args.start_epoch, epochs + 1):
-            for m in model.modules():
-                if isinstance(m, torch.nn.BatchNorm2d):
-                    print(m.running_mean.mean().item())
-                    break
-
             train_loss, train_acc_1, train_acc_5 = train_val(model, train_loader, optimizer, tr_bs, args, dataset="train")
             if args.val_freq and ((epoch % args.val_freq == 0) or (epoch == epochs)) and (args.dataset == 'ImageNet'):
                 val_loss, val_acc_1, val_acc_5 = train_val(model, val_loader, None, te_bs, args, dataset="val")
