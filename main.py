@@ -2747,7 +2747,7 @@ if __name__ == '__main__':
             memory_loader = shutdown_loader(memory_loader)
             gc.collect()              # run Python's garbage collector
 
-        if (epoch % args.test_freq == 0) or (epoch == epochs): # eval knn every test_freq epochs
+        if (epoch >= args.test_freq) and ((epoch % args.test_freq == 0) or (epoch == epochs)): # eval knn every test_freq epochs
             test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=True, 
                 pin_memory=False, persistent_workers=te_pw)
             test_acc_1, test_acc_5, test_macro_acc = test(model, feauture_bank, feature_labels, test_loader, args, progress=True, prefix="Test:")
@@ -2757,7 +2757,7 @@ if __name__ == '__main__':
             txt_write.write('\ntest_acc@1: {}, test_acc@5: {}, test_macro_acc: {}'.format(test_acc_1, test_acc_5, test_macro_acc))
             torch.save(model.state_dict(), 'results/{}/{}/model_{}.pth'.format(args.dataset, args.name, epoch))
 
-        if ((epoch % args.val_freq == 0) or (epoch == epochs)) and (args.dataset == 'ImageNet'):
+        if (epoch >= args.val_freq) and ((epoch % args.val_freq == 0) or (epoch == epochs)) and (args.dataset == 'ImageNet'):
             # evaluate on validation set
             val_loader = DataLoader(val_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=True, 
                 pin_memory=False, persistent_workers=te_pw)
