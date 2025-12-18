@@ -112,6 +112,9 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
     total_samples = len(data_loader.dataset)
     
     total_loss, total_correct_1, total_correct_5, total_num = 0.0, 0.0, 0.0, 0
+    # For macro-accuracy computation
+    per_class_correct = torch.zeros(num_class, dtype=torch.long, device="cuda")
+    per_class_total   = torch.zeros(num_class, dtype=torch.long, device="cuda")
     bar_format = '{l_bar}{bar:' + str(args.bar) + '}{r_bar}' #{bar:-' + str(args.bar) + 'b}'
     data_bar = tqdm(data_loader,
             total=len(data_loader),
@@ -171,6 +174,11 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
                 prediction = torch.argsort(out, dim=-1, descending=True)
                 total_correct_1 += torch.sum((prediction[:, 0:1] == target.unsqueeze(dim=-1)).any(dim=-1).float()).item()
                 total_correct_5 += torch.sum((prediction[:, 0:5] == target.unsqueeze(dim=-1)).any(dim=-1).float()).item()
+                for cls in range(num_class):
+                    mask = (target == cls)
+                    if mask.any():
+                        per_class_total[cls] += mask.sum()
+                        per_class_correct[cls] += (prediction[mask, 0] == cls).sum()
 
                 feature_mix_list.append(feature)
                 target_mix_list.append(target)
@@ -238,10 +246,12 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
                     train_optimizer.zero_grad()  # clear gradients at beginning of next gradients batch
                     feature_mix_list, target_mix_list = [], []
 
-            data_bar.set_description('{} Epoch: [{}/{}] [{}/{}] Loss: {:.4f} Acc@1: {:.2f}% Acc@5: {:.2f}%'
+            valid = per_class_total > 0
+            macro_acc = (per_class_correct[valid].float() / per_class_total[valid].float()).mean().item()
+            data_bar.set_description('{} Epoch: [{}/{}] [{}/{}] Loss: {:.4f} Acc@1: {:.2f}% Acc@5: {:.2f}% Macro-Acc:{:.2f}%'
                                      .format(dataset.capitalize(), epoch, epochs, total_num, len(data_loader.dataset),
                                              total_loss / total_num,
-                                             total_correct_1 / total_num * 100, total_correct_5 / total_num * 100))
+                                             total_correct_1 / total_num * 100, total_correct_5 / total_num * 100, macro_acc * 100))
         # end for data, target in data_bar:
 
         if feature_list:
