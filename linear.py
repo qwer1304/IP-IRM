@@ -595,6 +595,11 @@ if __name__ == '__main__':
     
     else:
         for epoch in range(args.start_epoch, epochs + 1):
+            for m in model.modules():
+                if isinstance(m, torch.nn.BatchNorm2d):
+                    print(m.running_mean.mean().item())
+                    break
+
             train_loss, train_acc_1, train_acc_5 = train_val(model, train_loader, optimizer, tr_bs, args, dataset="train")
             if args.val_freq and ((epoch % args.val_freq == 0) or (epoch == epochs)) and (args.dataset == 'ImageNet'):
                 val_loss, val_acc_1, val_acc_5 = train_val(model, val_loader, None, te_bs, args, dataset="val")
