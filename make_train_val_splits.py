@@ -131,6 +131,11 @@ def main(args):
     # count number of samples in each class and training domain
     domains, classes, counts = count_domains(input_dir, set(args.domain_names)-set([args.test_domain])) 
     if args.count_only:
+        print('Domains:')
+        print(domains)
+        print('Classes:')
+        print(classes)
+        print('Counts:')
         print(counts)
         exit(1)
     balanced_counts, discarded_counts = prune_datasets(counts, min_count=args.min_size, p=args.p, p_floor=args.p_floor)
