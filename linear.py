@@ -165,8 +165,7 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
                     data = transform(data)
 
                 out, feature = net(data, normalize=True)
-                s = 30
-                loss = loss_criterion(s * out, target)
+                loss = loss_criterion(out, target)
 
                 total_num += data.size(0)
                 total_loss += loss.item() * data.size(0)
@@ -500,7 +499,7 @@ if __name__ == '__main__':
             #exit()
 
         else:
-            train_data  = utils.Imagenet(root=args.data + '/train', transform=train_transform, target_transform=target_transform, class_to_idx=class_to_idx)
+            train_data  = utils.Imagenet(root=args.data + '/train', transform=test_transform, target_transform=target_transform, class_to_idx=class_to_idx)
             if args.prune_sizes: # prune dataset s.t. the number of samples per  label is the same
                 class SubsetProxy(Subset):
                     def __getattr__(self, name):
