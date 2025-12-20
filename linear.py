@@ -72,7 +72,12 @@ class NetResnet(nn.Module):
 
         # classifier
         self.dropout = nn.Dropout(args.dropout_prob) if args.dropout else nn.Identity()
-        self.fc = nn.Linear(2048, num_class, bias=True)
+        #self.fc = nn.Linear(2048, num_class, bias=True)
+        self.fc = nn.Sequential(
+            nn.Linear(2048, 2048, bias=False),
+            nn.ReLU(inplace=True),
+            nn.Linear(2048, num_class, bias=False),
+        )
 
     def forward(self, x, normalize=False):
         with torch.no_grad():
