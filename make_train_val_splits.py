@@ -317,8 +317,8 @@ def main(args):
                                     for fp in [files[i] for i in train_idx]:
                                         src = Path(fp.path)
                                         dst = os.path.join(output_lab_dir, fp.name)
-                                        dst = Path(dst)                                    
-                                        dst.symlink_to(src)
+                                        dst = Path(dst)    
+                                        dst.symlink_to(src.absolute())
                                     
                                     # R Val
                                     val_num = R_val[env_idx, label_idx]
@@ -330,7 +330,7 @@ def main(args):
                                         src = Path(fp.path)
                                         dst = os.path.join(output_lab_dir, fp.name)
                                         dst = Path(dst)                                    
-                                        dst.symlink_to(src)
+                                        dst.symlink_to(src.absolute())
 
                                     # P Train
                                     train_num = P_train[env_idx, label_idx]
@@ -342,7 +342,7 @@ def main(args):
                                         src = Path(fp.path)
                                         dst = os.path.join(output_lab_dir, fp.name)
                                         dst = Path(dst)                                    
-                                        dst.symlink_to(src)
+                                        dst.symlink_to(src.absolute())
                                     
                                     # P Val
                                     val_num = P_val[env_idx, label_idx]
@@ -354,7 +354,7 @@ def main(args):
                                         src = Path(fp.path)
                                         dst = os.path.join(output_lab_dir, fp.name)
                                         dst = Path(dst)                                    
-                                        dst.symlink_to(src)
+                                        dst.symlink_to(src.absolute())
                 else:
                     with os.scandir(env_dir) as l:
                         for lab_dir in l:   # lab_dir is a label sub-directory
