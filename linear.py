@@ -652,7 +652,7 @@ if __name__ == '__main__':
                 )
                               
 
-            if True:
+            if False:
                 @torch.no_grad()
                 def compute_margins(model, loader, device, batch_size):
                     model.eval()

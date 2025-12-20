@@ -164,7 +164,7 @@ def prune_domains(domains, classes, raw, train_fraction=0.8, lp_train_target_per
                 # Domains sorted by descending P_train for this class
                 order = np.argsort(-P_train[:, c])
                 d_max = int(order[0])
-                d_2nd = int(order[1])
+                d_2nd = d_max if D == 1 else int(order[1])
 
                 max_val = P_train[d_max, c]
                 second_val = P_train[d_2nd, c]
