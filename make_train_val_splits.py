@@ -127,7 +127,6 @@ def prune_domains(domains, classes, raw, train_fraction=0.8, lp_train_target_per
     R_train = np.zeros((D, C), dtype=int)
     R_val   = np.zeros((D, C), dtype=int)
 
-    print(RAW)
     for d in range(D):
         for c in range(C):
             train_cnt = int(math.floor(TRAIN_FRACTION * RAW[d, c]))
