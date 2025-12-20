@@ -684,7 +684,7 @@ if __name__ == '__main__':
                             if transform is not None:
                                 data = transform(data)
 
-                            s, z = net(data, normalize=True)
+                            s, z = model(data, normalize=True)
                             y = target
 
                             true_scores = s.gather(1, y.view(-1, 1)).squeeze(1)
