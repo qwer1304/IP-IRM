@@ -195,7 +195,7 @@ def prune_domains(domains, classes, raw, train_fraction=0.8, lp_train_target_per
 
         # Exact per-class LP totals
         for c in range(C):
-            assert int(P_train[:, c].sum()) == effective_M[c]
+            assert int(P_train[:, c].sum()) == effective_M[c], f"{c}, {int(P_train[:, c].sum())}, {effective_M[c]}"
 
     # ============================================================
     # HEADROOM ANALYSIS FOR M
