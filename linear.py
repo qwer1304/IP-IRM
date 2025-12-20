@@ -659,21 +659,43 @@ if __name__ == '__main__':
                     margins = []
                     labels = []
 
-                    for x, y in loader:
-                        x = x.to(device)
-                        y = y.to(device)
+                    transform = loader.dataset.transform
+                    target_transform = loader.dataset.target_transform
+                    gradients_batch_size = args.gradients_batch_size
+                    loader_batch_size = batch_size
+                    gpu_batch_size = args.micro_batch_size
 
-                        s, z = model(x)
+                    loader_accum_steps = gradients_batch_size // loader_batch_size 
+                    gpu_accum_steps = loader_batch_size // gpu_batch_size 
 
-                        true_scores = s.gather(1, y.view(-1, 1)).squeeze(1)
-                        s_clone = s.clone()
-                        s_clone.scatter_(1, y.view(-1, 1), -1e9)
-                        max_other = s_clone.max(dim=1).values
+                    for batch_data in loader:
+                        data, target = batch_data[0], batch_data[1] # ommit index, if returned 
 
-                        margin = true_scores - max_other
+                        if gpu_accum_steps > 1:
+                            data_chunks = data.split(gpu_batch_size)
+                            target_chunks = target.split(gpu_batch_size)
+                        else:
+                            data_chunks = (data,)
+                            target_chunks = (target,)
 
-                        margins.append(margin.cpu())
-                        labels.append(y.cpu())
+                        for data_chunk, target_chunk in zip(data_chunks, target_chunks):
+                            data, target = data_chunk.cuda(non_blocking=True), target_chunk.cuda(non_blocking=True)
+
+                            if transform is not None:
+                                data = transform(data)
+
+                            s, z = net(data, normalize=True)
+                            y = target
+
+                            true_scores = s.gather(1, y.view(-1, 1)).squeeze(1)
+                            s_clone = s.clone()
+                            s_clone.scatter_(1, y.view(-1, 1), -1e9)
+                            max_other = s_clone.max(dim=1).values
+
+                            margin = true_scores - max_other
+
+                            margins.append(margin.cpu())
+                            labels.append(y.cpu())
 
                     return torch.cat(margins), torch.cat(labels)
 
