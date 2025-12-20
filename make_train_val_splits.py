@@ -31,6 +31,7 @@ def count_domains(root, domain_names):
 
     domains = sorted(domains)
     classes = sorted(classes)
+    assert domains == sorted(domain_names), f"Requested domains missing: {list(set(domain_names) - set(domains))}"
 
     # mapping: domain -> row, class -> col
     d2i = {d: i for i, d in enumerate(domains)}
