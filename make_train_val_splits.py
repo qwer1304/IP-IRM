@@ -149,6 +149,8 @@ def prune_domains(domains, classes, raw, train_fraction=0.8, lp_train_target_per
 
     effective_M = np.zeros(C, dtype=int)
 
+    print(R_train)
+    print(R_train.shape)
     for c in range(C):
         total_available = int(R_train[:, c].sum())
         M_c = min(LP_TRAIN_TARGET_PER_CLASS, total_available)
@@ -158,7 +160,6 @@ def prune_domains(domains, classes, raw, train_fraction=0.8, lp_train_target_per
         for c in range(C):
             while True:
                 current_sum = int(P_train[:, c].sum())
-                print(c, current_sum, M_c)
                 if current_sum <= M_c:
                     break
 
