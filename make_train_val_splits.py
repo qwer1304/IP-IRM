@@ -289,7 +289,7 @@ def main(args):
         print('Counts:')
         print(counts)
         exit(1)
-    P_train, P_val, R_train, R_val = prune_domains(domains, classes, raw, train_fraction=0.8, lp_train_target_per_class=100, do_trim=args.balance_counts)
+    P_train, P_val, R_train, R_val = prune_domains(domains, classes, counts, train_fraction=0.8, lp_train_target_per_class=100, do_trim=args.balance_counts)
 
     if args.select_method == 'train':
         with os.scandir(input_dir) as e:
