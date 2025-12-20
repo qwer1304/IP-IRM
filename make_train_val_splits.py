@@ -381,7 +381,7 @@ def main(args):
                                         # P Test
                                         dst = os.path.join(output_lab_dir_P, fp.name)
                                         dst = Path(dst)                                    
-                                        dst.symlink_to(src)
+                                        dst.symlink_to(src.absolute())
     elif args.select_method == 'loo':
         with os.scandir(input_dir) as e:      # env_dir is directory of per-label sub-directories
             for env_dir in e:
