@@ -203,13 +203,13 @@ def prune_domains(domains, classes, raw, train_fraction=0.8, lp_train_target_per
     # ============================================================
 
     # Maximum feasible LP-train per class given the fixed split
+    print(R_train)
     max_M_per_class = R_train.sum(axis=0)   # shape (C,)
 
     # Per-class headroom relative to user target
     headroom_per_class = max_M_per_class - effective_M
 
     # Global limiting class
-    print(max_M_per_class)
     global_max_M = int(max_M_per_class.min())
     global_headroom = global_max_M - LP_TRAIN_TARGET_PER_CLASS
 
