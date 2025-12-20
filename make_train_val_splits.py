@@ -289,7 +289,13 @@ def main(args):
         print('Counts:')
         print(counts)
         exit(1)
-    P_train, P_val, R_train, R_val = prune_domains(domains, classes, counts, train_fraction=0.8, lp_train_target_per_class=100, do_trim=args.balance_counts)
+    Sc = np.sum(counts, axis=0) # sum over domains
+    Mc_max = np.median(Sc)
+    M_range = [2*args.M, 4*args.M]
+    M = min(mean(M_range), 0.8* Mc_max)
+    M = M if args.calc_M else args.M 
+    
+    P_train, P_val, R_train, R_val = prune_domains(domains, classes, counts, train_fraction=0.8, lp_train_target_per_class=M, do_trim=args.balance_counts)
 
     if args.select_method == 'train':
         with os.scandir(input_dir) as e:
@@ -418,6 +424,8 @@ if __name__ == "__main__":
 
     train_parser = subparsers.add_parser('train')
     train_parser.add_argument('--train_split', type=partial(bounded_type, min_val=0.0, max_val=1.0, cast_type=float), required=True)
+    train_parser.add_argument('--M', type=int, required=True, help="Number of samples per class")
+    train_parser.add_argument('--calc_M', action='store_true', help="Adjust M from data")
 
     loo_parser = subparsers.add_parser('loo')
     loo_parser.add_argument('--val_domain', type=str, required=True)

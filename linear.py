@@ -534,7 +534,7 @@ if __name__ == '__main__':
             if args.weighted_loss: # weight per-class loss w/ its inverse frequency
                 labels = train_data.targets if isinstance(train_data.targets, torch.Tensor) else torch.tensor(train_data.targets)
                 counts = torch.bincount(labels)
-                class_weights = counts.sum() / counts.float() # use inverse frequency
+                class_weights = counts.sum() / counts.float() / args.class_num  # use inverse frequency
             else:
                 num_class = len(train_data.classes) if args.dataset != "ImageNet" else args.class_num
                 class_weights = torch.ones(num_class)
