@@ -292,7 +292,7 @@ def main(args):
     Sc = np.sum(counts, axis=0) # sum over domains
     Mc_max = np.median(Sc)
     M_range = [2*args.M, 4*args.M]
-    M = min(mean(M_range), 0.8* Mc_max)
+    M = np.min(np.mean(M_range), 0.8* Mc_max)
     M = M if args.calc_M else args.M 
     
     P_train, P_val, R_train, R_val = prune_domains(domains, classes, counts, train_fraction=0.8, lp_train_target_per_class=M, do_trim=args.balance_counts)
