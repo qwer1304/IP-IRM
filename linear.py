@@ -91,9 +91,7 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
         # Freeze BN stats
         def freeze_bn(module):
             if isinstance(module, torch.nn.modules.batchnorm._BatchNorm):
-                module.eval()               # stop running stats updates
-                module.weight.requires_grad = False
-                module.bias.requires_grad = False
+                module.requires_grad_(False)
         net.apply(freeze_bn)
     else: 
         net.eval()
@@ -653,5 +651,43 @@ if __name__ == '__main__':
                     args=args
                 )
                               
+
+            if True:
+                @torch.no_grad()
+                def compute_margins(model, loader, device):
+                    model.eval()
+                    margins = []
+                    labels = []
+
+                    for x, y in loader:
+                        x = x.to(device)
+                        y = y.to(device)
+
+                        z = model.f(x)
+                        s = model.fc(z)
+
+                        true_scores = s.gather(1, y.view(-1, 1)).squeeze(1)
+                        s_clone = s.clone()
+                        s_clone.scatter_(1, y.view(-1, 1), -1e9)
+                        max_other = s_clone.max(dim=1).values
+
+                        margin = true_scores - max_other
+
+                        margins.append(margin.cpu())
+                        labels.append(y.cpu())
+
+                    return torch.cat(margins), torch.cat(labels)
+
+                m_train, y_train = compute_margins(model, train_loader, 'cuda')
+                m_val, y_val = compute_margins(model, val_loader, 'cuda')
+
+                print()
+                for c in range(num_class):
+                    print(
+                        c,
+                        m_train[y_train == c].mean().item(),
+                        m_val[y_val == c].mean().item()
+                    )
+
         # end for epoch in range(1, epochs + 1):
         torch.save(model.state_dict(), '{}/model_{}.pth'.format(save_dir, epoch))
