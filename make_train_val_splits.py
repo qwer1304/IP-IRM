@@ -383,6 +383,7 @@ def main(args):
                                         dst = Path(dst)                                    
                                         dst.symlink_to(src.absolute())
     elif args.select_method == 'loo':
+        assert False, "needs updating for R/P split"
         with os.scandir(input_dir) as e:      # env_dir is directory of per-label sub-directories
             for env_dir in e:
                 if env_dir.name not in args.domain_names:
@@ -419,13 +420,13 @@ if __name__ == "__main__":
     parser.add_argument('--domain_names', type=str, nargs='+', required=True, help='Cannot be last before selection method')
     parser.add_argument('--count_only', action='store_true', help='Only count domains')
     parser.add_argument('--balance_counts', action='store_true', help='Balance counts')
+    parser.add_argument('--M', type=int, required=True, help="Number of samples per class")
+    parser.add_argument('--calc_M', action='store_true', help="Adjust M from data")
 
     subparsers = parser.add_subparsers(dest='select_method', required=True)
 
     train_parser = subparsers.add_parser('train')
     train_parser.add_argument('--train_split', type=partial(bounded_type, min_val=0.0, max_val=1.0, cast_type=float), required=True)
-    train_parser.add_argument('--M', type=int, required=True, help="Number of samples per class")
-    train_parser.add_argument('--calc_M', action='store_true', help="Adjust M from data")
 
     loo_parser = subparsers.add_parser('loo')
     loo_parser.add_argument('--val_domain', type=str, required=True)
