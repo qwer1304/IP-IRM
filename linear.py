@@ -654,7 +654,7 @@ if __name__ == '__main__':
 
             if True:
                 @torch.no_grad()
-                def compute_margins(model, loader, device):
+                def compute_margins(model, loader, device, batch_size):
                     model.eval()
                     margins = []
                     labels = []
@@ -699,8 +699,8 @@ if __name__ == '__main__':
 
                     return torch.cat(margins), torch.cat(labels)
 
-                m_train, y_train = compute_margins(model, train_loader, 'cuda')
-                m_val, y_val = compute_margins(model, val_loader, 'cuda')
+                m_train, y_train = compute_margins(model, train_loader, 'cuda', tr_bs)
+                m_val, y_val = compute_margins(model, val_loader, 'cuda', tr_bs)
 
                 print()
                 for c in range(num_class):
