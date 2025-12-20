@@ -152,11 +152,11 @@ def prune_domains(domains, classes, raw, train_fraction=0.8, lp_train_target_per
     for c in range(C):
         total_available = int(R_train[:, c].sum())
         M_c = min(LP_TRAIN_TARGET_PER_CLASS, total_available)
-        print(c, total_available, M_c)
         effective_M[c] = M_c
 
     if do_trim:
         for c in range(C):
+            M_c = effective_M[c]
             while True:
                 current_sum = int(P_train[:, c].sum())
                 if current_sum <= M_c:
