@@ -663,8 +663,7 @@ if __name__ == '__main__':
                         x = x.to(device)
                         y = y.to(device)
 
-                        z = model.f(x)
-                        s = model.fc(z)
+                        s, z = model(x)
 
                         true_scores = s.gather(1, y.view(-1, 1)).squeeze(1)
                         s_clone = s.clone()
