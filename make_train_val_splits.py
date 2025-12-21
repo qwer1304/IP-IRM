@@ -379,7 +379,7 @@ def main(args):
                                         # R Test
                                         dst = os.path.join(output_lab_dir_R, fp.name)
                                         dst = Path(dst)                                    
-                                        dst.symlink_to(src)
+                                        dst.symlink_to(src.absolute())
                                         # P Test
                                         dst = os.path.join(output_lab_dir_P, fp.name)
                                         dst = Path(dst)                                    
