@@ -27,7 +27,7 @@ import kornia.augmentation as K
 
 
 class NetResnet(nn.Module):
-    def __init__(self, num_class, pretrained_path, image_class='ImageNet', args=None):
+    def __init__(self, num_class, pretrained_path, image_class='ImageNet', num_proto=1, args=None):
         super().__init__()
 
         device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -71,16 +71,32 @@ class NetResnet(nn.Module):
         self.f = model.module.f
 
         # classifier
+        
+        # linear head: C * K logits
         self.dropout = nn.Dropout(args.dropout_prob) if args.dropout else nn.Identity()
-        self.fc = nn.Linear(2048, num_class, bias=True)
+        # number of prototypes per class (small: 3–5)
+        self.num_proto = args.num_proto # e.g. 3 or 5
+        self.fc = nn.Linear(2048, num_class * self.num_proto, bias=True)
 
     def forward(self, x, normalize=False):
         with torch.no_grad():
             feature = self.f(x)
+
         feature = torch.flatten(feature, start_dim=1)
         if normalize:
             feature = F.normalize(feature, dim=1)
-        out = self.fc(feature)
+
+        feature = self.dropout(feature)
+
+        logits = self.fc(feature)  # [B, C*K]
+
+        # reshape to [B, C, K]
+        B = logits.size(0)
+        logits = logits.view(B, -1, self.num_proto)
+
+        # max over prototypes (hard mixture)
+        out, _ = logits.max(dim=2)  # [B, C]
+
         return out, feature
 
 # train or test for one epoch
@@ -424,6 +440,7 @@ if __name__ == '__main__':
     parser.add_argument('--weighted_sampler', action="store_true", help="Class weighted sampler")
     parser.add_argument('--dropout', action="store_true", help="Apply dropout before linear head")
     parser.add_argument('--dropout_prob', type=float, default=0.2, help="Dropout prob")
+    parser.add_argument('--num_proto', type=int, default=1, help="Number of class prototypes in linear head")
 
     args = parser.parse_args()
 
