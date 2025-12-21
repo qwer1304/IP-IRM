@@ -126,6 +126,11 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
     if args.cutmix:
         cutmix = K.RandomCutMixV2(data_keys=["input", "class"], same_on_batch=False, keepdim=True,)
     
+    if is_train:
+        loss_criterion =  nn.CrossEntropyLoss(weight=class_weights, label_smoothing=args.label_smoothing)
+    else:
+        loss_criterion =  nn.CrossEntropyLoss()
+    
     loss_mixup_criterion = nn.CrossEntropyLoss(weight=class_weights, label_smoothing=args.label_smoothing, reduction='none')
 
     with (torch.enable_grad() if is_train else torch.no_grad()):
@@ -442,7 +447,7 @@ if __name__ == '__main__':
     if args.dataset == 'STL':
         train_transform = utils.make_train_transform(normalize=args.image_class)
         test_transform = utils.make_test_transform(normalize=args.image_class)
-        train_data = STL10(root=args.data, split='train', transform=train_transform, target_transform=target_transform)
+        train_data = STL10(root=args.data, split='train', transform=test_transform, target_transform=target_transform)
         test_data = STL10(root=args.data, split='test', transform=test_transform, target_transform=target_transform)
         train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, shuffle=True, pin_memory=True, 
             drop_last=True, persistent_workers=tr_pw)
@@ -451,8 +456,8 @@ if __name__ == '__main__':
     elif args.dataset == 'CIFAR10':
         train_transform = utils.make_train_transform(normalize=args.image_class)
         test_transform = utils.make_test_transform(normalize=args.image_class)
-        train_data = utils.CIFAR10(root=args.data, train=True, transform=train_transform, target_transform=target_transform)
-        test_data = utils.CIFAR10(root=args.data, train=False, transform=train_transform, target_transform=target_transform)
+        train_data = utils.CIFAR10(root=args.data, train=True, transform=test_transform, target_transform=target_transform)
+        test_data = utils.CIFAR10(root=args.data, train=False, transform=test_transform, target_transform=target_transform)
         train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, shuffle=True, pin_memory=True, 
             drop_last=True, persistent_workers=tr_pw)
         test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
@@ -460,7 +465,7 @@ if __name__ == '__main__':
     elif args.dataset == 'CIFAR100':
         train_transform = utils.make_train_transform(normalize=args.image_class)
         test_transform = utils.make_test_transform(normalize=args.image_class)
-        train_data = utils.CIFAR100Pair_Index(root=args.data, train=True, transform=train_transform, target_transform=target_transform)
+        train_data = utils.CIFAR100Pair_Index(root=args.data, train=True, transform=test_transform, target_transform=target_transform)
         test_data = utils.CIFAR100Pair(root=args.data, train=False, transform=test_transform, target_transform=target_transform)
         train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, shuffle=True, pin_memory=True, 
             drop_last=True, persistent_workers=tr_pw)
@@ -474,7 +479,7 @@ if __name__ == '__main__':
             wrap = args.extract_features
             # descriptors of train data
             train_desc  =   {'dataset': utils.Imagenet_idx,
-                              'transform': train_transform,
+                              'transform': test_transform,
                               'target_transform': target_transform,
                               'class_to_index': class_to_idx,
                               'wrap': False, # for changeable target transform
@@ -574,7 +579,6 @@ if __name__ == '__main__':
     model = nn.DataParallel(model)
 
     optimizer = optim.Adam(model.module.fc.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-    loss_criterion = nn.CrossEntropyLoss(weight=class_weights, label_smoothing=args.label_smoothing)
     results = {'train_loss': [], 'train_acc@1': [], 'train_acc@5': [],
                'test_loss': [], 'test_acc@1': [], 'test_acc@5': []}
     if args.dataset == 'ImageNet':

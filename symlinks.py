@@ -16,7 +16,7 @@ def record_symlinks(root: Path, out_file: Path):
 
         # Check files
         for name in filenames:
-            p = dirpath / name
+            p = dirpath / name # The / operator is overloaded by pathlib.Path to mean path joining
             if p.is_symlink():
                 symlinks[str(p)] = os.readlink(p)
 
@@ -65,9 +65,10 @@ def main(args):
             root=Path(args.root),
             out_file=Path(args.map_file)
         )
-
     elif args.action == 'restore':
         restore_symlinks(Path(args.map_file))
+    else:
+        raise ValueError(f"Unknown action {args.action}")
 
 if __name__ == "__main__":
     # create the top-level parser
