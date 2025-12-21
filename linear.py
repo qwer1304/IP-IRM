@@ -74,7 +74,7 @@ class NetResnet(nn.Module):
         
         # linear head: C * K logits
         self.dropout = nn.Dropout(args.dropout_prob) if args.dropout else nn.Identity()
-        # number of prototypes per class (small: 3–5)
+        # number of prototypes per class (small: 3-5)
         self.num_proto = args.num_proto # e.g. 3 or 5
         self.fc = nn.Linear(2048, num_class * self.num_proto, bias=True)
 
