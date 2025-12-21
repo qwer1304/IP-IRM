@@ -25,6 +25,67 @@ import os
 
 import kornia.augmentation as K
 
+class MultiProtoLinear(nn.Module):
+    """
+    Multi-prototype linear classifier.
+
+    Parameters
+    ----------
+    in_dim : int
+        Feature dimension (e.g. 2048).
+    num_classes : int
+        Number of classes.
+    num_proto : int
+        Number of prototypes per class.
+    bias : bool
+        Whether to use bias per prototype.
+    agg : str
+        Prototype aggregation: "max" or "lse" (log-sum-exp).
+    """
+
+    def __init__(self, in_dim, num_classes, num_proto=4,
+                 bias=True, agg="max"):
+        super().__init__()
+
+        assert agg in ("max", "lse")
+
+        self.in_dim = in_dim
+        self.num_classes = num_classes
+        self.num_proto = num_proto
+        self.agg = agg
+
+        # One linear layer producing C*K logits
+        self.weight = nn.Parameter(
+            torch.randn(num_classes, num_proto, in_dim) * 0.01
+        )
+
+        if bias:
+            self.bias = nn.Parameter(
+                torch.zeros(num_classes, num_proto)
+            )
+        else:
+            self.bias = None
+
+    def forward(self, x):
+        """
+        x: Tensor [B, in_dim]
+        returns: logits [B, num_classes]
+        """
+
+        # Compute prototype logits
+        # [B, C, K]
+        logits = torch.einsum("bd,ckd->bck", x, self.weight)
+
+        if self.bias is not None:
+            logits = logits + self.bias.unsqueeze(0)
+
+        # Aggregate prototypes -> class logits
+        if self.agg == "max":
+            logits, _ = logits.max(dim=2)
+        else:  # log-sum-exp
+            logits = torch.logsumexp(logits, dim=2)
+
+        return logits
 
 class NetResnet(nn.Module):
     def __init__(self, num_class, pretrained_path, image_class='ImageNet', num_proto=1, args=None):
@@ -76,7 +137,7 @@ class NetResnet(nn.Module):
         self.dropout = nn.Dropout(args.dropout_prob) if args.dropout else nn.Identity()
         # number of prototypes per class (small: 3-5)
         self.num_proto = args.num_proto # e.g. 3 or 5
-        self.fc = nn.Linear(2048, num_class * self.num_proto, bias=True)
+        self.fc = MultiProtoLinear(2048, num_class, num_proto=self.num_proto, bias=True, agg="max")
 
     def forward(self, x, normalize=False):
         with torch.no_grad():
@@ -87,15 +148,7 @@ class NetResnet(nn.Module):
             feature = F.normalize(feature, dim=1)
 
         feature = self.dropout(feature)
-
-        logits = self.fc(feature)  # [B, C*K]
-
-        # reshape to [B, C, K]
-        B = logits.size(0)
-        logits = logits.view(B, -1, self.num_proto)
-
-        # max over prototypes (hard mixture)
-        out, _ = logits.max(dim=2)  # [B, C]
+        out = self.fc(feature)  # [B, C]
 
         return out, feature
 
