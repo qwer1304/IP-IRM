@@ -98,7 +98,7 @@ class NetResnet(nn.Module):
         model = nn.DataParallel(model)
 
         # Load checkpoint
-        assert pretrained_path is not None and os.path.isfile(pretrained_path)
+        assert pretrained_path is not None and os.path.isfile(pretrained_path), f"pretrained file {pretrained_path} is missing"
         print("=> loading pretrained checkpoint '{}'".format(pretrained_path))
         # ssl or resume
         checkpoint = torch.load(pretrained_path, map_location=device, weights_only=False)

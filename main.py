@@ -2490,6 +2490,7 @@ if __name__ == '__main__':
             val_data    = utils.Imagenet(root=args.data     + '/val',   transform=test_transform,  target_transform=target_transform, class_to_idx=class_to_idx)
         
     # pretrain model
+    assert args.pretrain_path is not None and os.path.isfile(args.pretrain_path), f"pretrain file {args.pretrain_path} is missing"
     if args.pretrain_path is not None and os.path.isfile(args.pretrain_path):
         msg = []
         print("=> loading pretrained checkpoint '{}'".format(args.pretrain_path), end="")
@@ -2584,6 +2585,7 @@ if __name__ == '__main__':
             # dummy for debug multiple partitions
             # updated_split_all.append(torch.randn((len(update_data), args.env_num), requires_grad=True, device=device))
             if not args.baseline:
+                print(f"found {len(updated_split_all)} partitions")
                 if updated_split_all:
                     if not all([len(s) == len(update_data) for s in updated_split_all]) and not args.evaluate:
                         print([len(s) for s in updated_split_all], len(update_data))
@@ -2612,6 +2614,7 @@ if __name__ == '__main__':
     # start epoch is what the user provided, if provided, or from checkpoint, if exists, or 1 (default)
     start_epoch = args.start_epoch if args.start_epoch else start_epoch
     epoch = start_epoch # used from train_partition()
+    print(f"start epoch {start_epoch}")
 
     if args.evaluate:
         print(f"Starting evaluation name: {args.name}")
@@ -2645,6 +2648,7 @@ if __name__ == '__main__':
     # update partition for the first time, if we need one
     if not args.baseline:
         if (not resumed) or args.partition_reinit or (resumed and (updated_split is None) and ((args.penalty_cont > 0) or (args.penalty_weight > 0))):  
+            print("create initial partition")
             if args.dataset != "ImageNet":
                 updated_split = torch.randn((len(update_data), args.env_num), requires_grad=True, device=device)
             else:
