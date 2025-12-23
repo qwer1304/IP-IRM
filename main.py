@@ -2585,7 +2585,8 @@ if __name__ == '__main__':
             # dummy for debug multiple partitions
             # updated_split_all.append(torch.randn((len(update_data), args.env_num), requires_grad=True, device=device))
             if not args.baseline:
-                print(f"found {len(updated_split_all)} partitions")
+                num_partitions = len(updated_split_all) if updated_split_all is not None else 0
+                print(f"found {num_partitions} partitions")
                 if updated_split_all:
                     if not all([len(s) == len(update_data) for s in updated_split_all]) and not args.evaluate:
                         print([len(s) for s in updated_split_all], len(update_data))
