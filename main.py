@@ -2490,7 +2490,7 @@ if __name__ == '__main__':
             val_data    = utils.Imagenet(root=args.data     + '/val',   transform=test_transform,  target_transform=target_transform, class_to_idx=class_to_idx)
         
     # pretrain model
-    assert args.pretrain_path is not None and os.path.isfile(args.pretrain_path), f"pretrain file {args.pretrain_path} is missing"
+    assert (args.pretrain_path is None) or (args.pretrain_path is not None and os.path.isfile(args.pretrain_path)), f"pretrain file {args.pretrain_path} is missing"
     if args.pretrain_path is not None and os.path.isfile(args.pretrain_path):
         msg = []
         print("=> loading pretrained checkpoint '{}'".format(args.pretrain_path), end="")
