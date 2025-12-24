@@ -681,7 +681,7 @@ if __name__ == '__main__':
             test_loss, test_acc_1, test_acc_5 = train_val(model, test_loader, None, te_bs, args, dataset="test")
         else:
             test_loss, test_acc_1, test_acc_5 = 0.0, 0.0, 0.0
-        if ('val' is in args.evaluate) and (args.dataset == 'ImageNet'):
+        if ('val' in args.evaluate) and (args.dataset == 'ImageNet'):
             val_loss, val_acc_1, val_acc_5 = train_val(model, val_loader, None, te_bs, args, dataset="val")
         else:
             val_loss, val_acc_1, val_acc_5 = 0.0, 0.0, 0.0
