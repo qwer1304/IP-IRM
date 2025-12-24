@@ -123,7 +123,7 @@ class NetResnet(nn.Module):
 
         msg = model.module.f.load_state_dict(new_state_dict, strict=False)
         print("Missing keys (ignoring fc):", [k for k in msg.missing_keys if not k.startswith("fc.")])
-        if args.evaluate is None or args.evaluate == 'knn':
+        if args.evaluate is None:
             print("Unexpected keys (ignoring fc):", [k for k in msg.unexpected_keys if not k.startswith("fc.")])
         else:
             print("Unexpected keys:", msg.unexpected_keys)
@@ -471,7 +471,7 @@ if __name__ == '__main__':
     parser.add_argument('--bar', default=50, type=int, help='length of progess bar')
 
     parser.add_argument('--norandgray', action="store_true", default=False, help='skip rand gray transform')
-    parser.add_argument('--evaluate', type=str, default=None, choices=['knn', 'linear'], help='only evaluate')
+    parser.add_argument('--evaluate', type=str, default=None, nargs='+', choices=['train', 'test', 'val'], help='only evaluate')
     parser.add_argument('--extract_features', action="store_true", help="extract features for post processiin during evaluate")   
 
     parser.add_argument('--resume', default='', type=str, metavar='PATH',
@@ -672,13 +672,19 @@ if __name__ == '__main__':
 
     if args.evaluate:
         epoch = epochs
-        train_data  = utils.Imagenet(root=args.data + '/train', transform=test_transform, target_transform=target_transform, class_to_idx=class_to_idx)
-        train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, pin_memory=True, 
-            drop_last=False, persistent_workers=tr_pw, **kwargs)
-        train_loss, train_acc_1, train_acc_5 = train_val(model, train_loader, None, tr_bs, args, dataset="train")
-        test_loss, test_acc_1, test_acc_5 = train_val(model, test_loader, None, te_bs, args, dataset="test")
-        if args.dataset == 'ImageNet':
+        if 'train' in args.evaluate:
+            train_data  = utils.Imagenet(root=args.data + '/train', transform=test_transform, target_transform=target_transform, class_to_idx=class_to_idx)
+            train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, pin_memory=True, 
+                drop_last=False, persistent_workers=tr_pw, **kwargs)
+            train_loss, train_acc_1, train_acc_5 = train_val(model, train_loader, None, tr_bs, args, dataset="train")
+        if 'test' in args.evaluate:
+            test_loss, test_acc_1, test_acc_5 = train_val(model, test_loader, None, te_bs, args, dataset="test")
+        else:
+            test_loss, test_acc_1, test_acc_5 = 0.0, 0.0, 0.0
+        if ('val' is in args.evaluate) and (args.dataset == 'ImageNet'):
             val_loss, val_acc_1, val_acc_5 = train_val(model, val_loader, None, te_bs, args, dataset="val")
+        else:
+            val_loss, val_acc_1, val_acc_5 = 0.0, 0.0, 0.0
         if args.txt:
             txt_write = open("{}/{}".format(save_dir, 'result.txt'), 'a')
             txt_write.write('\ntest_loss: {}, test_acc@1: {}, test_acc@5: {}'.format(test_loss, test_acc_1, test_acc_5))
