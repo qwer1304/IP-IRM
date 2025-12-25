@@ -890,7 +890,7 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
                         logits, labels, indexs = info_nce_loss_update(torch.cat([feature_1, feature_2], dim=0), feature_1.size(0), temperature=1.0)
                         print()
                         print(f"logits {logits.size()}, labels {labels.size}, indexs {indexs.size()}")
-                    elif ssl_type == 'moco' or ssl_type = 'mocosupcon':
+                    elif ssl_type == 'moco' or ssl_type == 'mocosupcon':
                         logits, labels, indexs = moco_loss_update(torch.cat([feature_1, feature_2], dim=0), feature_1.size(0), temperature=1.0, 
                             queue=queue, dataset_idx=dataset_idx, dataset=dataset, moco_temp=temperature)
 
