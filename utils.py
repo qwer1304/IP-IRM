@@ -622,7 +622,10 @@ def moco_loss_update(features, batch_size, ssl_type, queue, dataset_idx, dataset
     out_q = features[:batch_size]
     out_k = features[batch_size:]
     if ssl_type == 'moco':
-        pass
+        l_pos = torch.sum(out_q * out_k, dim=1, keepdim=True)
+        l_neg = torch.matmul(out_q, queue.get(queue.queue_size, advance=False).t())
+        logits = torch.cat([l_pos, l_neg], dim=1)
+        labels = torch.zeros(logits.size(0), dtype=torch.long, device=logits.device)
     elif ssl_type == 'mocosupcon':
         k_queue, idx_queue = queue.get(queue.queue_size, advance=False, idx=True) # 'idx_queue' are dataset indices of samples in queue
         k_all = torch.cat([out_k, k_queue], dim=0) # (N,D), N=B+K 
@@ -875,7 +878,6 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
         risk_all_list, risk_cont_all_list, risk_penalty_all_list, risk_constrain_all_list, training_num = [],[],[],[], 0
 
         for feature_1, feature_2, idx in trainloader: # 'idx' is the index in the dataset
-            print()
             feature_1, feature_2 = feature_1.cuda(non_blocking=True), feature_2.cuda(non_blocking=True)
             loss_cont_list, loss_penalty_list = [], []
             training_num += len(feature_1)
@@ -934,11 +936,6 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
                     penalty_irm2 = torch.autograd.grad(cont_loss_env_scale2, [scale], create_graph=True)[0]
                     loss_cont_list.append(cont_loss_env)
                     loss_penalty_list.append(torch.sum(penalty_irm1*penalty_irm2))
-                    print(f"scale size {scale.size()}")
-                    print(f"penalty_irm1 size {penalty_irm1.size()}")
-                    print(f"isfinal cont_loss_env_scale1 {torch.isfinite(cont_loss_env_scale1)}")
-                    print(f"cont_loss_env_scale1 {cont_loss_env_scale1}")
-                    print(f"penalty_irm1 {penalty_irm1}")
 
                 cont_loss_epoch = torch.stack(loss_cont_list).mean()
                 inv_loss_epoch = torch.stack(loss_penalty_list).mean()
