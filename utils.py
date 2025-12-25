@@ -929,11 +929,16 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
                         cont_loss_env_scale1 = (loss_per_anchor * weights[::2]).sum() / weights[::2].sum()
                         loss_per_anchor = F.cross_entropy(scale*logits[1::2], labels[1::2], reduction='none')
                         cont_loss_env_scale2 = (loss_per_anchor * weights[1::2]).sum() / weights[1::2].sum()
-                        
+                                           
                     penalty_irm1 = torch.autograd.grad(cont_loss_env_scale1, [scale], create_graph=True)[0]
                     penalty_irm2 = torch.autograd.grad(cont_loss_env_scale2, [scale], create_graph=True)[0]
                     loss_cont_list.append(cont_loss_env)
                     loss_penalty_list.append(torch.sum(penalty_irm1*penalty_irm2))
+                    print(f"scale size {scale.size()}")
+                    print(f"penalty_irm1 size {penalty_irm1.size()}")
+                    print(f"isfinal cont_loss_env_scale1 {torch.isfinal(cont_loss_env_scale1)}")
+                    print(f"cont_loss_env_scale1 {cont_loss_env_scale1}")
+                    print(f"penalty_irm1 {penalty_irm1}")
 
                 cont_loss_epoch = torch.stack(loss_cont_list).mean()
                 inv_loss_epoch = torch.stack(loss_penalty_list).mean()
