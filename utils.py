@@ -875,6 +875,7 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
         risk_all_list, risk_cont_all_list, risk_penalty_all_list, risk_constrain_all_list, training_num = [],[],[],[], 0
 
         for feature_1, feature_2, idx in trainloader: # 'idx' is the index in the dataset
+            print()
             feature_1, feature_2 = feature_1.cuda(non_blocking=True), feature_2.cuda(non_blocking=True)
             loss_cont_list, loss_penalty_list = [], []
             training_num += len(feature_1)
@@ -930,12 +931,10 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
                         
                     penalty_irm1 = torch.autograd.grad(cont_loss_env_scale1, [scale], create_graph=True)[0]
                     penalty_irm2 = torch.autograd.grad(cont_loss_env_scale2, [scale], create_graph=True)[0]
+                    print(f"penalty_irm1 {penalty_irm1}, penalty_irm2 {penalty_irm2}"})
                     loss_cont_list.append(cont_loss_env)
                     loss_penalty_list.append(torch.sum(penalty_irm1*penalty_irm2))
 
-                print()
-                print(f"loss_cont_list {loss_cont_list}")
-                print(f"loss_penalty_list {loss_penalty_list}")
                 cont_loss_epoch = torch.stack(loss_cont_list).mean()
                 inv_loss_epoch = torch.stack(loss_penalty_list).mean()
                 risk_final = - (cont_loss_epoch + irm_weight*inv_loss_epoch)
