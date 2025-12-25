@@ -1002,26 +1002,6 @@ def soft_contrastive_loss(logits, labels, weights, mode='v1', nonorm=False):
     return cont_loss_env
 
 
-
-class update_split_dataset(data.Dataset):
-    def __init__(self, feature_bank1, feature_bank2):
-        """Initialize and preprocess the Dsprite dataset."""
-        self.feature_bank1 = feature_bank1
-        self.feature_bank2 = feature_bank2
-
-
-    def __getitem__(self, index):
-        """Return one image and its corresponding attribute label."""
-        feature1 = self.feature_bank1[index]
-        feature2 = self.feature_bank2[index]
-
-        return feature1, feature2, index
-
-    def __len__(self):
-        """Return the number of images."""
-        return self.feature_bank1.size(0)
-
-
 def assign_samples(data, split, env_idx):
     images_pos1, images_pos2, labels, idxs = data
     group_assign = split[idxs].argmax(dim=1)
