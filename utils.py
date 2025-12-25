@@ -883,7 +883,7 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
             param_split = F.softmax(soft_split_all[idx], dim=-1)
             if irm_mode == 'v1': # original
                 for env_idx in range(num_env):
-                    if ssl_type is None:
+                    if True or ssl_type is None:
                         # indexs[i, j] = original image ID generating the j-th logit for anchor i
                         logits, labels, indexs = info_nce_loss_update(torch.cat([feature_1, feature_2], dim=0), feature_1.size(0), temperature=1.0)
                         # For anchor i and comparison j, attach the environment-specific weight of the compared image.
@@ -922,7 +922,7 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
                         # Weighted aggregation
                         cont_loss_env = (loss_per_anchor * weights).sum() / weights.sum()
 
-                        scale = torch.ones((1, logits.size(-1))).cuda(non_blocking=True).requires_grad_() * 1e-8
+                        scale = torch.ones((1, logits.size(-1))).cuda(non_blocking=True).requires_grad_()
                         logits_pen = logits / irm_temp
 
                         loss_per_anchor = F.cross_entropy(scale*logits[::2], labels[::2], reduction='none')
