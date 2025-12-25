@@ -1875,7 +1875,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
     # end for batch_index, data_env in enumerate(train_bar):
     return total_loss_weighted / trained_samples
 
-def train_partition(net, update_loader, soft_split, random_init=False, args=None):
+def train_partition(net, update_loader, soft_split, random_init=False, args=None, net_momentum=None, queue=None, **kwargs):
+
     utils.write_log('Start Maximizing ...', log_file, print_=True)
     
     transform = update_loader.dataset.transform
@@ -1912,15 +1913,21 @@ def train_partition(net, update_loader, soft_split, random_init=False, args=None
                 if target_transform is not None:
                     target = target_transform(target)
                 
-                feature_1, out_1 = net(pos_1)
-                feature_2, out_2 = net(pos_2)
+                if args.ssl_type.lower() == 'moco' or args.ssl_type.lower() == 'mocosupcon':
+                    feature_1, out_1 = net(pos_1)
+                    with torch.no_grad():
+                        feature_2, out_2 = model_momentum(pos_2)
+                else:        
+                    feature_1, out_1 = net(pos_1)
+                    feature_2, out_2 = net(pos_2)
                 feature_bank_1.append(out_1.cpu())
                 feature_bank_2.append(out_2.cpu())
         feature1 = torch.cat(feature_bank_1, 0)
         feature2 = torch.cat(feature_bank_2, 0)
         updated_split = utils.auto_split_offline(feature1, feature2, soft_split, temperature, args.irm_temp, loss_mode='v2', irm_mode=args.irm_mode,
                                          irm_weight=args.irm_weight_maxim, constrain=args.constrain, cons_relax=args.constrain_relax, nonorm=args.nonorm, 
-                                         log_file=log_file, batch_size=uo_bs, num_workers=uo_nw, prefetch_factor=uo_pf, persistent_workers=uo_pw)
+                                         log_file=log_file, batch_size=uo_bs, num_workers=uo_nw, prefetch_factor=uo_pf, persistent_workers=uo_pw,
+                                         ssl_type=args.ssl_type.lower(), queue=queue, index=Index, dataset=update_loader.dataset)
     else:
         updated_split = utils.auto_split(net, update_loader, soft_split, temperature, args.irm_temp, loss_mode='v2', irm_mode=args.irm_mode,
                                      irm_weight=args.irm_weight_maxim, constrain=args.constrain, cons_relax=args.constrain_relax, 
@@ -2646,6 +2653,11 @@ if __name__ == '__main__':
     if args.gradnorm_rescale_weights:
         gradnorm_balancer.rescale_weights()
     
+    if ssl_type == 'moco' or ssl_type == 'mocosupcon':
+        kwargs = {'net_momentum': model_momentum, 'queue': queue, 'temperature': temperature, 'momentum': momentum}
+    elif ssl_type == 'simsiam':
+        kwargs = {}
+
     # update partition for the first time, if we need one
     if not args.baseline:
         if (not resumed) or args.partition_reinit or (resumed and (updated_split is None) and ((args.penalty_cont > 0) or (args.penalty_weight > 0))):  
@@ -2660,7 +2672,7 @@ if __name__ == '__main__':
                 else:
                     upd_loader = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, prefetch_factor=u_pf, shuffle=True,
                         drop_last=True, pin_memory=True, persistent_workers=u_pw)
-            updated_split = train_partition(model, upd_loader, updated_split, random_init=args.random_init, args=args)
+            updated_split = train_partition(model, upd_loader, updated_split, random_init=args.random_init, args=args, **kwargs)
             updated_split_all = [updated_split.clone().detach()]
             assert all([len(s) == len(update_data) for s in updated_split_all]), "Parititon different length from dataset" 
             upd_loader = None
@@ -2714,11 +2726,6 @@ if __name__ == '__main__':
             updated_split = None
             updated_split_all = None            
 
-        if ssl_type == 'moco' or ssl_type == 'mocosupcon':
-            kwargs = {'net_momentum': model_momentum, 'queue': queue, 'temperature': temperature, 'momentum': momentum}
-        elif ssl_type == 'simsiam':
-            kwargs = {}
-
         train_loss = train_env(model, train_loader, optimizer, upd_split, tr_bs, args, **kwargs)
 
         if (epoch % args.maximize_iter == 0) and (not args.baseline):
@@ -2731,7 +2738,7 @@ if __name__ == '__main__':
             else:
                 upd_loader = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, prefetch_factor=u_pf, shuffle=True, pin_memory=True, 
                     drop_last=True, persistent_workers=u_pw)
-            updated_split = train_partition(model, upd_loader, updated_split, random_init=args.random_init, args=args)
+            updated_split = train_partition(model, upd_loader, updated_split, random_init=args.random_init, args=args, **kwargs)
             upd_loader = shutdown_loader(upd_loader)
             gc.collect()              # run Python's garbage collector
             updated_split_all.append(updated_split)

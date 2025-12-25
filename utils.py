@@ -591,26 +591,69 @@ def info_nce_loss_update(features, batch_size, temperature):
 
     # discard the main diagonal from both: labels and similarities matrix
     mask = torch.eye(labels.shape[0], dtype=torch.bool).to(features.device)
+    # When you do boolean indexing like labels[~mask], PyTorch (and NumPy) flattens the result into a 1D tensor of just the selected elements.
+    # The order is row-major (C-order) in PyTorch (same as NumPy): pick a row, go across columns, move to next row.
+    # each row corresponds to one anchor, and the columns are the other samples (diagonal removed).
+    # PyTorch uses row-major storage. That means the 1D array FILLS the new 2D array row by row.
     labels = labels[~mask].view(labels.shape[0], -1)
     similarity_matrix = similarity_matrix[~mask].view(similarity_matrix.shape[0], -1)
-    # split_matrixs = split_matrixs[~mask].view(split_matrixs.shape[0], -1)
     index_sequence = index_sequence[~mask].view(index_sequence.shape[0], -1)
-    # assert similarity_matrix.shape == labels.shape
+    # For each row i (an anchor), columns correspond to all other examples j != i in the concatenated 
+    # batch (ordered by original column order, but with the diagonal element removed).
 
     # select and combine multiple positives
-    positives = similarity_matrix[labels.bool()].view(labels.shape[0], -1)
+    positives = similarity_matrix[labels.bool()].view(labels.shape[0], -1) # (2*batch_size, P)
     positive_index = index_sequence[labels.bool()].view(labels.shape[0], -1)
 
     # select only the negatives
-    negatives = similarity_matrix[~labels.bool()].view(similarity_matrix.shape[0], -1)
+    negatives = similarity_matrix[~labels.bool()].view(similarity_matrix.shape[0], -1) # (2*batch_size, N)
     negative_index = index_sequence[~labels.bool()].view(labels.shape[0], -1)
 
-    logits = torch.cat([positives, negatives], dim=1)
+    logits = torch.cat([positives, negatives], dim=1) # (2*batch_size, D)
     labels = torch.zeros(logits.shape[0], dtype=torch.long).to(features.device)
     indexs = torch.cat([positive_index, negative_index], dim=1)
 
     logits = logits / temperature
     return logits, labels, indexs
+
+def moco_loss_update(features, batch_size, temperature, ssl_type, queue, dataset_idx, dataset, moco_temp):
+    # 'features' is a tensor of two views concatenated along dim=0
+    # 'batch_size' is the length of the first view 
+    pos_q = features[:batch_size]
+    pos_k = features[batch_size:]
+    if ssl_type == 'moco':
+        pass
+    elif ssl_type = 'mocosupcon':
+        k_queue, idx_queue = queue.get(queue.queue_size, advance=False, idx=True) # 'idx_queue' are dataset indices of samples in queue
+        k_all = torch.cat([out_k, k_queue], dim=0) # (N,D), N=B+K 
+        
+        def get_targets(idcs, dataset, device):
+            targets = [dataset.targets[i] for i in idcs]
+            if dataset.target_transform is not None:
+                labels = [dataset.target_transform(t) for t in targets]
+            else:
+                labels = targets
+            return torch.tensor(labels, dtype=torch.long, device=device)
+        y_batch = get_targets(dataset_idx, dataset, pos_q.device)
+        y_queue = get_targets(idx_queue, dataset, pos_q.device)
+        y_all = torch.cat([y_batch, y_queue], dim=0) # (N,)
+
+        logits = (out_q @ k_all.T) / moco_temp # (B,N)
+        
+        pos_mask = (y_batch[:, None] == y_all[None, :])   # (B,N)
+        pos_mask[:, :len(y_batch)].fill_diagonal_(False)  # remove self-keys
+        num_pos = pos_mask.sum(dim=1, keepdim=True).clamp(min=1)
+
+        # Replace non-positives with -inf
+        pos_logits = logits.masked_fill(~pos_mask, -float("inf"))
+        # One logit per anchor = logsumexp over positives
+        l_pos = torch.logsumexp(pos_logits, dim=1, keepdim=True) #- num_pos.log() # (B,1)
+        
+        l_neg = logits.masked_fill(pos_mask, -float("inf")) # (B,N)
+        
+        logits = torch.cat([l_pos, l_neg], dim=1) # (B,N+1)
+        labels = torch.zeros(logits.size(0), dtype=torch.long, device=logits.device)
+        return logits, labels, indexs
 
 
 def penalty(logits, y, loss_function, mode='w', batchsize=None):
@@ -632,18 +675,20 @@ def penalty(logits, y, loss_function, mode='w', batchsize=None):
 
 
 class update_split_dataset(data.Dataset):
-    def __init__(self, feature_bank1, feature_bank2):
+    def __init__(self, feature_bank1, feature_bank2, index):
         """Initialize and preprocess the Dsprite dataset."""
         self.feature_bank1 = feature_bank1
         self.feature_bank2 = feature_bank2
+        self.index = index
 
 
     def __getitem__(self, index):
         """Return one image and its corresponding attribute label."""
         feature1 = self.feature_bank1[index]
         feature2 = self.feature_bank2[index]
+        idx = self.index[index] # index in the dataset
 
-        return feature1, feature2, index
+        return feature1, feature2, idx, index
 
     def __len__(self):
         """Return the number of images."""
@@ -814,7 +859,9 @@ def auto_split(net, update_loader, soft_split_all, temperature, irm_temp, loss_m
 # update split offline
 # out_1, out_2 are already post transform() and are in cpu
 def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss_mode='v2', irm_mode='v1', irm_weight=10, constrain=False, 
-            cons_relax=False, nonorm=False, log_file=None, batch_size=3096, num_workers=4, prefetch_factor=2, persistent_workers=True):
+            cons_relax=False, nonorm=False, log_file=None, batch_size=3096, num_workers=4, prefetch_factor=2, persistent_workers=True,
+            ssl_type=None, queue=None, index=None, dataset=None):
+    # 'index' are the indices of sample in the dataset
     # irm mode: v1 is original irm; v2 is variance
     low_loss, constrain_loss = 1e5, torch.Tensor([0.])
     cnt, best_epoch, training_num = 0, 0, 0
@@ -824,14 +871,14 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
     pre_scheduler = MultiStepLR(pre_optimizer, [5, 35], gamma=0.2, last_epoch=-1)
 
     # dataset and dataloader
-    traindataset = update_split_dataset(out_1, out_2)
+    traindataset = update_split_dataset(out_1, out_2, index)
     trainloader = DataLoader(traindataset, batch_size=batch_size, shuffle=True, num_workers=num_workers, 
         prefetch_factor=prefetch_factor, persistent_workers=persistent_workers, pin_memory=True, drop_last=False)
 
     for epoch in range(100):
         risk_all_list, risk_cont_all_list, risk_penalty_all_list, risk_constrain_all_list, training_num = [],[],[],[], 0
 
-        for feature_1, feature_2, idx in trainloader:
+        for feature_1, feature_2, dataset_idx, idx in trainloader: # 'idx' is the index in the dummy dataset
             feature_1, feature_2 = feature_1.cuda(non_blocking=True), feature_2.cuda(non_blocking=True)
             loss_cont_list, loss_penalty_list = [], []
             training_num += len(feature_1)
@@ -839,7 +886,13 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
             param_split = F.softmax(soft_split_all[idx], dim=-1)
             if irm_mode == 'v1': # original
                 for env_idx in range(num_env):
-                    logits, labels, indexs = info_nce_loss_update(torch.cat([feature_1, feature_2], dim=0), feature_1.size(0), temperature=1.0)
+                    if True or ssl_type is None:
+                        logits, labels, indexs = info_nce_loss_update(torch.cat([feature_1, feature_2], dim=0), feature_1.size(0), temperature=1.0)
+                        print()
+                        print(f"logits {logits.size()}, labels {labels.size}, indexs {indexs.size()}")
+                    elif ssl_type == 'moco' or ssl_type = 'mocosupcon':
+                        logits, labels, indexs = moco_loss_update(torch.cat([feature_1, feature_2], dim=0), feature_1.size(0), temperature=1.0, 
+                            queue=queue, dataset_idx=dataset_idx, dataset=dataset, moco_temp=temperature)
 
                     loss_weight = param_split[:, env_idx][indexs]
                     logits_cont = logits / temperature
