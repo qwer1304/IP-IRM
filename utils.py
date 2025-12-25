@@ -908,7 +908,7 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
                         cont_loss_env_scale1 = soft_contrastive_loss(logits_pen[::2]*scale, labels[::2], loss_weight[::2], mode=loss_mode, nonorm=nonorm)
                         cont_loss_env_scale2 = soft_contrastive_loss(logits_pen[1::2]*scale, labels[1::2], loss_weight[1::2], mode=loss_mode, nonorm=nonorm)
                     elif ssl_type == 'moco' or ssl_type == 'mocosupcon':
-                        logits, labels = moco_loss_update(torch.cat([feature_1, feature_2], dim=0), feature_1.size(0), 
+                        logits, labels = moco_loss_update(torch.cat([feature_1, feature_2], dim=0), feature_1.size(0), ssl_type, 
                                             queue=queue, dataset_idx=idx, dataset=dataset, moco_temp=temperature)
                         # sum over batch, per env handled by driver
                         # get the samples that have POSITIVES (column 0)
