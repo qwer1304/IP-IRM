@@ -916,12 +916,6 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
                         valid = torch.isfinite(l_pos)
                         logits = logits[valid]
                         labels = labels[valid]
-                        print()
-                        print(l_pos)
-                        print(valid)
-                        print(logits)
-                        print(labels)
-
                         weights = param_split[:, env_idx]                       
                         loss_per_anchor = F.cross_entropy(logits, labels, reduction='none')
                         # Weighted aggregation
@@ -933,6 +927,8 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
                         cont_loss_env_scale1 = (loss_per_anchor * weights[::2]).sum() / weights[::2].sum()
                         loss_per_anchor = F.cross_entropy(scale*logits[1::2], labels[1::2], reduction='none')
                         cont_loss_env_scale2 = (loss_per_anchor * weights[1::2]).sum() / weights[1::2].sum()
+                        print()
+                        print(cont_loss_env, cont_loss_env_scale1, cont_loss_env_scale2)
                         
                     penalty_irm1 = torch.autograd.grad(cont_loss_env_scale1, [scale], create_graph=True)[0]
                     penalty_irm2 = torch.autograd.grad(cont_loss_env_scale2, [scale], create_graph=True)[0]
