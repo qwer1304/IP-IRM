@@ -916,6 +916,11 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
                         valid = torch.isfinite(l_pos)
                         logits = logits[valid]
                         labels = labels[valid]
+                        print()
+                        print(l_pos)
+                        print(valid)
+                        print(logits)
+                        print(labels)
 
                         weights = param_split[:, env_idx]                       
                         loss_per_anchor = F.cross_entropy(logits, labels, reduction='none')
