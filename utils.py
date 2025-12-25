@@ -922,7 +922,7 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
                         # Weighted aggregation
                         cont_loss_env = (loss_per_anchor * weights).sum() / weights.sum()
 
-                        scale = torch.ones((1, logits.size(-1))).cuda(non_blocking=True).requires_grad_() * 1e-4
+                        scale = torch.ones((1, logits.size(-1))).cuda(non_blocking=True).requires_grad_() * 1e-8
                         logits_pen = logits / irm_temp
 
                         loss_per_anchor = F.cross_entropy(scale*logits[::2], labels[::2], reduction='none')
