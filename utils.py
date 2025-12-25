@@ -623,7 +623,7 @@ def moco_loss_update(features, batch_size, temperature, ssl_type, queue, dataset
     pos_k = features[batch_size:]
     if ssl_type == 'moco':
         pass
-    elif ssl_type = 'mocosupcon':
+    elif ssl_type == 'mocosupcon':
         k_queue, idx_queue = queue.get(queue.queue_size, advance=False, idx=True) # 'idx_queue' are dataset indices of samples in queue
         k_all = torch.cat([out_k, k_queue], dim=0) # (N,D), N=B+K 
         
