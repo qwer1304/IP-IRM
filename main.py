@@ -1893,7 +1893,7 @@ def train_partition(net, update_loader, soft_split, random_init=False, args=None
 
     if args.offline: # Maximize Step offline, first extract image features
         net.eval()
-        feature_bank_1, feature_bank_2 = [], []
+        feature_bank_1, feature_bank_2, idx = [], [], []
         with torch.no_grad():
             # generate feature bank
             bar_format = '{l_bar}{bar:' + str(args.bar) + '}{r_bar}' #{bar:-' + str(args.bar) + 'b}'
@@ -1922,12 +1922,13 @@ def train_partition(net, update_loader, soft_split, random_init=False, args=None
                     feature_2, out_2 = net(pos_2)
                 feature_bank_1.append(out_1.cpu())
                 feature_bank_2.append(out_2.cpu())
+                idx.append(Index.cpu())
         feature1 = torch.cat(feature_bank_1, 0)
         feature2 = torch.cat(feature_bank_2, 0)
         updated_split = utils.auto_split_offline(feature1, feature2, soft_split, temperature, args.irm_temp, loss_mode='v2', irm_mode=args.irm_mode,
                                          irm_weight=args.irm_weight_maxim, constrain=args.constrain, cons_relax=args.constrain_relax, nonorm=args.nonorm, 
                                          log_file=log_file, batch_size=uo_bs, num_workers=uo_nw, prefetch_factor=uo_pf, persistent_workers=uo_pw,
-                                         ssl_type=args.ssl_type.lower(), queue=queue, index=Index, dataset=update_loader.dataset)
+                                         ssl_type=args.ssl_type.lower(), queue=queue, index=idx, dataset=update_loader.dataset)
     else:
         updated_split = utils.auto_split(net, update_loader, soft_split, temperature, args.irm_temp, loss_mode='v2', irm_mode=args.irm_mode,
                                      irm_weight=args.irm_weight_maxim, constrain=args.constrain, cons_relax=args.constrain_relax, 
