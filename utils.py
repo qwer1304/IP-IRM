@@ -645,11 +645,11 @@ def moco_loss_update(features, batch_size, ssl_type, queue, dataset_idx, dataset
         num_pos = pos_mask.sum(dim=1, keepdim=True).clamp(min=1)
 
         # Replace non-positives with -inf
-        pos_logits = logits.masked_fill(~pos_mask, -float("inf"))
+        pos_logits = logits.masked_fill(~pos_mask, -1e9)
         # One logit per anchor = logsumexp over positives
         l_pos = torch.logsumexp(pos_logits, dim=1, keepdim=True) #- num_pos.log() # (B,)
         
-        l_neg = logits.masked_fill(pos_mask, -float("inf")) # (B,N)
+        l_neg = logits.masked_fill(pos_mask, -1e9) # (B,N)
         
         logits = torch.cat([l_pos, l_neg], dim=1) # (B,N+1)
         labels = torch.zeros(logits.size(0), dtype=torch.long, device=logits.device)
@@ -914,7 +914,7 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
                         # sum over batch, per env handled by driver
                         # get the samples that have POSITIVES (column 0)
                         l_pos = logits[:, 0]
-                        valid = torch.isfinite(l_pos)
+                        valid = l_pos > -1e9
                         logits = logits[valid]
                         labels = labels[valid]
                         weights = param_split[:, env_idx]   
