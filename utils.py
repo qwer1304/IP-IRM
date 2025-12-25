@@ -917,14 +917,15 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
                         valid = torch.isfinite(l_pos)
                         logits = logits[valid]
                         labels = labels[valid]
-                        weights = param_split[:, env_idx]                       
+                        weights = param_split[:, env_idx]   
+                        print(f"logits size {logits.size()}")
+                        print(f"isfinite {torch.isfinite(logits)}")
                         loss_per_anchor = F.cross_entropy(logits, labels, reduction='none')
                         # Weighted aggregation
                         cont_loss_env = (loss_per_anchor * weights).sum() / weights.sum()
 
                         scale = torch.ones((1, logits.size(-1))).cuda(non_blocking=True).requires_grad_()
                         logits_pen = logits / irm_temp
-                        print(logits)
 
                         loss_per_anchor = F.cross_entropy(scale*logits[::2], labels[::2], reduction='none')
                         cont_loss_env_scale1 = (loss_per_anchor * weights[::2]).sum() / weights[::2].sum()
