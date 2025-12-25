@@ -922,19 +922,16 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
                         # Weighted aggregation
                         cont_loss_env = (loss_per_anchor * weights).sum() / weights.sum()
 
-                        scale = torch.ones((1, logits.size(-1))).cuda(non_blocking=True).requires_grad_()
+                        scale = torch.ones((1, logits.size(-1))).cuda(non_blocking=True).requires_grad_() * 1e-4
                         logits_pen = logits / irm_temp
 
                         loss_per_anchor = F.cross_entropy(scale*logits[::2], labels[::2], reduction='none')
-                        print(f"isfinite loss_per_anchor {torch.isfinite(loss_per_anchor).all()}")
                         cont_loss_env_scale1 = (loss_per_anchor * weights[::2]).sum() / weights[::2].sum()
                         loss_per_anchor = F.cross_entropy(scale*logits[1::2], labels[1::2], reduction='none')
                         cont_loss_env_scale2 = (loss_per_anchor * weights[1::2]).sum() / weights[1::2].sum()
                         
                     penalty_irm1 = torch.autograd.grad(cont_loss_env_scale1, [scale], create_graph=True)[0]
                     penalty_irm2 = torch.autograd.grad(cont_loss_env_scale2, [scale], create_graph=True)[0]
-                    print(f"cont_loss_env_scale1 {cont_loss_env_scale1}")
-                    print(f"penalty_irm1 {penalty_irm1}")
                     loss_cont_list.append(cont_loss_env)
                     loss_penalty_list.append(torch.sum(penalty_irm1*penalty_irm2))
 
