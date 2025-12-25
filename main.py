@@ -1904,7 +1904,7 @@ def train_partition(net, update_loader, soft_split, random_init=False, args=None
                 bar_format=bar_format,          # request bar width
                 desc='train_partition(): Feature extracting'
             )
-            if True:
+            if False:
                 for pos_, target, Index in train_bar:
                     pos_ = pos_.cuda(non_blocking=True)
 
