@@ -883,7 +883,7 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
             param_split = F.softmax(soft_split_all[idx], dim=-1)
             if irm_mode == 'v1': # original
                 for env_idx in range(num_env):
-                    if True or ssl_type is None:
+                    if False or ssl_type is None:
                         # indexs[i, j] = original image ID generating the j-th logit for anchor i
                         logits, labels, indexs = info_nce_loss_update(torch.cat([feature_1, feature_2], dim=0), feature_1.size(0), temperature=1.0)
                         # For anchor i and comparison j, attach the environment-specific weight of the compared image.
