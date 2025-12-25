@@ -931,7 +931,8 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
                         
                     penalty_irm1 = torch.autograd.grad(cont_loss_env_scale1, [scale], create_graph=True)[0]
                     penalty_irm2 = torch.autograd.grad(cont_loss_env_scale2, [scale], create_graph=True)[0]
-                    print(f"penalty_irm1 {penalty_irm1}, penalty_irm2 {penalty_irm2}")
+                    print(f"cont_loss_env_scale1 {cont_loss_env_scale1}")
+                    print(f"penalty_irm1 {penalty_irm1}")
                     loss_cont_list.append(cont_loss_env)
                     loss_penalty_list.append(torch.sum(penalty_irm1*penalty_irm2))
 
