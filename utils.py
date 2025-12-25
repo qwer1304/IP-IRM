@@ -680,12 +680,16 @@ class update_split_dataset(data.Dataset):
         self.feature_bank1 = feature_bank1
         self.feature_bank2 = feature_bank2
         self.index = index
+        print()
+        print(f"feature_bank {feature_bank.size()}, index {len(index)}")
 
 
     def __getitem__(self, index):
         """Return one image and its corresponding attribute label."""
         feature1 = self.feature_bank1[index]
         feature2 = self.feature_bank2[index]
+        print()
+        print(f"self.index {len(self.index)}, index {index}")
         idx = self.index[index] # index in the dataset
 
         return feature1, feature2, idx, index
