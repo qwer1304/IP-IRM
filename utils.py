@@ -934,8 +934,8 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
                     loss_penalty_list.append(torch.sum(penalty_irm1*penalty_irm2))
 
                 print()
-                print(loss_cont_list)
-                print(loss_penalty_list)
+                print(f"loss_cont_list {loss_cont_list}")
+                print(f"loss_penalty_list {loss_penalty_list}")
                 cont_loss_epoch = torch.stack(loss_cont_list).mean()
                 inv_loss_epoch = torch.stack(loss_penalty_list).mean()
                 risk_final = - (cont_loss_epoch + irm_weight*inv_loss_epoch)
