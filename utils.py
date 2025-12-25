@@ -681,7 +681,7 @@ class update_split_dataset(data.Dataset):
         self.feature_bank2 = feature_bank2
         self.index = index
         print()
-        print(f"feature_bank {feature_bank.size()}, index {len(index)}")
+        print(f"feature_bank {feature_bank1.size()}, index {len(index)}")
 
 
     def __getitem__(self, index):
