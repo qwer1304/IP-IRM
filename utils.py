@@ -928,6 +928,7 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
                         logits_pen = logits / irm_temp
 
                         loss_per_anchor = F.cross_entropy(scale*logits[::2], labels[::2], reduction='none')
+                        print(f"loss_per_anchor {loss_per_anchor}")
                         cont_loss_env_scale1 = (loss_per_anchor * weights[::2]).sum() / weights[::2].sum()
                         loss_per_anchor = F.cross_entropy(scale*logits[1::2], labels[1::2], reduction='none')
                         cont_loss_env_scale2 = (loss_per_anchor * weights[1::2]).sum() / weights[1::2].sum()
