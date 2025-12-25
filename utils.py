@@ -936,7 +936,7 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
                     loss_penalty_list.append(torch.sum(penalty_irm1*penalty_irm2))
                     print(f"scale size {scale.size()}")
                     print(f"penalty_irm1 size {penalty_irm1.size()}")
-                    print(f"isfinal cont_loss_env_scale1 {torch.isfinal(cont_loss_env_scale1)}")
+                    print(f"isfinal cont_loss_env_scale1 {torch.isfinite(cont_loss_env_scale1)}")
                     print(f"cont_loss_env_scale1 {cont_loss_env_scale1}")
                     print(f"penalty_irm1 {penalty_irm1}")
 
