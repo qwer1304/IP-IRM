@@ -619,8 +619,8 @@ def info_nce_loss_update(features, batch_size, temperature):
 def moco_loss_update(features, batch_size, ssl_type, queue, dataset_idx, dataset, moco_temp):
     # 'features' is a tensor of two views concatenated along dim=0
     # 'batch_size' is the length of the first view 
-    pos_q = features[:batch_size]
-    pos_k = features[batch_size:]
+    out_q = features[:batch_size]
+    out_k = features[batch_size:]
     if ssl_type == 'moco':
         pass
     elif ssl_type == 'mocosupcon':
@@ -634,8 +634,8 @@ def moco_loss_update(features, batch_size, ssl_type, queue, dataset_idx, dataset
             else:
                 labels = targets
             return torch.tensor(labels, dtype=torch.long, device=device)
-        y_batch = get_targets(dataset_idx, dataset, pos_q.device)
-        y_queue = get_targets(idx_queue, dataset, pos_q.device)
+        y_batch = get_targets(dataset_idx, dataset, out_q.device)
+        y_queue = get_targets(idx_queue, dataset, out_q.device)
         y_all = torch.cat([y_batch, y_queue], dim=0) # (N,)
 
         logits = (out_q @ k_all.T) / moco_temp # (B,N)
