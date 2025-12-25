@@ -647,7 +647,7 @@ def moco_loss_update(features, batch_size, ssl_type, queue, dataset_idx, dataset
         # Replace non-positives with -inf
         pos_logits = logits.masked_fill(~pos_mask, -float("inf"))
         # One logit per anchor = logsumexp over positives
-        l_pos = torch.logsumexp(pos_logits, dim=1) #- num_pos.log() # (B,)
+        l_pos = torch.logsumexp(pos_logits, dim=1, keepdim=True) #- num_pos.log() # (B,)
         
         l_neg = logits.masked_fill(pos_mask, -float("inf")) # (B,N)
         
