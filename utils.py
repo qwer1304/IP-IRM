@@ -924,6 +924,8 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
 
                         scale = torch.ones((1, logits.size(-1))).cuda(non_blocking=True).requires_grad_()
                         logits_pen = logits / irm_temp
+                        print(logits)
+
                         loss_per_anchor = F.cross_entropy(scale*logits[::2], labels[::2], reduction='none')
                         cont_loss_env_scale1 = (loss_per_anchor * weights[::2]).sum() / weights[::2].sum()
                         loss_per_anchor = F.cross_entropy(scale*logits[1::2], labels[1::2], reduction='none')
@@ -931,7 +933,6 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
                         
                     penalty_irm1 = torch.autograd.grad(cont_loss_env_scale1, [scale], create_graph=True)[0]
                     penalty_irm2 = torch.autograd.grad(cont_loss_env_scale2, [scale], create_graph=True)[0]
-                    print(logits[::2])
                     print(f"cont_loss_env_scale1 {cont_loss_env_scale1}")
                     print(f"penalty_irm1 {penalty_irm1}")
                     loss_cont_list.append(cont_loss_env)
