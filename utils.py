@@ -587,7 +587,7 @@ def info_nce_loss_update(features, batch_size, temperature):
     index_sequence = index_sequence.unsqueeze(0).expand(2*batch_size, 2*batch_size) # (2*batch_size,2*batch_size)
 
     # features = F.normalize(features, dim=1)
-    similarity_matrix = torch.matmul(features, features.T)
+    similarity_matrix = torch.matmul(features, features.T) # (2*batch_size, 2*batch_size)
 
     # discard the main diagonal from both: labels and similarities matrix
     mask = torch.eye(labels.shape[0], dtype=torch.bool).to(features.device)
@@ -595,9 +595,9 @@ def info_nce_loss_update(features, batch_size, temperature):
     # The order is row-major (C-order) in PyTorch (same as NumPy): pick a row, go across columns, move to next row.
     # each row corresponds to one anchor, and the columns are the other samples (diagonal removed).
     # PyTorch uses row-major storage. That means the 1D array FILLS the new 2D array row by row.
-    labels = labels[~mask].view(labels.shape[0], -1)
-    similarity_matrix = similarity_matrix[~mask].view(similarity_matrix.shape[0], -1)
-    index_sequence = index_sequence[~mask].view(index_sequence.shape[0], -1)
+    labels = labels[~mask].view(labels.shape[0], -1) # (2*batch_size, 2*batch_size-1)
+    similarity_matrix = similarity_matrix[~mask].view(similarity_matrix.shape[0], -1) # (2*batch_size, 2*batch_size-1)
+    index_sequence = index_sequence[~mask].view(index_sequence.shape[0], -1) # (2*batch_size, 2*batch_size-1)
     # For each row i (an anchor), columns correspond to all other examples j != i in the concatenated 
     # batch (ordered by original column order, but with the diagonal element removed).
 
@@ -610,13 +610,13 @@ def info_nce_loss_update(features, batch_size, temperature):
     negative_index = index_sequence[~labels.bool()].view(labels.shape[0], -1)
 
     logits = torch.cat([positives, negatives], dim=1) # (2*batch_size, D)
-    labels = torch.zeros(logits.shape[0], dtype=torch.long).to(features.device)
-    indexs = torch.cat([positive_index, negative_index], dim=1)
+    labels = torch.zeros(logits.shape[0], dtype=torch.long).to(features.device) # (2*batch_size,)
+    indexs = torch.cat([positive_index, negative_index], dim=1) # (2*batch_size, P+N)
 
     logits = logits / temperature
     return logits, labels, indexs
 
-def moco_loss_update(features, batch_size, temperature, ssl_type, queue, dataset_idx, dataset, moco_temp):
+def moco_loss_update(features, batch_size, ssl_type, queue, dataset_idx, dataset, moco_temp):
     # 'features' is a tensor of two views concatenated along dim=0
     # 'batch_size' is the length of the first view 
     pos_q = features[:batch_size]
@@ -647,14 +647,13 @@ def moco_loss_update(features, batch_size, temperature, ssl_type, queue, dataset
         # Replace non-positives with -inf
         pos_logits = logits.masked_fill(~pos_mask, -float("inf"))
         # One logit per anchor = logsumexp over positives
-        l_pos = torch.logsumexp(pos_logits, dim=1, keepdim=True) #- num_pos.log() # (B,1)
+        l_pos = torch.logsumexp(pos_logits, dim=1) #- num_pos.log() # (B,)
         
         l_neg = logits.masked_fill(pos_mask, -float("inf")) # (B,N)
         
         logits = torch.cat([l_pos, l_neg], dim=1) # (B,N+1)
         labels = torch.zeros(logits.size(0), dtype=torch.long, device=logits.device)
-        return logits, labels, indexs
-
+        return logits, labels
 
 def penalty(logits, y, loss_function, mode='w', batchsize=None):
     assert((logits.size(0) % 2) == 0) 
@@ -675,24 +674,17 @@ def penalty(logits, y, loss_function, mode='w', batchsize=None):
 
 
 class update_split_dataset(data.Dataset):
-    def __init__(self, feature_bank1, feature_bank2, index):
+    def __init__(self, feature_bank1, feature_bank2):
         """Initialize and preprocess the Dsprite dataset."""
         self.feature_bank1 = feature_bank1
         self.feature_bank2 = feature_bank2
-        self.index = index
-        print()
-        print(f"feature_bank {feature_bank1.size()}, index {len(index)}")
-
 
     def __getitem__(self, index):
         """Return one image and its corresponding attribute label."""
         feature1 = self.feature_bank1[index]
         feature2 = self.feature_bank2[index]
-        print()
-        print(f"self.index {len(self.index)}, index {index}")
-        idx = self.index[index] # index in the dataset
 
-        return feature1, feature2, idx, index
+        return feature1, feature2, index
 
     def __len__(self):
         """Return the number of images."""
@@ -864,9 +856,9 @@ def auto_split(net, update_loader, soft_split_all, temperature, irm_temp, loss_m
 # out_1, out_2 are already post transform() and are in cpu
 def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss_mode='v2', irm_mode='v1', irm_weight=10, constrain=False, 
             cons_relax=False, nonorm=False, log_file=None, batch_size=3096, num_workers=4, prefetch_factor=2, persistent_workers=True,
-            ssl_type=None, queue=None, index=None, dataset=None):
-    # 'index' are the indices of sample in the dataset
-    # irm mode: v1 is original irm; v2 is variance
+            ssl_type=None, queue=None, dataset=None):
+    # 'out_1', 'out_2' are features of samples in the whole dataset, their order corresponds to the dataset original order
+    # 'irm_mode': 'v1' is original irm; 'v2' is variance
     low_loss, constrain_loss = 1e5, torch.Tensor([0.])
     cnt, best_epoch, training_num = 0, 0, 0
     num_env = soft_split_all.size(1)
@@ -875,14 +867,14 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
     pre_scheduler = MultiStepLR(pre_optimizer, [5, 35], gamma=0.2, last_epoch=-1)
 
     # dataset and dataloader
-    traindataset = update_split_dataset(out_1, out_2, index)
+    traindataset = update_split_dataset(out_1, out_2)
     trainloader = DataLoader(traindataset, batch_size=batch_size, shuffle=True, num_workers=num_workers, 
         prefetch_factor=prefetch_factor, persistent_workers=persistent_workers, pin_memory=True, drop_last=False)
 
     for epoch in range(100):
         risk_all_list, risk_cont_all_list, risk_penalty_all_list, risk_constrain_all_list, training_num = [],[],[],[], 0
 
-        for feature_1, feature_2, dataset_idx, idx in trainloader: # 'idx' is the index in the dummy dataset
+        for feature_1, feature_2, idx in trainloader: # 'idx' is the index in the dataset
             feature_1, feature_2 = feature_1.cuda(non_blocking=True), feature_2.cuda(non_blocking=True)
             loss_cont_list, loss_penalty_list = [], []
             training_num += len(feature_1)
@@ -890,26 +882,58 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
             param_split = F.softmax(soft_split_all[idx], dim=-1)
             if irm_mode == 'v1': # original
                 for env_idx in range(num_env):
-                    if True or ssl_type is None:
+                    if ssl_type is None:
+                        # indexs[i, j] = original image ID generating the j-th logit for anchor i
                         logits, labels, indexs = info_nce_loss_update(torch.cat([feature_1, feature_2], dim=0), feature_1.size(0), temperature=1.0)
-                        print()
-                        print(f"logits {logits.size()}, labels {labels.size}, indexs {indexs.size()}")
+                        # For anchor i and comparison j, attach the environment-specific weight of the compared image.
+                        # indexs[i, j] tells you which original image produced the j-th logit for anchor i, 
+                        # and param_split[:, env_idx][indexs] replaces each image ID with its environment-specific weight.
+                        # loss_weight[i, j] = param_split[indexs[i, j], env_idx], loss_weight.shape == indexs.shape
+                        loss_weight = param_split[:, env_idx][indexs] 
+                        logits_cont = logits / temperature
+                        """
+                        They want a contrastive loss where:
+                            each anchor has 1 positive + many negatives (InfoNCE / SimCLR style)
+                            negatives are reweighted by environment-dependent weights
+                            positives may also be reweighted
+                            normalization can be per-sample or global
+                        logits:  (N, K)   # N = 2B anchors, K = 1 + (#negatives)
+                        labels:  (N,)     # always 0 (positive is at index 0)
+                        weights: (N, K)   # per-(anchor, comparison) weights
+                        """
+                        cont_loss_env = soft_contrastive_loss(logits_cont, labels, loss_weight, mode=loss_mode, nonorm=nonorm)
+
+                        scale = torch.ones((1, logits.size(-1))).cuda(non_blocking=True).requires_grad_()
+                        logits_pen = logits / irm_temp
+                        cont_loss_env_scale1 = soft_contrastive_loss(logits_pen[::2]*scale, labels[::2], loss_weight[::2], mode=loss_mode, nonorm=nonorm)
+                        cont_loss_env_scale2 = soft_contrastive_loss(logits_pen[1::2]*scale, labels[1::2], loss_weight[1::2], mode=loss_mode, nonorm=nonorm)
                     elif ssl_type == 'moco' or ssl_type == 'mocosupcon':
-                        logits, labels, indexs = moco_loss_update(torch.cat([feature_1, feature_2], dim=0), feature_1.size(0), temperature=1.0, 
-                            queue=queue, dataset_idx=dataset_idx, dataset=dataset, moco_temp=temperature)
+                        logits, labels = moco_loss_update(torch.cat([feature_1, feature_2], dim=0), feature_1.size(0), 
+                                            queue=queue, dataset_idx=idx, dataset=dataset, moco_temp=temperature)
+                        # sum over batch, per env handled by driver
+                        # get the samples that have POSITIVES (column 0)
+                        l_pos = logits[:, 0]
+                        valid = torch.isfinite(l_pos)
+                        logits = logits[valid]
+                        labels = labels[valid]
 
-                    loss_weight = param_split[:, env_idx][indexs]
-                    logits_cont = logits / temperature
-                    cont_loss_env = soft_contrastive_loss(logits_cont, labels, loss_weight, mode=loss_mode, nonorm=nonorm)
+                        weights = param_split[:, env_idx]                       
+                        loss_per_anchor = F.cross_entropy(logits, labels, reduction='none')
+                        # Weighted aggregation
+                        cont_loss_env = (loss_per_anchor * weights).sum() / weights.sum()
 
-                    scale = torch.ones((1, logits.size(-1))).cuda(non_blocking=True).requires_grad_()
-                    logits_pen = logits / irm_temp
-                    cont_loss_env_scale1 = soft_contrastive_loss(logits_pen[::2]*scale, labels[::2], loss_weight[::2], mode=loss_mode, nonorm=nonorm)
-                    cont_loss_env_scale2 = soft_contrastive_loss(logits_pen[1::2]*scale, labels[1::2], loss_weight[1::2], mode=loss_mode, nonorm=nonorm)
+                        scale = torch.ones((1, logits.size(-1))).cuda(non_blocking=True).requires_grad_()
+                        logits_pen = logits / irm_temp
+                        loss_per_anchor = F.cross_entropy(scale*logits[::2], labels[::2], reduction='none')
+                        cont_loss_env_scale1 = (loss_per_anchor * weights[::2]).sum() / weights[::2].sum()
+                        loss_per_anchor = F.cross_entropy(scale*logits[1::2], labels[1::2], reduction='none')
+                        cont_loss_env_scale2 = (loss_per_anchor * weights[1::2]).sum() / weights[1::2].sum()
+                        
                     penalty_irm1 = torch.autograd.grad(cont_loss_env_scale1, [scale], create_graph=True)[0]
                     penalty_irm2 = torch.autograd.grad(cont_loss_env_scale2, [scale], create_graph=True)[0]
                     loss_cont_list.append(cont_loss_env)
                     loss_penalty_list.append(torch.sum(penalty_irm1*penalty_irm2))
+
 
                 cont_loss_epoch = torch.stack(loss_cont_list).mean()
                 inv_loss_epoch = torch.stack(loss_penalty_list).mean()
@@ -987,14 +1011,34 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
 
 # soft version of the contrastive loss
 def soft_contrastive_loss(logits, labels, weights, mode='v1', nonorm=False):
+    """
+    This loss implements InfoNCE where negatives are reweighted inside the softmax according to environment-specific importance, 
+    while positives remain fixed, and normalization controls gradient scale.    
+    """
     if mode == 'v1':
         logits *= weights
         cont_loss_env = torch.nn.CrossEntropyLoss()(logits, labels)
     elif mode == 'v2':
         sample_dim, label_dim = logits.size(0), logits.size(1)
         logits_exp = logits.exp()
+        # weight_pos: (N, 1), weight of the positive for anchor i
+        # weight_neg: (N, K-1), weight of j-th negative for each anchor
         weight_pos, weight_neg = torch.split(weights, [1, label_dim-1], dim=1)
+        """
+        Normalize negative weights
+        Per anchor: sum_j weight_neg_norm[i, j] = (K-1)
+            average negative weight = 1
+            negatives are reweighted relative to each other
+            total negative mass is preserved  
+        """
         weight_neg_norm = weight_neg / weight_neg.sum(1).unsqueeze(1) * (label_dim-1)
+        """
+        Construct final weights
+            positive weight is set to 1       
+            only negatives are reweighted
+            All positives are equally important; environments affect how hard negatives are
+            This is a design choice.
+        """
         weights_new = torch.cat([torch.ones_like(weight_pos), weight_neg_norm], dim=1)
         softmax_loss = (weights_new*logits_exp) / (weights_new*logits_exp).sum(1).unsqueeze(1)
         cont_loss_env = torch.nn.NLLLoss(reduction='none')(torch.log(softmax_loss), labels)

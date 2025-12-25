@@ -1893,7 +1893,7 @@ def train_partition(net, update_loader, soft_split, random_init=False, args=None
 
     if args.offline: # Maximize Step offline, first extract image features
         net.eval()
-        feature_bank_1, feature_bank_2, idx = [], [], []
+        feature_bank_1, feature_bank_2 = [], []
         with torch.no_grad():
             # generate feature bank
             bar_format = '{l_bar}{bar:' + str(args.bar) + '}{r_bar}' #{bar:-' + str(args.bar) + 'b}'
@@ -1904,32 +1904,35 @@ def train_partition(net, update_loader, soft_split, random_init=False, args=None
                 bar_format=bar_format,          # request bar width
                 desc='train_partition(): Feature extracting'
             )
-            for pos_, target, Index in train_bar:
-                pos_ = pos_.cuda(non_blocking=True)
-      
-                if transform is not None:
-                    pos_1 = transform(pos_)
-                    pos_2 = transform(pos_)
-                if target_transform is not None:
-                    target = target_transform(target)
-                
-                if args.ssl_type.lower() == 'moco' or args.ssl_type.lower() == 'mocosupcon':
-                    feature_1, out_1 = net(pos_1)
-                    with torch.no_grad():
-                        feature_2, out_2 = model_momentum(pos_2)
-                else:        
-                    feature_1, out_1 = net(pos_1)
-                    feature_2, out_2 = net(pos_2)
-                feature_bank_1.append(out_1.cpu())
-                feature_bank_2.append(out_2.cpu())
-                idx.append(Index.cpu())
-        feature1 = torch.cat(feature_bank_1, 0)
-        feature2 = torch.cat(feature_bank_2, 0)
-        idx = torch.cat(idx, 0)
+            if False:
+                for pos_, target, Index in train_bar:
+                    pos_ = pos_.cuda(non_blocking=True)
+
+                    if transform is not None:
+                        pos_1 = transform(pos_)
+                        pos_2 = transform(pos_)
+                    if target_transform is not None:
+                        target = target_transform(target)
+
+                    if args.ssl_type.lower() == 'moco' or args.ssl_type.lower() == 'mocosupcon':
+                        feature_1, out_1 = net(pos_1)
+                        with torch.no_grad():
+                            feature_2, out_2 = model_momentum(pos_2)
+                    else:        
+                        feature_1, out_1 = net(pos_1)
+                        feature_2, out_2 = net(pos_2)
+                    feature_bank_1.append(out_1.cpu())
+                    feature_bank_2.append(out_2.cpu())
+                feature1 = torch.cat(feature_bank_1, 0)
+                feature2 = torch.cat(feature_bank_2, 0)
+            else:
+                feature1 = torch.rand(len(soft_split), 2048, dtype=torch.float)
+                feature1 = torch.rand(len(soft_split), 2048, dtype=torch.float)
+            
         updated_split = utils.auto_split_offline(feature1, feature2, soft_split, temperature, args.irm_temp, loss_mode='v2', irm_mode=args.irm_mode,
                                          irm_weight=args.irm_weight_maxim, constrain=args.constrain, cons_relax=args.constrain_relax, nonorm=args.nonorm, 
                                          log_file=log_file, batch_size=uo_bs, num_workers=uo_nw, prefetch_factor=uo_pf, persistent_workers=uo_pw,
-                                         ssl_type=args.ssl_type.lower(), queue=queue, index=idx, dataset=update_loader.dataset)
+                                         ssl_type=args.ssl_type.lower(), queue=queue, dataset=update_loader.dataset)
     else:
         updated_split = utils.auto_split(net, update_loader, soft_split, temperature, args.irm_temp, loss_mode='v2', irm_mode=args.irm_mode,
                                      irm_weight=args.irm_weight_maxim, constrain=args.constrain, cons_relax=args.constrain_relax, 
@@ -2669,6 +2672,7 @@ if __name__ == '__main__':
             else:
                 updated_split = torch.randn((len(update_data), args.env_num), requires_grad=True, device=device)
                 if args.offline:
+                    # It is MANDATORY that 'shuffle' is False, otherwise samples won't match their weights
                     upd_loader = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, prefetch_factor=u_pf, shuffle=False, 
                         drop_last=False, pin_memory=True, persistent_workers=u_pw)
                 else:
@@ -2735,6 +2739,7 @@ if __name__ == '__main__':
             train_loader = shutdown_loader(train_loader)
             gc.collect()
             if args.offline:
+                # It is MANDATORY that 'shuffle' is False, otherwise samples won't match their weights
                 upd_loader = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, prefetch_factor=u_pf, shuffle=False, 
                     pin_memory=False, persistent_workers=u_pw)
             else:
