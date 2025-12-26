@@ -922,7 +922,7 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
             training_num += len(feature_1)
 
             param_split = F.softmax(soft_split_all, dim=-1) # positive, normalized across domains
-            W_env = param_split.sum(dim=0) # sum of weights per env, their 'mass'
+            W_env = param_split.sum(dim=0) # (num_env,) sum of weights per env, their 'mass'
             for env_idx in range(num_env):
                 if ssl_type == 'simclr':
                     # indexs[i, j] = original image ID generating the j-th logit for anchor i
@@ -971,9 +971,9 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
                         reg1 = len(labels[::2])
                         reg2 = len(labels[1::2])
                     else:
-                        reg  = w_batch_env.sum().clamp_min(eps)       * W_env[env_idx] / (W_env.sum())
-                        reg1 = w_batch_env[::2].sum().clamp_min(eps)  * W_env[env_idx] / (W_env.sum())
-                        reg2 = w_batch_env[1::2].sum().clamp_min(eps) * W_env[env_idx] / (W_env.sum()) 
+                        reg  = w_batch_env.sum().clamp_min(eps)       #* W_env[env_idx] / (W_env.sum())
+                        reg1 = w_batch_env[::2].sum().clamp_min(eps)  #* W_env[env_idx] / (W_env.sum())
+                        reg2 = w_batch_env[1::2].sum().clamp_min(eps) #* W_env[env_idx] / (W_env.sum()) 
 
                     cont_loss_env = (w_batch_env * loss_anchors).sum() / reg                      
 
