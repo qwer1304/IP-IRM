@@ -651,7 +651,7 @@ def moco_supcon_softenv_ce(
         pos_mask[:, :B].fill_diagonal_(True)
 
     # --- env gating (keys only) ---
-    log_w = torch.log(w_keys.clamp_min(eps))        # (N,)
+    log_w = torch.log(w_all.clamp_min(eps))        # (N,)
     logits_env = logits + log_w[None, :]            # (B, N)
 
     # --- collapse positives -> single logit ---
