@@ -693,7 +693,7 @@ def moco_loss_update(features, batch_size, weights, ssl_type, queue, dataset_idx
         y_queue = get_targets(idx_queue, dataset, device)
         y_all = torch.cat([y_batch, y_queue], dim=0) # (N,)
 
-    logits, labels = moco_supcon_softenv_ce(out_q, k_all, y_batch, y_all, moco_temp, NEG=NEG, supcon=ssl_type=='mocosupcon')
+    logits, labels = moco_supcon_softenv_ce(out_q, k_all, y_batch, y_all, weights, moco_temp, NEG=NEG, supcon=ssl_type=='mocosupcon')
     return logits, labels
 
 def penalty(logits, y, loss_function, mode='w', batchsize=None):
