@@ -541,11 +541,11 @@ class MoCoSupConLossModule(LossModule):
         num_pos = pos_mask.sum(dim=1, keepdim=True).clamp(min=1)
 
         # Replace non-positives with -inf
-        pos_logits = logits.masked_fill(~pos_mask, -float("inf"))
+        pos_logits = logits.masked_fill(~pos_mask, -1e9)
         # One logit per anchor = logsumexp over positives
         l_pos = torch.logsumexp(pos_logits, dim=1, keepdim=True) #- num_pos.log() # (B,1)
         
-        l_neg = logits.masked_fill(pos_mask, -float("inf")) # (B,N)
+        l_neg = logits.masked_fill(pos_mask, -1e9) # (B,N)
         
         self._logits = torch.cat([l_pos, l_neg], dim=1) # (B,N+1)
         self.labels = torch.zeros(self._logits.size(0), dtype=torch.long, device=self._logits.device)
@@ -592,7 +592,7 @@ class MoCoSupConLossModule(LossModule):
         # sum over batch, per env handled by driver
         # get the samples that have POSITIVES (column 0)
         l_pos = self._logits[idxs][:, 0]
-        valid = torch.isfinite(l_pos)
+        valid = l_pos > -1e9
 
         loss = F.cross_entropy(scale * self._logits[idxs][valid], self.labels[idxs][valid], reduction=reduction)
         return loss
@@ -1932,7 +1932,7 @@ def train_partition(net, update_loader, soft_split, random_init=False, args=None
         updated_split = utils.auto_split_offline(feature1, feature2, soft_split, temperature, args.irm_temp, loss_mode='v2', irm_mode=args.irm_mode,
                                          irm_weight=args.irm_weight_maxim, constrain=args.constrain, cons_relax=args.constrain_relax, nonorm=args.nonorm, 
                                          log_file=log_file, batch_size=uo_bs, num_workers=uo_nw, prefetch_factor=uo_pf, persistent_workers=uo_pw,
-                                         ssl_type=args.ssl_type.lower(), queue=queue, dataset=update_loader.dataset)
+                                         ssl_type=args.ssl_type_partition.lower(), queue=queue, dataset=update_loader.dataset)
     else:
         updated_split = utils.auto_split(net, update_loader, soft_split, temperature, args.irm_temp, loss_mode='v2', irm_mode=args.irm_mode,
                                      irm_weight=args.irm_weight_maxim, constrain=args.constrain, cons_relax=args.constrain_relax, 
@@ -2246,6 +2246,7 @@ def load_checkpoint(path, model, model_momentum, optimizer, gradnorm_balancer, g
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train IP-IRM')
     parser.add_argument('--ssl_type', default='MoCo', type=str, choices=['MoCo', 'SimSiam', 'MoCoSupCon'], help='SSL type')    
+    parser.add_argument('--ssl_type_partition', default='MoCoSupCon', type=str, choices=['MoCo', 'SimSiam', 'MoCoSupCon', 'SimCLR'], help='SSL type for partition')    
     parser.add_argument('--penalty_type', default='IRM', type=str, choices=['IRM', 'VREx'], help='Penalty type')        
     parser.add_argument('--penalty_sigma', default=None, type=float, help='Noise level to inject into penalty')        
     parser.add_argument('--drop_samples', default=None, type=int, help='# of samples to drop to break equilibrium')        
