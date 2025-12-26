@@ -922,6 +922,7 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
             training_num += len(feature_1)
 
             param_split = F.softmax(soft_split_all, dim=-1) # positive, normalized across domains
+            W_env = param_split.sum(dim=0) # sum of weights per env, their 'mass'
             for env_idx in range(num_env):
                 if ssl_type == 'simclr':
                     # indexs[i, j] = original image ID generating the j-th logit for anchor i
@@ -951,9 +952,9 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
                         cont_loss_env_scale2 = soft_contrastive_loss(logits_pen[1::2]*scale, labels[1::2], loss_weight[1::2], mode=loss_mode, nonorm=nonorm)
 
                 elif ssl_type == 'moco' or ssl_type == 'mocosupcon':
-                    weights_all = param_split[:, env_idx]
+                    weights_all_env = param_split[:, env_idx]
                     NEG = -1e9
-                    logits, labels = moco_loss_update(torch.cat([feature_1, feature_2], dim=0), feature_1.size(0), weights_all, ssl_type, 
+                    logits, labels = moco_loss_update(torch.cat([feature_1, feature_2], dim=0), feature_1.size(0), weights_all_env, ssl_type, 
                                         queue=queue, dataset_idx=idx, dataset=dataset, moco_temp=temperature, NEG=NEG)
                     # sum over batch, per env handled by driver
                     # get the samples that have POSITIVES (column 0)
@@ -961,7 +962,7 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
                     valid = l_pos > NEG
                     logits = logits[valid]
                     labels = labels[valid]
-                    w_anchors = weights_all[idx]
+                    w_batch_env = weights_all_env[idx]
                     loss_anchors = F.cross_entropy(logits, labels, reduction='none')
                     eps = 1e-12
                     # --- anchor gating ---
@@ -970,20 +971,20 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
                         reg1 = len(labels[::2])
                         reg2 = len(labels[1::2])
                     else:
-                        reg  = w_anchors.sum().clamp_min(eps) 
-                        reg1 = w_anchors[::2].sum().clamp_min(eps) 
-                        reg2 = w_anchors[1::2].sum().clamp_min(eps) 
+                        reg  = w_batch_env.sum().clamp_min(eps)       * W_env[env_idx] / (W_env.sum())
+                        reg1 = w_batch_env[::2].sum().clamp_min(eps)  * W_env[env_idx] / (W_env.sum())
+                        reg2 = w_batch_env[1::2].sum().clamp_min(eps) * W_env[env_idx] / (W_env.sum()) 
 
-                    cont_loss_env = (w_anchors * loss_anchors).sum() / reg                      
+                    cont_loss_env = (w_batch_env * loss_anchors).sum() / reg                      
 
                     if irm_mode == 'v1': # original
                         scale = torch.ones((1, logits.size(-1))).cuda(non_blocking=True).requires_grad_()
                         logits_pen = logits / irm_temp
 
                         loss_per_anchor = F.cross_entropy(scale*logits[::2], labels[::2], reduction='none')
-                        cont_loss_env_scale1 = (loss_per_anchor * w_anchors[::2]).sum() / reg1
+                        cont_loss_env_scale1 = (loss_per_anchor * w_batch_env[::2]).sum() / reg1
                         loss_per_anchor = F.cross_entropy(scale*logits[1::2], labels[1::2], reduction='none')
-                        cont_loss_env_scale2 = (loss_per_anchor * w_anchors[1::2]).sum() / reg2
+                        cont_loss_env_scale2 = (loss_per_anchor * w_batch_env[1::2]).sum() / reg2
                 # end if ssl_type == ...
 
                 # calculate IRM penalty
