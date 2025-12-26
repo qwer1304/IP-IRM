@@ -965,21 +965,25 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
                     loss_anchors = F.cross_entropy(logits, labels, reduction='none')
                     eps = 1e-12
                     # --- anchor gating ---
-                    cont_loss_env = (w_anchors * loss_anchors).sum()                      
                     if nonorm:
-                        sample_dim = logits.size(0)
-                        cont_loss_env /= sample_dim
+                        reg  = len(labels)
+                        reg1 = len(labels[::2])
+                        reg2 = len(labels[1::2])
                     else:
-                        cont_loss_env /= w_anchors.sum().clamp_min(eps) 
+                        reg  = w_anchors.sum().clamp_min(eps) 
+                        reg1 = w_anchors[::2].sum().clamp_min(eps) 
+                        reg2 = w_anchors[1::2].sum().clamp_min(eps) 
+
+                    cont_loss_env = (w_anchors * loss_anchors).sum() / reg                      
 
                     if irm_mode == 'v1': # original
                         scale = torch.ones((1, logits.size(-1))).cuda(non_blocking=True).requires_grad_()
                         logits_pen = logits / irm_temp
 
                         loss_per_anchor = F.cross_entropy(scale*logits[::2], labels[::2], reduction='none')
-                        cont_loss_env_scale1 = (loss_per_anchor * weights[::2]).sum() / weights[::2].sum()
+                        cont_loss_env_scale1 = (loss_per_anchor * w_anchors[::2]).sum() / reg1
                         loss_per_anchor = F.cross_entropy(scale*logits[1::2], labels[1::2], reduction='none')
-                        cont_loss_env_scale2 = (loss_per_anchor * weights[1::2]).sum() / weights[1::2].sum()
+                        cont_loss_env_scale2 = (loss_per_anchor * w_anchors[1::2]).sum() / reg2
                 # end if ssl_type == ...
 
                 # calculate IRM penalty
