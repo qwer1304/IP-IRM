@@ -645,7 +645,7 @@ def moco_supcon_softenv_ce(
         # --- SupCon positive mask ---
         pos_mask = (y_q[:, None] == y_all[None, :])     # (B, N)
         pos_mask[:, :B].fill_diagonal_(False)
-     else:
+    else:
         # vanilla MoCo
         pos_mask = torch.zeros(N, dtype=torch.bool, device=device)
         pos_mask[:, :B].fill_diagonal_(True)
