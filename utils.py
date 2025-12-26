@@ -664,7 +664,9 @@ def moco_supcon_softenv_ce(
     # --- CE-style logits ---
     ce_logits = torch.cat([l_pos, neg_logits], dim=1)        # (B, 1+N)
     labels = torch.zeros(B, dtype=torch.long, device=device)
-
+    print()
+    print(B,N)
+    print(labels.size())
     return ce_logits, labels
 
 def moco_loss_update(features, batch_size, weights, ssl_type, queue, dataset_idx, dataset, moco_temp, NEG=-1e9):
@@ -961,6 +963,7 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
                     valid = l_pos > NEG
                     print()
                     print(valid)
+                    print(vlaid.size())
                     print(logits.size())
                     print(labels.size())
                     logits = logits[valid]
