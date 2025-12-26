@@ -627,7 +627,7 @@ def moco_supcon_softenv_ce(
     """
     Returns L_env (scalar) using CrossEntropyLoss
         z_q: (B, D) query embeddings (anchors)
-        z_all: (B, N=B+K) key embeddings (positives and negatives)
+        z_all: (N=B+K, D) key embeddings (positives and negatives)
         y_q: (B,) class labels for queries
         y_all: (N=B+K,) labels for [z_k ; z_queue]
         w_all: (N=B+K,) soft env weights for keys
@@ -635,7 +635,7 @@ def moco_supcon_softenv_ce(
     """
 
     device = z_q.device
-    B, N = z_all.size()
+    B, N = z_q.size(0), z_all.size(0)
     eps = 1e-12
 
     # --- similarities ---
@@ -664,9 +664,7 @@ def moco_supcon_softenv_ce(
     # --- CE-style logits ---
     ce_logits = torch.cat([l_pos, neg_logits], dim=1)        # (B, 1+N)
     labels = torch.zeros(B, dtype=torch.long, device=device)
-    print()
-    print(B,N)
-    print(labels.size())
+
     return ce_logits, labels
 
 def moco_loss_update(features, batch_size, weights, ssl_type, queue, dataset_idx, dataset, moco_temp, NEG=-1e9):
@@ -961,11 +959,6 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
                     # get the samples that have POSITIVES (column 0)
                     l_pos = logits[:, 0]
                     valid = l_pos > NEG
-                    print()
-                    print(valid)
-                    print(vlaid.size())
-                    print(logits.size())
-                    print(labels.size())
                     logits = logits[valid]
                     labels = labels[valid]
                     w_anchors = weights_all[idx]
