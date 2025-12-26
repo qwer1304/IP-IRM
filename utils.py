@@ -678,10 +678,6 @@ def moco_loss_update(features, batch_size, weights, ssl_type, queue, dataset_idx
     k_queue, idx_queue = queue.get(queue.queue_size, advance=False, idx=True) # 'idx_queue' are dataset indices of samples in queue
     k_all = torch.cat([out_k, k_queue], dim=0) # (N,D), N=B+K 
     k_indices_all = torch.cat([dataset_idx.to(device, non_blocking=True), idx_queue.to(device, non_blocking=True)], dim=0)
-    print()
-    print(weights.size())
-    print(k_indices_all.size())
-    print(k_indices_all.max())
     w_all = weights[k_indices_all]
 
     def get_targets(idcs, dataset, device):
@@ -963,6 +959,10 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
                     # get the samples that have POSITIVES (column 0)
                     l_pos = logits[:, 0]
                     valid = l_pos > NEG
+                    print()
+                    print(valid)
+                    print(logits.size())
+                    print(labels.size())
                     logits = logits[valid]
                     labels = labels[valid]
                     w_anchors = weights_all[idx]
