@@ -583,7 +583,11 @@ def info_nce_loss_update(features, batch_size, temperature):
     labels = (labels.unsqueeze(0) == labels.unsqueeze(1)).float() # (2*batch_size,2*batch_size) of True where index match in both views
     labels = labels.to(features.device)
     # split_matrixs = torch.cat([split_matrix, split_matrix], dim=0).to(features.device)
-    index_sequence = torch.cat([torch.arange(batch_size) for i in range(2)], dim=0).to(features.device) # (2*batch_size,) of [0,batch_size)
+    # L = [torch.arange(batch_size) for i in range(2)] is a 2-element list, each element a tensor of [0,batch_size)
+    # torch.cat(L, dim=0) is a (2*batch_size,) tensor, of two stacked tensor w/ elements in [0,batch_size)
+    index_sequence = torch.cat([torch.arange(batch_size) for i in range(2)], dim=0).to(features.device) 
+    # idex_sequence.unsqueeze(0) -> (1,2*batch_size)
+    # .expand(2*batch_size, 2*batch_size) generates a tensor w/ the 0-dim repeated (expanded)
     index_sequence = index_sequence.unsqueeze(0).expand(2*batch_size, 2*batch_size) # (2*batch_size,2*batch_size)
 
     # features = F.normalize(features, dim=1)
@@ -631,38 +635,48 @@ def moco_supcon_softenv_ce(
         y_q: (B,) class labels for queries
         y_all: (N=B+K,) labels for [z_k ; z_queue]
         w_all: (N=B+K,) soft env weights for keys
-        temperature tau
+        tau: temperature
     """
 
     device = z_q.device
-    B, N = z_q.size(0), z_all.size(0)
+    B, N = z_q.size(0), z_all.size(0) # Batch, deNumerator (positives + negatives)
     eps = 1e-12
 
     # --- similarities ---
     logits = (z_q @ z_all.T) / tau                  # (B, N)
 
+    # positive / negative masks
     if supcon:
         # --- SupCon positive mask ---
-        pos_mask = (y_q[:, None] == y_all[None, :])     # (B, N)
+        pos_mask = (y_q[:, None] == y_all[None, :]) # (B, N)
         pos_mask[:, :B].fill_diagonal_(False)
     else:
         # vanilla MoCo
-        pos_mask = torch.zeros(N, dtype=torch.bool, device=device)
+        pos_mask = torch.zeros_like(logits, dtype=torch.bool)
         pos_mask[:, :B].fill_diagonal_(True)
+    neg_mask = ~pos_mask
 
-    # --- env gating (keys only) ---
-    log_w = torch.log(w_all.clamp_min(eps))        # (N,)
-    logits_env = logits + log_w[None, :]            # (B, N)
+    # --- collapse positives (UNWEIGHTED) ---
+    pos_logits = logits.masked_fill(neg_mask, NEG)
+    l_pos = torch.logsumexp(pos_logits, dim=1, keepdim=True) # (B, 1)
+    
+    # negatives: apply SimCLR-style weight massage
+    # expand env weights to anchors
+    w_neg = w_all[None, :].expand(B, N)             # (B, N)
+    w_neg = w_neg.masked_fill(pos_mask, 0.0)        # keep only negatives
+    
+    # renormalize negatives per anchor
+    neg_count = neg_mask.sum(dim=1, keepdim=True)   # (B, 1)
+    w_sum = w_neg.sum(dim=1, keepdim=True).clamp_min(eps)
+    w_neg = w_neg / w_sum * neg_count               # sum_j w_neg = #neg
+    
+    # inject weights in log-space
+    log_w_neg  = torch.log(w_neg.clamp_min(eps))
+    neg_logits = logits + log_w_neg
+    neg_logits = neg_logits.masked_fill(pos_mask, NEG)
 
-    # --- collapse positives -> single logit ---
-    pos_logits = logits_env.masked_fill(~pos_mask, NEG)
-    l_pos = torch.logsumexp(pos_logits, dim=1, keepdim=True)  # (B, 1)
-
-    # --- negatives stay separate ---
-    neg_logits = logits_env.masked_fill(pos_mask, NEG)       # (B, N)
-
-    # --- CE-style logits ---
-    ce_logits = torch.cat([l_pos, neg_logits], dim=1)        # (B, 1+N)
+    # CE logits
+    ce_logits = torch.cat([l_pos, neg_logits], dim=1)  # (B, 1+N)
     labels = torch.zeros(B, dtype=torch.long, device=device)
 
     return ce_logits, labels
@@ -962,18 +976,26 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
                     valid = l_pos > NEG
                     logits = logits[valid]
                     labels = labels[valid]
-                    w_batch_env = weights_all_env[idx]
+                    w_batch = weights_all_env[idx]      # (B,)
+                    w_batch_env = w_batch[valid]        # (B_valid,)
                     loss_anchors = F.cross_entropy(logits, labels, reduction='none')
                     eps = 1e-12
                     # --- anchor gating ---
+                    mask1 = torch.zeros(len(w_batch), dtype=torch.bool, device=w_batch.device) # (B,)
+                    mask1[::2] = True # (B,)
+                    mask2 = ~mask1    # (B,)
+
+                    mask1 = mask1[valid] # (B_valid,)
+                    mask2 = mask2[valid] # (B_valid,)
+
                     if nonorm:
                         reg  = len(labels)
-                        reg1 = len(labels[::2])
-                        reg2 = len(labels[1::2])
+                        reg1 = mask1.sum()
+                        reg2 = mask2.sum()
                     else:
-                        reg  = w_batch_env.sum().clamp_min(eps)       #* W_env[env_idx] / (W_env.sum())
-                        reg1 = w_batch_env[::2].sum().clamp_min(eps)  #* W_env[env_idx] / (W_env.sum())
-                        reg2 = w_batch_env[1::2].sum().clamp_min(eps) #* W_env[env_idx] / (W_env.sum()) 
+                        reg  = w_batch_env.sum().clamp_min(eps)       
+                        reg1 = w_batch_env[mask1].sum().clamp_min(eps)
+                        reg2 = w_batch_env[mask2].sum().clamp_min(eps)
 
                     cont_loss_env = (w_batch_env * loss_anchors).sum() / reg                      
 
@@ -981,10 +1003,10 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
                         scale = torch.ones((1, logits.size(-1))).cuda(non_blocking=True).requires_grad_()
                         logits_pen = logits / irm_temp
 
-                        loss_per_anchor = F.cross_entropy(scale*logits[::2], labels[::2], reduction='none')
-                        cont_loss_env_scale1 = (loss_per_anchor * w_batch_env[::2]).sum() / reg1
-                        loss_per_anchor = F.cross_entropy(scale*logits[1::2], labels[1::2], reduction='none')
-                        cont_loss_env_scale2 = (loss_per_anchor * w_batch_env[1::2]).sum() / reg2
+                        loss_per_anchor = F.cross_entropy(scale*logits[mask1], labels[mask1], reduction='none')
+                        cont_loss_env_scale1 = (loss_per_anchor * w_batch_env[mask1]).sum() / reg1
+                        loss_per_anchor = F.cross_entropy(scale*logits[mask2], labels[mask2], reduction='none')
+                        cont_loss_env_scale2 = (loss_per_anchor * w_batch_env[mask2]).sum() / reg2
                 # end if ssl_type == ...
 
                 # calculate IRM penalty
@@ -1071,6 +1093,7 @@ def soft_contrastive_loss(logits, labels, weights, mode='v1', nonorm=False):
     elif mode == 'v2':
         sample_dim, label_dim = logits.size(0), logits.size(1)
         logits_exp = logits.exp()
+        # split weights into 2 chunks, sizes (N,1) and (N,K-1)
         # weight_pos: (N, 1), weight of the positive for anchor i
         # weight_neg: (N, K-1), weight of j-th negative for each anchor
         weight_pos, weight_neg = torch.split(weights, [1, label_dim-1], dim=1)
