@@ -925,7 +925,7 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
             loss_cont_list, loss_penalty_list = [], [] # per-env aggregators
             training_num += len(feature_1)
 
-            param_split = F.softmax(soft_split_all[idx], dim=-1) # positive, normalized across domains
+            param_split = F.softmax(soft_split_all, dim=-1) # positive, normalized across domains
             for env_idx in range(num_env):
                 if ssl_type == 'simclr':
                     # indexs[i, j] = original image ID generating the j-th logit for anchor i
@@ -934,7 +934,7 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
                     # indexs[i, j] tells you which original image produced the j-th logit for anchor i, 
                     # and param_split[:, env_idx][indexs] replaces each image ID with its environment-specific weight.
                     # loss_weight[i, j] = param_split[indexs[i, j], env_idx], loss_weight.shape == indexs.shape
-                    loss_weight = param_split[:, env_idx][indexs] 
+                    loss_weight = param_split[idx, env_idx][indexs] 
                     logits_cont = logits / temperature
                     """
                     They want a contrastive loss where:
@@ -955,9 +955,9 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
                         cont_loss_env_scale2 = soft_contrastive_loss(logits_pen[1::2]*scale, labels[1::2], loss_weight[1::2], mode=loss_mode, nonorm=nonorm)
 
                 elif ssl_type == 'moco' or ssl_type == 'mocosupcon':
-                    weights = param_split[:, env_idx]
+                    weights_all = param_split[:, env_idx]
                     NEG = -1e9
-                    logits, labels = moco_loss_update(torch.cat([feature_1, feature_2], dim=0), feature_1.size(0), weights, ssl_type, 
+                    logits, labels = moco_loss_update(torch.cat([feature_1, feature_2], dim=0), feature_1.size(0), weights_all, ssl_type, 
                                         queue=queue, dataset_idx=idx, dataset=dataset, moco_temp=temperature, NEG=NEG)
                     # sum over batch, per env handled by driver
                     # get the samples that have POSITIVES (column 0)
@@ -965,7 +965,7 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
                     valid = l_pos > NEG
                     logits = logits[valid]
                     labels = labels[valid]
-                    w_anchors = weights[idx]
+                    w_anchors = weights_all[idx]
                     loss_anchors = F.cross_entropy(logits, labels, reduction='none')
                     eps = 1e-12
                     # --- anchor gating ---
