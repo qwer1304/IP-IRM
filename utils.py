@@ -672,11 +672,12 @@ def moco_loss_update(features, batch_size, weights, ssl_type, queue, dataset_idx
     # 'batch_size' is the length of the first view 
     # 'dataset_idx' are the samples' indices in the dataset
     # 'weights' are weights of a partition of ALL samples in the dataset
+    device = features.device
     out_q = features[:batch_size]
     out_k = features[batch_size:]
     k_queue, idx_queue = queue.get(queue.queue_size, advance=False, idx=True) # 'idx_queue' are dataset indices of samples in queue
     k_all = torch.cat([out_k, k_queue], dim=0) # (N,D), N=B+K 
-    k_indices_all = torch.cat([dataset_idx, idx_queue], dim=0)
+    k_indices_all = torch.cat([dataset_idx.to(device, non_blocking=True), idx_queue.to(device, non_blocking=True)], dim=0)
 
     def get_targets(idcs, dataset, device):
         targets = [dataset.targets[i] for i in idcs]
@@ -688,8 +689,8 @@ def moco_loss_update(features, batch_size, weights, ssl_type, queue, dataset_idx
     if ssl_type == 'moco':
         y_batch, y_all = None, None
     elif ssl_type == 'mocosupcon':
-        y_batch = get_targets(dataset_idx, dataset, out_q.device)
-        y_queue = get_targets(idx_queue, dataset, out_q.device)
+        y_batch = get_targets(dataset_idx, dataset, device)
+        y_queue = get_targets(idx_queue, dataset, device)
         y_all = torch.cat([y_batch, y_queue], dim=0) # (N,)
 
     logits, labels = moco_supcon_softenv_ce(out_q, k_all, y_batch, y_all, moco_temp, NEG=NEG, supcon=ssl_type=='mocosupcon')
