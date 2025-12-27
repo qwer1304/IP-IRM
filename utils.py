@@ -623,60 +623,47 @@ def info_nce_loss_update(features, batch_size, temperature):
 def moco_supcon_softenv_ce(
     z_q, z_all,
     y_q, y_all,
-    w_all, # (N,) - denominator = positives & negatives
+    w_all,
     tau,
     NEG=-1e9,
     supcon=True,
 ):
-    """
-    Returns L_env (scalar) using CrossEntropyLoss
-        z_q: (B, D) query embeddings (anchors)
-        z_all: (N=B+K, D) key embeddings (positives and negatives)
-        y_q: (B,) class labels for queries
-        y_all: (N=B+K,) labels for [z_k ; z_queue]
-        w_all: (N=B+K,) soft env weights for keys
-        tau: temperature
-    """
-
     device = z_q.device
-    B, N = z_q.size(0), z_all.size(0) # Batch, deNumerator (positives + negatives)
+    B, N = z_q.size(0), z_all.size(0)
     eps = 1e-12
 
-    # --- similarities ---
-    logits = (z_q @ z_all.T) / tau                  # (B, N)
+    logits = (z_q @ z_all.T) / tau  # (B, N)
 
-    # positive / negative masks
     if supcon:
-        # --- SupCon positive mask ---
-        pos_mask = (y_q[:, None] == y_all[None, :]) # (B, N)
+        pos_mask = (y_q[:, None] == y_all[None, :])
         pos_mask[:, :B].fill_diagonal_(False)
     else:
-        # vanilla MoCo
         pos_mask = torch.zeros_like(logits, dtype=torch.bool)
         pos_mask[:, :B].fill_diagonal_(True)
+
     neg_mask = ~pos_mask
 
-    # --- collapse positives (UNWEIGHTED) ---
-    pos_logits = logits.masked_fill(neg_mask, NEG)
-    l_pos = torch.logsumexp(pos_logits, dim=1, keepdim=True) # (B, 1)
-    
-    # negatives: apply SimCLR-style weight massage
-    # expand env weights to anchors
-    w_neg = w_all[None, :].expand(B, N)             # (B, N)
-    w_neg = w_neg.masked_fill(pos_mask, 0.0)        # keep only negatives
-    
-    # renormalize negatives per anchor
-    neg_count = neg_mask.sum(dim=1, keepdim=True)   # (B, 1)
+    # ---- key gating (ALL keys) ----
+    log_w = torch.log(w_all.clamp_min(eps))
+    logits_env = logits + log_w[None, :]
+
+    # ---- collapse positives (WEIGHTED) ----
+    pos_logits = logits_env.masked_fill(neg_mask, NEG)
+    l_pos = torch.logsumexp(pos_logits, dim=1, keepdim=True)
+
+    # ---- SimCLR-style negative massaging ----
+    w_neg = w_all[None, :].expand(B, N)
+    w_neg = w_neg.masked_fill(pos_mask, 0.0)
+
+    neg_count = neg_mask.sum(dim=1, keepdim=True)
     w_sum = w_neg.sum(dim=1, keepdim=True).clamp_min(eps)
-    w_neg = w_neg / w_sum * neg_count               # sum_j w_neg = #neg
-    
-    # inject weights in log-space
-    log_w_neg  = torch.log(w_neg.clamp_min(eps))
+    w_neg = w_neg / w_sum * neg_count
+
+    log_w_neg = torch.log(w_neg + eps)
     neg_logits = logits + log_w_neg
     neg_logits = neg_logits.masked_fill(pos_mask, NEG)
 
-    # CE logits
-    ce_logits = torch.cat([l_pos, neg_logits], dim=1)  # (B, 1+N)
+    ce_logits = torch.cat([l_pos, neg_logits], dim=1)
     labels = torch.zeros(B, dtype=torch.long, device=device)
 
     return ce_logits, labels
