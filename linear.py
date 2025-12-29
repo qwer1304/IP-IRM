@@ -25,6 +25,23 @@ import os
 
 import kornia.augmentation as K
 
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+class ShallowMLPProbe(nn.Module):
+    def __init__(self, D, C, H=64, use_bn=False):
+        super().__init__()
+        layers = [nn.Linear(D, H), bias=True]
+        if use_bn:
+            layers.append(nn.BatchNorm1d(H))
+        layers.append(nn.ReLU(inplace=True))
+        layers.append(nn.Linear(H, C), bias=True)
+        self.net = nn.Sequential(*layers)
+
+    def forward(self, z):
+        return self.net(z)
+
 class MultiProtoLinear(nn.Module):
     """
     Multi-prototype linear classifier.
@@ -144,7 +161,10 @@ class NetResnet(nn.Module):
         if self.num_proto > 1:
             self.fc = MultiProtoLinear(2048, num_class, num_proto=self.num_proto, bias=True, agg="max")
         else:
-            self.fc = nn.Linear(2048, num_class, bias=True)
+            if args.shallow_probe:
+                self.fc = ShallowMLPProbe(2048, num_class, H=64, use_bn=False)
+            else:
+                self.fc = nn.Linear(2048, num_class, bias=True)
             
     def forward(self, x, normalize=False):
         with torch.no_grad():
@@ -503,6 +523,7 @@ if __name__ == '__main__':
     parser.add_argument('--dropout', action="store_true", help="Apply dropout before linear head")
     parser.add_argument('--dropout_prob', type=float, default=0.2, help="Dropout prob")
     parser.add_argument('--num_proto', type=int, default=1, help="Number of class prototypes in linear head")
+    parser.add_argument('--shallow_probe', action='store_true', help="shallow non-linear head")
 
     args = parser.parse_args()
 
