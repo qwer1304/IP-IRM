@@ -355,7 +355,7 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
                 'n_classes':    args.class_num,
                 'head_weights': net.module.fc.weight,  # shape: (num_classes, embed_dim)
                 'head_bias':    net.module.fc.bias,    # shape: (num_classes,)
-            })
+            }, fp)
 
             print(f"Dumped features into {fp}")
         
@@ -682,15 +682,18 @@ if __name__ == '__main__':
     if args.evaluate:
         epoch = epochs
         if 'train' in args.evaluate:
+            print('evaluating on train')
             train_data  = utils.Imagenet(root=args.data + '/train', transform=test_transform, target_transform=target_transform, class_to_idx=class_to_idx)
             train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, pin_memory=True, 
                 drop_last=False, persistent_workers=tr_pw, **kwargs)
             train_loss, train_acc_1, train_acc_5 = train_val(model, train_loader, None, tr_bs, args, dataset="train")
         if 'test' in args.evaluate:
+            print('evaluating on test')
             test_loss, test_acc_1, test_acc_5 = train_val(model, test_loader, None, te_bs, args, dataset="test")
         else:
             test_loss, test_acc_1, test_acc_5 = 0.0, 0.0, 0.0
         if ('val' in args.evaluate) and (args.dataset == 'ImageNet'):
+            print('evaluating on val')
             val_loss, val_acc_1, val_acc_5 = train_val(model, val_loader, None, te_bs, args, dataset="val")
         else:
             val_loss, val_acc_1, val_acc_5 = 0.0, 0.0, 0.0
