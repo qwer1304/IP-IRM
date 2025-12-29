@@ -1891,6 +1891,19 @@ def train_partition(net, update_loader, soft_split, random_init=False, args=None
         soft_split = soft_split.requires_grad_()
         utils.write_log('%s' %(utils.pretty_tensor_str(soft_split[:3])), log_file, print_=True)
 
+    """
+    What's the difference between offline and online modes:
+    OFFLINE MODE: 
+        First extract features from the whole dataset and then run optimization of partitioning over multiple epochs
+        with THOSE features frozen.
+        The number of times the model is run (in evaluation mode) on the dataset is ONE.
+    ONLINE MODE:
+        Extract features from a batch and then run optimization of partitioning over multiple epochs/batches.
+        Since the model is NOT updated during this it might appear that the features do NOT change. But this is INCORRECT,
+        because raw samples are transformed using transforms with random elements. Hence the positives and negatives
+        CHANGE over batches / epochs.
+        The number of times the model is run (in evaluation mode) on the dataset is NUMBER OF EPOCHS.
+    """
     if args.offline: # Maximize Step offline, first extract image features
         net.eval()
         feature_bank_1, feature_bank_2 = [], []
@@ -2340,7 +2353,7 @@ if __name__ == '__main__':
     parser.add_argument('--test_freq', default=5*5, type=int, metavar='N',
                     help='test epoch freqeuncy')
     parser.add_argument('--norandgray', action="store_true", default=False, help='skip rand gray transform')
-    parser.add_argument('--evaluate', action="store_true", default=False, help='only evaluate')
+    parser.add_argument('--evaluate', type=str, default=None, nargs="*", choices=['val', 'test'], help='only evaluate')
     parser.add_argument('--extract_features', action="store_true", help="extract features for post processiin during evaluate")
     parser.add_argument('--split_train_for_test', type=float, default=None, nargs=2, help="fractions to split training data into train/val for evaluation")
 
@@ -2601,7 +2614,7 @@ if __name__ == '__main__':
                 num_partitions = len(updated_split_all) if updated_split_all is not None else 0
                 print(f"found {num_partitions} partitions")
                 if updated_split_all:
-                    if not all([len(s) == len(update_data) for s in updated_split_all]) and not args.evaluate:
+                    if not all([len(s) == len(update_data) for s in updated_split_all]) and args.evaluate is None:
                         print([len(s) for s in updated_split_all], len(update_data))
                         assert False, "Partitons from checkpoint have different length from dataset" 
                     assert updated_split_all[0].size(-1) == args.env_num, \
@@ -2630,7 +2643,7 @@ if __name__ == '__main__':
     epoch = start_epoch # used from train_partition()
     print(f"start epoch {start_epoch}")
 
-    if args.evaluate:
+    if args.evaluate is not None:
         print(f"Starting evaluation name: {args.name}")
         if args.split_train_for_test:
             mem_data = random_split(memory_data, args.split_train_for_test)
@@ -2643,14 +2656,18 @@ if __name__ == '__main__':
             train_loader = DataLoader(mem_data[1], batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
                 pin_memory=True, persistent_workers=te_pw)
             train_acc_1, train_acc_5, train_macro_acc = test(model, feauture_bank, feature_labels, train_loader, args, progress=True, prefix="Train:")
-        print('eval on val data')
-        val_loader = DataLoader(val_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=True, 
-            pin_memory=True, persistent_workers=te_pw)
-        val_acc_1, val_acc_5, val_macro_acc = test(model, feauture_bank, feature_labels, val_loader, args, progress=True, prefix="Val:")
-        print('eval on test data')
-        test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=True, 
-            pin_memory=True, persistent_workers=te_pw)
-        test_acc_1, test_acc_5, test_macro_acc = test(model, feauture_bank, feature_labels, test_loader, args, progress=True, prefix="Test:")
+        if len(args.evaluate) == 0:
+            args.evaluate = ['val', 'test']
+        if 'val' in args.evaluate:
+            print('eval on val data')
+            val_loader = DataLoader(val_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=True, 
+                pin_memory=True, persistent_workers=te_pw)
+            val_acc_1, val_acc_5, val_macro_acc = test(model, feauture_bank, feature_labels, val_loader, args, progress=True, prefix="Val:")
+        if 'test' in args.evaluate:
+            print('eval on test data')
+            test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=True, 
+                pin_memory=True, persistent_workers=te_pw)
+            test_acc_1, test_acc_5, test_macro_acc = test(model, feauture_bank, feature_labels, test_loader, args, progress=True, prefix="Test:")
         exit()
 
     if not args.resume and os.path.exists(log_file):

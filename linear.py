@@ -107,6 +107,10 @@ class NetResnet(nn.Module):
             state_dict = checkpoint["state_dict"]
         else:
             state_dict = checkpoint
+        if "epoch" in checkpoint:
+            epoch = checkpoint["epoch"]
+        else:
+            epoch = -1
 
         # Handle MoCo checkpoints (strip encoder_q prefix)
         new_state_dict = {}
@@ -127,7 +131,7 @@ class NetResnet(nn.Module):
             print("Unexpected keys (ignoring fc):", [k for k in msg.unexpected_keys if not k.startswith("fc.")])
         else:
             print("Unexpected keys:", msg.unexpected_keys)
-        print("<= loaded pretrained checkpoint '{}'".format(pretrained_path))
+        print("<= loaded pretrained checkpoint '{}', epoch {}".format(pretrained_path, epoch))
         
         self.f = model.module.f
 
@@ -137,8 +141,11 @@ class NetResnet(nn.Module):
         self.dropout = nn.Dropout(args.dropout_prob) if args.dropout else nn.Identity()
         # number of prototypes per class (small: 3-5)
         self.num_proto = args.num_proto # e.g. 3 or 5
-        self.fc = MultiProtoLinear(2048, num_class, num_proto=self.num_proto, bias=True, agg="max")
-
+        if self.num_proto > 1:
+            self.fc = MultiProtoLinear(2048, num_class, num_proto=self.num_proto, bias=True, agg="max")
+        else:
+            self.fc = nn.Linear(2048, num_class, bias=True)
+            
     def forward(self, x, normalize=False):
         with torch.no_grad():
             feature = self.f(x)
@@ -157,11 +164,10 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
     is_train = train_optimizer is not None
     if is_train:
         net.train()
-        # Freeze BN stats
-        def freeze_bn(module):
-            if isinstance(module, torch.nn.modules.batchnorm._BatchNorm):
-                module.requires_grad_(False)
-        net.apply(freeze_bn)
+        for m in net.modules():
+            if isinstance(m, torch.nn.modules.batchnorm._BatchNorm):
+                m.requires_grad_(False)          # freeze gamma/beta
+                m.track_running_stats = True     # default, but explicit is good
     else: 
         net.eval()
     
@@ -347,6 +353,8 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
                 'pred_scores':  pred_scores,
                 'model_epoch':  epoch,
                 'n_classes':    args.class_num,
+                'head_weights': net.module.fc.weight,  # shape: (num_classes, embed_dim)
+                'head_bias':    net.module.fc.bias,    # shape: (num_classes,)
             }, fp)
             print(f"Dumped features into {fp}")
         

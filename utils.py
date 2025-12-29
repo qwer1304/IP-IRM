@@ -642,28 +642,40 @@ def moco_supcon_softenv_ce(
         pos_mask[:, :B].fill_diagonal_(True)
 
     neg_mask = ~pos_mask
-
+    """
+    Weighted MoCo+SupCon env loss is:
+    L_e = 1/sum_i w_{i,e} * sum_i w_{i,e} [-log (sum_{j in P(i)} w_{j,e} exp(l_{ij}) / sum_k w_{k,e} exp(l_{ik}))]
+    lplus_{i,e} = log sum_{j in P(i)} w_{j,e} exp(l_{ij}) 
+                = log sum_{j in P(i)} exp(log(w_{j,e}))exp(l_{ij}) 
+                = log sum_{j in P(i)} exp(log(w_{j,e}) + l_{ij})
+    ltilde_{ik,e} = l_{ik} + log(w_{k,e})
+    Form logits for anchor i as [  l_pos_i ,  neg_1 , neg_2 , ... ]
+    CE(logits_i, label=0) = - log (exp(lplus_{i,e}) / (exp(lplus_{i,e}) + sum_k exp(ltilde_{ik,e}))) 
+                          = - log(sum_{j in P(i)} w_{j,e}exp(l_{ij}) / sum_k w_{k,e}exp(l_{ik}))
+    
+    """
     # ---- key gating (ALL keys) ----
     log_w = torch.log(w_all.clamp_min(eps))
     logits_env = logits + log_w[None, :]
 
-    # ---- collapse positives (WEIGHTED) ----
+    # ---- collapse positives into a single logit (WEIGHTED) ----
     pos_logits = logits_env.masked_fill(neg_mask, NEG)
-    l_pos = torch.logsumexp(pos_logits, dim=1, keepdim=True)
+    l_pos = torch.logsumexp(pos_logits, dim=1, keepdim=True) # lplus_{:,e}
 
-    # ---- SimCLR-style negative massaging ----
+    # ---- SimCLR-style negative weights massaging ----
     w_neg = w_all[None, :].expand(B, N)
     w_neg = w_neg.masked_fill(pos_mask, 0.0)
 
     neg_count = neg_mask.sum(dim=1, keepdim=True)
     w_sum = w_neg.sum(dim=1, keepdim=True).clamp_min(eps)
     w_neg = w_neg / w_sum * neg_count
+    # ---- End of negative weights massaging
 
-    log_w_neg = torch.log(w_neg + eps)
+    log_w_neg  = torch.log(w_neg + eps)                       
     neg_logits = logits + log_w_neg
-    neg_logits = neg_logits.masked_fill(pos_mask, NEG)
+    neg_logits = neg_logits.masked_fill(pos_mask, NEG)       # ltilde_{:,:,e}
 
-    ce_logits = torch.cat([l_pos, neg_logits], dim=1)
+    ce_logits = torch.cat([l_pos, neg_logits], dim=1)        # (B, 1+N)
     labels = torch.zeros(B, dtype=torch.long, device=device)
 
     return ce_logits, labels
@@ -1038,6 +1050,7 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
                         sum(risk_constrain_all_list)/len(risk_constrain_all_list), cnt, pre_optimizer.param_groups[0]['lr'], irm_mode, 
                         ", ".join("%.4f" % v for v in F.softmax(soft_split_print, dim=-1)[0].tolist()),
                        ), end='', flush=True)
+        # end for feature_1, feature_2, idx in trainloader: # 'idx' is the index in the dataset
 
         pre_scheduler.step()
         avg_risk = sum(risk_all_list)/len(risk_all_list)
@@ -1066,6 +1079,7 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
             write_log('Debug:  group1 %d  group2 %d' %(group_assign.sum(), group_assign.size(0)-group_assign.sum()), log_file=log_file, print_=True)
             del trainloader
             return soft_split_best
+    # end for epoch in range(100):
 
 
 # soft version of the contrastive loss
