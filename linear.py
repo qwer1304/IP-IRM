@@ -355,6 +355,7 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
                 'n_classes':    args.class_num,
                 'head_weights': net.module.fc.weight,  # shape: (num_classes, embed_dim)
                 'head_bias':    net.module.fc.bias,    # shape: (num_classes,)
+            })
 
             print(f"Dumped features into {fp}")
         
