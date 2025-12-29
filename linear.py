@@ -32,11 +32,11 @@ import torch.nn.functional as F
 class ShallowMLPProbe(nn.Module):
     def __init__(self, D, C, H=64, use_bn=False):
         super().__init__()
-        layers = [nn.Linear(D, H), bias=True]
+        layers = [nn.Linear(D, H, bias=True)]
         if use_bn:
             layers.append(nn.BatchNorm1d(H))
         layers.append(nn.ReLU(inplace=True))
-        layers.append(nn.Linear(H, C), bias=True)
+        layers.append(nn.Linear(H, C, bias=True))
         self.net = nn.Sequential(*layers)
 
     def forward(self, z):
