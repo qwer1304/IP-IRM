@@ -257,8 +257,9 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
             train_optimizer.zero_grad()  # clear gradients at the beginning
 
         for batch_data in data_bar:
-            data, target, index = batch_data[0], batch_data[1], batch_data[2] # ommit index, if returned 
-            if net.updated_split_all is not None and args.partition_to_test is not None:
+            data, target = batch_data[0], batch_data[1]
+            index = batch_data[2] is len(batch_data) > 2 else None
+            if (net.updated_split_all is not None) and (args.partition_to_test is not None) and (index is not None):
                 w = updated_split_all[args.partition_to_test][index]
                 w = F.softmax(w, dim=-1)
                 mask_k = (w[:, 0] > 0.9)   # or argmax if hard
@@ -626,7 +627,7 @@ if __name__ == '__main__':
             #exit()
 
         else:
-            train_data  = utils.Imagenet(root=args.data + '/train', transform=test_transform, target_transform=target_transform, class_to_idx=class_to_idx)
+            train_data  = utils.Imagenet_idx(root=args.data + '/train', transform=test_transform, target_transform=target_transform, class_to_idx=class_to_idx)
             if args.prune_sizes: # prune dataset s.t. the number of samples per  label is the same
                 class SubsetProxy(Subset):
                     def __getattr__(self, name):
