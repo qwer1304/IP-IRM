@@ -258,7 +258,7 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
 
         for batch_data in data_bar:
             data, target = batch_data[0], batch_data[1]
-            index = batch_data[2] is len(batch_data) > 2 else None
+            index = batch_data[2] if len(batch_data) > 2 else None
             if (net.updated_split_all is not None) and (args.partition_to_test is not None) and (index is not None):
                 w = updated_split_all[args.partition_to_test][index]
                 w = F.softmax(w, dim=-1)
