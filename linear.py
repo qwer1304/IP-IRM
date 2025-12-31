@@ -136,7 +136,7 @@ class NetResnet(nn.Module):
             print("updated_split doesn't exist")
         if "updated_split_all" in checkpoint:
            self.updated_split_all = checkpoint['updated_split_all']
-           print(f"updated_split_all exists; num_envs {self.updated_split_all.size(-1)}")
+           print(f"updated_split_all exists; num partitions {len(self.updated_split_all)}")
         else:
             self.updated_split_all =  None
             print("updated_split_all doesn't exist")
