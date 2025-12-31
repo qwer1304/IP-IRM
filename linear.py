@@ -256,15 +256,20 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
         if is_train:
             train_optimizer.zero_grad()  # clear gradients at the beginning
 
+        if is_train and  (net.module.updated_split_all is not None) and (args.partition_to_test is not None):
+            w = net.module.updated_split_all[args.partition_to_test]
+            w = F.softmax(w, dim=-1)
+            max_idcs = torch.argmax(w, dim=1) # 0/1
+            env_idx = int(max_idcs.sum() > (len(max_idcs) / 2))
+            w = w[:, env_idx]
+        else:
+            w = None
+            
         for batch_data in data_bar:
             data, target = batch_data[0], batch_data[1]
             index = batch_data[2] if len(batch_data) > 2 else None
-            if (net.module.updated_split_all is not None) and (args.partition_to_test is not None) and (index is not None):
-                w = net.module.updated_split_all[args.partition_to_test][index]
-                w = F.softmax(w, dim=-1)
-                max_idcs = torch.argmax(w, dim=1) # 0/1
-                env_idx = max_idcs.sum() > (len(max_idcs) / 2)
-                mask_k = (w[:, int(env_idx)] > 0.9).to('cpu')   # or argmax if hard
+            if (w is not None) and (index is not None):
+                mask_k = (w[index] > 0.9).to('cpu')   # or argmax if hard
             else:
                 mask_k = torch.ones_like(target, dtype=torch.bool)
 
