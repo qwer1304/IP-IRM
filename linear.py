@@ -128,6 +128,18 @@ class NetResnet(nn.Module):
             epoch = checkpoint["epoch"]
         else:
             epoch = -1
+        if "updated_split" in checkpoint:
+           self.updated_split = checkpoint['updated_split']
+           print("updated_split exists")
+        else:
+            self.updated_split =  None
+            print("updated_split doesn't exist")
+        if "updated_split_all" in checkpoint:
+           self.updated_split_all = checkpoint['updated_split_all']
+           print(f"updated_split_all exists; num_envs {updated_split_all.size(-1)}")
+        else:
+            self.updated_split_all =  None
+            print("updated_split_all doesn't exist")
 
         # Handle MoCo checkpoints (strip encoder_q prefix)
         new_state_dict = {}
@@ -245,7 +257,16 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
             train_optimizer.zero_grad()  # clear gradients at the beginning
 
         for batch_data in data_bar:
-            data, target = batch_data[0], batch_data[1] # ommit index, if returned 
+            data, target, index = batch_data[0], batch_data[1], batch_data[2] # ommit index, if returned 
+            if net.updated_split_all is not None and args.partition_to_test is not None:
+                w = updated_split_all[args.partition_to_test][index]
+                w = F.softmax(w, dim=-1)
+                mask_k = (w[:, 0] > 0.9)   # or argmax if hard
+            else:
+                mask_k = torch.ones_like(target, dtype=torch.bool)
+
+            data = data[mask_k]
+            target = target[mask_k]
             # Split into micro-batches
             if gpu_accum_steps > 1:
                 data_chunks = data.split(gpu_batch_size)
@@ -524,6 +545,7 @@ if __name__ == '__main__':
     parser.add_argument('--dropout_prob', type=float, default=0.2, help="Dropout prob")
     parser.add_argument('--num_proto', type=int, default=1, help="Number of class prototypes in linear head")
     parser.add_argument('--shallow_probe', action='store_true', help="shallow non-linear head")
+    parser.add_argument('--partition_to_test', type=int, default=None, help="Partition to test")
 
     args = parser.parse_args()
 
