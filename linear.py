@@ -262,7 +262,9 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
             if (net.module.updated_split_all is not None) and (args.partition_to_test is not None) and (index is not None):
                 w = net.module.updated_split_all[args.partition_to_test][index]
                 w = F.softmax(w, dim=-1)
-                mask_k = (w[:, 0] > 0.9).to('cpu')   # or argmax if hard
+                max_idcs = torch.argmax(w, dim=1) # 0/1
+                env_idx = max_idcs.sum() > (len(max_idcs) / 2)
+                mask_k = (w[:, int(env_idx)] > 0.9).to('cpu')   # or argmax if hard
             else:
                 mask_k = torch.ones_like(target, dtype=torch.bool)
 
