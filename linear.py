@@ -555,6 +555,10 @@ if __name__ == '__main__':
     parser.add_argument('--shallow_probe', action='store_true', help="shallow non-linear head")
     parser.add_argument('--partition_to_test', type=int, default=None, help="Partition to test")
 
+    parser.add_argument('--train_transform', default='train', type=str, choices=['train', 'test'])
+    parser.add_argument('--test_transform', default='test', type=str, choices=['train', 'test'])
+    parser.add_argument('--val_transform', default='test', type=str, choices=['train', 'test'])
+
     args = parser.parse_args()
 
     save_dir = 'downstream/{}'.format(args.name)
@@ -634,7 +638,8 @@ if __name__ == '__main__':
             #exit()
 
         else:
-            train_data  = utils.Imagenet_idx(root=args.data + '/train', transform=test_transform, target_transform=target_transform, class_to_idx=class_to_idx)
+            transform   = train_transform if args.test_transform == 'train' else test_transform
+            train_data  = utils.Imagenet_idx(root=args.data + '/train', transform=transform, target_transform=target_transform, class_to_idx=class_to_idx)
             if args.prune_sizes: # prune dataset s.t. the number of samples per  label is the same
                 class SubsetProxy(Subset):
                     def __getattr__(self, name):
@@ -673,8 +678,10 @@ if __name__ == '__main__':
                 class_weights = torch.ones(num_class)
             class_weights = class_weights.cuda()
 
-            test_data   = utils.Imagenet(root=args.data + '/test',  transform=test_transform,  target_transform=target_transform, class_to_idx=class_to_idx)
-            val_data    = utils.Imagenet(root=args.data + '/val',   transform=test_transform,  target_transform=target_transform, class_to_idx=class_to_idx)
+            transform   = train_transform if args.test_transform == 'train' else test_transform
+            test_data   = utils.Imagenet(root=args.data + '/test',  transform=transform,  target_transform=target_transform, class_to_idx=class_to_idx)
+            transform   = train_transform if args.val_transform == 'train' else test_transform
+            val_data    = utils.Imagenet(root=args.data + '/val',   transform=transform,  target_transform=target_transform, class_to_idx=class_to_idx)
 
             if args.weighted_sampler:
                 # Count per-class frequency
@@ -734,7 +741,8 @@ if __name__ == '__main__':
         epoch = epochs
         if 'train' in args.evaluate:
             print('evaluating on train')
-            train_data  = utils.Imagenet(root=args.data + '/train', transform=test_transform, target_transform=target_transform, class_to_idx=class_to_idx)
+            transform = train_transform if args.train_transform == 'train' else test_transform
+            train_data  = utils.Imagenet(root=args.data + '/train', transform=transform, target_transform=target_transform, class_to_idx=class_to_idx)
             train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, pin_memory=True, 
                 drop_last=False, persistent_workers=tr_pw, **kwargs)
             train_loss, train_acc_1, train_acc_5 = train_val(model, train_loader, None, tr_bs, args, dataset="train")
