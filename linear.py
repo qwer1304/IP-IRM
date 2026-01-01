@@ -135,8 +135,11 @@ class NetResnet(nn.Module):
             self.updated_split =  None
             print("updated_split doesn't exist")
         if "updated_split_all" in checkpoint:
-           self.updated_split_all = checkpoint['updated_split_all']
-           print(f"updated_split_all exists; num partitions {len(self.updated_split_all)}")
+            self.updated_split_all = checkpoint['updated_split_all']
+            if self.updated_split_all is not None:
+                print(f"updated_split_all exists; num partitions {len(self.updated_split_all)}")
+            else:
+                print("updated_split_all exists; no partitions")
         else:
             self.updated_split_all =  None
             print("updated_split_all doesn't exist")
@@ -555,7 +558,7 @@ if __name__ == '__main__':
     parser.add_argument('--shallow_probe', action='store_true', help="shallow non-linear head")
     parser.add_argument('--partition_to_test', type=int, default=None, help="Partition to test")
 
-    parser.add_argument('--train_transform', default='train', type=str, choices=['train', 'test'])
+    parser.add_argument('--train_transform', default='test', type=str, choices=['train', 'test']) # in LP train transfrom = test transfrom
     parser.add_argument('--test_transform', default='test', type=str, choices=['train', 'test'])
     parser.add_argument('--val_transform', default='test', type=str, choices=['train', 'test'])
 
