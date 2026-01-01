@@ -641,7 +641,7 @@ if __name__ == '__main__':
             #exit()
 
         else:
-            transform   = train_transform if args.test_transform == 'train' else test_transform
+            transform   = train_transform if args.train_transform == 'train' else test_transform
             train_data  = utils.Imagenet_idx(root=args.data + '/train', transform=transform, target_transform=target_transform, class_to_idx=class_to_idx)
             if args.prune_sizes: # prune dataset s.t. the number of samples per  label is the same
                 class SubsetProxy(Subset):
