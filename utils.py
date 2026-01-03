@@ -1255,7 +1255,7 @@ def make_train_transform(image_size=64, randgray=True, normalize='CIFAR', gpu=Tr
                 K.RandomHorizontalFlip(p=0.5)
                ]
     if mixed: 
-        geometry = [K.AugmentationSequential(*geometry, p=0.5)
+        geometry = [K.AugmentationSequential(*geometry, p=0.5)]
     gpu_transform = K.AugmentationSequential(
         *geometry,
         K.ColorJitter(0.4,0.4,0.4,0.1),
