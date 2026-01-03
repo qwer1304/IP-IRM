@@ -1227,7 +1227,7 @@ class GaussianBlur(object):
 
 # just follow the previous work -- DCL, NeurIPS2020
 
-def make_train_transform(image_size=64, randgray=True, normalize='CIFAR', gpu=True):
+def make_train_transform(image_size=64, randgray=True, normalize='CIFAR', gpu=True, mixed=False):
     kernel_size = int(0.1 * image_size)
     if (kernel_size % 2) == 0:
         kernel_size += 1
@@ -1251,9 +1251,13 @@ def make_train_transform(image_size=64, randgray=True, normalize='CIFAR', gpu=Tr
             transforms.Normalize(mean=norm_mean, std=norm_std),
         ])
 
+    geometry = [K.RandomResizedCrop((image_size, image_size), scale=(0.7,1.0)),
+                K.RandomHorizontalFlip(p=0.5)
+               ]
+    if mixed: 
+        geometry = [K.AugmentationSequential(*geometry, p=0.5)
     gpu_transform = K.AugmentationSequential(
-        K.RandomResizedCrop((image_size, image_size), scale=(0.7,1.0)),
-        K.RandomHorizontalFlip(p=0.5),
+        *geometry,
         K.ColorJitter(0.4,0.4,0.4,0.1),
         K.RandomGrayscale(p=0.2) if randgray else nn.Identity(),
         K.RandomGaussianBlur((kernel_size,kernel_size), sigma=(0.1,2.0)),
