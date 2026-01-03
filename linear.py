@@ -584,7 +584,7 @@ if __name__ == '__main__':
     if args.dataset == 'STL':
         train_transform = utils.make_train_transform(normalize=args.image_class)
         test_transform = utils.make_test_transform(normalize=args.image_class)
-        train_data = STL10(root=args.data, split='train', transform=test_transform, target_transform=target_transform)
+        train_data = STL10(root=args.data, split='train', transform=train_transform, target_transform=target_transform)
         test_data = STL10(root=args.data, split='test', transform=test_transform, target_transform=target_transform)
         train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, shuffle=True, pin_memory=True, 
             drop_last=True, persistent_workers=tr_pw)
@@ -593,7 +593,7 @@ if __name__ == '__main__':
     elif args.dataset == 'CIFAR10':
         train_transform = utils.make_train_transform(normalize=args.image_class)
         test_transform = utils.make_test_transform(normalize=args.image_class)
-        train_data = utils.CIFAR10(root=args.data, train=True, transform=test_transform, target_transform=target_transform)
+        train_data = utils.CIFAR10(root=args.data, train=True, transform=train_transform, target_transform=target_transform)
         test_data = utils.CIFAR10(root=args.data, train=False, transform=test_transform, target_transform=target_transform)
         train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, shuffle=True, pin_memory=True, 
             drop_last=True, persistent_workers=tr_pw)
@@ -602,7 +602,7 @@ if __name__ == '__main__':
     elif args.dataset == 'CIFAR100':
         train_transform = utils.make_train_transform(normalize=args.image_class)
         test_transform = utils.make_test_transform(normalize=args.image_class)
-        train_data = utils.CIFAR100Pair_Index(root=args.data, train=True, transform=test_transform, target_transform=target_transform)
+        train_data = utils.CIFAR100Pair_Index(root=args.data, train=True, transform=train_transform, target_transform=target_transform)
         test_data = utils.CIFAR100Pair(root=args.data, train=False, transform=test_transform, target_transform=target_transform)
         train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, shuffle=True, pin_memory=True, 
             drop_last=True, persistent_workers=tr_pw)
@@ -616,7 +616,7 @@ if __name__ == '__main__':
             wrap = args.extract_features
             # descriptors of train data
             train_desc  =   {'dataset': utils.Imagenet_idx,
-                              'transform': test_transform,
+                              'transform': train_transform,
                               'target_transform': target_transform,
                               'class_to_index': class_to_idx,
                               'wrap': False, # for changeable target transform
