@@ -558,7 +558,7 @@ if __name__ == '__main__':
     parser.add_argument('--shallow_probe', action='store_true', help="shallow non-linear head")
     parser.add_argument('--partition_to_test', type=int, default=None, help="Partition to test")
 
-    parser.add_argument('--train_transform', default='test', type=str, choices=['train', 'test']) # in LP train transfrom = test transfrom
+    parser.add_argument('--train_transform', default='test', type=str, choices=['train', 'test', 'train_mixed']) # in LP train transfrom = test transfrom
     parser.add_argument('--test_transform', default='test', type=str, choices=['train', 'test'])
     parser.add_argument('--val_transform', default='test', type=str, choices=['train', 'test'])
 
@@ -609,7 +609,7 @@ if __name__ == '__main__':
         test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
             pin_memory=True, persistent_workers=te_pw)
     elif args.dataset == 'ImageNet':
-        train_transform = utils.make_train_transform(image_size, randgray=not args.norandgray, normalize=args.image_class, mixed=True)
+        train_transform = utils.make_train_transform(image_size, randgray=not args.norandgray, normalize=args.image_class, mixed=args.train_transform=='train_mixed')
         test_transform = utils.make_test_transform(normalize=args.image_class)
 
         if False:
@@ -641,7 +641,7 @@ if __name__ == '__main__':
             #exit()
 
         else:
-            transform   = train_transform if args.train_transform == 'train' else test_transform
+            transform   = train_transform if 'train' in args.train_transform else test_transform
             train_data  = utils.Imagenet_idx(root=args.data + '/train', transform=transform, target_transform=target_transform, class_to_idx=class_to_idx)
             if args.prune_sizes: # prune dataset s.t. the number of samples per  label is the same
                 class SubsetProxy(Subset):
@@ -744,7 +744,7 @@ if __name__ == '__main__':
         epoch = epochs
         if 'train' in args.evaluate:
             print('evaluating on train')
-            transform = train_transform if args.train_transform == 'train' else test_transform
+            transform = train_transform if 'train' in args.train_transform else test_transform
             train_data  = utils.Imagenet(root=args.data + '/train', transform=transform, target_transform=target_transform, class_to_idx=class_to_idx)
             train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, pin_memory=True, 
                 drop_last=False, persistent_workers=tr_pw, **kwargs)
