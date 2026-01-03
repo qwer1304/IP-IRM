@@ -609,7 +609,7 @@ if __name__ == '__main__':
         test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
             pin_memory=True, persistent_workers=te_pw)
     elif args.dataset == 'ImageNet':
-        train_transform = utils.make_train_transform(image_size, randgray=not args.norandgray, normalize=args.image_class)
+        train_transform = utils.make_train_transform(image_size, randgray=not args.norandgray, normalize=args.image_class, mixed=True)
         test_transform = utils.make_test_transform(normalize=args.image_class)
 
         if False:
