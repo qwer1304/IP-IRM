@@ -1253,7 +1253,7 @@ def make_train_transform(image_size=64, randgray=True, normalize='CIFAR', gpu=Tr
 
     geometry = [K.RandomResizedCrop((image_size, image_size), scale=(0.7,1.0)),
                 K.RandomHorizontalFlip(p=0.5),
-                K.Identity()                      # hack, 'random_apply' cannot be 0
+                nn.Identity()                      # hack, 'random_apply' cannot be 0
                ]
     if mixed: 
         geometry = [K.AugmentationSequential(*geometry, random_apply=(1,))]
