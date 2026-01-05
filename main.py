@@ -119,17 +119,20 @@ class FeatureQueue:
         else:
             return k
 
-def microbatches(x, y, mb_size, min_size=2):
+def microbatches(x, y, z, mb_size, min_size=2):
     # yields a micro-batch
     N = x.size(0)
     yb = None
+    zb = None
     for i in range(0, N, mb_size):
         xb = x[i:i+mb_size] 
         if y is not None:
             yb = y[i:i+mb_size]
+        if z is not None:
+            zb = z[i:i+mb_size]
         if xb.size(0) < min_size:
             continue  # skip this tiny batch
-        yield xb, yb
+        yield xb, yb, zb
 
 class BaseCalculator:
     def __init__(self, loss_module, *args, debug=False, device='cuda', **kwargs):
@@ -795,6 +798,33 @@ class SimSiamLossModule(LossModule):
     def is_per_env():
         return False
 
+# ---------------------------
+# CE Loss Module
+# ---------------------------
+class CELossModule(LossModule):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def pre_micro_batch(self, pos, transform, normalize=True, labels=None, **kwargs):
+        x = transform(pos)
+
+        _, out = self.net(x, normalize=True)
+        self._logits = out
+        self.labels = labels
+
+    def compute_loss_micro(self, normalize=True, **kwargs):
+        """
+        Computes unnormalized loss of a micro-batch
+        """
+        out = self._logits
+        loss = F.cross_entropy(self._logits, self.labels, reduction='sum')
+        return loss
+
+
+    @staticmethod
+    def is_per_env():
+        return False
+
 def clamp_scalers_for_progress(norm2_dict, dot_dict, scaler_dict, ema=False):
     def consistent_dots(dot_dict, norm2_dict, eps=1e-12):
         for (i,j) in [('k','l'), ('k','p'), ('l','p')]:
@@ -1120,6 +1150,15 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
     loss_type = loss_type.lower()
     penalty_type = getattr(args, 'penalty_type', 'irm')
     penalty_type = penalty_type.lower()
+    loss_keep_type = getattr(args, 'keep_type', None)
+    loss_keep_type = loss_keep_type.lower() if loss_keep_type is not None else None
+
+    if loss_keep_type == 'ce':
+        LossKeepModule = CELossModule
+    elif loss_keep_type is None:
+        LossKeepModule = None
+    else:
+        raise ValueError(f"Unknown loss_keep_type: {loss_keep_type}")
 
     if loss_type == 'moco':
         LossModule = MoCoLossModule
@@ -1129,6 +1168,11 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         LossModule = SimSiamLossModule
     else:
         raise ValueError(f"Unknown loss_type: {loss_type}")
+
+    if LossKeepModule is not None:
+        loss_keep_module = LossKeepModule(net, debug=args.debug, **kwargs) 
+    else:
+        loss_keep_module =  None
 
     is_per_env  = LossModule.is_per_env()
     loss_module = LossModule(net, debug=args.debug, **kwargs) 
@@ -1182,32 +1226,43 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
 
         reduction = 'sum' if is_per_env else 'none' # make sure it's the correct one
 
-        data_batch, indexs_batch = data_env[0], data_env[-1] # 'data_batch' is an batch of images, 'indexs_batch' is their corresponding indices 
+        data_batch, labels_batch, indexs_batch = data_env # 'data_batch' is an batch of images, 'indexs_batch' is their corresponding indices 
         this_batch_size = len(indexs_batch) # for the case drop_last=False
         
         loss_module.pre_batch(data_batch, indexs_batch, partitions)
+        if loss_keep_module is not None:
+            loss_keep_module.pre_batch(data_batch) # WEIGHTS?
 
         # -----------------------
         # Step 0: micro-batches
         # -----------------------
-        mb_list = list(microbatches(data_batch, indexs_batch, gpu_batch_size))
+        mb_list = list(microbatches(data_batch, labels_batch, indexs_batch, gpu_batch_size))
 
         for j in range(num_halves): # over halves of micro-batches
             for i in [i_ for i_ in range(len(mb_list)) if i_ % num_halves == j]: # loop over micro-batches
                 # per micro-batch pipeline
-                batch_micro, indexs = mb_list[i]
+                batch_micro, labels, indexs = mb_list[i]
                 batch_micro         = batch_micro.cuda(non_blocking=True)
+                labels              = labels.cuda(non_blocking=True)
                 indexs              = indexs.cuda(non_blocking=True)
 
                 num_samples           = 1 if is_per_env else len(batch_micro)
-                num_split_repeates    = int(not args.baseline) * (int(loss_weight>0) + int(penalty_weight>0))
-                num_baseline_repeates = int(loss_keep_weight>0) * int(args.keep_cont)                                  
-                num_repeats           = max(num_split_repeates, num_baseline_repeates)
-                num_grads             = num_partitions * args.env_num * num_split_repeates + num_baseline_repeates
+                num_split_repeates    = int(not args.baseline) * (int(loss_weight>0) + int(penalty_weight>0)) # 0, 1 or 2
+                num_baseline_repeates = int(loss_keep_weight>0) * int(args.keep_cont) # 0 or 1                                  
+                num_repeats           = max(num_split_repeates, num_baseline_repeates) # max is for the case 'num_split_repeates' is 0
+                num_grads             = num_partitions * args.env_num * num_split_repeates + num_baseline_repeates # number of rows
                 if is_per_env:
+                    # For per-env loss_cont, each env gets its own column + one more column for loss_keep, if requested, whether same to loss_cont or not
                     grad_outputs          = torch.zeros((num_grads, num_grads), dtype=torch.float, device=device) 
                 else:
-                    grad_outputs          = torch.zeros((num_grads, num_samples*num_repeats), dtype=torch.float, device=device) 
+                    # for per-sample loss_cont, the number of columns is the number of samples times the number of repeats. 
+                    # loss_cont and loss_keep share the SAME columns, if loss_keep is similar to loss_cont; otherwise loss_keep has its own extra column
+                    if num_baseline_repeates and loss_keep_module is None:
+                        grad_outputs      = torch.zeros((num_grads, num_samples*num_repeats), dtype=torch.float, device=device) 
+                    elif num_baseline_repeates and loss_keep_module is not None:
+                        grad_outputs      = torch.zeros((num_grads, num_samples*num_split_repeates + 1), dtype=torch.float, device=device) 
+                    else:
+                        grad_outputs      = torch.zeros((num_grads, num_samples*num_repeats), dtype=torch.float, device=device) 
                 differentiate_this    = []
 
                 """
@@ -1215,12 +1270,19 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                     MoCo:    generate two views, get their embeddings from respective encoders, normalize them, etc
                     SimSiam: generate two views, get their projections and predictions, etc
                 """
+                if do_keep_loss and loss_keep_module is not None:
+                    loss_keep_module.pre_micro_batch(batch_micro, transform=transform, indexs=indexs, labels=labels, normalize=True, dataset=train_loader.dataset)
+                    losses_samples_all = loss_keep_module.compute_loss_micro(reduction='sum')
+                    # Must be first to be in 1st column 
+                    differentiate_this.append(losses_samples_all)
+
                 loss_module.pre_micro_batch(batch_micro, transform=transform, indexs=indexs, normalize=(loss_type != 'supcon'), dataset=train_loader.dataset)
                 
-                if do_keep_loss or (do_loss and not is_per_env):
-                    # compute unnormalized micro-batch loss
-                    losses_samples = loss_module.compute_loss_micro(reduction=reduction)
-                    differentiate_this.append(losses_samples)
+                # Even if 'do_loss'==False, when SAME loss is used for BOTH loss_cont and loss_keep, 'reduction' reflects the correct reduction
+                if (do_keep_loss and loss_keep_module is None) or (do_loss and not is_per_env):
+                    # compute unnormalized WHOLE micro-batch loss, no split into envs
+                    losses_samples_all = loss_module.compute_loss_micro(reduction=reduction)
+                    differentiate_this.append(losses_samples_all)
 
                 if do_penalty and not is_per_env:
                     penalties_samples = penalty_calculator.penalty(losses_samples, reduction=reduction)
@@ -1231,6 +1293,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                         for env in range(args.env_num):
 
                             # split mb: 'idxs' are indices into 'indexs' that correspond to domain 'env' in 'partition'
+                            # 'indexs' are the indices of samples in dataset which are in this micro-batch
                             idxs = utils.assign_idxs(indexs, partition, env)
 
                             if (N := len(idxs)) == 0:
@@ -1253,17 +1316,22 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                             
                             halves_sz[j,partition_num,env] += samples_left # update number of elements in environment
                             
-                            # losses
+                            # losses - losses are ALWAYS a scalar
                             if do_loss:
                                 # compute unnormalized micro-batch loss
                                 if is_per_env:
                                     # compute unnormalized micro-batch loss
+                                    # 'idxs' select the samples from this micro-batch
+                                    # 'loss_samples' are either the per-sample losses or thie sum depending on 'reduction'
+                                    # for 'is_per_env'==True, it's always 'sum'
                                     losses_samples = loss_module.compute_loss_micro(p=partition_num, env=env, reduction=reduction, idxs=idxs)
                                     differentiate_this.append(losses_samples)
                                     loss = losses_samples.detach()
                                 else:
+                                    # For 'is_per_env'==False, convert per-sample losses to a sum
                                     loss = losses_samples[idxs].sum(dim=0).detach()
                                 loss_aggregator[j,partition_num,env] += loss # unnormalized, before penalty scaler
+                            # penalties - penalties are ALWAYS a scalar
                             if do_penalty:
                                 if is_per_env:
                                     penalties_samples = penalty_calculator.penalty(losses_samples, reduction=reduction)
@@ -1276,12 +1344,15 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                             # gradients
                             """
                             'grad_outputs' is a table w/ each row corresponding to a loss/penalty of an env in a partition.
-                            The top half coresponds to losses; the bottom half corresponds to penalties.
+                            The top half coresponds to cont losses; the bottom half corresponds to penalties.
                             The last row corresponds to loss_keep.
-                            For per_env losses (e.g., MoCo) each column corresponds to an env in a partition loss/penalty. 
-                            The 1st column corresponds to loss_keep if requested.
-                            For non-per-env losses (e.g., SimSiam) each column corresponds to a sample loss/penalty.
-                            The left half corresponds to losses; the right half corresponds to penalties.
+                            For per_env losses (e.g., MoCo):
+                                each column corresponds to an env in a partition loss/penalty. 
+                                The 1st column corresponds to loss_keep if requested.
+                            For non-per-env losses (e.g., SimSiam):
+                                each column corresponds to a sample loss/penalty.
+                                The left half corresponds to losses; the right half corresponds to penalties.
+                                The 1st to 'num_samples' columns correspond to loss_keep if requested.                                
                             'grad_outputs[i,j]' is a multiplier of the [i,j]-th entry to differentiate.
                             """
                             linear_idx = torch.tensor(partition_num*args.env_num + env, dtype=torch.int, device=device) # row index
@@ -1295,7 +1366,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                 if do_penalty:
                                     grad_outputs[linear_idx][offset:offset+num_samples] = mask # unweighted
                             else:
-                                offset = 0
+                                offset = 0 # loss_cont & loss_keep share the same per-sample losses
                                 mask = torch.zeros(num_samples, dtype=torch.float, device=device)
                                 mask[idxs] = 1.0
                                 if do_loss:
@@ -1311,13 +1382,17 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 if do_keep_loss: # global loss @ 1st partition
                     # This could be done w/o the split into two halves, but this streamlines the code w/o any harm
                     # Here we know that losses are over the whole macro-batch, so we can normalize up-front
-                    loss = losses_samples.sum().detach()  / this_batch_size / gradients_accumulation_steps
+                    # sum() is for the case when 'is_per_env'==False; otherwise - it's harmless
+                    # 'losses_samples_all' are the losses of ALL samples in this micro-batch
+                    # loss - loss is ALWAYS a scalar
+                    loss = losses_samples_all.sum().detach()  / this_batch_size / gradients_accumulation_steps
                     # compute unnormalized gradients for this loss
                     # grad_outputs: one per sample
                     loss_keep_aggregator += loss # before scaler
 
                     offset = 0 # 1st column
-                    grad_outputs[-1][offset:offset+num_samples]  = 1.0 / this_batch_size / gradients_accumulation_steps # unweighted
+                    number_of_columns = num_samples if loss_keep_module is None else 1
+                    grad_outputs[-1][offset:offset+number_of_columns]  = 1.0 / this_batch_size / gradients_accumulation_steps # unweighted
 
                 differentiate_this = [t.reshape(-1) for t in differentiate_this] # ensure common shape of 1D tensors
                 differentiate_this = torch.cat(differentiate_this, dim=0) # cat losses and penalties into a single vector length 2B
@@ -1333,6 +1408,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                       f"grad_outputs {grad_outputs.size()}, differentiate_this {differentiate_this.size()}")
                 """
 
+                # autograd sums all gradients in each row for each parameter
                 grads_all = torch.autograd.grad(
                     differentiate_this,
                     tuple(net.parameters()),
@@ -1349,7 +1425,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                     for _j, g in enumerate(grads_all):
                         if g is None:
                             continue
-                        grads = g[-1] # loss keep is always last
+                        grads = g[-1] # loss keep is always last row
                         if grads is None:
                             continue
                         grads = grads.detach().view(-1)
@@ -1388,7 +1464,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 loss_module.prepare_for_free()
                 
                 # free memory of micro-batch
-                del batch_micro, indexs, losses_samples, grads, g, grads_all, differentiate_this
+                del batch_micro, indexs, losses_samples, grads, g, grads_all, differentiate_this, losses_samples_all
                 if do_loss or do_keep_loss:
                     del loss
                 if do_loss:
@@ -2263,7 +2339,8 @@ if __name__ == '__main__':
     parser.add_argument('--penalty_type', default='IRM', type=str, choices=['IRM', 'VREx'], help='Penalty type')        
     parser.add_argument('--penalty_sigma', default=None, type=float, help='Noise level to inject into penalty')        
     parser.add_argument('--drop_samples', default=None, type=int, help='# of samples to drop to break equilibrium')        
-    parser.add_argument('--grad_rotate', default=None, type=float, nargs=2, help='rotate gradients')        
+    parser.add_argument('--grad_rotate', default=None, type=float, nargs=2, help='rotate gradients')      
+    parser.add_argument('--loss_keep_type', default=None, type=str, choices=['CE'], help='Loss keep type')    
 
     parser.add_argument('--feature_dim', default=128, type=int, help='Feature dim for latent vector')
     parser.add_argument('--temperature', default=0.5, type=float, help='Temperature used in softmax')
