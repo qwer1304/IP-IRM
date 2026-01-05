@@ -1464,11 +1464,13 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 loss_module.prepare_for_free()
                 
                 # free memory of micro-batch
-                del batch_micro, indexs, losses_samples, grads, g, grads_all, differentiate_this, losses_samples_all
+                del batch_micro, indexs, grads, g, grads_all, differentiate_this
                 if do_loss or do_keep_loss:
                     del loss
+                if do_keep_loss:
+                    del losses_samples_all
                 if do_loss:
-                    pass
+                    del losses_samples
                 if do_penalty:
                     del penalties_samples, penalty
             # end for i in [i_ for i_ in range(len(mb_list)) if i_ % 2 == j]:
