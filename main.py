@@ -808,7 +808,9 @@ class CELossModule(LossModule):
     def pre_micro_batch(self, pos, transform, normalize=True, labels=None, **kwargs):
         x = transform(pos)
 
-        _, out = self.net(x, normalize=True)
+        _, out = self.net(x)
+        if normalize:
+            out = F.normalize(out, dim=1)
         self._logits = out
         self.labels = labels
 
