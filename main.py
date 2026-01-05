@@ -1150,7 +1150,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
     loss_type = loss_type.lower()
     penalty_type = getattr(args, 'penalty_type', 'irm')
     penalty_type = penalty_type.lower()
-    loss_keep_type = getattr(args, 'keep_type', None)
+    loss_keep_type = getattr(args, 'loss_keep_type', None)
     loss_keep_type = loss_keep_type.lower() if loss_keep_type is not None else None
 
     if loss_keep_type == 'ce':
