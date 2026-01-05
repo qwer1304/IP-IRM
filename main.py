@@ -805,7 +805,7 @@ class CELossModule(LossModule):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    def pre_micro_batch(self, pos, transform, normalize=True, labels=None, **kwargs):
+    def pre_micro_batch(self, pos, transform, normalize=True, labels=None, weights=None, **kwargs):
         x = transform(pos)
 
         _, out = self.net(x)
@@ -813,13 +813,14 @@ class CELossModule(LossModule):
             out = F.normalize(out, dim=1)
         self._logits = out
         self.labels = labels
+        self.weights = weights
 
     def compute_loss_micro(self, normalize=True, **kwargs):
         """
         Computes unnormalized loss of a micro-batch
         """
         out = self._logits
-        loss = F.cross_entropy(self._logits, self.labels, reduction='sum')
+        loss = F.cross_entropy(self._logits, self.labels, reduction='sum', weight=self.weights)
         return loss
 
 
@@ -1155,7 +1156,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
     loss_keep_type = getattr(args, 'loss_keep_type', None)
     loss_keep_type = loss_keep_type.lower() if loss_keep_type is not None else None
 
-    if loss_keep_type == 'ce':
+    if loss_keep_type == 'ce' or loss_keep_type == 'ceweighted':
         LossKeepModule = CELossModule
     elif loss_keep_type is None:
         LossKeepModule = None
@@ -2346,7 +2347,7 @@ if __name__ == '__main__':
     parser.add_argument('--penalty_sigma', default=None, type=float, help='Noise level to inject into penalty')        
     parser.add_argument('--drop_samples', default=None, type=int, help='# of samples to drop to break equilibrium')        
     parser.add_argument('--grad_rotate', default=None, type=float, nargs=2, help='rotate gradients')      
-    parser.add_argument('--loss_keep_type', default=None, type=str, choices=['CE'], help='Loss keep type')    
+    parser.add_argument('--loss_keep_type', default=None, type=str, choices=['CE', 'CEweighted'], help='Loss keep type')    
 
     parser.add_argument('--feature_dim', default=128, type=int, help='Feature dim for latent vector')
     parser.add_argument('--temperature', default=0.5, type=float, help='Temperature used in softmax')
@@ -2763,6 +2764,13 @@ if __name__ == '__main__':
         kwargs = {'net_momentum': model_momentum, 'queue': queue, 'temperature': temperature, 'momentum': momentum}
     elif ssl_type == 'simsiam':
         kwargs = {}
+        
+    if args.loss_keep_type == 'CEweighted': # weight per-class loss w/ its inverse frequency
+        labels = train_data.targets if isinstance(train_data.targets, torch.Tensor) else torch.tensor(train_data.targets)
+        labels = target_transform(labels) if target_transform else labels
+        counts = torch.bincount(labels)
+        class_weights = counts.sum() / counts.float() / args.class_num  # use inverse frequency
+        kwargs['CEweights'] = class_weights
 
     # update partition for the first time, if we need one
     if not args.baseline:
