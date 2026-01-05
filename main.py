@@ -1893,10 +1893,12 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         gradnorm_rates_str = " ".join([f'{n} {r:.4f}' for n,r in zip([task_names_2_klp[k] for k in task_names], gradnorm_rates)]) if do_gradnorm else ""  
         if args.print_batch:
             print() # this causes each tqdm update to be printed on a separare line
+        keep_str = f'Keep/{loss_keep_type}' if loss_keep_type is not None else 'Keep'
+
         desc_str = f'Epoch [{epoch}/{epochs}] [{trained_samples}/{total_samples}]' + \
                    f' {args.ssl_type}' + \
                    f' Total {total_loss_weighted/trained_samples:.3e}' + \
-                   f' Keep {total_keep_loss_weighted/trained_samples:.3e}' + \
+                   f' {keep_str} {total_keep_loss_weighted/trained_samples:.3e}' + \
                    f' Env {total_env_loss_weighted/trained_samples:.3e}' + \
                    f' {args.penalty_type} {total_irm_loss_weighted/trained_samples:.3e}' + \
                    f' LR {train_optimizer.param_groups[0]["lr"]:.4f} PW {penalty_weight_orig:.6g}' + \
