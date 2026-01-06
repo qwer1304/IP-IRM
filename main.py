@@ -1324,7 +1324,7 @@ def calculate_scalers(loss_keep_grads_final, loss_grads_final, penalty_grads_fin
         'v_k':               gradnorm_balancer.task_weights['loss_keep'].item() if 'loss_keep' in gradnorm_balancer.task_weights else 0.,
         'v_l':               gradnorm_balancer.task_weights['loss'].item()      if 'loss'      in gradnorm_balancer.task_weights else 0.,
         'v_p':               gradnorm_balancer.task_weights['penalty'].item()   if 'penalty'   in gradnorm_balancer.task_weights else 0.,
-        'gn_pm':             gn_pm.item,
+        'gn_pm':             gn_pm,
         # if cond > 0, the corresponding quantity would decrease
         'loss_decrease_cond':      loss_grad_scaler      * ngl2 + loss_keep_grad_scaler*dot_lk + penalty_grad_scaler*dot_lp,
         'loss_keep_decrease_cond': loss_keep_grad_scaler * ngk2 + loss_grad_scaler*dot_lk      + penalty_grad_scaler*dot_kp,
