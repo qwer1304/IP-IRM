@@ -1188,7 +1188,7 @@ def calculate_scalers(loss_keep_grads_final, loss_grads_final, penalty_grads_fin
         if do_flag:
             grads_weighted = [g.detach().clone() * weight * Lscaler for g in grads_final if g is not None]
             grads_weighted_vector = torch.cat([g for g in grads_weighted]) 
-            grada_norm_weighted = grads_weighted_vector.norm()
+            grads_norm_weighted = grads_weighted_vector.norm()
         else:
             grads_weighted = [torch.zeros_like(g) for g in grads_final if g is not None]
             assert default_grads_weighted_vector is not None, "default_grads_weighted_vector not given when do_flag is False"
