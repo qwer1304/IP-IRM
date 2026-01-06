@@ -1180,6 +1180,7 @@ def rotate_penalty_grads(penalty_grads_final, loss_grads_final, grad_rotate, do_
 
 def calculate_scalers(loss_keep_grads_final, loss_grads_final, penalty_grads_final, 
                       loss_keep_aggregator,  loss_env,         penalty_env,
+                      loss_keep_weight,      loss_weight,      penalty_weight,
                       ema,
                       gradnorm_balancer, do_gradnorm,
                       args, do_loss, do_penalty, device):
@@ -1817,6 +1818,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         loss_keep_grad_scaler, loss_grad_scaler, penalty_grad_scaler, gradnorm_loss, info_dict = \
             calculate_scalers(loss_keep_grads_final, loss_grads_final, penalty_grads_final, 
                               loss_keep_aggregator,  loss_env,         penalty_env,
+                              loss_keep_weight,      loss_weight,      penalty_weight,
                               ema,
                               gradnorm_balancer, do_gradnorm,
                               args, do_loss, do_penalty, device)
