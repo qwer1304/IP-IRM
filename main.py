@@ -1874,7 +1874,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                    f" {keep_str} {total_keep_loss_weighted/trained_samples:.3e}" + \
                    f" Env {total_env_loss_weighted/trained_samples:.3e}" + \
                    f" {args.penalty_type} {total_irm_loss_weighted/trained_samples:.3e}" + \
-                   f" LR {train_optimizer.param_groups[0]["lr"]:.4f} PW {penalty_weight_orig:.6g}" + \
+                   f" LR {train_optimizer.param_groups[0]['lr']:.4f} PW {penalty_weight_orig:.6g}" + \
                    f" dot: ll {info_dict['ngl2']:.2e} lk {info_dict['dot_lk']:.2e} lp {info_dict['dot_lp']:.2e} kk {info_dict['ngk2']:.2e} kp {info_dict['dot_kp']:.2e} pp {info_dict['ngp2']:.2e}" + \
                    f" cos: lk {info_dict['cos_lk']:.3e} lp {info_dict['cos_lp']:.3e} kp {info_dict['cos_kp']:.2e}" + \
                    f" w/v: k {info_dict['w_k']:.4f}/{info_dict['v_k']:.4f} l {info_dict['w_l']:.4f}/{info_dict['v_l']:.4f} p {info_dict['w_p']:.4f}/{info_dict['v_p']:.4f}" + \
