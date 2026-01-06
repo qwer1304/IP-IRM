@@ -1314,7 +1314,7 @@ def calculate_scalers(loss_keep_grads_final, loss_grads_final, penalty_grads_fin
         'ngl2':              ngl2.item(),
         'ngp2':              ngp2.item(),
         'cos_Lp':            cos_Lp.item(),
-        'dot_Lp'             dot_Lp.item(),
+        'dot_Lp':            dot_Lp.item(),
         'gradnorm_progress': gradnorm_progress.item(),
         # get these before gradnorm optimizer updates them
         'w_k':               loss_keep_grad_scaler.item(),
