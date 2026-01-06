@@ -1275,7 +1275,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                     SimSiam: generate two views, get their projections and predictions, etc
                 """
                 if do_keep_loss and loss_keep_module is not None:
-                    loss_keep_module.pre_micro_batch(batch_micro, transform=transform, indexs=indexs, labels=labels, normalize=True, dataset=train_loader.dataset)
+                    loss_keep_module.pre_micro_batch(batch_micro, transform=transform, indexs=indexs, labels=labels, normalize=False, dataset=train_loader.dataset)
                     losses_samples_all = loss_keep_module.compute_loss_micro(reduction='sum')
                     # Must be first to be in 1st column 
                     differentiate_this.append(losses_samples_all)
