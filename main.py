@@ -1921,13 +1921,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         for par in loss_keep_grads_final: # over list
             par.zero_()
         del penalty_env, loss_env, loss_batch_weighted
-        if do_penalty or do_loss:
-            del total_grad_flat, total_grad_flat_weighted
-        if do_penalty:
-            del dPenalty_dTheta_env, penalty_grads_final, p_grads_flat_weighted
-        if do_loss:
-            dLoss_dTheta_env, loss_grads_final, l_grads_flat_weighted 
-        del l_keep_grads_flat_weighted
+        del info_dict
         torch.cuda.empty_cache()
 
         loss_module.post_batch()
