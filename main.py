@@ -1183,7 +1183,7 @@ def calculate_scalers(loss_keep_grads_final, loss_grads_final, penalty_grads_fin
                       loss_keep_weight,      loss_weight,      penalty_weight,
                       ema,
                       gradnorm_balancer, do_gradnorm,
-                      args, do_loss, do_penalty, device):
+                      args, do_keep_loss, do_loss, do_penalty, device):
     def setup_grads_and_norms(grads_final, weight, Lscaler, device, do_flag, default_grads_weighted_vector=None):
         if do_flag:
             grads_weighted = [g.detach().clone() * weight * Lscaler for g in grads_final if g is not None]
@@ -1821,7 +1821,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                               loss_keep_weight,      loss_weight,      penalty_weight,
                               ema,
                               gradnorm_balancer, do_gradnorm,
-                              args, do_loss, do_penalty, device)
+                              args, do_keep_loss, do_loss, do_penalty, device)
 
         """
         Don't multiply individual task's loss by scaler, since it's misleading
