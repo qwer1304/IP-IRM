@@ -808,7 +808,8 @@ class CELossModule(LossModule):
     def pre_micro_batch(self, pos, transform, normalize=True, labels=None, weights=None, **kwargs):
         x = transform(pos)
 
-        _, out = self.net(x)
+        features, _ = self.net(x)
+        out = self.net.module.second_fc(features)
         if normalize:
             out = F.normalize(out, dim=1)
         self._logits = out
@@ -2617,8 +2618,9 @@ if __name__ == '__main__':
 
     # model setup and optimizer config
     ssl_type = args.ssl_type.lower()
+    second_fc = args.class_num if args.loss_keep_type else None
     if ssl_type == 'moco' or ssl_type == 'mocosupcon':
-        model = ModelResnet(feature_dim, image_class=image_class, state_dict=state_dict).cuda()
+        model = ModelResnet(feature_dim, image_class=image_class, state_dict=state_dict, second_fc=second_fc).cuda()
     elif ssl_type == 'simsiam':
         model = SimSiam(feature_dim, image_class=image_class, state_dict=state_dict).cuda()
     else:
