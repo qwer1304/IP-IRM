@@ -1235,7 +1235,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         
         loss_module.pre_batch(data_batch, indexs_batch, partitions)
         if loss_keep_module is not None:
-            loss_keep_module.pre_batch(data_batch) # WEIGHTS?
+            loss_keep_module.pre_batch(data_batch) # weights handled below
 
         # -----------------------
         # Step 0: micro-batches
@@ -1246,9 +1246,14 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             for i in [i_ for i_ in range(len(mb_list)) if i_ % num_halves == j]: # loop over micro-batches
                 # per micro-batch pipeline
                 batch_micro, labels, indexs = mb_list[i]
+                if (loss_keep_module is not None) and (kwargs['CEweights'] is not None):
+                    weights         = kwargs['CEweights'][indexs]
+                else:
+                    weights         = None
                 batch_micro         = batch_micro.cuda(non_blocking=True)
                 labels              = labels.cuda(non_blocking=True)
                 indexs              = indexs.cuda(non_blocking=True)
+                weights             = weights.cuda(non_blocking=True) if weights is not None else None
 
                 num_samples           = 1 if is_per_env else len(batch_micro)
                 num_split_repeates    = int(not args.baseline) * (int(loss_weight>0) + int(penalty_weight>0)) # 0, 1 or 2
@@ -1275,7 +1280,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                     SimSiam: generate two views, get their projections and predictions, etc
                 """
                 if do_keep_loss and loss_keep_module is not None:
-                    loss_keep_module.pre_micro_batch(batch_micro, transform=transform, indexs=indexs, labels=labels, normalize=False, dataset=train_loader.dataset)
+                    loss_keep_module.pre_micro_batch(batch_micro, transform=transform, indexs=indexs, labels=labels, normalize=False, 
+                        dataset=train_loader.dataset, weights=weights)
                     losses_samples_all = loss_keep_module.compute_loss_micro(reduction='sum')
                     # Must be first to be in 1st column 
                     differentiate_this.append(losses_samples_all)
