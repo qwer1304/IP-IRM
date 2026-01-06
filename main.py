@@ -1855,6 +1855,10 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             gradnorm_update(gradnorm_balancer, gradnorm_loss, gradnorm_optimizer, args)
 
         # True loss reflecting progress does NOT include balancing scalers
+        loss_weighted      = loss_weight      * loss_env.mean()
+        loss_keep_weighted = loss_keep_weight * loss_keep_aggregator.mean()
+        penalty_weighted   = penalty_weight   * penalty_env.mean()
+
         loss_batch_weighted = (loss_keep_weighted + # loss_keep_aggregator is a scalar normalized over macro-batch
                                penalty_weighted   + # mean over envs normalized over macro-batch
                                loss_weighted        # mean over envs normalized over macro-batch
