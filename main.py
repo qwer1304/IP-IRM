@@ -1080,6 +1080,303 @@ def analyze_grad_alignment_moco_flexible(
         'blocks': results_blocks
     }
 
+def rotate_pen_toward_orthogonal(pen_grads, loss_grads, theta=0.2):
+    # pen_grads, loss_grads: lists of tensors [g_env0, g_env1, ..., g_env{E-1}]
+    #                        each flattened to shape (D,)
+    # theta in radians (0.1-0.3 recommended; 0.2 ~ 11.5 degrees)
+    # returns list of new_pen_grads (D,)
+    # compute projection of loss onto pen: proj = (dot(loss,pen))/(dot(pen,pen)) * pen
+    rotated = []
+    device  = pen_grads[0].device
+    for p,l in zip(pen_grads, loss_grads):
+        denom = (p * p).sum() + 1e-12          # ()
+        proj = ( (l * p).sum() / denom ) * p   # (D,) 
+        loss_orth = l - proj                   # (D,)
+        # normalize orth component safely
+        loss_orth_norm = torch.norm(loss_orth).clamp_min(1e-12)
+        loss_orth_unit = loss_orth / loss_orth_norm # (D,)
+        pen_norm = torch.norm(p)
+        cos_t = torch.cos(torch.tensor(theta, device=device))
+        sin_t = torch.sin(torch.tensor(theta, device=device))
+        new_pen = cos_t * p + sin_t * (pen_norm * loss_orth_unit) # (D,)
+        rotated.append(new_pen)
+    return rotated
+
+def rotate_gradients_per_env(grads, eps=0.03, device=None):
+    """
+    grads: list of tensors [g_env0, g_env1, ..., g_env{E-1}]
+           each flattened to shape (D,)
+    eps:   small rotation strength (~radians)
+    returns: list of rotated gradients
+    """
+    rotated = []
+    for g in grads:
+        g = g.to(device)
+        v = torch.randn_like(g)           # random rotation axis
+        v = v - (v @ g) / (g @ g + 1e-12) * g  # make v normal to g
+        v = F.normalize(v, dim=0)
+
+        # simple 2D rotation in span{g, v}
+        cos_theta = torch.cos(torch.tensor(eps, device=device))
+        sin_theta = torch.sin(torch.tensor(eps, device=device))
+        g_rot = cos_theta * g + sin_theta * (torch.norm(g) * v)
+
+        rotated.append(g_rot)
+    return rotated
+
+def convert_to_list(x):
+    x_flat = x.view(-1, x.shape[2])  # shape: (I*J, K)
+    # Step 2: Unbind along the first dimension
+    x_list = list(torch.unbind(x_flat, dim=0)) # order (0,0),(0,1),...,(0,J-1),(1,0),...,(I-1,J-1)
+    return x_list
+
+def convert_to_tensor(x_list, I, J):
+    # Stack the list into a single tensor
+    K = x_list[0].size(0)
+    x_flat = torch.stack(x_list, dim=0)  # shape: (I*J, K)
+    # Reshape back to (I, J, K)
+    x = x_flat.view(I, J, K)
+    return x
+
+def calculate_loss_grads_final(loss_grads, loss_env, loss_weight_env, halves_sz, loss_module, reduction, device, do_loss):
+    if do_loss:
+        loss_grads_final = []
+        for pind, _ in enumerate(net.parameters()):
+            dLoss_dTheta_env = loss_grads[pind] * loss_weight_env[..., None]  # per env sum of dCont/dTheta, shape (I,J,K,param_numel), unweighted
+            reduction = 'sum'
+            total_grad_flat  = loss_module.loss_grads_finalize(dLoss_dTheta_env, loss_env, halves_sz, reduction=reduction)
+            loss_grads_final.append(total_grad_flat)
+    else:
+        loss_grads_final = [torch.tensor(0., dtype=torch.float, device=device)] * len(loss_grads)
+    return loss_grads_final
+
+def calculate_penalty_grads_final(penalty_grads, penalty_aggregator, penalty_weight_env, halves_sz, penalty_calculator, reduction, device, do_penalty):
+    if do_penalty:
+        penalty_grads_final = []
+        pen = penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz, for_grads=True) # normalized per env for macro-batch, unweighted
+        for pind in range(len(penalty_grads)):
+            dPenalty_dTheta_env = penalty_grads[pind] * penalty_weight_env[..., None] # per env sum of dPenalty/dTheta over macro-batch per parameter, unweighted, shape (I,J,K,param_numel)
+            reduction = 'sum'
+            total_grad_flat     = \
+                penalty_calculator.penalty_grads_finalize(
+                    dPenalty_dTheta_env, 
+                    pen, 
+                    halves_sz,
+                    sigma=args.penalty_sigma,
+                    reduction=reduction
+                )                                                                     
+            penalty_grads_final.append(total_grad_flat.detach())
+    else:
+        penalty_grads_final = [torch.tensor(0., dtype=torch.float, device=device)] * len(penalty_grads)
+    return penalty_grads_final
+
+def rotate_penalty_grads(penalty_grads_final, loss_grads_final, grad_rotate, do_penalty):
+    if do_penalty and grad_rotate is not None:
+        theta = float(torch.empty(1).uniform_(min(grad_rotate), max(agrad_rotate)).item())
+        penalty_grads_final = [rotate_pen_toward_orthogonal( # returns list w/ 1 element, w/ size (parnum,)
+            [g], [loss_grads_final[pind]], theta=theta)[0].clone() for pind, g in enumerate(penalty_grads_final)
+        ]
+    return penalty_grads_final
+
+def calculate_scalers(loss_keep_grads_final, loss_grads_final, penalty_grads_final, 
+                      loss_keep_aggregator,  loss_env,         penalty_env,
+                      ema,
+                      gradnorm_balancer, do_gradnorm,
+                      args, do_loss, do_penalty, device):
+    def setup_grads_and_norms(grads_final, weight, Lscaler, device, do_flag, default_grads_weighted_vector=None):
+        if do_flag:
+            grads_weighted = [g.detach().clone() * weight * Lscaler for g in grads_final if g is not None]
+            grads_weighted_vector = torch.cat([g for g in grads_weighted]) 
+            grada_norm_weighted = grads_weighted_vector.norm()
+        else:
+            grads_weighted = [torch.zeros_like(g) for g in grads_final if g is not None]
+            assert default_grads_weighted_vector is not None, "default_grads_weighted_vector not given when do_flag is False"
+            grads_weighted_vector = default_grads_weighted_vector
+            grads_norm_weighted = torch.tensor(0., dtype=torch.float, device=device)
+        return grads_weighted, grads_weighted_vector, grada_norm_weighted
+
+    loss_keep_grads_final_weighted, l_keep_grads_flat_weighted, loss_keep_grad_norm_weighted = \
+        setup_grads_and_norms(loss_keep_grads_final, loss_keep_weight, args.Lscaler, device, True)
+    default_grads_weighted_vector = torch.zeros_like(l_keep_grads_flat_weighted)
+    loss_grads_final_weighted, l_grads_flat_weighted, loss_grad_norm_weighted = \
+        setup_grads_and_norms(loss_grads_final, loss_weight, args.Lscaler, device, do_loss, default_grads_weighted_vector=default_grads_weighted_vector)
+    penalty_grads_final_weighted, p_grads_flat_weighted, penalty_grad_norm_weighted = \
+        setup_grads_and_norms(penalty_grads_final, penalty_weight, args.Lscaler, device, do_penalty, default_grads_weighted_vector=default_grads_weighted_vector)
+
+    # Compute dot products & cosines
+    delta_lk = l_grads_flat_weighted.dot(l_keep_grads_flat_weighted)       
+    delta_lp = l_grads_flat_weighted.dot(p_grads_flat_weighted)
+    delta_kp = l_keep_grads_flat_weighted.dot(p_grads_flat_weighted)
+    cos_lk   = delta_lk / (loss_keep_grad_norm_weighted * loss_grad_norm_weighted    + 1e-12)
+    cos_lp   = delta_lp / (loss_grad_norm_weighted      * penalty_grad_norm_weighted + 1e-12)
+    cos_kp   = delta_kp / (loss_keep_grad_norm_weighted * penalty_grad_norm_weighted + 1e-12)
+
+    Loss_grads_flat_weighted = [loss_keep_grads_final_weighted[p] + loss_grads_final_weighted[p] for p in range(len(loss_grads_final_weighted))]
+    L_grads_flat_weighted = l_keep_grads_flat_weighted + l_grads_flat_weighted
+    cos_Lp   = F.cosine_similarity(L_grads_flat_weighted, p_grads_flat_weighted, dim=0)
+    dot_Lp   = L_grads_flat_weighted.dot(p_grads_flat_weighted)
+
+    loss_weighted      = loss_weight      * loss_env.mean()
+    loss_keep_weighted = loss_keep_weight * loss_keep_aggregator.mean()
+    penalty_weighted   = penalty_weight   * penalty_env.mean()
+
+    if args.ema:
+        emas = ema.update({'ngk':      loss_keep_grad_norm_weighted, 
+                           'ngl':      loss_grad_norm_weighted, 
+                           'ngp':      penalty_grad_norm_weighted, 
+                           'cos_lk':   cos_lk,
+                           'cos_lp':   cos_lp,
+                           'cos_kp':   cos_kp
+                          }, orig_shape=True)   # return data shaped as input data
+        # make sure the order is explicit and not some implicit one
+        emas_k = ['ngk', 'ngl', 'ngp', 'cos_lk', 'cos_lp', 'cos_kp']
+        ngk, ngl, ngp, cos_lk, cos_lp, cos_kp = [emas[k] for k in emas_k]
+        dot_lk = ngk * ngl * cos_lk
+        dot_lp = ngl * ngp * cos_lp
+        dot_kp = ngk * ngp * cos_kp
+    else:
+        ngk      = loss_keep_grad_norm_weighted
+        ngl      = loss_grad_norm_weighted
+        ngp      = penalty_grad_norm_weighted
+        dot_lk   = delta_lk
+        dot_lp   = delta_lp
+        dot_kp   = delta_kp
+
+    # This awlays holds because we compute it from cosines
+    assert dot_lk.abs() <= ngk * ngl, f"ngk {ngk}, ngl {ngl}, lk {dot_lk.abs()}" 
+    assert dot_lp.abs() <= ngl * ngp, f"ngl {ngl}, ngp {ngp}, lp {dot_lp.abs()}"
+    assert dot_kp.abs() <= ngk * ngp, f"ngk {ngk}, ngp {ngp}, lpk {dot_lp.abs()}"
+
+    ngk2 = ngk ** 2
+    ngl2 = ngl ** 2
+    ngp2 = ngp ** 2
+
+    normalized_scales = {}
+    gradnorm_rates = torch.zeros(int(args.penalty_weight>0) + int(do_loss) + int(do_keep_loss), dtype=torch.float, device=device)
+    losses_dict, grad_norms_dict = {}, {}
+    if do_penalty:
+        losses_dict['penalty']       = penalty_weighted
+        grad_norms_dict['penalty']   = ngp
+    if do_loss:
+        losses_dict['loss']          = loss_weighted
+        grad_norms_dict['loss']      = ngl
+    if do_keep_loss:
+        losses_dict['loss_keep']     = loss_keep_weighted
+        grad_norms_dict['loss_keep'] = ngk            
+
+    if do_gradnorm:
+        normalized_scales, gradnorm_loss, gradnorm_rates, gradnorm_progress = gradnorm_balancer.compute_weights_and_loss(losses_dict, grad_norms_dict)
+        """
+        print()
+        print([f'{k}: {v.item()}' for k,v in normalized_scales.items()], 
+               f'gloss: {gradnorm_loss.item()}', 
+               [f'{k}: {gradnorm_rates[i].item()}' for i,k in enumerate(task_names)], 
+               [f'{k} {gradnorm_balancer.task_weights[k].item()}' for k in task_names])
+        """
+    else:
+        normalized_scales = {k: torch.tensor(v, dtype=torch.float, device=device) for k,v in args.gradnorm_scalers.items()}
+        gradnorm_progress = torch.tensor(1.0, dtype=torch.float)
+        gradnorm_loss = torch.tensor(1.0, dtype=torch.float)
+
+    task_names   = gradnorm_balancer.task_names # list
+    task_names_2_klp = {'loss_keep': 'k', 'loss': 'l', 'penalty': 'p'}
+    if args.clamp_weights_for_progress:
+        dot_dict    = {'kl': dot_lk, 'kp': dot_kp, 'lp': dot_lp}
+        norm2_dict  = {'k':  ngk2,   'l':  ngl2,   'p':  ngp2}
+        scaler_dict = {v: normalized_scales[k] for k,v in task_names_2_klp.items()}
+        #w = clamp_scalers_for_progress(norm2_dict, dot_dict, scaler_dict, ema=(args.ema is not None))
+        w = clamp_scalers_for_progress_ema_safe(norm2_dict, dot_dict, scaler_dict, do_print=args.debug)
+        # this can CHANGE the relative rank of the weights!!!
+        normalized_scales = {k: w[v] for k,v in task_names_2_klp.items()} 
+
+    loss_keep_grad_scaler = normalized_scales['loss_keep'] if do_keep_loss else torch.tensor(1.0, dtype=torch.float, device=device)
+    loss_grad_scaler      = normalized_scales['loss']      if do_loss      else torch.tensor(1.0, dtype=torch.float, device=device)
+    penalty_grad_scaler   = normalized_scales['penalty']   if do_penalty   else torch.tensor(1.0, dtype=torch.float, device=device)
+
+    gn_pm = 0
+    for pind, p in enumerate(gradnorm_balancer.parameters()):
+        if p.grad is not None:
+            gn_pm += (2**pind)*(p.grad.sign()) 
+
+    gradnorm_rates  = gradnorm_rates.tolist() if do_gradnorm else []
+    info_dict = {
+        'ngk':               ngk.item(),
+        'ngl':               ngl.item(),
+        'ngp':               ngp.item(),
+        'dot_lk':            dot_lk.item(),               
+        'dot_lp':            dot_lp.item(),
+        'dot_kp':            dot_kp.item(),
+        'cos_lk':            cos_lk.item(),               
+        'cos_lp':            cos_lp.item(),
+        'cos_kp':            cos_kp.item(),
+        'gradnorm_loss':     gradnorm_loss.item()    if do_gradnorm else 0.,
+        'ngk2':              ngk2.item(),
+        'ngl2':              ngl2.item(),
+        'ngp2':              ngp2.item(),
+        'cos_Lp':            cos_Lp.item(),
+        'dot_Lp'             dot_Lp.item(),
+        'gradnorm_progress': gradnorm_progress.item(),
+        # get these before gradnorm optimizer updates them
+        'w_k':               loss_keep_grad_scaler.item(),
+        'w_l':               loss_grad_scaler.item(),
+        'w_p':               penalty_grad_scaler.item(),
+        'v_k':               gradnorm_balancer.task_weights['loss_keep'].item() if 'loss_keep' in gradnorm_balancer.task_weights else 0.,
+        'v_l':               gradnorm_balancer.task_weights['loss'].item()      if 'loss'      in gradnorm_balancer.task_weights else 0.,
+        'v_p':               gradnorm_balancer.task_weights['penalty'].item()   if 'penalty'   in gradnorm_balancer.task_weights else 0.,
+        'gn_pm':             gn_pm.item,
+        # if cond > 0, the corresponding quantity would decrease
+        'loss_decrease_cond':      loss_grad_scaler      * ngl2 + loss_keep_grad_scaler*dot_lk + penalty_grad_scaler*dot_lp,
+        'loss_keep_decrease_cond': loss_keep_grad_scaler * ngk2 + loss_grad_scaler*dot_lk      + penalty_grad_scaler*dot_kp,
+        'penalty_decrease_cond':   penalty_grad_scaler   * ngl2 + loss_keep_grad_scaler*dot_kp + loss_grad_scaler*dot_lp,
+        'gradnorm_rates_str':     " ".join([f'{n} {r:.4f}' for n,r in zip([task_names_2_klp[k] for k in task_names], gradnorm_rates)]) if do_gradnorm else "",  
+    }
+
+    return loss_keep_grad_scaler, loss_grad_scaler, penalty_grad_scaler, gradnorm_loss, info_dict
+
+def gradnorm_update(gradnorm_balancer, gradnorm_loss, gradnorm_optimizer, args):
+    gradnorm_optimizer.zero_grad(set_to_none=True) # clear gradients
+    gradnorm_loss.backward()
+    gradnorm_balancer.remove_common_mode_hook()    # remove common-mode from grads
+
+    # actual computed grads after backward:
+    if args.gradnorm_debug and 'gn' in args.gradnorm_debug:
+        with np.printoptions(precision=6):
+            print("actual v.grad:\t", np.array([gradnorm_balancer.task_weights[k].grad.item() for k in gradnorm_balancer.task_names]))
+
+    gradnorm_optimizer.step()
+
+    if args.gradnorm_debug and 'opt' in args.gradnorm_debug:
+        print()
+        opt_ids = {id(p) for g in gradnorm_optimizer.param_groups for p in g['params']}
+        # 1) Does optimizer actually contain the exact Parameter objects?
+        for k, p in gradnorm_balancer.task_weights.items():
+            print("param in opt?", k, id(p) in opt_ids)
+
+        # 2) Are grads present and nonzero?
+        for k, p in gradnorm_balancer.task_weights.items():
+            print(k, "requires_grad=", p.requires_grad,
+                  "grad is None?", p.grad is None,
+                  "grad norm=", None if p.grad is None else p.grad.norm().item())
+
+        # 3) Check loss and dtype/device sanity
+        print("loss item:", float(gradnorm_loss.item()))
+        print("weights device/dtype:", [(k, p.device, p.dtype) for k, p in gradnorm_balancer.task_weights.items()])
+
+        # 4) Check lr / optimizer param count
+        print("optimizer lr(s):", [g['lr'] for g in gradnorm_optimizer.param_groups])
+        print("optimizer param counts:", [len(g['params']) for g in gradnorm_optimizer.param_groups])
+
+    lb = {'loss_keep': 1e-3,  'loss': 1e-3,  'penalty': 1e-3} 
+    ub = {'loss_keep': 5.0,   'loss': 5.0,   'penalty': 5.0} 
+    gradnorm_balancer.clamp_weights(lb, ub) # clamps UNNORMALIZED weights
+    if (all_lb := all([v == lb[k] for k,v in gradnorm_balancer.task_weights.items()])) or \
+       (all_ub := all([v == ub[k] for k,v in gradnorm_balancer.task_weights.items()])):
+       bound = "LB" if all_lb else "UB"
+       warnings.warn(f"[GN WARNING] All unnormalized weights clamped to {bound}. Resetting.")
+       gradnorm_balancer.rescale_weights()
+       utils.reset_optimizer(gradnorm_optimizer)
+
+
 # ssl training with IP-IRM
 def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, **kwargs):
 
@@ -1511,247 +1808,19 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         else:
             penalty_env = torch.tensor(0, dtype=torch.float, device=device)
 
-        loss_keep_grads_final_weighted = [g.detach().clone() * loss_keep_weight * args.Lscaler for g in loss_keep_grads_final if g is not None]
-        l_keep_grads_flat_weighted = torch.cat(loss_keep_grads_final_weighted) # cat all grads of all pars into one long vector
-        loss_keep_grad_norm_weighted = l_keep_grads_flat_weighted.norm() # weighted, can be 0
-        
-        def rotate_pen_toward_orthogonal(pen_grads, loss_grads, theta=0.2):
-            # pen_grads, loss_grads: lists of tensors [g_env0, g_env1, ..., g_env{E-1}]
-            #                        each flattened to shape (D,)
-            # theta in radians (0.1-0.3 recommended; 0.2 ~ 11.5 degrees)
-            # returns list of new_pen_grads (D,)
-            # compute projection of loss onto pen: proj = (dot(loss,pen))/(dot(pen,pen)) * pen
-            rotated = []
-            device  = pen_grads[0].device
-            for p,l in zip(pen_grads, loss_grads):
-                denom = (p * p).sum() + 1e-12          # ()
-                proj = ( (l * p).sum() / denom ) * p   # (D,) 
-                loss_orth = l - proj                   # (D,)
-                # normalize orth component safely
-                loss_orth_norm = torch.norm(loss_orth).clamp_min(1e-12)
-                loss_orth_unit = loss_orth / loss_orth_norm # (D,)
-                pen_norm = torch.norm(p)
-                cos_t = torch.cos(torch.tensor(theta, device=device))
-                sin_t = torch.sin(torch.tensor(theta, device=device))
-                new_pen = cos_t * p + sin_t * (pen_norm * loss_orth_unit) # (D,)
-                rotated.append(new_pen)
-            return rotated
-
-        def rotate_gradients_per_env(grads, eps=0.03, device=None):
-            """
-            grads: list of tensors [g_env0, g_env1, ..., g_env{E-1}]
-                   each flattened to shape (D,)
-            eps:   small rotation strength (~radians)
-            returns: list of rotated gradients
-            """
-            rotated = []
-            for g in grads:
-                g = g.to(device)
-                v = torch.randn_like(g)           # random rotation axis
-                v = v - (v @ g) / (g @ g + 1e-12) * g  # make v normal to g
-                v = F.normalize(v, dim=0)
-
-                # simple 2D rotation in span{g, v}
-                cos_theta = torch.cos(torch.tensor(eps, device=device))
-                sin_theta = torch.sin(torch.tensor(eps, device=device))
-                g_rot = cos_theta * g + sin_theta * (torch.norm(g) * v)
-
-                rotated.append(g_rot)
-            return rotated
-
-        def convert_to_list(x):
-            x_flat = x.view(-1, x.shape[2])  # shape: (I*J, K)
-            # Step 2: Unbind along the first dimension
-            x_list = list(torch.unbind(x_flat, dim=0)) # order (0,0),(0,1),...,(0,J-1),(1,0),...,(I-1,J-1)
-            return x_list
-
-        def convert_to_tensor(x_list, I, J):
-            # Stack the list into a single tensor
-            K = x_list[0].size(0)
-            x_flat = torch.stack(x_list, dim=0)  # shape: (I*J, K)
-            # Reshape back to (I, J, K)
-            x = x_flat.view(I, J, K)
-            return x
-
         # Environments gradients
-        if do_loss:
-            loss_grads_final = []
-            for pind, _ in enumerate(net.parameters()):
-                dLoss_dTheta_env = loss_grads[pind] * loss_weight_env[..., None]  # per env sum of dCont/dTheta, shape (I,J,K,param_numel), unweighted
-                reduction = 'sum' #'none' if (args.grad_rotate is not None) and args.grad_rotate[0] > 0. else 'sum'
-                total_grad_flat  = loss_module.loss_grads_finalize(dLoss_dTheta_env, loss_env, halves_sz, reduction=reduction)
-                if reduction == 'none':
-                    total_grad_flat  = convert_to_list(total_grad_flat.sum(dim=0))  # (J,K,param_numel)
-                    total_grad_flat  = rotate_gradients_per_env(total_grad_flat, device=device, eps=args.grad_rotate[0])
-                    total_grad_flat  = torch.stack(total_grad_flat, dim=0).sum(0) # (param_numel,)
-                loss_grads_final.append(total_grad_flat)
-            loss_grads_final_weighted = [g.detach().clone() * loss_weight * args.Lscaler for g in loss_grads_final if g is not None]
-            l_grads_flat_weighted = torch.cat([g for g in loss_grads_final_weighted]) 
-            loss_grad_norm_weighted = l_grads_flat_weighted.norm()
-        else:
-            loss_grads_final_weighted = [torch.zeros_like(g) for g in loss_keep_grads_final if g is not None]
-            l_grads_flat_weighted = torch.zeros_like(l_keep_grads_flat_weighted)
-            loss_grads_final = [torch.tensor(0., dtype=torch.float, device=device)] * len(loss_grads)
-            loss_grad_norm_weighted = torch.tensor(0., dtype=torch.float, device=device)
+        loss_grads_final = calculate_loss_grads_final(loss_grads, loss_env, loss_weight_env, halves_sz, loss_module, reduction, device, do_loss)
 
-        if do_penalty:
-            penalty_grads_final = []
-            pen = penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz, for_grads=True) # normalized per env for macro-batch, unweighted
-            for pind in range(len(penalty_grads)):
-                dPenalty_dTheta_env = penalty_grads[pind] * penalty_weight_env[..., None] # per env sum of dPenalty/dTheta over macro-batch per parameter, unweighted, shape (I,J,K,param_numel)
-                reduction = 'sum' # 'none' if (args.grad_rotate is not None) else 'sum'
-                # (J,K,parnum) or (parnum) depending on 'reduction'
-                total_grad_flat     = \
-                    penalty_calculator.penalty_grads_finalize(
-                        dPenalty_dTheta_env, 
-                        pen, 
-                        halves_sz,
-                        sigma=args.penalty_sigma,
-                        reduction=reduction
-                    )                                                                     
-                if args.grad_rotate is not None:
-                    if len(total_grad_flat.size()) == 3: # total_grad_flat size (J,K,parnum)
-                        # rotate penalty gradient of each environment to be more orthogonal w/ the corresponding loss gradient than anti-parallel
-                        dLoss_dTheta_env = loss_grads[pind] * loss_weight_env[..., None]  # per env sum of dCont/dTheta, shape (I,J,K,param_numel), unweighted
-                        loss_grad_flat  = loss_module.loss_grads_finalize(dLoss_dTheta_env, loss_env, halves_sz, reduction=reduction) # (I,J,K,param_numel)
-                        loss_grad_flat  = convert_to_list(loss_grad_flat.sum(dim=0))  # list w/ J*K elements, each element size (param_numel,)
-                        total_grad_flat  = convert_to_list(total_grad_flat) # list w/ J*K elements, each element size (parnum,)
-                        #total_grad_flat  = rotate_gradients_per_env(total_grad_flat, device=device, eps=args.grad_rotate[1])
-                        theta = float(torch.empty(1).uniform_(min(args.grad_rotate), max(args.grad_rotate)).item())
-                        total_grad_flat = rotate_pen_toward_orthogonal(total_grad_flat, loss_grad_flat, theta=theta) # list w/ J*K elements, each element size (parnum,)
-                        total_grad_flat  = torch.stack(total_grad_flat, dim=0).sum(0) # (paramnum,)
-                    elif len(total_grad_flat.size()) == 1: # total_grad_flat size (parnum,)
-                        theta = float(torch.empty(1).uniform_(min(args.grad_rotate), max(args.grad_rotate)).item())
-                        total_grad_flat = rotate_pen_toward_orthogonal([total_grad_flat], [loss_grads_final[pind]], theta=theta)[0] # list w/ 1 element, w/ size (parnum,)
-                penalty_grads_final.append(total_grad_flat.detach().clone())
-            penalty_grads_final_weighted = [g.detach().clone() * penalty_weight * args.Lscaler for g in penalty_grads_final if g is not None]
-            p_grads_flat_weighted = torch.cat([g for g in penalty_grads_final_weighted])
-            penalty_grad_norm_weighted = p_grads_flat_weighted.norm()
-        else:
-            p_grads_flat_weighted = torch.zeros_like(l_keep_grads_flat_weighted)
-            penalty_grads_final = [torch.tensor(0., dtype=torch.float, device=device)] * len(penalty_grads)
-            penalty_grad_norm_weighted = torch.tensor(0., dtype=torch.float, device=device)
-            
-        Loss_grads_flat_weighted = [loss_keep_grads_final_weighted[p] + loss_grads_final_weighted[p] for p in range(len(loss_grads_final_weighted))]
-        L_grads_flat_weighted = l_keep_grads_flat_weighted + l_grads_flat_weighted
-        cos_Lp   = F.cosine_similarity(L_grads_flat_weighted, p_grads_flat_weighted, dim=0)
-        dot_Lp   = L_grads_flat_weighted.dot(p_grads_flat_weighted)
-        
-        if args.debug:
-            print()
-            alignment_stats = analyze_grad_alignment_moco_flexible(net, Loss_grads_flat_weighted, penalty_grads_final_weighted)
-            print(f"GLOBAL: cos={alignment_stats['global']['cos_global']:+.3f}, "
-                  f"dot={alignment_stats['global']['dot_global']:.3e} "
-                 )
+        penalty_grads_final = calculate_penalty_grads_final(penalty_grads, penalty_aggregator, penalty_weight_env, halves_sz, penalty_calculator, reduction, device, do_penalty)
+        penalty_grads_final = rotate_penalty_grads(penalty_grads_final, loss_grads_final, args.grad_rotate, do_penalty)
 
-            print("\nPER BLOCK:")
-            for b, s in alignment_stats['blocks'].items():
-                print(f"{b:10s} | cos_w_mean={s['cos_weighted']:+.3f} | "
-                      f"conflict={s['frac_conflict']*100:5.1f}% | "
-                      f"||task||={s['g_task_norm_sum']:.2f} | ||irm||={s['g_irm_norm_sum']:.2f}")
-        
-        # rotate penalty gradient if it's orthogonal enough to losses' gradients
-        if do_penalty and (args.penalty_grad_project is not None):
-            alpha      = torch.tensor(0., dtype=torch.float, device=device)
-            if cos_Lp < 0:
-                tau_low, tau_high = args.penalty_grad_project
-                alpha = torch.clip((cos_Lp.abs() - tau_low) / (tau_high - tau_low), 0, 1)
-                if alpha > 0.:
-                    nL = L_grads_flat_weighted.norm()
-                    proj = (dot_Lp / (nL * nL + 1e-12)) * L_grads_flat_weighted
-                    g_p_rot = p_grads_flat_weighted - alpha * proj
-                    g_p_rot = g_p_rot * (penalty_grad_norm_weighted / (g_p_rot.norm() + 1e-12))
-                    p_grads_flat_weighted = g_p_rot 
-                    # update list of pars' gradients w/ rotated grad
-                    grad_lengths = [len(p) for p in penalty_grads_final] 
-                    penalty_grads_final = list(torch.split(p_grads_flat_weighted, grad_lengths, dim=0))                   
+        loss_keep_grad_scaler, loss_grad_scaler, penalty_grad_scaler, gradnorm_loss, info_dict = \
+            calculate_scalers(loss_keep_grads_final, loss_grads_final, penalty_grads_final, 
+                              loss_keep_aggregator,  loss_env,         penalty_env,
+                              ema,
+                              gradnorm_balancer, do_gradnorm,
+                              args, do_loss, do_penalty, device)
 
-            """
-            print()
-            print(f'{cos_Lp.item():.4f}', f'{alpha:.4f}', dot_Lp, f'{p_grads_flat_weighted.norm().item():.4f}') 
-            """
-        
-        # Compute dot products & cosines
-        delta_lk = l_grads_flat_weighted.dot(l_keep_grads_flat_weighted)       
-        delta_lp = l_grads_flat_weighted.dot(p_grads_flat_weighted)
-        delta_kp = l_keep_grads_flat_weighted.dot(p_grads_flat_weighted)
-        cos_lk   = delta_lk / (loss_keep_grad_norm_weighted * loss_grad_norm_weighted    + 1e-12)
-        cos_lp   = delta_lp / (loss_grad_norm_weighted      * penalty_grad_norm_weighted + 1e-12)
-        cos_kp   = delta_kp / (loss_keep_grad_norm_weighted * penalty_grad_norm_weighted + 1e-12)
-
-        loss_weighted      = loss_weight      * loss_env.mean()
-        loss_keep_weighted = loss_keep_weight * loss_keep_aggregator.mean()
-        penalty_weighted   = penalty_weight   * penalty_env.mean()
-        
-        if args.ema:
-            emas = ema.update({'ngk':      loss_keep_grad_norm_weighted, 
-                               'ngl':      loss_grad_norm_weighted, 
-                               'ngp':      penalty_grad_norm_weighted, 
-                               'cos_lk':   cos_lk,
-                               'cos_lp':   cos_lp,
-                               'cos_kp':   cos_kp
-                              }, orig_shape=True)   # return data shaped as input data
-            # make sure the order is explicit and not some implicit one
-            emas_k = ['ngk', 'ngl', 'ngp', 'cos_lk', 'cos_lp', 'cos_kp']
-            ngk, ngl, ngp, cos_lk, cos_lp, cos_kp = [emas[k] for k in emas_k]
-            dot_lk = ngk * ngl * cos_lk
-            dot_lp = ngl * ngp * cos_lp
-            dot_kp = ngk * ngp * cos_kp
-        else:
-            ngk      = loss_keep_grad_norm_weighted
-            ngl      = loss_grad_norm_weighted
-            ngp      = penalty_grad_norm_weighted
-            dot_lk   = delta_lk
-            dot_lp   = delta_lp
-            dot_kp   = delta_kp
-        
-        # This awlays holds because we compute it from cosines
-        assert dot_lk.abs() <= ngk * ngl, f"ngk {ngk}, ngl {ngl}, lk {dot_lk.abs()}" 
-        assert dot_lp.abs() <= ngl * ngp, f"ngl {ngl}, ngp {ngp}, lp {dot_lp.abs()}"
-        assert dot_kp.abs() <= ngk * ngp, f"ngk {ngk}, ngp {ngp}, lpk {dot_lp.abs()}"
-        
-        ngk2 = ngk ** 2
-        ngl2 = ngl ** 2
-        ngp2 = ngp ** 2
-        
-        normalized_scales = {}
-        gradnorm_rates = torch.zeros(int(args.penalty_weight>0) + int(do_loss) + int(do_keep_loss), dtype=torch.float, device=device)
-        losses_dict, grad_norms_dict = {}, {}
-        if do_penalty:
-            losses_dict['penalty']       = penalty_weighted
-            grad_norms_dict['penalty']   = ngp
-        if do_loss:
-            losses_dict['loss']          = loss_weighted
-            grad_norms_dict['loss']      = ngl
-        if do_keep_loss:
-            losses_dict['loss_keep']     = loss_keep_weighted
-            grad_norms_dict['loss_keep'] = ngk            
-                    
-        if do_gradnorm:
-            normalized_scales, gradnorm_loss, gradnorm_rates, gradnorm_progress = gradnorm_balancer.compute_weights_and_loss(losses_dict, grad_norms_dict)
-            """
-            print()
-            print([f'{k}: {v.item()}' for k,v in normalized_scales.items()], 
-                   f'gloss: {gradnorm_loss.item()}', 
-                   [f'{k}: {gradnorm_rates[i].item()}' for i,k in enumerate(task_names)], 
-                   [f'{k} {gradnorm_balancer.task_weights[k].item()}' for k in task_names])
-            """
-        else:
-            normalized_scales = {k: torch.tensor(v, dtype=torch.float, device=device) for k,v in args.gradnorm_scalers.items()}
-            gradnorm_progress = torch.tensor(1.0, dtype=torch.float)
-
-        if args.clamp_weights_for_progress:
-            dot_dict    = {'kl': dot_lk, 'kp': dot_kp, 'lp': dot_lp}
-            norm2_dict  = {'k':  ngk2,   'l':  ngl2,   'p':  ngp2}
-            scaler_dict = {v: normalized_scales[k] for k,v in task_names_2_klp.items()}
-            #w = clamp_scalers_for_progress(norm2_dict, dot_dict, scaler_dict, ema=(args.ema is not None))
-            w = clamp_scalers_for_progress_ema_safe(norm2_dict, dot_dict, scaler_dict, do_print=args.debug)
-            # this can CHANGE the relative rank of the weights!!!
-            normalized_scales = {k: w[v] for k,v in task_names_2_klp.items()} 
-        
-        loss_keep_grad_scaler = normalized_scales['loss_keep'] if do_keep_loss else torch.tensor(1.0, dtype=torch.float, device=device)
-        loss_grad_scaler      = normalized_scales['loss']      if do_loss      else torch.tensor(1.0, dtype=torch.float, device=device)
-        penalty_grad_scaler   = normalized_scales['penalty']   if do_penalty   else torch.tensor(1.0, dtype=torch.float, device=device)
         """
         Don't multiply individual task's loss by scaler, since it's misleading
         Only multiply the gradients since this is what determines how tasks' losses are updated
@@ -1759,44 +1828,15 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         loss_weighted      *= loss_grad_scaler
         penalty_weighted   *= penalty_grad_scaler 
         """
-
-        if args.debug:
-            print()
-
-        if False:
-            al = 1 - alternating_gradients_update
-            ap = 0 + alternating_gradients_update
-        else:
-            al = 1
-            ap = 1
         for pind, p in enumerate(net.parameters()):        
-            total_grad_flat_weighted = (   loss_keep_grads_final[pind] * loss_keep_weight * loss_keep_grad_scaler * al
-                                         + loss_grads_final[pind]      * loss_weight      * loss_grad_scaler      * al
-                                         + penalty_grads_final[pind]   * penalty_weight   * penalty_grad_scaler   * ap
+            total_grad_flat_weighted = (   loss_keep_grads_final[pind] * loss_keep_weight * loss_keep_grad_scaler
+                                         + loss_grads_final[pind]      * loss_weight      * loss_grad_scaler     
+                                         + penalty_grads_final[pind]   * penalty_weight   * penalty_grad_scaler  
                                        )
-
-            if args.debug:
-                print()
-                g_L = loss_grads_final[pind]      * loss_weight      * loss_grad_scaler
-                g_P = penalty_grads_final[pind]   * penalty_weight   * penalty_grad_scaler
-                g_t = total_grad_flat_weighted
-                cos_LP = F.cosine_similarity(g_L, g_P, dim=0)
-                cos_tL = F.cosine_similarity(g_t, g_L, dim=0)
-                cos_tP = F.cosine_similarity(g_t, g_P, dim=0)
-                dominance = cos_tL - cos_tP  # >0 => loss-dominated; <0 => penalty-dominated
-
-                print(f"pind {pind} g_L norm {g_L.norm():.4e} g_P norm {g_P.norm():.4e}, g_t {g_t.norm()}")
-                print(f"cos(L,P)={cos_LP.item():.4e}, cos(total,L)={cos_tL.item():.4e}, cos(total,P)={cos_tP.item():.4e}, dominance {dominance:.2f}")
-
             if p.grad is None:
                 p.grad  = total_grad_flat_weighted.view(p.shape)
             else:
                 p.grad += total_grad_flat_weighted.view(p.shape)
-            if args.debug:
-                # Are grads present and nonzero?
-                print(pind, "requires_grad=", p.requires_grad,
-                      "grad is None?", p.grad is None,
-                      "grad norm=", None if p.grad is None else p.grad.norm().item())
         
         # -----------------------
         # Step 3: optimizer step
@@ -1806,82 +1846,11 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             # magnitudes that happens at this step.
             utils.reset_optimizer(train_optimizer)
 
-        # get these before optimizer updates them
-        w_k                   = loss_keep_grad_scaler.item()
-        w_l                   = loss_grad_scaler.item()
-        w_p                   = penalty_grad_scaler.item()
-        v_k                   = gradnorm_balancer.task_weights['loss_keep'].item() if 'loss_keep' in gradnorm_balancer.task_weights else 0.
-        v_l                   = gradnorm_balancer.task_weights['loss'].item()      if 'loss'      in gradnorm_balancer.task_weights else 0.
-        v_p                   = gradnorm_balancer.task_weights['penalty'].item()   if 'penalty'   in gradnorm_balancer.task_weights else 0.
-        
-        gn_pm = 0
-        for pind, p in enumerate(gradnorm_balancer.parameters()):
-            if p.grad is not None:
-                gn_pm += (2**pind)*(p.grad.sign()) 
-
         train_optimizer.step()
         train_optimizer.zero_grad(set_to_none=True)        # clear gradients at beginning of next gradients batch
+
         if do_gradnorm:
-            gradnorm_optimizer.zero_grad(set_to_none=True) # clear gradients
-            gradnorm_loss.backward()
-            gradnorm_balancer.remove_common_mode_hook()    # remove common-mode from grads
-
-            # actual computed grads after backward:
-            if args.gradnorm_debug and 'gn' in args.gradnorm_debug:
-                with np.printoptions(precision=6):
-                    print("actual v.grad:\t", np.array([gradnorm_balancer.task_weights[k].grad.item() for k in gradnorm_balancer.task_names]))
-
-            gradnorm_optimizer.step()
-            
-            if args.gradnorm_debug and 'opt' in args.gradnorm_debug:
-                print()
-                opt_ids = {id(p) for g in gradnorm_optimizer.param_groups for p in g['params']}
-                # 1) Does optimizer actually contain the exact Parameter objects?
-                for k, p in gradnorm_balancer.task_weights.items():
-                    print("param in opt?", k, id(p) in opt_ids)
-
-                # 2) Are grads present and nonzero?
-                for k, p in gradnorm_balancer.task_weights.items():
-                    print(k, "requires_grad=", p.requires_grad,
-                          "grad is None?", p.grad is None,
-                          "grad norm=", None if p.grad is None else p.grad.norm().item())
-
-                # 3) Check loss and dtype/device sanity
-                print("loss item:", float(gradnorm_loss.item()))
-                print("weights device/dtype:", [(k, p.device, p.dtype) for k, p in gradnorm_balancer.task_weights.items()])
-
-                # 4) Check lr / optimizer param count
-                print("optimizer lr(s):", [g['lr'] for g in gradnorm_optimizer.param_groups])
-                print("optimizer param counts:", [len(g['params']) for g in gradnorm_optimizer.param_groups])
-            
-           
-            lb = {'loss_keep': 1e-3,  'loss': 1e-3,  'penalty': 1e-3} 
-            ub = {'loss_keep': 5.0,   'loss': 5.0,   'penalty': 5.0} 
-            gradnorm_balancer.clamp_weights(lb, ub) # clamps UNNORMALIZED weights
-            if (all_lb := all([v == lb[k] for k,v in gradnorm_balancer.task_weights.items()])) or \
-               (all_ub := all([v == ub[k] for k,v in gradnorm_balancer.task_weights.items()])):
-               bound = "LB" if all_lb else "UB"
-               warnings.warn(f"[GN WARNING] All unnormalized weights clamped to {bound}. Resetting.")
-               gradnorm_balancer.rescale_weights()
-               utils.reset_optimizer(gradnorm_optimizer)
-
-        ngk                   = ngk.item()
-        ngl                   = ngl.item()
-        ngp                   = ngp.item()
-        dot_lk                = dot_lk.item()               
-        dot_lp                = dot_lp.item()
-        dot_kp                = dot_kp.item()
-        cos_lk                = cos_lk.item()               
-        cos_lp                = cos_lp.item()
-        cos_kp                = cos_kp.item()
-        gradnorm_loss         = gradnorm_loss.item()    if do_gradnorm else 0.
-        gradnorm_rates        = gradnorm_rates.tolist() if do_gradnorm else []
-        ngk2                  = ngk2.item()
-        ngl2                  = ngl2.item()
-        ngp2                  = ngp2.item()
-        cos_Lp                = cos_Lp.item()
-        dot_Lp                = dot_Lp.item()
-        gradnorm_progress     = gradnorm_progress.item()
+            gradnorm_update(gradnorm_balancer, gradnorm_loss, gradnorm_optimizer, args)
 
         # True loss reflecting progress does NOT include balancing scalers
         loss_batch_weighted = (loss_keep_weighted + # loss_keep_aggregator is a scalar normalized over macro-batch
@@ -1895,29 +1864,23 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         total_env_loss_weighted  += (loss_weight      * loss_env.mean()).item()      * this_batch_size * gradients_accumulation_steps
         total_loss_weighted      += loss_batch_weighted.item()                       * this_batch_size * gradients_accumulation_steps
         
-        # if cond > 0, the corresponding quantity would decrease
-        loss_decrease_cond      = loss_grad_scaler      * ngl2 + loss_keep_grad_scaler*dot_lk + penalty_grad_scaler*dot_lp
-        loss_keep_decrease_cond = loss_keep_grad_scaler * ngk2 + loss_grad_scaler*dot_lk      + penalty_grad_scaler*dot_kp
-        penalty_decrease_cond   = penalty_grad_scaler   * ngl2 + loss_keep_grad_scaler*dot_kp + loss_grad_scaler*dot_lp
-
-        gradnorm_rates_str = " ".join([f'{n} {r:.4f}' for n,r in zip([task_names_2_klp[k] for k in task_names], gradnorm_rates)]) if do_gradnorm else ""  
         if args.print_batch:
             print() # this causes each tqdm update to be printed on a separare line
         keep_str = f'Keep/{loss_keep_type}' if loss_keep_type is not None else 'Keep'
 
-        desc_str = f'Epoch [{epoch}/{epochs}] [{trained_samples}/{total_samples}]' + \
-                   f' {args.ssl_type}' + \
-                   f' Total {total_loss_weighted/trained_samples:.3e}' + \
-                   f' {keep_str} {total_keep_loss_weighted/trained_samples:.3e}' + \
-                   f' Env {total_env_loss_weighted/trained_samples:.3e}' + \
-                   f' {args.penalty_type} {total_irm_loss_weighted/trained_samples:.3e}' + \
-                   f' LR {train_optimizer.param_groups[0]["lr"]:.4f} PW {penalty_weight_orig:.6g}' + \
-                   f' dot: ll {ngl2:.2e} lk {dot_lk:.2e} lp {dot_lp:.2e} kk {ngk2:.2e} kp {dot_kp:.2e} pp {ngp2:.2e}' + \
-                   f' cos: lk {cos_lk:.3e} lp {cos_lp:.3e} kp {cos_kp:.2e}' + \
-                   f' w/v: k {w_k:.4f}/{v_k:.4f} l {w_l:.4f}/{v_l:.4f} p {w_p:.4f}/{v_p:.4f}' + \
-                   f' decr: l {loss_decrease_cond:.2e} k {loss_keep_decrease_cond:.2e} p {penalty_decrease_cond:.2e}' + \
-                   f' gn_loss {gradnorm_loss:.4e} rates: {gradnorm_rates_str} gn_gpm: {gn_pm} Lp: cos {cos_Lp:.3e}' + \
-                   f' dot {dot_Lp:.3e} gn_prgrs {gradnorm_progress:.6g}'
+        desc_str = f"Epoch [{epoch}/{epochs}] [{trained_samples}/{total_samples}]" + \
+                   f" {args.ssl_type}" + \
+                   f" Total {total_loss_weighted/trained_samples:.3e}" + \
+                   f" {keep_str} {total_keep_loss_weighted/trained_samples:.3e}" + \
+                   f" Env {total_env_loss_weighted/trained_samples:.3e}" + \
+                   f" {args.penalty_type} {total_irm_loss_weighted/trained_samples:.3e}" + \
+                   f" LR {train_optimizer.param_groups[0]["lr"]:.4f} PW {penalty_weight_orig:.6g}" + \
+                   f" dot: ll {info_dict['ngl2']:.2e} lk {info_dict['dot_lk']:.2e} lp {info_dict['dot_lp']:.2e} kk {info_dict['ngk2']:.2e} kp {info_dict['dot_kp']:.2e} pp {info_dict['ngp2']:.2e}" + \
+                   f" cos: lk {info_dict['cos_lk']:.3e} lp {info_dict['cos_lp']:.3e} kp {info_dict['cos_kp']:.2e}" + \
+                   f" w/v: k {info_dict['w_k']:.4f}/{info_dict['v_k']:.4f} l {info_dict['w_l']:.4f}/{info_dict['v_l']:.4f} p {info_dict['w_p']:.4f}/{info_dict['v_p']:.4f}" + \
+                   f" decr: l {info_dict['loss_decrease_cond:.2e} k {info_dict['loss_keep_decrease_cond:.2e} p {info_dict['penalty_decrease_cond:.2e}" + \
+                   f" gn_loss {info_dict['gradnorm_loss']:.4e} rates: {info_dict['gradnorm_rates_str']} gn_gpm: {info_dict['gn_pm']}" + \
+                   f" Lp: cos {info_dict['cos_Lp']:.3e} dot {info_dict['dot_Lp']:.3e} gn_prgrs {info_dict['gradnorm_progress']:.6g}"
         desc_str += loss_module.get_debug_info_str()
         train_bar.set_description(desc_str)
 
@@ -1929,13 +1892,13 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                     total_env_loss_weighted/trained_samples) + 
                             ' {}: {:.4g} LR: {:.4f} PW {:.4f} GN {:.4f}'
                             .format(args.penalty_type, total_irm_loss_weighted/trained_samples, train_optimizer.param_groups[0]['lr'], 
-                                    penalty_weight_orig, gradnorm_loss) + 
+                                    penalty_weight_orig, info_dict['gradnorm_loss']) + 
                             ' dot {:.2e} {:.2e} {:.2e} {:.2e} {:.2e} {:.2e}'
-                            .format(ngl2, dot_lk, dot_lp, ngk2, dot_kp, ngp2) +
+                            .format(info_dict['ngl2'], info_dict['dot_lk'], info_dict['dot_lp'], info_dict['ngk2'], info_dict['dot_kp'], info_dict['ngp2']) +
                             ' rates {}'
-                            .format(gradnorm_rates_str) + 
+                            .format(info_dict['gradnorm_rates_str']) + 
                             ' decr l {:.2e} k {:.2e} p {:.2e} gn_gpm {} Lp cos {:4f} delta {:.3e}'
-                            .format(loss_decrease_cond, loss_keep_decrease_cond, penalty_decrease_cond, gn_pm, cos_Lp, dot_Lp),
+                            .format(info_dict['loss_decrease_cond'], info_dict['loss_keep_decrease_cond'], info_dict['penalty_decrease_cond'], info_dict['gn_pm'], info_dict['cos_Lp'], info_dict['dot_Lp']),
                             log_file=log_file)
                                         
         # Prepare for next iteration
