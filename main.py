@@ -1138,7 +1138,7 @@ def convert_to_tensor(x_list, I, J):
     x = x_flat.view(I, J, K)
     return x
 
-def calculate_loss_grads_final(loss_grads, loss_env, loss_weight_env, halves_sz, loss_module, reduction, device, do_loss):
+def calculate_loss_grads_final(loss_grads, loss_env, loss_weight_env, halves_sz, loss_module, net, reduction, device, do_loss):
     if do_loss:
         loss_grads_final = []
         for pind, _ in enumerate(net.parameters()):
@@ -1810,7 +1810,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             penalty_env = torch.tensor(0, dtype=torch.float, device=device)
 
         # Environments gradients
-        loss_grads_final = calculate_loss_grads_final(loss_grads, loss_env, loss_weight_env, halves_sz, loss_module, reduction, device, do_loss)
+        loss_grads_final = calculate_loss_grads_final(loss_grads, loss_env, loss_weight_env, halves_sz, loss_module, net, reduction, device, do_loss)
 
         penalty_grads_final = calculate_penalty_grads_final(penalty_grads, penalty_aggregator, penalty_weight_env, halves_sz, penalty_calculator, reduction, device, do_penalty)
         penalty_grads_final = rotate_penalty_grads(penalty_grads_final, loss_grads_final, args.grad_rotate, do_penalty)
@@ -1865,8 +1865,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                               )
 
         # total loss is sum of losses so far over entire batch aggregation period.
-        print()
-        print(penalty_env.mean().item(), loss_env.mean().item(), penalty_weight, loss_weight)
         total_keep_loss_weighted += (loss_keep_weight * loss_keep_aggregator).item() * this_batch_size * gradients_accumulation_steps
         total_irm_loss_weighted  += (penalty_weight   * penalty_env.mean()).item()   * this_batch_size * gradients_accumulation_steps
         total_env_loss_weighted  += (loss_weight      * loss_env.mean()).item()      * this_batch_size * gradients_accumulation_steps
