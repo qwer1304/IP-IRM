@@ -1194,7 +1194,7 @@ def calculate_scalers(loss_keep_grads_final, loss_grads_final, penalty_grads_fin
             assert default_grads_weighted_vector is not None, "default_grads_weighted_vector not given when do_flag is False"
             grads_weighted_vector = default_grads_weighted_vector
             grads_norm_weighted = torch.tensor(0., dtype=torch.float, device=device)
-        return grads_weighted, grads_weighted_vector, grada_norm_weighted
+        return grads_weighted, grads_weighted_vector, grads_norm_weighted
 
     loss_keep_grads_final_weighted, l_keep_grads_flat_weighted, loss_keep_grad_norm_weighted = \
         setup_grads_and_norms(loss_keep_grads_final, loss_keep_weight, args.Lscaler, device, True)
