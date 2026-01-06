@@ -975,111 +975,6 @@ def _ensure_grad_dict(model, grads: Union[Dict[str, torch.Tensor], List[torch.Te
             pass
     return grad_dict
 
-def analyze_grad_alignment_moco_flexible(
-    model,
-    grads_task: Union[Dict[str, torch.Tensor], List[torch.Tensor]],
-    grads_irm:  Union[Dict[str, torch.Tensor], List[torch.Tensor]],
-    conflict_thresh: float = -0.5,
-    eps: float = 1e-12
-):
-    """
-    Flexible analyzer: accepts grads as dicts (name->tensor) or lists (same order as model.parameters()).
-    Returns:
-      {
-        'global': {cos_global, dot_global, norm_task, norm_irm, progress},
-        'blocks': { block_name: {cos_mean, cos_weighted, cos_std, frac_conflict,
-                                 g_task_norm_sum, g_irm_norm_sum, n_params} }
-      }
-    Notes:
-      - grads list entries may be flattened or not; function flattens internally.
-      - If grads are lists, they must align with model.named_parameters() order.
-    Example usage:
-        grad_task_list = [p.grad.detach().flatten() for p in model.parameters()]
-        grad_irm_list  = [grad_irm_for_param.detach().flatten() for grad_irm_for_param in some_list]
-        out = analyze_grad_alignment_moco_flexible(model, grad_task_list, grad_irm_list)
-    """
-    # normalize inputs to dicts keyed by parameter name
-    grad_task_dict = _ensure_grad_dict(model, grads_task)
-    grad_irm_dict  = _ensure_grad_dict(model, grads_irm)
-
-    stats = defaultdict(lambda: {'cos': [], 'weight': [], 'g_task_norms': [], 'g_irm_norms': []})
-    g_task_all, g_irm_all = [], []
-
-    # iterate model.named_parameters for deterministic grouping/order
-    for name, param in model.named_parameters():
-        if name not in grad_task_dict or name not in grad_irm_dict:
-            continue
-        gL = grad_task_dict[name]
-        gP = grad_irm_dict[name]
-        if gL is None or gP is None:
-            continue
-        # flatten (safe if already 1D)
-        gLf = gL.flatten()
-        gPf = gP.flatten()
-        if gLf.numel() == 0 or gPf.numel() == 0:
-            continue
-
-        # accumulate for global
-        g_task_all.append(gLf)
-        g_irm_all.append(gPf)
-
-        # per-param cosine and norms
-        cos = F.cosine_similarity(gLf, gPf, dim=0, eps=eps).item()
-        normL = gLf.norm().item()
-        normP = gPf.norm().item()
-        weight = normL * normP
-
-        group = group_name_moco(name)
-        stats[group]['cos'].append(cos)
-        stats[group]['weight'].append(weight)
-        stats[group]['g_task_norms'].append(normL)
-        stats[group]['g_irm_norms'].append(normP)
-
-    # === Global metrics ===
-    if len(g_task_all) > 0:
-        g_task_flat = torch.cat(g_task_all)
-        g_irm_flat  = torch.cat(g_irm_all)
-        dot_global = float(torch.dot(g_task_flat, g_irm_flat).item())
-        cos_global = float(F.cosine_similarity(g_task_flat, g_irm_flat, dim=0, eps=eps).item())
-        norm_task  = float(g_task_flat.norm().item())
-        norm_irm   = float(g_irm_flat.norm().item())
-    else:
-        dot_global = cos_global = norm_task = norm_irm = float('nan')
-
-    # === Per-block aggregation ===
-    results_blocks = {}
-    for group, d in stats.items():
-        if len(d['cos']) == 0:
-            continue
-        cos_tensor = torch.tensor(d['cos'], dtype=torch.float64)
-        weight = torch.tensor(d['weight'], dtype=torch.float64)
-        cos_mean = float(cos_tensor.mean().item())
-        cos_weighted = float(((cos_tensor * weight).sum() / (weight.sum() + eps)).item())
-        cos_std = float(cos_tensor.std(unbiased=False).item())
-        frac_conflict = float((cos_tensor < conflict_thresh).float().mean().item())
-        g_task_norm_sum = float(sum(d['g_task_norms']))
-        g_irm_norm_sum = float(sum(d['g_irm_norms']))
-
-        results_blocks[group] = {
-            'cos_mean': cos_mean,
-            'cos_weighted': cos_weighted,
-            'cos_std': cos_std,
-            'frac_conflict': frac_conflict,
-            'g_task_norm_sum': g_task_norm_sum,
-            'g_irm_norm_sum': g_irm_norm_sum,
-            'n_params': len(d['cos'])
-        }
-
-    return {
-        'global': {
-            'cos_global': cos_global,
-            'dot_global': dot_global,
-            'norm_task': norm_task,
-            'norm_irm': norm_irm
-        },
-        'blocks': results_blocks
-    }
-
 def rotate_pen_toward_orthogonal(pen_grads, loss_grads, theta=0.2):
     # pen_grads, loss_grads: lists of tensors [g_env0, g_env1, ..., g_env{E-1}]
     #                        each flattened to shape (D,)
@@ -1102,46 +997,10 @@ def rotate_pen_toward_orthogonal(pen_grads, loss_grads, theta=0.2):
         rotated.append(new_pen)
     return rotated
 
-def rotate_gradients_per_env(grads, eps=0.03, device=None):
-    """
-    grads: list of tensors [g_env0, g_env1, ..., g_env{E-1}]
-           each flattened to shape (D,)
-    eps:   small rotation strength (~radians)
-    returns: list of rotated gradients
-    """
-    rotated = []
-    for g in grads:
-        g = g.to(device)
-        v = torch.randn_like(g)           # random rotation axis
-        v = v - (v @ g) / (g @ g + 1e-12) * g  # make v normal to g
-        v = F.normalize(v, dim=0)
-
-        # simple 2D rotation in span{g, v}
-        cos_theta = torch.cos(torch.tensor(eps, device=device))
-        sin_theta = torch.sin(torch.tensor(eps, device=device))
-        g_rot = cos_theta * g + sin_theta * (torch.norm(g) * v)
-
-        rotated.append(g_rot)
-    return rotated
-
-def convert_to_list(x):
-    x_flat = x.view(-1, x.shape[2])  # shape: (I*J, K)
-    # Step 2: Unbind along the first dimension
-    x_list = list(torch.unbind(x_flat, dim=0)) # order (0,0),(0,1),...,(0,J-1),(1,0),...,(I-1,J-1)
-    return x_list
-
-def convert_to_tensor(x_list, I, J):
-    # Stack the list into a single tensor
-    K = x_list[0].size(0)
-    x_flat = torch.stack(x_list, dim=0)  # shape: (I*J, K)
-    # Reshape back to (I, J, K)
-    x = x_flat.view(I, J, K)
-    return x
-
-def calculate_loss_grads_final(loss_grads, loss_env, loss_weight_env, halves_sz, loss_module, net, reduction, device, do_loss):
+def calculate_loss_grads_final(loss_grads, loss_env, loss_weight_env, halves_sz, loss_module, reduction, device, do_loss):
     if do_loss:
         loss_grads_final = []
-        for pind, _ in enumerate(net.parameters()):
+        for pind in range(len(loss_grads)):
             dLoss_dTheta_env = loss_grads[pind] * loss_weight_env[..., None]  # per env sum of dCont/dTheta, shape (I,J,K,param_numel), unweighted
             reduction = 'sum'
             total_grad_flat  = loss_module.loss_grads_finalize(dLoss_dTheta_env, loss_env, halves_sz, reduction=reduction)
@@ -1334,7 +1193,9 @@ def calculate_scalers(loss_keep_grads_final, loss_grads_final, penalty_grads_fin
 
     return loss_keep_grad_scaler, loss_grad_scaler, penalty_grad_scaler, gradnorm_loss, info_dict
 
-def gradnorm_update(gradnorm_balancer, gradnorm_loss, gradnorm_optimizer, args):
+def gradnorm_update(gradnorm_balancer, gradnorm_loss, gradnorm_optimizer, args, do_gradnorm):
+    if not do_gradnorm:
+        return
     gradnorm_optimizer.zero_grad(set_to_none=True) # clear gradients
     gradnorm_loss.backward()
     gradnorm_balancer.remove_common_mode_hook()    # remove common-mode from grads
@@ -1377,6 +1238,11 @@ def gradnorm_update(gradnorm_balancer, gradnorm_loss, gradnorm_optimizer, args):
        gradnorm_balancer.rescale_weights()
        utils.reset_optimizer(gradnorm_optimizer)
 
+def make_dither_weight(num_partitions, env_num, weight_env_eps, device):
+    deltas = (2.0 * torch.rand(1, num_partitions, env_num, device=device) - 1.0) * weight_env_eps  # random in [-eps, eps]
+    deltas -= deltas.mean()  # mean-zero so overall scale unchanged
+    weight_env = 1.0 + deltas
+    return weight_env
 
 # ssl training with IP-IRM
 def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, **kwargs):
@@ -1612,17 +1478,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                         differentiate_this.append(torch.zeros(1, dtype=torch.float, device=device)) # dummy penalty
                                 continue
                             
-                            samples_left = N
-                            if args.drop_samples:
-                                samples_left = max(N - args.drop_samples, 2)
-                                samples_to_drop = max(N - samples_left, 0)
-                                if samples_to_drop > 0:
-                                    drop_idxs = torch.randint(0, len(idxs), (samples_to_drop,))
-                                    mask = torch.ones_like(idxs, dtype=torch.bool)
-                                    mask[drop_idxs] = False
-                                    idxs = idxs[mask] 
-                            
-                            halves_sz[j,partition_num,env] += samples_left # update number of elements in environment
+                            halves_sz[j,partition_num,env] += N # update number of elements in environment
                             
                             # losses - losses are ALWAYS a scalar
                             if do_loss:
@@ -1663,6 +1519,39 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                 The 1st to 'num_samples' columns correspond to loss_keep if requested.                                
                             'grad_outputs[i,j]' is a multiplier of the [i,j]-th entry to differentiate.
                             """
+
+                            # 1. Calculate base indices once
+                            # Using standard Python ints for indexing is faster than creating 0-d Tensors
+                            base_idx = partition_num * args.env_num + env
+                            row_stride = num_partitions * args.env_num
+
+                            # 2. Determine Mask and Initial Offset
+                            if is_per_env:
+                                # Per-env: Mask is solid 1.0; Offset is based on the partition index
+                                mask = 1.0
+                                current_offset = base_idx + int(do_keep_loss)
+                            else:
+                                # Shared: Mask is sparse (zeros with ones at idxs); Offset starts at 0
+                                mask = torch.zeros(num_samples, dtype=torch.float, device=device)
+                                mask[idxs] = 1.0
+                                current_offset = 0
+
+                            # 3. Apply Updates Sequentially
+                            current_row = base_idx
+
+                            if do_loss:
+                                # Use comma indexing [row, col] for efficiency
+                                grad_outputs[current_row, current_offset : current_offset + num_samples] = mask
+
+                                # Shift indices for the penalty step
+                                current_row += row_stride
+                                current_offset += num_samples
+
+                            if do_penalty:
+                                grad_outputs[current_row, current_offset : current_offset + num_samples] = mask
+
+                            """
+                            =========== BEGIN ORIGINAL CODE =============
                             linear_idx = torch.tensor(partition_num*args.env_num + env, dtype=torch.int, device=device) # row index
                             if is_per_env:
                                 offset = partition_num*args.env_num + env + int(do_keep_loss) # 1st column is keep_loss
@@ -1683,6 +1572,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                     offset += num_samples # offset to penalties
                                 if do_penalty:
                                     grad_outputs[linear_idx][offset:offset+num_samples] = mask # unweighted
+                            =========== END OF ORIGINAL CODE =============
+                            """
+
                         # end for env in range(args.env_num):
                     # end for partition_num, partition in enumerate(partitions):
                 # end if not args.baseline:
@@ -1726,6 +1618,40 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                     is_grads_batched=True
                 )
 
+                # 1. Pre-calculate bounds and offsets
+                num_tasks = (num_grads - num_baseline_repeates) // max(1, num_split_repeates)
+                penalty_offset = num_partitions * args.env_num
+
+                # 2. Single pass over parameters
+                # 'grads_all' is a tuple w/ an entry per parameter.
+                # each entry is a tensor w/ 1st dim = 'grad_outputs.size(0)' and other dims matching the parameter
+                for _j, g in enumerate(grads_all):
+                    if g is None:
+                        continue
+
+                    # Flatten: (Batch, *Param_Dims) -> (Batch, Flattened_Dim)
+                    # Using reshape/view here avoids repeating it inside inner loops
+                    g_flat = g.detach().reshape(g.size(0), -1)
+
+                    # --- Keep Loss (Last Row) ---
+                    if do_keep_loss:
+                        loss_keep_grads_final[_j] += g_flat[-1]
+
+                    # --- Loss & Penalty (Batch Slicing) ---
+                    if (do_loss or do_penalty) and num_tasks > 0:
+                        # Shape to broadcast: (Partitions, Envs, Flattened_Dim)
+                        view_shape = (num_partitions, args.env_num, -1)
+
+                        if do_loss:
+                            # Slice first 'num_tasks' rows -> Reshape -> Add
+                            loss_grads[_j][j] += g_flat[:num_tasks].view(view_shape)
+
+                        if do_penalty:
+                            # Slice rows starting at offset -> Reshape -> Add
+                            penalty_grads[_j][j] += g_flat[penalty_offset : penalty_offset + num_tasks].view(view_shape)
+
+                """
+                =========== BEGIN ORIGINAL CODE =============
                 if do_keep_loss: # global loss @ 1st partition
                     # 'grads_all' is a tuple w/ an entry per parameter.
                     # each entry is a tensor w/ 1st dim = 'grad_outputs.size(0)' and other dims matching the parameter
@@ -1767,9 +1693,15 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                     continue
                                 grads = grads.detach().view(-1)
                                 penalty_grads[_j][j,partition_num,env] += grads
+                =========== END OF ORIGINAL CODE =============
+                """
+                         
                 # end if not args.baseline:
                 loss_module.post_micro_batch()
                 loss_module.prepare_for_free()
+                if loss_keep_module is not None:
+                    loss_keep_module.post_micro_batch()
+                    loss_keep_module.prepare_for_free()
                 
                 # free memory of micro-batch
                 del batch_micro, indexs, grads, g, grads_all, differentiate_this
@@ -1790,14 +1722,11 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         gradients_accumulation_step += 1
         if gradients_accumulation_step < gradients_accumulation_steps:
             continue
+        
         macro_batch_index           += 1
 
-        deltas = (2.0 * torch.rand(1, num_partitions, args.env_num, device=device) - 1.0) * args.weight_env_eps  # random in [-eps, eps]
-        deltas -= deltas.mean()  # mean-zero so overall scale unchanged
-        loss_weight_env = 1.0 + deltas
-        deltas = (2.0 * torch.rand(1, num_partitions, args.env_num, device=device) - 1.0) * args.weight_env_eps  # random in [-eps, eps]
-        deltas -= deltas.mean()  # mean-zero so overall scale unchanged
-        penalty_weight_env = 1.0 + deltas
+        loss_weight_env    = make_dither_weight(num_partitions, args.env_num, args.weight_env_eps, device)
+        penalty_weight_env = make_dither_weight(num_partitions, args.env_num, args.weight_env_eps, device)
 
         if do_loss:
             partition_sz = halves_sz.sum(dim=0, keepdim=True) # (1,J,K) # sizes of envs in macro-batch
@@ -1810,7 +1739,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             penalty_env = torch.tensor(0, dtype=torch.float, device=device)
 
         # Environments gradients
-        loss_grads_final = calculate_loss_grads_final(loss_grads, loss_env, loss_weight_env, halves_sz, loss_module, net, reduction, device, do_loss)
+        loss_grads_final = calculate_loss_grads_final(loss_grads, loss_env, loss_weight_env, halves_sz, loss_module, reduction, device, do_loss)
 
         penalty_grads_final = calculate_penalty_grads_final(penalty_grads, penalty_aggregator, penalty_weight_env, halves_sz, penalty_calculator, reduction, device, do_penalty)
         penalty_grads_final = rotate_penalty_grads(penalty_grads_final, loss_grads_final, args.grad_rotate, do_penalty)
@@ -1851,8 +1780,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         train_optimizer.step()
         train_optimizer.zero_grad(set_to_none=True)        # clear gradients at beginning of next gradients batch
 
-        if do_gradnorm:
-            gradnorm_update(gradnorm_balancer, gradnorm_loss, gradnorm_optimizer, args)
+        gradnorm_update(gradnorm_balancer, gradnorm_loss, gradnorm_optimizer, args, do_gradnorm)
 
         # True loss reflecting progress does NOT include balancing scalers
         loss_weighted      = loss_weight      * loss_env.mean()
@@ -1925,6 +1853,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         torch.cuda.empty_cache()
 
         loss_module.post_batch()
+        if loss_keep_module is not None:
+            loss_keep_module.post_batch()
     # end for batch_index, data_env in enumerate(train_bar):
     return total_loss_weighted / trained_samples
 
@@ -2315,7 +2245,6 @@ if __name__ == '__main__':
     parser.add_argument('--ssl_type_partition', default='MoCoSupCon', type=str, choices=['MoCo', 'SimSiam', 'MoCoSupCon', 'SimCLR'], help='SSL type for partition')    
     parser.add_argument('--penalty_type', default='IRM', type=str, choices=['IRM', 'VREx'], help='Penalty type')        
     parser.add_argument('--penalty_sigma', default=None, type=float, help='Noise level to inject into penalty')        
-    parser.add_argument('--drop_samples', default=None, type=int, help='# of samples to drop to break equilibrium')        
     parser.add_argument('--grad_rotate', default=None, type=float, nargs=2, help='rotate gradients')      
     parser.add_argument('--loss_keep_type', default=None, type=str, choices=['CE', 'CEweighted'], help='Loss keep type')    
 
@@ -2442,7 +2371,6 @@ if __name__ == '__main__':
     parser.add_argument('--gradnorm_huber_delta', default=1e-2, type=float, help='gradnorm Huber delta')
 
     parser.add_argument('--clamp_weights_for_progress', action="store_true", help="clamp loss' weights for progress")
-    parser.add_argument('--penalty_grad_project', type=float, nargs=2, default=None, help="project penalty grad for orthogonality", metavar="[tau_low, tau_high]")
     
     parser.add_argument('--adapt_bn', action="store_true", help="adapt BN layers")
     parser.add_argument('--featurizer_lr', type=float, default=0.0, help="featurizer LR")
@@ -2454,7 +2382,6 @@ if __name__ == '__main__':
     args = parser.parse_args()
     args.gradnorm_tau = {args.gradnorm_tau[i]: args.gradnorm_tau[i+1] for i in range(0,len(args.gradnorm_tau),2)} if args.gradnorm_tau is not None else None
     args.gradnorm_scalers = {args.gradnorm_scalers[i]: args.gradnorm_scalers[i+1] for i in range(0,len(args.gradnorm_scalers),2)} if args.gradnorm_scalers is not None else None
-    assert not (args.clamp_weights_for_progress and (args.penalty_grad_project is not None)), "Using weight clamping and projection is mutually exclusive"
     
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
