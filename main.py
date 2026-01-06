@@ -1172,7 +1172,7 @@ def calculate_penalty_grads_final(penalty_grads, penalty_aggregator, penalty_wei
 
 def rotate_penalty_grads(penalty_grads_final, loss_grads_final, grad_rotate, do_penalty):
     if do_penalty and grad_rotate is not None:
-        theta = float(torch.empty(1).uniform_(min(grad_rotate), max(agrad_rotate)).item())
+        theta = float(torch.empty(1).uniform_(min(grad_rotate), max(grad_rotate)).item())
         penalty_grads_final = [rotate_pen_toward_orthogonal( # returns list w/ 1 element, w/ size (parnum,)
             [g], [loss_grads_final[pind]], theta=theta)[0].clone() for pind, g in enumerate(penalty_grads_final)
         ]
