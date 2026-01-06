@@ -1878,7 +1878,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                    f" dot: ll {info_dict['ngl2']:.2e} lk {info_dict['dot_lk']:.2e} lp {info_dict['dot_lp']:.2e} kk {info_dict['ngk2']:.2e} kp {info_dict['dot_kp']:.2e} pp {info_dict['ngp2']:.2e}" + \
                    f" cos: lk {info_dict['cos_lk']:.3e} lp {info_dict['cos_lp']:.3e} kp {info_dict['cos_kp']:.2e}" + \
                    f" w/v: k {info_dict['w_k']:.4f}/{info_dict['v_k']:.4f} l {info_dict['w_l']:.4f}/{info_dict['v_l']:.4f} p {info_dict['w_p']:.4f}/{info_dict['v_p']:.4f}" + \
-                   f" decr: l {info_dict['loss_decrease_cond:.2e} k {info_dict['loss_keep_decrease_cond:.2e} p {info_dict['penalty_decrease_cond:.2e}" + \
+                   f" decr: l {info_dict['loss_decrease_cond']:.2e} k {info_dict['loss_keep_decrease_cond']:.2e} p {info_dict['penalty_decrease_cond']:.2e}" + \
                    f" gn_loss {info_dict['gradnorm_loss']:.4e} rates: {info_dict['gradnorm_rates_str']} gn_gpm: {info_dict['gn_pm']}" + \
                    f" Lp: cos {info_dict['cos_Lp']:.3e} dot {info_dict['dot_Lp']:.3e} gn_prgrs {info_dict['gradnorm_progress']:.6g}"
         desc_str += loss_module.get_debug_info_str()
