@@ -119,20 +119,17 @@ class FeatureQueue:
         else:
             return k
 
-def microbatches(x, y, z, mb_size, min_size=2):
-    # yields a micro-batch
-    N = x.size(0)
-    yb = None
-    zb = None
+def microbatches(X, mb_size, min_size=2):
+    # yields a micro-batch of objects in list X
+    assert isinstance(X, 'list'), "X must be a list"
+    assert len(X) > 0, f"len(X)={len(X)} == 0"
+    assert all([len(x) == len(X[0]) for x in X), "all elements must have the same length"
+    N = X.size(0)
     for i in range(0, N, mb_size):
-        xb = x[i:i+mb_size] 
-        if y is not None:
-            yb = y[i:i+mb_size]
-        if z is not None:
-            zb = z[i:i+mb_size]
-        if xb.size(0) < min_size:
-            continue  # skip this tiny batch
-        yield xb, yb, zb
+        Xb = [x[i:i+mb_size] for x in X] 
+        if Xb[0].size(0) < min_size:
+            continue  # skip this tiny micro-batch
+        yield Xb
 
 class BaseCalculator:
     def __init__(self, loss_module, *args, debug=False, device='cuda', **kwargs):
@@ -1037,12 +1034,12 @@ def rotate_penalty_grads(penalty_grads_final, loss_grads_final, grad_rotate, do_
         ]
     return penalty_grads_final
 
-def calculate_scalers(loss_keep_grads_final, loss_grads_final, penalty_grads_final, 
-                      loss_keep_aggregator,  loss_env,         penalty_env,
-                      loss_keep_weight,      loss_weight,      penalty_weight,
+def calculate_scalers(loss_unsplit_grads_final, loss_grads_final, penalty_grads_final, 
+                      loss_unsplit_aggregator,  loss_env,         penalty_env,
+                      loss_unsplit_weight,      loss_weight,      penalty_weight,
                       ema,
                       gradnorm_balancer, do_gradnorm,
-                      args, do_keep_loss, do_loss, do_penalty, device):
+                      args, do_unsplit_loss, do_loss, do_penalty, device):
     def setup_grads_and_norms(grads_final, weight, Lscaler, device, do_flag, default_grads_weighted_vector=None):
         if do_flag:
             grads_weighted = [g.detach().clone() * weight * Lscaler for g in grads_final if g is not None]
@@ -1055,33 +1052,33 @@ def calculate_scalers(loss_keep_grads_final, loss_grads_final, penalty_grads_fin
             grads_norm_weighted = torch.tensor(0., dtype=torch.float, device=device)
         return grads_weighted, grads_weighted_vector, grads_norm_weighted
 
-    loss_keep_grads_final_weighted, l_keep_grads_flat_weighted, loss_keep_grad_norm_weighted = \
-        setup_grads_and_norms(loss_keep_grads_final, loss_keep_weight, args.Lscaler, device, True)
-    default_grads_weighted_vector = torch.zeros_like(l_keep_grads_flat_weighted)
+    loss_unsplit_grads_final_weighted, l_unsplit_grads_flat_weighted, loss_unsplit_grad_norm_weighted = \
+        setup_grads_and_norms(loss_unsplit_grads_final, loss_unsplit_weight, args.Lscaler, device, True)
+    default_grads_weighted_vector = torch.zeros_like(l_unsplit_grads_flat_weighted)
     loss_grads_final_weighted, l_grads_flat_weighted, loss_grad_norm_weighted = \
         setup_grads_and_norms(loss_grads_final, loss_weight, args.Lscaler, device, do_loss, default_grads_weighted_vector=default_grads_weighted_vector)
     penalty_grads_final_weighted, p_grads_flat_weighted, penalty_grad_norm_weighted = \
         setup_grads_and_norms(penalty_grads_final, penalty_weight, args.Lscaler, device, do_penalty, default_grads_weighted_vector=default_grads_weighted_vector)
 
     # Compute dot products & cosines
-    delta_lk = l_grads_flat_weighted.dot(l_keep_grads_flat_weighted)       
+    delta_lk = l_grads_flat_weighted.dot(l_unsplit_grads_flat_weighted)       
     delta_lp = l_grads_flat_weighted.dot(p_grads_flat_weighted)
-    delta_kp = l_keep_grads_flat_weighted.dot(p_grads_flat_weighted)
-    cos_lk   = delta_lk / (loss_keep_grad_norm_weighted * loss_grad_norm_weighted    + 1e-12)
+    delta_kp = l_unsplit_grads_flat_weighted.dot(p_grads_flat_weighted)
+    cos_lk   = delta_lk / (loss_unsplit_grad_norm_weighted * loss_grad_norm_weighted    + 1e-12)
     cos_lp   = delta_lp / (loss_grad_norm_weighted      * penalty_grad_norm_weighted + 1e-12)
-    cos_kp   = delta_kp / (loss_keep_grad_norm_weighted * penalty_grad_norm_weighted + 1e-12)
+    cos_kp   = delta_kp / (loss_unsplit_grad_norm_weighted * penalty_grad_norm_weighted + 1e-12)
 
-    Loss_grads_flat_weighted = [loss_keep_grads_final_weighted[p] + loss_grads_final_weighted[p] for p in range(len(loss_grads_final_weighted))]
-    L_grads_flat_weighted = l_keep_grads_flat_weighted + l_grads_flat_weighted
+    Loss_grads_flat_weighted = [loss_unsplit_grads_final_weighted[p] + loss_grads_final_weighted[p] for p in range(len(loss_grads_final_weighted))]
+    L_grads_flat_weighted = l_unsplit_grads_flat_weighted + l_grads_flat_weighted
     cos_Lp   = F.cosine_similarity(L_grads_flat_weighted, p_grads_flat_weighted, dim=0)
     dot_Lp   = L_grads_flat_weighted.dot(p_grads_flat_weighted)
 
     loss_weighted      = loss_weight      * loss_env.mean()
-    loss_keep_weighted = loss_keep_weight * loss_keep_aggregator.mean()
+    loss_unsplit_weighted = loss_unsplit_weight * loss_unsplit_aggregator.mean()
     penalty_weighted   = penalty_weight   * penalty_env.mean()
 
     if args.ema:
-        emas = ema.update({'ngk':      loss_keep_grad_norm_weighted, 
+        emas = ema.update({'ngk':      loss_unsplit_grad_norm_weighted, 
                            'ngl':      loss_grad_norm_weighted, 
                            'ngp':      penalty_grad_norm_weighted, 
                            'cos_lk':   cos_lk,
@@ -1095,7 +1092,7 @@ def calculate_scalers(loss_keep_grads_final, loss_grads_final, penalty_grads_fin
         dot_lp = ngl * ngp * cos_lp
         dot_kp = ngk * ngp * cos_kp
     else:
-        ngk      = loss_keep_grad_norm_weighted
+        ngk      = loss_unsplit_grad_norm_weighted
         ngl      = loss_grad_norm_weighted
         ngp      = penalty_grad_norm_weighted
         dot_lk   = delta_lk
@@ -1112,7 +1109,7 @@ def calculate_scalers(loss_keep_grads_final, loss_grads_final, penalty_grads_fin
     ngp2 = ngp ** 2
 
     normalized_scales = {}
-    gradnorm_rates = torch.zeros(int(args.penalty_weight>0) + int(do_loss) + int(do_keep_loss), dtype=torch.float, device=device)
+    gradnorm_rates = torch.zeros(int(args.penalty_weight>0) + int(do_loss) + int(do_unsplit_loss), dtype=torch.float, device=device)
     losses_dict, grad_norms_dict = {}, {}
     if do_penalty:
         losses_dict['penalty']       = penalty_weighted
@@ -1120,9 +1117,9 @@ def calculate_scalers(loss_keep_grads_final, loss_grads_final, penalty_grads_fin
     if do_loss:
         losses_dict['loss']          = loss_weighted
         grad_norms_dict['loss']      = ngl
-    if do_keep_loss:
-        losses_dict['loss_keep']     = loss_keep_weighted
-        grad_norms_dict['loss_keep'] = ngk            
+    if do_unsplit_loss:
+        losses_dict['loss_unsplit']     = loss_unsplit_weighted
+        grad_norms_dict['loss_unsplit'] = ngk            
 
     if do_gradnorm:
         normalized_scales, gradnorm_loss, gradnorm_rates, gradnorm_progress = gradnorm_balancer.compute_weights_and_loss(losses_dict, grad_norms_dict)
@@ -1139,7 +1136,7 @@ def calculate_scalers(loss_keep_grads_final, loss_grads_final, penalty_grads_fin
         gradnorm_loss = torch.tensor(1.0, dtype=torch.float)
 
     task_names   = gradnorm_balancer.task_names # list
-    task_names_2_klp = {'loss_keep': 'k', 'loss': 'l', 'penalty': 'p'}
+    task_names_2_klp = {'loss_unsplit': 'k', 'loss': 'l', 'penalty': 'p'}
     if args.clamp_weights_for_progress:
         dot_dict    = {'kl': dot_lk, 'kp': dot_kp, 'lp': dot_lp}
         norm2_dict  = {'k':  ngk2,   'l':  ngl2,   'p':  ngp2}
@@ -1149,7 +1146,7 @@ def calculate_scalers(loss_keep_grads_final, loss_grads_final, penalty_grads_fin
         # this can CHANGE the relative rank of the weights!!!
         normalized_scales = {k: w[v] for k,v in task_names_2_klp.items()} 
 
-    loss_keep_grad_scaler = normalized_scales['loss_keep'] if do_keep_loss else torch.tensor(1.0, dtype=torch.float, device=device)
+    loss_unsplit_grad_scaler = normalized_scales['loss_unsplit'] if do_unsplit_loss else torch.tensor(1.0, dtype=torch.float, device=device)
     loss_grad_scaler      = normalized_scales['loss']      if do_loss      else torch.tensor(1.0, dtype=torch.float, device=device)
     penalty_grad_scaler   = normalized_scales['penalty']   if do_penalty   else torch.tensor(1.0, dtype=torch.float, device=device)
 
@@ -1177,21 +1174,21 @@ def calculate_scalers(loss_keep_grads_final, loss_grads_final, penalty_grads_fin
         'dot_Lp':            dot_Lp.item(),
         'gradnorm_progress': gradnorm_progress.item(),
         # get these before gradnorm optimizer updates them
-        'w_k':               loss_keep_grad_scaler.item(),
+        'w_k':               loss_unsplit_grad_scaler.item(),
         'w_l':               loss_grad_scaler.item(),
         'w_p':               penalty_grad_scaler.item(),
-        'v_k':               gradnorm_balancer.task_weights['loss_keep'].item() if 'loss_keep' in gradnorm_balancer.task_weights else 0.,
+        'v_k':               gradnorm_balancer.task_weights['loss_unsplit'].item() if 'loss_unsplit' in gradnorm_balancer.task_weights else 0.,
         'v_l':               gradnorm_balancer.task_weights['loss'].item()      if 'loss'      in gradnorm_balancer.task_weights else 0.,
         'v_p':               gradnorm_balancer.task_weights['penalty'].item()   if 'penalty'   in gradnorm_balancer.task_weights else 0.,
         'gn_pm':             gn_pm,
         # if cond > 0, the corresponding quantity would decrease
-        'loss_decrease_cond':      loss_grad_scaler      * ngl2 + loss_keep_grad_scaler*dot_lk + penalty_grad_scaler*dot_lp,
-        'loss_keep_decrease_cond': loss_keep_grad_scaler * ngk2 + loss_grad_scaler*dot_lk      + penalty_grad_scaler*dot_kp,
-        'penalty_decrease_cond':   penalty_grad_scaler   * ngl2 + loss_keep_grad_scaler*dot_kp + loss_grad_scaler*dot_lp,
+        'loss_decrease_cond':      loss_grad_scaler      * ngl2 + loss_unsplit_grad_scaler*dot_lk + penalty_grad_scaler*dot_lp,
+        'loss_unsplit_decrease_cond': loss_unsplit_grad_scaler * ngk2 + loss_grad_scaler*dot_lk      + penalty_grad_scaler*dot_kp,
+        'penalty_decrease_cond':   penalty_grad_scaler   * ngl2 + loss_unsplit_grad_scaler*dot_kp + loss_grad_scaler*dot_lp,
         'gradnorm_rates_str':     " ".join([f'{n} {r:.4f}' for n,r in zip([task_names_2_klp[k] for k in task_names], gradnorm_rates)]) if do_gradnorm else "",  
     }
 
-    return loss_keep_grad_scaler, loss_grad_scaler, penalty_grad_scaler, gradnorm_loss, info_dict
+    return loss_unsplit_grad_scaler, loss_grad_scaler, penalty_grad_scaler, gradnorm_loss, info_dict
 
 def gradnorm_update(gradnorm_balancer, gradnorm_loss, gradnorm_optimizer, args, do_gradnorm):
     if not do_gradnorm:
@@ -1228,8 +1225,8 @@ def gradnorm_update(gradnorm_balancer, gradnorm_loss, gradnorm_optimizer, args, 
         print("optimizer lr(s):", [g['lr'] for g in gradnorm_optimizer.param_groups])
         print("optimizer param counts:", [len(g['params']) for g in gradnorm_optimizer.param_groups])
 
-    lb = {'loss_keep': 1e-3,  'loss': 1e-3,  'penalty': 1e-3} 
-    ub = {'loss_keep': 5.0,   'loss': 5.0,   'penalty': 5.0} 
+    lb = {'loss_unsplit': 1e-3,  'loss': 1e-3,  'penalty': 1e-3} 
+    ub = {'loss_unsplit': 5.0,   'loss': 5.0,   'penalty': 5.0} 
     gradnorm_balancer.clamp_weights(lb, ub) # clamps UNNORMALIZED weights
     if (all_lb := all([v == lb[k] for k,v in gradnorm_balancer.task_weights.items()])) or \
        (all_ub := all([v == ub[k] for k,v in gradnorm_balancer.task_weights.items()])):
@@ -1238,25 +1235,28 @@ def gradnorm_update(gradnorm_balancer, gradnorm_loss, gradnorm_optimizer, args, 
        gradnorm_balancer.rescale_weights()
        utils.reset_optimizer(gradnorm_optimizer)
 
-def make_dither_weight(num_partitions, env_num, weight_env_eps, device):
+def make_rand_dither_weight(num_partitions, env_num, weight_env_eps, device):
     deltas = (2.0 * torch.rand(1, num_partitions, env_num, device=device) - 1.0) * weight_env_eps  # random in [-eps, eps]
     deltas -= deltas.mean()  # mean-zero so overall scale unchanged
     weight_env = 1.0 + deltas
     return weight_env
-
-# ssl training with IP-IRM
-def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, **kwargs):
-
-    net.train()
+    
+def set_BN_adapt(net, adapt_bn, bn_momentum)
     for m in net.modules():
         if isinstance(m, (torch.nn.BatchNorm3d, nn.BatchNorm2d, nn.BatchNorm1d)):
-            if not args.adapt_bn:
+            if not adapt_bn:
                 m.eval()                 # use stored running stats
                 m.track_running_stats = True
             else:
                 m.train()                 # learn pars
                 m.track_running_stats = True
-                m.momentum = args.bn_momentum
+                m.momentum = bn_momentum
+
+# ssl training with IP-IRM
+def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, **kwargs):
+
+    net.train()
+    set_BN_adapt(net, args.adapt_bn, args.bn_momentum)
 
     if isinstance(partitions, list): # if retain previous partitions
         assert args.retain_group
@@ -1276,18 +1276,15 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
     else:
         penalty_weight = args.penalty_weight
         
-    loss_weight         = args.penalty_cont          * (1 if penalty_weight <= 1 else 1 / penalty_weight)
-    loss_keep_weight    = max(args.penalty_keep_cont * (1 if penalty_weight <= 1 else (1 / penalty_weight)), int(args.baseline))
+    loss_weight         = args.penalty_cont             * (1 if penalty_weight <= 1 else 1 / penalty_weight)
+    loss_unsplit_weight = max(args.penalty_unsplit_cont * (1 if penalty_weight <= 1 else (1 / penalty_weight)), int(args.baseline))
     penalty_weight_orig = penalty_weight
     penalty_weight      = 1 if penalty_weight > 1 else penalty_weight
     
-    do_loss      = (not args.baseline) and (loss_weight > 0)
-    do_keep_loss = (args.baseline)     or ((args.keep_cont)  and (loss_keep_weight > 0))
-    do_penalty   = (not args.baseline) and (penalty_weight > 0)
-    do_gradnorm  = (not args.baseline) and args.gradnorm  and (epoch >= args.gradnorm_epoch)
-
-    task_names   = gradnorm_balancer.task_names # list
-    task_names_2_klp = {'loss_keep': 'k', 'loss': 'l', 'penalty': 'p'}
+    do_loss         = (not args.baseline) and (loss_weight > 0)
+    do_unsplit_loss = (args.baseline)     or ((args.unsplit_cont)  and (loss_unsplit_weight > 0))
+    do_penalty      = (not args.baseline) and (penalty_weight > 0)
+    do_gradnorm     = (not args.baseline) and args.gradnorm        and (epoch >= args.gradnorm_epoch)
 
     loader_batch_size            = batch_size
     gradients_accumulation_steps = args.gradients_accumulation_batch_size // loader_batch_size 
@@ -1298,11 +1295,11 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
     alternating_gradients_update = 0
     total_samples                = len(train_loader.dataset)
     
-    trained_samples          = 0
-    total_keep_loss_weighted = 0.0
-    total_env_loss_weighted  = 0.0
-    total_irm_loss_weighted  = 0.0
-    total_loss_weighted      = 0.0
+    trained_samples             = 0
+    total_unsplit_loss_weighted = 0.0
+    total_env_loss_weighted     = 0.0
+    total_irm_loss_weighted     = 0.0
+    total_loss_weighted         = 0.0
 
     bar_format = '{l_bar}{bar:' + str(args.bar) + '}{r_bar}' #{bar:-' + str(args.bar) + 'b}'
     train_bar = tqdm(train_loader,
@@ -1314,19 +1311,17 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
 
     # instantiate LossModule and IRMCalculator based on args (pluggable)
     # default to MoCo if args.loss_type not provided
-    loss_type = getattr(args, 'ssl_type', 'moco')
-    loss_type = loss_type.lower()
-    penalty_type = getattr(args, 'penalty_type', 'irm')
-    penalty_type = penalty_type.lower()
-    loss_keep_type = getattr(args, 'loss_keep_type', None)
-    loss_keep_type = loss_keep_type.lower() if loss_keep_type is not None else None
+    loss_type = getattr(args, 'ssl_type', 'moco').lower()
+    penalty_type = getattr(args, 'penalty_type', 'irm').lower()
+    loss_unsplit_type = getattr(args, 'loss_unsplit_type', None)
+    loss_unsplit_type = loss_unsplit_type.lower() if loss_unsplit_type is not None else None
 
-    if loss_keep_type == 'ce' or loss_keep_type == 'ceweighted':
-        LossKeepModule = CELossModule
-    elif loss_keep_type is None:
-        LossKeepModule = None
+    if loss_unsplit_type == 'ce' or loss_unsplit_type == 'ceweighted':
+        LossUnsplitModule = CELossModule
+    elif loss_unsplit_type is None:
+        LossUnsplitModule = None
     else:
-        raise ValueError(f"Unknown loss_keep_type: {loss_keep_type}")
+        raise ValueError(f"Unknown loss_unsplit_type: {loss_unsplit_type}")
 
     if loss_type == 'moco':
         LossModule = MoCoLossModule
@@ -1337,10 +1332,10 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
     else:
         raise ValueError(f"Unknown loss_type: {loss_type}")
 
-    if LossKeepModule is not None:
-        loss_keep_module = LossKeepModule(net, debug=args.debug, **kwargs) 
+    if LossUnsplitModule is not None:
+        loss_unsplit_module = LossUnsplitModule(net, debug=args.debug, **kwargs) 
     else:
-        loss_keep_module =  None
+        loss_unsplit_module =  None
 
     is_per_env  = LossModule.is_per_env()
     loss_module = LossModule(net, debug=args.debug, **kwargs) 
@@ -1367,10 +1362,10 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
     """
     num_halves  = PenaltyCalculator.num_halves()
 
-    loss_aggregator      = torch.zeros((num_halves, num_partitions, args.env_num), dtype=torch.float, device=device) 
-    penalty_aggregator   = torch.zeros((num_halves, num_partitions, args.env_num), dtype=torch.float, device=device) 
-    loss_keep_aggregator = torch.tensor(0, dtype=torch.float, device=device) # scalar
-    halves_sz            = torch.zeros((num_halves, num_partitions, args.env_num), dtype=torch.float, device=device) 
+    loss_aggregator         = torch.zeros((num_halves, num_partitions, args.env_num), dtype=torch.float, device=device) 
+    penalty_aggregator      = torch.zeros((num_halves, num_partitions, args.env_num), dtype=torch.float, device=device) 
+    loss_unsplit_aggregator = torch.tensor(0, dtype=torch.float, device=device) # scalar
+    halves_sz               = torch.zeros((num_halves, num_partitions, args.env_num), dtype=torch.float, device=device) 
     # One buffer per parameter
     loss_grads = [  # dLoss / dTheta
         torch.zeros((*loss_aggregator.shape, p.numel()), dtype=p.dtype, device=p.device)
@@ -1380,8 +1375,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         torch.zeros((*penalty_aggregator.shape, p.numel()), dtype=p.dtype, device=p.device)
         for p in net.parameters()
     ]
-    # loss keep doesn't require finalization
-    loss_keep_grads_final = [  # dLoss / dTheta
+    # loss unsplit doesn't require finalization
+    loss_unsplit_grads_final = [  # dLoss / dTheta
         torch.zeros(p.numel(), dtype=p.dtype, device=p.device)
         for p in net.parameters()
     ]
@@ -1398,19 +1393,19 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         this_batch_size = len(indexs_batch) # for the case drop_last=False
         
         loss_module.pre_batch(data_batch, indexs_batch, partitions)
-        if loss_keep_module is not None:
-            loss_keep_module.pre_batch(data_batch) # weights handled below
+        if loss_unsplit_module is not None:
+            loss_unsplit_module.pre_batch(data_batch) # weights handled below
 
         # -----------------------
         # Step 0: micro-batches
         # -----------------------
-        mb_list = list(microbatches(data_batch, labels_batch, indexs_batch, gpu_batch_size))
+        mb_list = list(microbatches([data_batch, labels_batch, indexs_batch], gpu_batch_size))
 
         for j in range(num_halves): # over halves of micro-batches
             for i in [i_ for i_ in range(len(mb_list)) if i_ % num_halves == j]: # loop over micro-batches
                 # per micro-batch pipeline
                 batch_micro, labels, indexs = mb_list[i]
-                if (loss_keep_module is not None) and (kwargs['CEweights'] is not None):
+                if (loss_unsplit_module is not None) and (kwargs['CEweights'] is not None):
                     weights         = kwargs['CEweights'][indexs]
                 else:
                     weights         = None
@@ -1421,18 +1416,18 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
 
                 num_samples           = 1 if is_per_env else len(batch_micro)
                 num_split_repeates    = int(not args.baseline) * (int(loss_weight>0) + int(penalty_weight>0)) # 0, 1 or 2
-                num_baseline_repeates = int(loss_keep_weight>0) * int(args.keep_cont) # 0 or 1                                  
+                num_baseline_repeates = int(loss_unsplit_weight>0) * int(args.unsplit_cont) # 0 or 1                                  
                 num_repeats           = max(num_split_repeates, num_baseline_repeates) # max is for the case 'num_split_repeates' is 0
                 num_grads             = num_partitions * args.env_num * num_split_repeates + num_baseline_repeates # number of rows
                 if is_per_env:
-                    # For per-env loss_cont, each env gets its own column + one more column for loss_keep, if requested, whether same to loss_cont or not
+                    # For per-env loss_cont, each env gets its own column + one more column for loss_unsplit, if requested, whether same to loss_cont or not
                     grad_outputs          = torch.zeros((num_grads, num_grads), dtype=torch.float, device=device) 
                 else:
                     # for per-sample loss_cont, the number of columns is the number of samples times the number of repeats. 
-                    # loss_cont and loss_keep share the SAME columns, if loss_keep is similar to loss_cont; otherwise loss_keep has its own extra column
-                    if num_baseline_repeates and loss_keep_module is None:
+                    # loss_cont and loss_unsplit share the SAME columns, if loss_unsplit is similar to loss_cont; otherwise loss_unsplit has its own extra column
+                    if num_baseline_repeates and loss_unsplit_module is None:
                         grad_outputs      = torch.zeros((num_grads, num_samples*num_repeats), dtype=torch.float, device=device) 
-                    elif num_baseline_repeates and loss_keep_module is not None:
+                    elif num_baseline_repeates and loss_unsplit_module is not None:
                         grad_outputs      = torch.zeros((num_grads, num_samples*num_split_repeates + 1), dtype=torch.float, device=device) 
                     else:
                         grad_outputs      = torch.zeros((num_grads, num_samples*num_repeats), dtype=torch.float, device=device) 
@@ -1443,17 +1438,17 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                     MoCo:    generate two views, get their embeddings from respective encoders, normalize them, etc
                     SimSiam: generate two views, get their projections and predictions, etc
                 """
-                if do_keep_loss and loss_keep_module is not None:
-                    loss_keep_module.pre_micro_batch(batch_micro, transform=transform, indexs=indexs, labels=labels, normalize=False, 
+                if do_unsplit_loss and loss_unsplit_module is not None:
+                    loss_unsplit_module.pre_micro_batch(batch_micro, transform=transform, indexs=indexs, labels=labels, normalize=False, 
                         dataset=train_loader.dataset, weights=weights)
-                    losses_samples_all = loss_keep_module.compute_loss_micro(reduction='sum')
+                    losses_samples_all = loss_unsplit_module.compute_loss_micro(reduction='sum')
                     # Must be first to be in 1st column 
                     differentiate_this.append(losses_samples_all)
 
                 loss_module.pre_micro_batch(batch_micro, transform=transform, indexs=indexs, normalize=(loss_type != 'supcon'), dataset=train_loader.dataset)
                 
-                # Even if 'do_loss'==False, when SAME loss is used for BOTH loss_cont and loss_keep, 'reduction' reflects the correct reduction
-                if (do_keep_loss and loss_keep_module is None) or (do_loss and not is_per_env):
+                # Even if 'do_loss'==False, when SAME loss is used for BOTH loss_cont and loss_unsplit, 'reduction' reflects the correct reduction
+                if (do_unsplit_loss and loss_unsplit_module is None) or (do_loss and not is_per_env):
                     # compute unnormalized WHOLE micro-batch loss, no split into envs
                     losses_samples_all = loss_module.compute_loss_micro(reduction=reduction)
                     differentiate_this.append(losses_samples_all)
@@ -1509,14 +1504,14 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                             """
                             'grad_outputs' is a table w/ each row corresponding to a loss/penalty of an env in a partition.
                             The top half coresponds to cont losses; the bottom half corresponds to penalties.
-                            The last row corresponds to loss_keep.
+                            The last row corresponds to loss_unsplit.
                             For per_env losses (e.g., MoCo):
                                 each column corresponds to an env in a partition loss/penalty. 
-                                The 1st column corresponds to loss_keep if requested.
+                                The 1st column corresponds to loss_unsplit if requested.
                             For non-per-env losses (e.g., SimSiam):
                                 each column corresponds to a sample loss/penalty.
                                 The left half corresponds to losses; the right half corresponds to penalties.
-                                The 1st to 'num_samples' columns correspond to loss_keep if requested.                                
+                                The 1st to 'num_samples' columns correspond to loss_unsplit if requested.                                
                             'grad_outputs[i,j]' is a multiplier of the [i,j]-th entry to differentiate.
                             """
 
@@ -1529,7 +1524,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                             if is_per_env:
                                 # Per-env: Mask is solid 1.0; Offset is based on the partition index
                                 mask = 1.0
-                                current_offset = base_idx + int(do_keep_loss)
+                                current_offset = base_idx + int(do_unsplit_loss)
                             else:
                                 # Shared: Mask is sparse (zeros with ones at idxs); Offset starts at 0
                                 mask = torch.zeros(num_samples, dtype=torch.float, device=device)
@@ -1550,36 +1545,11 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                             if do_penalty:
                                 grad_outputs[current_row, current_offset : current_offset + num_samples] = mask
 
-                            """
-                            =========== BEGIN ORIGINAL CODE =============
-                            linear_idx = torch.tensor(partition_num*args.env_num + env, dtype=torch.int, device=device) # row index
-                            if is_per_env:
-                                offset = partition_num*args.env_num + env + int(do_keep_loss) # 1st column is keep_loss
-                                mask = 1.0
-                                if do_loss:
-                                    grad_outputs[linear_idx][offset:offset+num_samples] = mask # unweighted
-                                    linear_idx += num_partitions * args.env_num # same idx, bottom half of the table
-                                    offset += num_samples # offset to penalties
-                                if do_penalty:
-                                    grad_outputs[linear_idx][offset:offset+num_samples] = mask # unweighted
-                            else:
-                                offset = 0 # loss_cont & loss_keep share the same per-sample losses
-                                mask = torch.zeros(num_samples, dtype=torch.float, device=device)
-                                mask[idxs] = 1.0
-                                if do_loss:
-                                    grad_outputs[linear_idx][offset:offset+num_samples] = mask # unweighted
-                                    linear_idx += num_partitions * args.env_num # same idx, bottom half of the table
-                                    offset += num_samples # offset to penalties
-                                if do_penalty:
-                                    grad_outputs[linear_idx][offset:offset+num_samples] = mask # unweighted
-                            =========== END OF ORIGINAL CODE =============
-                            """
-
                         # end for env in range(args.env_num):
                     # end for partition_num, partition in enumerate(partitions):
                 # end if not args.baseline:
 
-                if do_keep_loss: # global loss @ 1st partition
+                if do_unsplit_loss: # global loss @ 1st partition
                     # This could be done w/o the split into two halves, but this streamlines the code w/o any harm
                     # Here we know that losses are over the whole macro-batch, so we can normalize up-front
                     # sum() is for the case when 'is_per_env'==False; otherwise - it's harmless
@@ -1588,10 +1558,10 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                     loss = losses_samples_all.sum().detach()  / this_batch_size / gradients_accumulation_steps
                     # compute unnormalized gradients for this loss
                     # grad_outputs: one per sample
-                    loss_keep_aggregator += loss # before scaler
+                    loss_unsplit_aggregator += loss # before scaler
 
                     offset = 0 # 1st column
-                    number_of_columns = num_samples if loss_keep_module is None else 1
+                    number_of_columns = num_samples if loss_unsplit_module is None else 1
                     grad_outputs[-1][offset:offset+number_of_columns]  = 1.0 / this_batch_size / gradients_accumulation_steps # unweighted
 
                 differentiate_this = [t.reshape(-1) for t in differentiate_this] # ensure common shape of 1D tensors
@@ -1619,7 +1589,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                 )
 
                 # 1. Pre-calculate bounds and offsets
-                num_tasks = (num_grads - num_baseline_repeates) // max(1, num_split_repeates)
+                num_tasks      = (num_grads - num_baseline_repeates) // max(1, num_split_repeates)
                 penalty_offset = num_partitions * args.env_num
 
                 # 2. Single pass over parameters
@@ -1634,8 +1604,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                     g_flat = g.detach().reshape(g.size(0), -1)
 
                     # --- Keep Loss (Last Row) ---
-                    if do_keep_loss:
-                        loss_keep_grads_final[_j] += g_flat[-1]
+                    if do_unsplit_loss:
+                        loss_unsplit_grads_final[_j] += g_flat[-1]
 
                     # --- Loss & Penalty (Batch Slicing) ---
                     if (do_loss or do_penalty) and num_tasks > 0:
@@ -1650,64 +1620,18 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                             # Slice rows starting at offset -> Reshape -> Add
                             penalty_grads[_j][j] += g_flat[penalty_offset : penalty_offset + num_tasks].view(view_shape)
 
-                """
-                =========== BEGIN ORIGINAL CODE =============
-                if do_keep_loss: # global loss @ 1st partition
-                    # 'grads_all' is a tuple w/ an entry per parameter.
-                    # each entry is a tensor w/ 1st dim = 'grad_outputs.size(0)' and other dims matching the parameter
-                    # flatten and accumulate per parameter
-                    for _j, g in enumerate(grads_all):
-                        if g is None:
-                            continue
-                        grads = g[-1] # loss keep is always last row
-                        if grads is None:
-                            continue
-                        grads = grads.detach().view(-1)
-                        loss_keep_grads_final[_j] += grads
-
-                if do_loss or do_penalty:
-                    for _split in range((num_grads - num_baseline_repeates) // max(1,num_split_repeates)):
-                        partition_num, env = _split // args.env_num, _split % args.env_num 
-                        linear_idx = _split # row index
-                        if do_loss:
-                            # flatten and accumulate per parameter
-                            # 'grads_all' is a tuple w/ an entry per parameter.
-                            # each entry is a tensor w/ 1st dim = 'grad_outputs.size(0)' and other dims matching the parameter
-                            for _j, g in enumerate(grads_all):
-                                if g is None:
-                                    continue
-                                grads = g[linear_idx]
-                                if grads is None:
-                                    continue
-                                grads = grads.detach().view(-1)
-                                loss_grads[_j][j,partition_num,env] += grads
-                            linear_idx += num_partitions * args.env_num # prepare for penalty grads
-                        # penalty
-                        if do_penalty:
-                            # flatten and accumulate per parameter
-                            for _j, g in enumerate(grads_all):
-                                if g is None:
-                                    continue
-                                grads = g[linear_idx]
-                                if grads is None:
-                                    continue
-                                grads = grads.detach().view(-1)
-                                penalty_grads[_j][j,partition_num,env] += grads
-                =========== END OF ORIGINAL CODE =============
-                """
-                         
                 # end if not args.baseline:
                 loss_module.post_micro_batch()
                 loss_module.prepare_for_free()
-                if loss_keep_module is not None:
-                    loss_keep_module.post_micro_batch()
-                    loss_keep_module.prepare_for_free()
+                if loss_unsplit_module is not None:
+                    loss_unsplit_module.post_micro_batch()
+                    loss_unsplit_module.prepare_for_free()
                 
                 # free memory of micro-batch
                 del batch_micro, indexs, g_flat, g, grads_all, differentiate_this
-                if do_loss or do_keep_loss:
+                if do_loss or do_unsplit_loss:
                     del loss
-                if do_keep_loss:
+                if do_unsplit_loss:
                     del losses_samples_all
                 if do_loss:
                     del losses_samples
@@ -1725,8 +1649,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         
         macro_batch_index           += 1
 
-        loss_weight_env    = make_dither_weight(num_partitions, args.env_num, args.weight_env_eps, device)
-        penalty_weight_env = make_dither_weight(num_partitions, args.env_num, args.weight_env_eps, device)
+        loss_weight_env    = make_rand_dither_weight(num_partitions, args.env_num, args.weight_env_eps, device)
+        penalty_weight_env = make_rand_dither_weight(num_partitions, args.env_num, args.weight_env_eps, device)
 
         if do_loss:
             partition_sz = halves_sz.sum(dim=0, keepdim=True) # (1,J,K) # sizes of envs in macro-batch
@@ -1744,25 +1668,25 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         penalty_grads_final = calculate_penalty_grads_final(penalty_grads, penalty_aggregator, penalty_weight_env, halves_sz, penalty_calculator, reduction, device, do_penalty)
         penalty_grads_final = rotate_penalty_grads(penalty_grads_final, loss_grads_final, args.grad_rotate, do_penalty)
 
-        loss_keep_grad_scaler, loss_grad_scaler, penalty_grad_scaler, gradnorm_loss, info_dict = \
-            calculate_scalers(loss_keep_grads_final, loss_grads_final, penalty_grads_final, 
-                              loss_keep_aggregator,  loss_env,         penalty_env,
-                              loss_keep_weight,      loss_weight,      penalty_weight,
+        loss_unsplit_grad_scaler, loss_grad_scaler, penalty_grad_scaler, gradnorm_loss, info_dict = \
+            calculate_scalers(loss_unsplit_grads_final, loss_grads_final, penalty_grads_final, 
+                              loss_unsplit_aggregator,  loss_env,         penalty_env,
+                              loss_unsplit_weight,      loss_weight,      penalty_weight,
                               ema,
                               gradnorm_balancer, do_gradnorm,
-                              args, do_keep_loss, do_loss, do_penalty, device)
+                              args, do_unsplit_loss, do_loss, do_penalty, device)
 
         """
         Don't multiply individual task's loss by scaler, since it's misleading
         Only multiply the gradients since this is what determines how tasks' losses are updated
-        loss_keep_weighted *= loss_keep_grad_scaler
+        loss_unsplit_weighted *= loss_unsplit_grad_scaler
         loss_weighted      *= loss_grad_scaler
         penalty_weighted   *= penalty_grad_scaler 
         """
         for pind, p in enumerate(net.parameters()):        
-            total_grad_flat_weighted = (   loss_keep_grads_final[pind] * loss_keep_weight * loss_keep_grad_scaler
-                                         + loss_grads_final[pind]      * loss_weight      * loss_grad_scaler     
-                                         + penalty_grads_final[pind]   * penalty_weight   * penalty_grad_scaler  
+            total_grad_flat_weighted = (   loss_unsplit_grads_final[pind] * loss_unsplit_weight * loss_unsplit_grad_scaler
+                                         + loss_grads_final[pind]         * loss_weight         * loss_grad_scaler     
+                                         + penalty_grads_final[pind]      * penalty_weight      * penalty_grad_scaler  
                                        )
             if p.grad is None:
                 p.grad  = total_grad_flat_weighted.view(p.shape)
@@ -1783,36 +1707,38 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         gradnorm_update(gradnorm_balancer, gradnorm_loss, gradnorm_optimizer, args, do_gradnorm)
 
         # True loss reflecting progress does NOT include balancing scalers
-        loss_weighted      = loss_weight      * loss_env.mean()
-        loss_keep_weighted = loss_keep_weight * loss_keep_aggregator.mean()
-        penalty_weighted   = penalty_weight   * penalty_env.mean()
+        loss_weighted          = loss_weight         * loss_env.mean()
+        loss_unsplit_weighted  = loss_unsplit_weight * loss_unsplit_aggregator.mean()
+        penalty_weighted       = penalty_weight      * penalty_env.mean()
 
-        loss_batch_weighted = (loss_keep_weighted + # loss_keep_aggregator is a scalar normalized over macro-batch
-                               penalty_weighted   + # mean over envs normalized over macro-batch
-                               loss_weighted        # mean over envs normalized over macro-batch
+        loss_batch_weighted = (loss_unsplit_weighted + # loss_unsplit_aggregator is a scalar normalized over macro-batch
+                               penalty_weighted      + # mean over envs normalized over macro-batch
+                               loss_weighted           # mean over envs normalized over macro-batch
                               )
 
         # total loss is sum of losses so far over entire batch aggregation period.
-        total_keep_loss_weighted += (loss_keep_weight * loss_keep_aggregator).item() * this_batch_size * gradients_accumulation_steps
+        total_unsplit_loss_weighted += (loss_unsplit_weight * loss_unsplit_aggregator).item() * this_batch_size * gradients_accumulation_steps
         total_irm_loss_weighted  += (penalty_weight   * penalty_env.mean()).item()   * this_batch_size * gradients_accumulation_steps
         total_env_loss_weighted  += (loss_weight      * loss_env.mean()).item()      * this_batch_size * gradients_accumulation_steps
         total_loss_weighted      += loss_batch_weighted.item()                       * this_batch_size * gradients_accumulation_steps
         
         if args.print_batch:
             print() # this causes each tqdm update to be printed on a separare line
-        keep_str = f'Keep/{loss_keep_type}' if loss_keep_type is not None else 'Keep'
+        unsplit_str = f'Unsplit/{loss_unsplit_type}' if loss_unsplit_type is not None else 'Unsplit'
 
         desc_str = f"Epoch [{epoch}/{epochs}] [{trained_samples}/{total_samples}]" + \
                    f" {args.ssl_type}" + \
                    f" Total {total_loss_weighted/trained_samples:.3e}" + \
-                   f" {keep_str} {total_keep_loss_weighted/trained_samples:.3e}" + \
+                   f" {unsplit_str} {total_unsplit_loss_weighted/trained_samples:.3e}" + \
                    f" Env {total_env_loss_weighted/trained_samples:.3e}" + \
                    f" {args.penalty_type} {total_irm_loss_weighted/trained_samples:.3e}" + \
                    f" LR {train_optimizer.param_groups[0]['lr']:.4f} PW {penalty_weight_orig:.6g}" + \
-                   f" dot: ll {info_dict['ngl2']:.2e} lk {info_dict['dot_lk']:.2e} lp {info_dict['dot_lp']:.2e} kk {info_dict['ngk2']:.2e} kp {info_dict['dot_kp']:.2e} pp {info_dict['ngp2']:.2e}" + \
+                   f" dot: ll {info_dict['ngl2']:.2e} lk {info_dict['dot_lk']:.2e} lp {info_dict['dot_lp']:.2e} kk {info_dict['ngk2']:.2e}" + \
+                   f" kp {info_dict['dot_kp']:.2e} pp {info_dict['ngp2']:.2e}" + \
                    f" cos: lk {info_dict['cos_lk']:.3e} lp {info_dict['cos_lp']:.3e} kp {info_dict['cos_kp']:.2e}" + \
-                   f" w/v: k {info_dict['w_k']:.4f}/{info_dict['v_k']:.4f} l {info_dict['w_l']:.4f}/{info_dict['v_l']:.4f} p {info_dict['w_p']:.4f}/{info_dict['v_p']:.4f}" + \
-                   f" decr: l {info_dict['loss_decrease_cond']:.2e} k {info_dict['loss_keep_decrease_cond']:.2e} p {info_dict['penalty_decrease_cond']:.2e}" + \
+                   f" w/v: k {info_dict['w_k']:.4f}/{info_dict['v_k']:.4f} l {info_dict['w_l']:.4f}/{info_dict['v_l']:.4f}" + \
+                   f" p {info_dict['w_p']:.4f}/{info_dict['v_p']:.4f}" + \
+                   f" decr: l {info_dict['loss_decrease_cond']:.2e} k {info_dict['loss_unsplit_decrease_cond']:.2e} p {info_dict['penalty_decrease_cond']:.2e}" + \
                    f" gn_loss {info_dict['gradnorm_loss']:.4e} rates: {info_dict['gradnorm_rates_str']} gn_gpm: {info_dict['gn_pm']}" + \
                    f" Lp: cos {info_dict['cos_Lp']:.3e} dot {info_dict['dot_Lp']:.3e} gn_prgrs {info_dict['gradnorm_progress']:.6g}"
         desc_str += loss_module.get_debug_info_str()
@@ -1822,7 +1748,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
            utils.write_log('Train Epoch: [{:d}/{:d}] [{:d}/{:d}] {}: Total: {:.4f} First: {:.4f} Env: {:.4f}'
                             .format(epoch, epochs, trained_samples, total_samples, args.ssl_type, 
                                     total_loss_weighted/trained_samples, 
-                                    total_keep_loss_weighted/trained_samples, 
+                                    total_unsplit_loss_weighted/trained_samples, 
                                     total_env_loss_weighted/trained_samples) + 
                             ' {}: {:.4g} LR: {:.4f} PW {:.4f} GN {:.4f}'
                             .format(args.penalty_type, total_irm_loss_weighted/trained_samples, train_optimizer.param_groups[0]['lr'], 
@@ -1832,29 +1758,30 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                             ' rates {}'
                             .format(info_dict['gradnorm_rates_str']) + 
                             ' decr l {:.2e} k {:.2e} p {:.2e} gn_gpm {} Lp cos {:4f} delta {:.3e}'
-                            .format(info_dict['loss_decrease_cond'], info_dict['loss_keep_decrease_cond'], info_dict['penalty_decrease_cond'], info_dict['gn_pm'], info_dict['cos_Lp'], info_dict['dot_Lp']),
+                            .format(info_dict['loss_decrease_cond'], info_dict['loss_unsplit_decrease_cond'], info_dict['penalty_decrease_cond'], 
+                                    info_dict['gn_pm'], info_dict['cos_Lp'], info_dict['dot_Lp']),
                             log_file=log_file)
                                         
         # Prepare for next iteration
         gradients_accumulation_step = 0
         alternating_gradients_update = 0 if alternating_gradients_update > 0 else 1
         penalty_aggregator.zero_()
-        loss_keep_aggregator.zero_()
+        loss_unsplit_aggregator.zero_()
         loss_aggregator.zero_()
         halves_sz.zero_()
         for par in loss_grads: # over list
             par.zero_()
         for par in penalty_grads: # over list
             par.zero_()
-        for par in loss_keep_grads_final: # over list
+        for par in loss_unsplit_grads_final: # over list
             par.zero_()
         del penalty_env, loss_env, loss_batch_weighted
         del info_dict
         torch.cuda.empty_cache()
 
         loss_module.post_batch()
-        if loss_keep_module is not None:
-            loss_keep_module.post_batch()
+        if loss_unsplit_module is not None:
+            loss_unsplit_module.post_batch()
     # end for batch_index, data_env in enumerate(train_bar):
     return total_loss_weighted / trained_samples
 
@@ -2246,7 +2173,7 @@ if __name__ == '__main__':
     parser.add_argument('--penalty_type', default='IRM', type=str, choices=['IRM', 'VREx'], help='Penalty type')        
     parser.add_argument('--penalty_sigma', default=None, type=float, help='Noise level to inject into penalty')        
     parser.add_argument('--grad_rotate', default=None, type=float, nargs=2, help='rotate gradients')      
-    parser.add_argument('--loss_keep_type', default=None, type=str, choices=['CE', 'CEweighted'], help='Loss keep type')    
+    parser.add_argument('--loss_unsplit_type', default=None, type=str, choices=['CE', 'CEweighted'], help='Loss unsplit type')    
 
     parser.add_argument('--feature_dim', default=128, type=int, help='Feature dim for latent vector')
     parser.add_argument('--temperature', default=0.5, type=float, help='Temperature used in softmax')
@@ -2288,7 +2215,7 @@ if __name__ == '__main__':
     parser.add_argument('--ours_mode', default='w', type=str, help='what mode to use')
     parser.add_argument('--penalty_weight', default=1.0, type=float, help='penalty weight')
     parser.add_argument('--penalty_cont', default=1.0, type=float, help='cont penalty weight')
-    parser.add_argument('--penalty_keep_cont', default=1.0, type=float, help='cont keep penalty weight')
+    parser.add_argument('--penalty_unsplit_cont', default=1.0, type=float, help='cont unsplit penalty weight')
     parser.add_argument('--Lscaler', default=1.0, type=float, help='Global scaler for losses gards')
     parser.add_argument('--penalty_iters', default=0, type=int, help='penalty weight start iteration')
     parser.add_argument('--increasing_weight', nargs=5, type=float, default=None, help='increasing penalty weight', 
@@ -2311,7 +2238,7 @@ if __name__ == '__main__':
     parser.add_argument('--debug', action="store_true", default=False, help='debug?')
     parser.add_argument('--print_batch', action="store_true", default=False, help='print every batch')
     parser.add_argument('--groupnorm', action="store_true", default=False, help='use group contrastive loss?')
-    parser.add_argument('--keep_cont', action="store_true", default=False, help='keep original contrastive?')
+    parser.add_argument('--unsplit_cont', action="store_true", default=False, help='unsplit original contrastive?')
     parser.add_argument('--pretrain_path', type=str, default=None, help='the path of pretrain model')
 
     # image
@@ -2354,7 +2281,7 @@ if __name__ == '__main__':
                         action=utils.ParseMixed, types=[str, float, str, float, str, float],
                         metavar='tau dictionary k-v pairs',    
                         help='loss divisors')
-    parser.add_argument('--gradnorm_scalers', default=['loss_keep', 1.0, 'loss', 1.0, 'penalty', 1.0], nargs=2*3, type=str,
+    parser.add_argument('--gradnorm_scalers', default=['loss_unsplit', 1.0, 'loss', 1.0, 'penalty', 1.0], nargs=2*3, type=str,
                         action=utils.ParseMixed, types=[str, float, str, float, str, float],
                         metavar='scalers dictionary k-v pairs',    
                         help='loss scalers when gradnorm inactive')
@@ -2388,8 +2315,8 @@ if __name__ == '__main__':
     if args.baseline:
         args.penalty_weight, args.penalty_cont = 0, 0
         
-    assert ((args.penalty_weight > 0) or (args.penalty_cont > 0)      or  (args.penalty_keep_cont > 0)) or \
-           ((args.penalty_cont == 0) and (args.penalty_keep_cont > 0) and (args.penalty_iters == 0))
+    assert ((args.penalty_weight > 0) or (args.penalty_cont > 0)      or  (args.penalty_unsplit_cont > 0)) or \
+           ((args.penalty_cont == 0) and (args.penalty_unsplit_cont > 0) and (args.penalty_iters == 0))
 
     # seed
     utils.set_seed(args.seed)
@@ -2512,9 +2439,12 @@ if __name__ == '__main__':
         state_dict = None
         print('Using default model')
 
+    c = len(memory_data.classes) if args.dataset != "ImageNet" else args.class_num
+    print('# Classes: {}'.format(c))
+
     # model setup and optimizer config
     ssl_type = args.ssl_type.lower()
-    second_fc = args.class_num if args.loss_keep_type else None
+    second_fc = c if args.loss_unsplit_type else None
     if ssl_type == 'moco' or ssl_type == 'mocosupcon':
         model = ModelResnet(feature_dim, image_class=image_class, state_dict=state_dict, second_fc=second_fc).cuda()
     elif ssl_type == 'simsiam':
@@ -2538,16 +2468,13 @@ if __name__ == '__main__':
         queue = None
         momentum = None
 
-    c = len(memory_data.classes) if args.dataset != "ImageNet" else args.class_num
-    print('# Classes: {}'.format(c))
-
     ema = utils.MovingAverage(0.95, oneminusema_correction=False, active=args.ema)
     
     initial_weights = {'penalty': torch.tensor(1.0, dtype=torch.float, device=device)}
     if args.penalty_cont > 0:
         initial_weights['loss'] = torch.tensor(1.0, dtype=torch.float, device=device)
-    if args.keep_cont and (args.penalty_keep_cont > 0):
-        initial_weights['loss_keep'] = torch.tensor(1.0, dtype=torch.float, device=device)
+    if args.unsplit_cont and (args.penalty_unsplit_cont > 0):
+        initial_weights['loss_unsplit'] = torch.tensor(1.0, dtype=torch.float, device=device)
     gradnorm_balancer = gn.GradNormLossBalancer(initial_weights, alpha=args.gradnorm_alpha, device=device, smoothing=False, 
                             tau=args.gradnorm_tau, eps=1e-8, debug=args.gradnorm_debug, beta=args.gradnorm_beta, 
                             avgG_detach_frac=args.gradnorm_avgG_detach_frac, Gscaler=args.gradnorm_Gscaler, 
@@ -2588,7 +2515,6 @@ if __name__ == '__main__':
              start_epoch, best_acc1, best_epoch,
              updated_split, updated_split_all, ema_, gradnorm_balancer, gradnorm_optimizer) = \
                 load_checkpoint(args.resume, model, model_momentum, optimizer, gradnorm_balancer, gradnorm_optimizer)
-                
             
             # dummy for debug multiple partitions
             # updated_split_all.append(torch.randn((len(update_data), args.env_num), requires_grad=True, device=device))
@@ -2608,13 +2534,10 @@ if __name__ == '__main__':
                 gradnorm_balancer.set_tau(args.gradnorm_tau) # always set tau to currently provided value; also converts None to values
 
             # use current LR, not the one from checkpoint
-            """
-            FIX ME!!!!!!!!!
             for param_group in optimizer.param_groups:
                 param_group['lr'] = args.lr
-            """
             for param_group in gradnorm_optimizer.param_groups:
-                param_group['lr'] = args.lr
+                param_group['lr'] = args.gradnorm_lr 
             resumed = True
         else:
             print("=> no checkpoint found at '{}'".format(args.resume))
@@ -2663,7 +2586,7 @@ if __name__ == '__main__':
     elif ssl_type == 'simsiam':
         kwargs = {}
         
-    if args.loss_keep_type == 'CEweighted': # weight per-class loss w/ its inverse frequency
+    if args.loss_unsplit_type == 'CEweighted': # weight per-class loss w/ its inverse frequency
         labels = train_data.targets if isinstance(train_data.targets, torch.Tensor) else torch.tensor(train_data.targets)
         labels = target_transform(labels) if target_transform else labels
         counts = torch.bincount(labels)
@@ -2731,7 +2654,7 @@ if __name__ == '__main__':
             train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, shuffle=True, 
                                 pin_memory=True, persistent_workers=tr_pw, drop_last=tr_dl)
 
-        # Minimize step
+        # Minimize step (Step 1)
         if not args.baseline:
             upd_split = updated_split_all if args.retain_group else updated_split
         else:
@@ -2742,7 +2665,7 @@ if __name__ == '__main__':
         train_loss = train_env(model, train_loader, optimizer, upd_split, tr_bs, args, **kwargs)
 
         if (epoch % args.maximize_iter == 0) and (not args.baseline):
-            # Maximize Step
+            # Maximize Step (Step 2)
             train_loader = shutdown_loader(train_loader)
             gc.collect()
             if args.offline:
