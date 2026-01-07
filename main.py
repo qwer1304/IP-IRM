@@ -121,7 +121,7 @@ class FeatureQueue:
 
 def microbatches(X, mb_size, min_size=2):
     # yields a micro-batch of objects in list X
-    assert isinstance(X, 'list'), "X must be a list"
+    assert isinstance(X, list), "X must be a list"
     assert len(X) > 0, f"len(X)={len(X)} == 0"
     assert all([len(x) == len(X[0]) for x in X]), "all elements must have the same length"
     N = X.size(0)
