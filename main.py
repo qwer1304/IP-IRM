@@ -1241,7 +1241,7 @@ def make_rand_dither_weight(num_partitions, env_num, weight_env_eps, device):
     weight_env = 1.0 + deltas
     return weight_env
     
-def set_BN_adapt(net, adapt_bn, bn_momentum)
+def set_BN_adapt(net, adapt_bn, bn_momentum):
     for m in net.modules():
         if isinstance(m, (torch.nn.BatchNorm3d, nn.BatchNorm2d, nn.BatchNorm1d)):
             if not adapt_bn:
