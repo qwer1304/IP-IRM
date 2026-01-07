@@ -927,51 +927,6 @@ def clamp_scalers_for_progress_ema_safe(norm2, dot, scaler, eps=1e-12, do_print=
     scaler['p'] = 3 * w_p / ssum
     return scaler
 
-def group_name_moco(name: str) -> str:
-    """Map param name to logical block for MoCo w/ ResNet backbone and g projection head."""
-    name = name.removeprefix("module.")
-    if name.startswith("f.conv1") or name.startswith("f.bn1"):
-        return "stem"
-    if name.startswith("f.layer1"):
-        return "layer1"
-    if name.startswith("f.layer2"):
-        return "layer2"
-    if name.startswith("f.layer3"):
-        return "layer3"
-    if name.startswith("f.layer4"):
-        return "layer4"
-    if name.startswith("g."):
-        return "proj_head"
-    return "other"
-
-def _ensure_grad_dict(model, grads: Union[Dict[str, torch.Tensor], List[torch.Tensor]]):
-    """
-    Convert grads (dict or list) into an ordered dict mapping parameter name -> grad tensor.
-    If grads is a list, it must be in the same order as model.parameters().
-    """
-    assert isinstance(grads, dict) or isinstance(grads, list), f"Grads must be dict or list. Got {type(grads)}"
-    grad_dict = {}
-    if isinstance(grads, dict):
-        # assume keys are param names
-        grad_dict = grads
-    else:
-        # list-like: zip model.named_parameters() with grads list
-        grad_dict = {}
-        it = iter(grads)
-        for (name, p) in model.named_parameters():
-            try:
-                g = next(it)
-            except StopIteration:
-                raise ValueError("grads list shorter than model.parameters()")
-            grad_dict[name] = g
-        # ensure no extra grads left
-        try:
-            next(it)
-            raise ValueError("grads list longer than model.parameters()")
-        except StopIteration:
-            pass
-    return grad_dict
-
 def rotate_pen_toward_orthogonal(pen_grads, loss_grads, theta=0.2):
     # pen_grads, loss_grads: lists of tensors [g_env0, g_env1, ..., g_env{E-1}]
     #                        each flattened to shape (D,)
