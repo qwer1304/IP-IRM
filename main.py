@@ -2056,10 +2056,12 @@ def load_checkpoint(path, model, model_momentum, optimizer, gradnorm_balancer, g
     if (gradnorm_balancer is not None):
         if ("state_dict_gradnorm" in checkpoint) and (checkpoint["state_dict_gradnorm"] is not None):
             state_dict = checkpoint["state_dict_gradnorm"]
-            if 'loss_keep' in state_dict:
-                state_dict['loss_unsplit'] = state_dict.pop('loss_keep')
-            missing_keys, unexpected_keys = gradnorm_balancer.load_state_dict(state_dict, strict=False)
-            msg_gradnorm = f'missing keys: {missing_keys}, unexpected keys: {unexpected_keys}'
+            if 'loss_keep' in state_dict["task_weights"]:
+                state_dict["task_weights"]['loss_unsplit'] = state_dict["task_weights"].pop('loss_keep')
+            new_parameters = gradnorm_balancer.load_state_dict(
+                state_dict,
+            )
+            msg_gradnorm = f'new parameters: {new_parameters}'
         else:
             msg_gradnorm = "no gradnorm in checkpoint"
     else:
