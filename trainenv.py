@@ -835,7 +835,7 @@ def calculate_loss_grads_final(loss_grads, loss_env, loss_weight_env, halves_sz,
         loss_grads_final = [torch.tensor(0., dtype=torch.float, device=device)] * len(loss_grads)
     return loss_grads_final
 
-def calculate_penalty_grads_final(penalty_grads, penalty_aggregator, penalty_weight_env, halves_sz, penalty_calculator, penalty_sigma, penalty_sigma, reduction, device, do_penalty):
+def calculate_penalty_grads_final(penalty_grads, penalty_aggregator, penalty_weight_env, halves_sz, penalty_calculator, penalty_sigma, reduction, device, do_penalty):
     if do_penalty:
         penalty_grads_final = []
         pen = penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz, for_grads=True) # normalized per env for macro-batch, unweighted
@@ -1491,7 +1491,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         loss_grads_final = calculate_loss_grads_final(loss_grads, loss_env, loss_weight_env, halves_sz, loss_module, reduction, device, do_loss)
 
         penalty_grads_final = calculate_penalty_grads_final(penalty_grads, penalty_aggregator, penalty_weight_env, halves_sz, penalty_calculator, 
-            args.penalty_sigma, reduction, device, do_penalty)
+                                args.penalty_sigma, reduction, device, do_penalty)
         penalty_grads_final = rotate_penalty_grads(penalty_grads_final, loss_grads_final, args.grad_rotate, do_penalty)
 
         loss_unsplit_grad_scaler, loss_grad_scaler, penalty_grad_scaler, gradnorm_loss, info_dict = \
