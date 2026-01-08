@@ -32,6 +32,7 @@ def stage_path(data_dir, name):
 def download_and_extract(url, dst, remove=True):
     gdown.download(url, dst, quiet=False)
 
+    print(f"Extracting files from {dst} ... ", end="")
     if dst.endswith(".tar.gz"):
         tar = tarfile.open(dst, "r:gz")
         tar.extractall(os.path.dirname(dst))
@@ -46,9 +47,12 @@ def download_and_extract(url, dst, remove=True):
         zf = ZipFile(dst, "r")
         zf.extractall(os.path.dirname(dst))
         zf.close()
+    print("Done!")
 
     if remove:
+        print(f"Removing {dst} ...", end="")
         os.remove(dst)
+        print("Done!")
 
 
 # VLCS ########################################################################
