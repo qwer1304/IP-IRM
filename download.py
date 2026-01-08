@@ -205,67 +205,60 @@ def download_terra_incognita(data_dir):
 
     os.makedirs(destination_folder, exist_ok=True)
 
-    print("Processing annotations")
-    bar_format = '{l_bar}{bar:' + str(args.bar) + '}{r_bar}' #{bar:-' + str(args.bar) + 'b}'
-    data_bar = tqdm(annotations_file_list,
-            total=len(annotations_file_list),
-            ncols=args.ncols,               # total width available
-            dynamic_ncols=False,            # disable autosizing
-            bar_format=bar_format,          # request bar width
-            )
-    for annotations_file in data_bar:
-        annots = {}
-        with open(annotations_file, "r") as f:
-            annots = json.load(f)
-            for k, v in annots.items():
-                data[k].extend(v)
+    print("Processing annotations...")
+    with tqdm(total=annotations_file_list, unit="file", desc="Processing annotation files") as pbar:
+        for annotations_file in annotations_file_list:
+            annots = {}
+            with open(annotations_file, "r") as f:
+                annots = json.load(f)
+                for k, v in annots.items():
+                    data[k].extend(v)
+            pbar.update(1)
+
 
     category_dict = {}
     for item in data['categories']:
         category_dict[item['id']] = item['name']
 
     print("Copying files")
-    data_bar = tqdm(data['images'],
-            total=len(data['images']),
-            ncols=args.ncols,               # total width available
-            dynamic_ncols=False,            # disable autosizing
-            bar_format=bar_format,          # request bar width
-            )
-    for image in data_bar:
-        image_location = str(image['location'])
+    with tqdm(total=data['images'], unit="file", desc="Copying image files") as pbar:
+        for image in data['images']:
+            image_location = str(image['location'])
 
-        if image_location not in include_locations:
-            continue
+            if image_location not in include_locations:
+                continue
 
-        loc_folder = os.path.join(destination_folder,
-                                  'L' + str(image_location) + '/')
-        os.makedirs(loc_folder, exist_ok=True)
+            loc_folder = os.path.join(destination_folder,
+                                      'L' + str(image_location) + '/')
+            os.makedirs(loc_folder, exist_ok=True)
 
-        image_id = image['id']
-        image_fname = image['file_name']
+            image_id = image['id']
+            image_fname = image['file_name']
 
-        for annotation in data['annotations']:
-            if annotation['image_id'] == image_id:
-                if image_location not in stats:
-                    stats[image_location] = {}
+            for annotation in data['annotations']:
+                if annotation['image_id'] == image_id:
+                    if image_location not in stats:
+                        stats[image_location] = {}
 
-                category = category_dict[annotation['category_id']]
+                    category = category_dict[annotation['category_id']]
 
-                if category not in include_categories:
-                    continue
+                    if category not in include_categories:
+                        continue
 
-                if category not in stats[image_location]:
-                    stats[image_location][category] = 0
-                else:
-                    stats[image_location][category] += 1
+                    if category not in stats[image_location]:
+                        stats[image_location][category] = 0
+                    else:
+                        stats[image_location][category] += 1
 
-                loc_cat_folder = os.path.join(loc_folder, category + '/')
-                os.makedirs(loc_cat_folder, exist_ok=True)
+                    loc_cat_folder = os.path.join(loc_folder, category + '/')
+                    os.makedirs(loc_cat_folder, exist_ok=True)
 
-                dst_path = os.path.join(loc_cat_folder, image_fname)
-                src_path = os.path.join(images_folder, image_fname)
+                    dst_path = os.path.join(loc_cat_folder, image_fname)
+                    src_path = os.path.join(images_folder, image_fname)
 
-                shutil.copyfile(src_path, dst_path)
+                    shutil.copyfile(src_path, dst_path)
+                    pbar.update(1)
+        # end for image in data['images']:
 
     shutil.rmtree(images_folder)
     shutil.rmtree(annotations_folder)
@@ -307,8 +300,6 @@ if __name__ == "__main__":
     parser.add_argument('--data_dir', type=str, required=True)
     parser.add_argument('--dataset', type=str, nargs="+", 
         choices=['MNIST', 'PACS', 'OfficeHome', 'DomainNet', 'VLCS', 'TerraIncognita', 'Spawrious', 'Sviro', 'Camelyon17', 'FMoW'])
-    parser.add_argument('--ncols', default=80, type=int, help='number of columns in terminal')
-    parser.add_argument('--bar', default=50, type=int, help='length of progess bar')
     args = parser.parse_args()
 
     downloaders = { 'MNIST':            download_mnist,
