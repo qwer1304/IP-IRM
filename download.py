@@ -209,7 +209,6 @@ def download_terra_incognita(data_dir):
 
     os.makedirs(destination_folder, exist_ok=True)
 
-    print("Processing annotations...")
     with tqdm(total=len(annotations_file_list), unit="file", desc="Processing annotation files") as pbar:
         for annotations_file in annotations_file_list:
             annots = {}
@@ -224,7 +223,6 @@ def download_terra_incognita(data_dir):
     for item in data['categories']:
         category_dict[item['id']] = item['name']
 
-    print("Copying files")
     with tqdm(total=len(data['images']), unit="file", desc="Copying image files") as pbar:
         for image in data['images']:
             image_location = str(image['location'])
