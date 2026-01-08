@@ -1087,6 +1087,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
 
     ema = kwargs['ema']
     gradnorm_balancer, gradnorm_optimizer = kwargs['gradnorm_balancer'], kwargs['gradnorm_optimizer']
+    epochs = kwargs['epochs']
     net.train()
     set_BN_adapt(net, args.adapt_bn, args.bn_momentum)
 

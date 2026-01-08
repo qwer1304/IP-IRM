@@ -774,7 +774,7 @@ if __name__ == '__main__':
     if args.gradnorm_rescale_weights:
         gradnorm_balancer.rescale_weights()
     
-    kwargs = {'ema': ema, 'gradnorm_balancer': gradnorm_balancer, 'gradnorm_optimizer': gradnorm_optimizer}
+    kwargs = {'ema': ema, 'gradnorm_balancer': gradnorm_balancer, 'gradnorm_optimizer': gradnorm_optimizer, 'epochs': epochs}
     if ssl_type == 'moco' or ssl_type == 'mocosupcon':
         kwargs.update({'net_momentum': model_momentum, 'queue': queue, 'temperature': temperature, 'momentum': momentum})
     elif ssl_type == 'simsiam':
