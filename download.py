@@ -12,7 +12,7 @@ import uuid
 import json
 import os
 import urllib
-from tqdm.auto import tqdm
+from tqdm import tqdm
 
 #from wilds.datasets.camelyon17_dataset import Camelyon17Dataset
 #from wilds.datasets.fmow_dataset import FMoWDataset
@@ -210,7 +210,7 @@ def download_terra_incognita(data_dir):
     os.makedirs(destination_folder, exist_ok=True)
 
     print("Processing annotations...")
-    with tqdm(total=annotations_file_list, unit="file", desc="Processing annotation files") as pbar:
+    with tqdm(total=len(annotations_file_list), unit="file", desc="Processing annotation files") as pbar:
         for annotations_file in annotations_file_list:
             annots = {}
             with open(annotations_file, "r") as f:
@@ -225,7 +225,7 @@ def download_terra_incognita(data_dir):
         category_dict[item['id']] = item['name']
 
     print("Copying files")
-    with tqdm(total=data['images'], unit="file", desc="Copying image files") as pbar:
+    with tqdm(total=len(data['images']), unit="file", desc="Copying image files") as pbar:
         for image in data['images']:
             image_location = str(image['location'])
 
