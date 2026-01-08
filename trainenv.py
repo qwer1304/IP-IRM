@@ -1085,6 +1085,8 @@ def set_BN_adapt(net, adapt_bn, bn_momentum):
 # ssl training with IP-IRM
 def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch, args, **kwargs):
 
+    ema = kwargs['ema']
+    gradnorm_balancer, gradnorm_optimizer = kwargs['gradnorm_balancer'], kwargs['gradnorm_optimizer']
     net.train()
     set_BN_adapt(net, args.adapt_bn, args.bn_momentum)
 
