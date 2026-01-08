@@ -12,6 +12,7 @@ import uuid
 import json
 import os
 import urllib
+from tqdm.auto import tqdm
 
 #from wilds.datasets.camelyon17_dataset import Camelyon17Dataset
 #from wilds.datasets.fmow_dataset import FMoWDataset
@@ -204,7 +205,15 @@ def download_terra_incognita(data_dir):
 
     os.makedirs(destination_folder, exist_ok=True)
 
-    for annotations_file in annotations_file_list:
+    print("Processing annotations")
+    bar_format = '{l_bar}{bar:' + str(args.bar) + '}{r_bar}' #{bar:-' + str(args.bar) + 'b}'
+    data_bar = tqdm(annotations_file_list,
+            total=len(annotations_file_list),
+            ncols=args.ncols,               # total width available
+            dynamic_ncols=False,            # disable autosizing
+            bar_format=bar_format,          # request bar width
+            )
+    for annotations_file in data_bar:
         annots = {}
         with open(annotations_file, "r") as f:
             annots = json.load(f)
@@ -215,7 +224,14 @@ def download_terra_incognita(data_dir):
     for item in data['categories']:
         category_dict[item['id']] = item['name']
 
-    for image in data['images']:
+    print("Copying files")
+    data_bar = tqdm(data['images'],
+            total=len(data['images']),
+            ncols=args.ncols,               # total width available
+            dynamic_ncols=False,            # disable autosizing
+            bar_format=bar_format,          # request bar width
+            )
+    for image in data_bar:
         image_location = str(image['location'])
 
         if image_location not in include_locations:
@@ -291,6 +307,8 @@ if __name__ == "__main__":
     parser.add_argument('--data_dir', type=str, required=True)
     parser.add_argument('--dataset', type=str, nargs="+", 
         choices=['MNIST', 'PACS', 'OfficeHome', 'DomainNet', 'VLCS', 'TerraIncognita', 'Spawrious', 'Sviro', 'Camelyon17', 'FMoW'])
+    parser.add_argument('--ncols', default=80, type=int, help='number of columns in terminal')
+    parser.add_argument('--bar', default=50, type=int, help='length of progess bar')
     args = parser.parse_args()
 
     downloaders = { 'MNIST':            download_mnist,
