@@ -1087,7 +1087,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
 
     ema = kwargs['ema']
     gradnorm_balancer, gradnorm_optimizer = kwargs['gradnorm_balancer'], kwargs['gradnorm_optimizer']
-    epochs = kwargs['epochs']
     log_file = kwargs['log_file']
     
     net.train()
@@ -1557,7 +1556,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
             print() # this causes each tqdm update to be printed on a separare line
         unsplit_str = f'Unsplit/{loss_unsplit_type}' if loss_unsplit_type is not None else 'Unsplit'
 
-        desc_str = f"Epoch [{epoch}/{epochs}] [{trained_samples}/{total_samples}]" + \
+        desc_str = f"Epoch [{epoch}/{args.epochs}] [{trained_samples}/{total_samples}]" + \
                    f" {args.ssl_type}" + \
                    f" Total {total_loss_weighted/trained_samples:.3e}" + \
                    f" {unsplit_str} {total_unsplit_loss_weighted/trained_samples:.3e}" + \
@@ -1577,7 +1576,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
 
         if (batch_index % 10 - gradients_accumulation_steps + 1) == 0:
            utils.write_log('Train Epoch: [{:d}/{:d}] [{:d}/{:d}] {}: Total: {:.4f} First: {:.4f} Env: {:.4f}'
-                            .format(epoch, epochs, trained_samples, total_samples, args.ssl_type, 
+                            .format(epoch, args.epochs, trained_samples, total_samples, args.ssl_type, 
                                     total_loss_weighted/trained_samples, 
                                     total_unsplit_loss_weighted/trained_samples, 
                                     total_env_loss_weighted/trained_samples) + 
