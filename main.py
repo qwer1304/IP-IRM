@@ -25,6 +25,7 @@ import warnings
 from collections import defaultdict
 from typing import Union, List, Dict
 from trainenv import train_env
+sys.modules['__main__'].FeatureQueue = utils.FeatureQueue
 
 def train_partition(net, update_loader, soft_split, random_init=False, args=None, net_momentum=None, queue=None, **kwargs):
 
