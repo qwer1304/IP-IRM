@@ -7,6 +7,8 @@ from tqdm.auto import tqdm
 
 import utils
 
+from math import ceil, prod
+
 class BaseCalculator:
     def __init__(self, loss_module, *args, debug=False, device='cuda', **kwargs):
         self.loss_module         = loss_module
