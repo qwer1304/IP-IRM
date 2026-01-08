@@ -1512,3 +1512,99 @@ def reset_optimizer(optimizer):
                 # Generic fallback: just clear whatever state exists
                 optimizer.state[p] = {}
 
+class FeatureQueue:
+    def __init__(self, queue_size, dim, device=None, dtype=torch.float32, indices=False):
+        """
+        A circular queue for storing feature embeddings.
+
+        Args:
+            queue_size: int
+                Maximum number of elements in the queue.
+            dim: int
+                Dimension of each feature vector.
+            device: torch.device or None
+                Device to store the queue on (default: same as k when first updated).
+            dtype: torch.dtype
+                Data type of the queue (default: torch.float32).
+            indices: bool
+                Whether to store keys' indices 
+        """
+        self.queue_size = queue_size
+        self.dim = dim
+        self.device = device
+        self.dtype = dtype
+
+        self.queue = F.normalize(torch.randn(queue_size, dim, device=device, dtype=dtype), dim=1)
+        self.write_ptr = 0  # write index - first index to write from
+        self.read_ptr = 0  # read index - first index to read from 
+        
+        if indices:
+            self.indices = torch.randperm(self.queue_size, device=device)
+        else:
+            self.indices = None
+
+    @torch.no_grad()
+    def update(self, k, idx=None):
+        """
+        Update the queue with new keys.
+
+        Args:
+            k:   torch.Tensor, shape [batch_size, dim]
+                     New keys to enqueue.
+            idx: indices of keys  
+        """
+        n = k.size(0)
+        if n == 0:
+            return
+        assert ((idx is not None) and (self.indices is not None)) or (idx is None)
+        assert (idx is None) or (len(idx) == n), f"idx {idx} n {n}"
+
+        if self.write_ptr + n <= self.queue_size:
+            indices = torch.arange(self.write_ptr, self.write_ptr+n)
+            self.write_ptr = self.write_ptr + n
+        else:  # wrap around
+            first = self.queue_size - self.write_ptr
+            indices = torch.cat([torch.arange(self.write_ptr, self.queue_size), torch.arange(0, n-first)], dim=0)
+            self.write_ptr = n - first
+        self.queue[indices] = k
+        if idx is not None:
+            self.indices[indices] = idx
+
+    def get(self, n=None, advance=True, idx=False):
+        """Return the current queue tensor."""
+        # n:   if n>0    - number of elements from the current read location to return
+        #      if n=None - return the whole queue
+        # idx: also return the indices 
+        if n is None:
+            n = self.queue_size
+        else: 
+            assert (n <= self.queue_size) and (n > 0)
+        assert (idx and (self.indices is not None)) or (not idx), f"idx {idx} self.indices {self.indices}"          
+        
+        if self.read_ptr + n <= self.queue_size:
+            indices = torch.arange(self.read_ptr, self.read_ptr+n)
+            if advance:
+                self.read_ptr = self.read_ptr + n
+        else:  # wrap around
+            first = self.queue_size - self.read_ptr
+            indices = torch.cat([torch.arange(self.read_ptr, self.queue_size), torch.arange(0, n-first)], dim=0)
+            if advance:
+                self.read_ptr = n - first
+        k = self.queue[indices]
+        if idx:
+            return k, self.indices[indices]
+        else:
+            return k
+
+def microbatches(X, mb_size, min_size=2):
+    # yields a micro-batch of objects in list X
+    assert isinstance(X, list), "X must be a list"
+    assert len(X) > 0, f"len(X)={len(X)} == 0"
+    assert all([len(x) == len(X[0]) for x in X]), "all elements must have the same length"
+    N = X[0].size(0)
+    for i in range(0, N, mb_size):
+        Xb = [x[i:i+mb_size] for x in X] 
+        if Xb[0].size(0) < min_size:
+            continue  # skip this tiny micro-batch
+        yield Xb
+

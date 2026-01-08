@@ -15,7 +15,6 @@ from tqdm.auto import tqdm
 import utils
 from model import ModelResnet, SimSiam
 import gradnorm as gn
-from prepare import prepare_datasets, traverse_objects
 import gc
 from math import ceil, prod
 import copy
@@ -25,806 +24,7 @@ import time
 import warnings
 from collections import defaultdict
 from typing import Union, List, Dict
-
-def get_negative_mask(batch_size):
-    negative_mask = torch.ones((batch_size, 2 * batch_size), dtype=bool)
-    for i in range(batch_size):
-        negative_mask[i, i] = 0
-        negative_mask[i, i + batch_size] = 0
-
-    negative_mask = torch.cat((negative_mask, negative_mask), 0)
-    return negative_mask
-
-class FeatureQueue:
-    def __init__(self, queue_size, dim, device=None, dtype=torch.float32, indices=False):
-        """
-        A circular queue for storing feature embeddings.
-
-        Args:
-            queue_size: int
-                Maximum number of elements in the queue.
-            dim: int
-                Dimension of each feature vector.
-            device: torch.device or None
-                Device to store the queue on (default: same as k when first updated).
-            dtype: torch.dtype
-                Data type of the queue (default: torch.float32).
-            indices: bool
-                Whether to store keys' indices 
-        """
-        self.queue_size = queue_size
-        self.dim = dim
-        self.device = device
-        self.dtype = dtype
-
-        self.queue = F.normalize(torch.randn(queue_size, dim, device=device, dtype=dtype), dim=1)
-        self.write_ptr = 0  # write index - first index to write from
-        self.read_ptr = 0  # read index - first index to read from 
-        
-        if indices:
-            self.indices = torch.randperm(self.queue_size, device=device)
-        else:
-            self.indices = None
-
-    @torch.no_grad()
-    def update(self, k, idx=None):
-        """
-        Update the queue with new keys.
-
-        Args:
-            k:   torch.Tensor, shape [batch_size, dim]
-                     New keys to enqueue.
-            idx: indices of keys  
-        """
-        n = k.size(0)
-        if n == 0:
-            return
-        assert ((idx is not None) and (self.indices is not None)) or (idx is None)
-        assert (idx is None) or (len(idx) == n), f"idx {idx} n {n}"
-
-        if self.write_ptr + n <= self.queue_size:
-            indices = torch.arange(self.write_ptr, self.write_ptr+n)
-            self.write_ptr = self.write_ptr + n
-        else:  # wrap around
-            first = self.queue_size - self.write_ptr
-            indices = torch.cat([torch.arange(self.write_ptr, self.queue_size), torch.arange(0, n-first)], dim=0)
-            self.write_ptr = n - first
-        self.queue[indices] = k
-        if idx is not None:
-            self.indices[indices] = idx
-
-    def get(self, n=None, advance=True, idx=False):
-        """Return the current queue tensor."""
-        # n:   if n>0    - number of elements from the current read location to return
-        #      if n=None - return the whole queue
-        # idx: also return the indices 
-        if n is None:
-            n = self.queue_size
-        else: 
-            assert (n <= self.queue_size) and (n > 0)
-        assert (idx and (self.indices is not None)) or (not idx), f"idx {idx} self.indices {self.indices}"          
-        
-        if self.read_ptr + n <= self.queue_size:
-            indices = torch.arange(self.read_ptr, self.read_ptr+n)
-            if advance:
-                self.read_ptr = self.read_ptr + n
-        else:  # wrap around
-            first = self.queue_size - self.read_ptr
-            indices = torch.cat([torch.arange(self.read_ptr, self.queue_size), torch.arange(0, n-first)], dim=0)
-            if advance:
-                self.read_ptr = n - first
-        k = self.queue[indices]
-        if idx:
-            return k, self.indices[indices]
-        else:
-            return k
-
-def microbatches(X, mb_size, min_size=2):
-    # yields a micro-batch of objects in list X
-    assert isinstance(X, list), "X must be a list"
-    assert len(X) > 0, f"len(X)={len(X)} == 0"
-    assert all([len(x) == len(X[0]) for x in X]), "all elements must have the same length"
-    N = X[0].size(0)
-    for i in range(0, N, mb_size):
-        Xb = [x[i:i+mb_size] for x in X] 
-        if Xb[0].size(0) < min_size:
-            continue  # skip this tiny micro-batch
-        yield Xb
-
-class BaseCalculator:
-    def __init__(self, loss_module, *args, debug=False, device='cuda', **kwargs):
-        self.loss_module         = loss_module
-        self.debug               = debug
-
-    def penalty(self, idxs=None, **kwargs):
-        raise NotImplementedError
-        
-    def penalty_finalize(self, grads, szs):
-        raise NotImplementedError
-
-    def penalty_grads_finalize(self, grads, penalties, szs, **kwargs):
-        raise NotImplementedError
-
-    @staticmethod
-    def num_halves():
-        raise NotImplementedError
-
-class VRExCalculator(BaseCalculator):
-    """
-    Class for VREx calculation.
-    """
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-    def penalty(self, loss, *args, **kwargs):
-        """
-        This is a hack, since we cannot calculate the true penalty:
-        P = 1/E*sum_e(Loss_e - mu)**2 = 1/E*sum_e(Loss_e**2 - mu**2)
-        Note that if we returned the uncentered penalty Loss_e**2, it'd be hard to 
-        calculate mu_e since mu_e**2 != sum_i(Loss_{e,i})**2, but sum_i(Loss_{e,i})**2
-        """
-
-        return loss
-        
-    def penalty_finalize(self, risks, szs, for_grads=False, **kwargs):
-        """
-            risks:      risk per half, per env, unnormalized (1,num_partitions,num_envs)
-            szs:        sizes of halves of environments
-        """
-        if not for_grads:
-            # 'mu' is per-partition, NOT for ALL partitions
-            mu = (risks / (szs+1e-12)).mean(dim=(0,2), keepdim=True)    # (1,num_partitions,1)
-            return (risks / (szs+1e-12) - mu)**2 # normalized per env for macro-batch, (1, num_partitions, num_envs)
-        else:
-            return risks / (szs+1e-12)
-
-    def penalty_grads_finalize(self, grads, penalties, szs, reduction='sum', **kwargs):
-        """
-        Given dLoss/dTheta, Loss per half, per env and their sizes calculate the combined gradient.
-        dV/dTheta = d/dTheta(1/E*(Loss_e - 1/E*sum_j(Loss_j))^2) = 
-                    2/E*sum_e((Loss_e - mu) * (grad_e - mu_grad) =
-                    2/E*sum_e((Loss_e - mu) * grad_e
-                    because:
-                        2/E*sum_e((Loss_e - mu) * (grad_e - mu_grad) = 
-                            2/E*[sum_e((Loss_e - mu)*grad_e) - sum_e((Loss_e - mu)*mu_grad)] =
-                            2/E*[sum_e((Loss_e - mu)*grad_e) - sum_e(Loss_e - mu)*mu_grad]    =
-                            2/E*[sum_e((Loss_e - mu)*grad_e) - 0*mu_grad] =
-                            2/E*sum_e((Loss_e - mu)*grad_e) 
-                    where: mu = 1/E*sum_e(Loss_e), mu_grad = 1/E*sum_e(grad_e), 
-                           Loss_e = 1/N_e*sum_i(L_{e,i}), grad_e = 1/N_e*sum_i(grad_{e,i})
-            grads:      dPenalty/dTheta per half, per env, unnormalized (1,num_partitions,num_envs,parnums), unweighted
-            penalties:  Penalty per half, normalized per env, (1,num_partitions,num_envs), unweighted
-            szs:        sizes of halves of environments (single half required)
-        """
-        
-        num_halves, num_partitions, num_env = szs.size()
-        assert num_halves == 1, "VREx number of halves should be 1"
-        
-        # 'mu' is per-partition, NOT for ALL partitions
-        mu = penalties.mean(dim=(0,2), keepdim=True) # (1,num_partitions,1)
-        x  = (2 * (penalties[..., None] - mu[..., None]) 
-                * (grads / (szs[..., None]+1e-12)) 
-                / num_env
-             ) / num_partitions            # (parnums,)
-            
-        if reduction == 'sum':
-            x = x.sum(dim=(0,1,2))
-        elif reduction == 'none':
-            x = x.squeeze(0) # remove halves dim
-        
-        total_grad_flat = x
-        return total_grad_flat
-
-    @staticmethod
-    def num_halves():
-        return 1
-        
-# ---------------------------
-# Base IRM Calculator
-# ---------------------------
-
-"""
-L = 1/Ntr * (nll + IRM)
-nll = sum_e(nll_e)
-IRM = sum_e(IRM_e)
-nll_e = 1/Ne sum_i(nll_i(f(xi),yi))
-IRM_e = g1 * g2 # two halves of Ni 
-gi = 1/Ni d/ds sum_j(nll_j(s*f(xj),yj)) = 1/Ni sum_j(d/ds nll_j(s*f(xj),yj))
-d/dTheta L = 1/Ntr * (d/dTheta nll + d/dTheta IRM)
-d/dTheta nll = 1/Ne sum_j(d/dTheta nll_j(f(xj),yj))
-d/dTheta IRM = sum_e(d/dTheta IRM_e)
-d/dTheta IRM_e = d/dTheta (g1 * g2) = d/dTheta g1 * g2 + g1 * d/dTheta g2
-d/dTheta gi = 1/Ni sum_j(d/dTheta d/ds nll_j(s*f(xj),yj))
-"""
-        
-class IRMCalculator(BaseCalculator):
-    """
-    Base class for IRM calculation. Subclass this and implement
-    `gradients_for_half` to return g_i for a half-batch.
-    """
-    def __init__(self, *args, irm_temp=1.0, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.irm_temp            = irm_temp
-
-    def penalty(self, *args, **kwargs):
-        """
-        Compute gradient w.r.t. scale for a half-batch.
-        Must be implemented by subclass.
-        Returns a tensor g_i.
-        """
-        raise NotImplementedError
-        
-    def penalty_finalize(self, penalties, szs, for_grads=False):
-        if not for_grads:
-            return (penalties[0] / (szs[0]+1e-12)) * (penalties[1] / (szs[1]+1e-12))  # normalized per env for macro-batch 
-        else:
-            penalties_copy = penalties.clone()
-            penalties_copy[0] /= (szs[0]+1e-12)
-            penalties_copy[1] /= (szs[1]+1e-12)
-            return penalties_copy
-
-    def penalty_grads_finalize(self, grads, penalties, szs, debug=False, reduction='sum', sigma=None, **kwargs):
-        """
-        Given dPenalty/dTheta, Penalty per half, per env and their sizes calculate the combined gradient.
-            grads:      dPenalty/dTheta per half, per env, unnormalized, unweighted
-            penalties:  Penalty per half, normalized per env, unweighted
-            szs:        sizes of halves of environments
-        """
-        # IRM = gs1 * gs2, where gs1 and gs2 are gradients w.r.t. scaler of mean CE of halves of sample in a batch
-        # dIRM/dTheta = d(gs1 * gs2)/dTheta = dgs1/dTheta * gs2 + gs1 * dgs2/dTheta
-
-        num_halves, num_partitions, num_env = szs.size()
-
-        sigma = sigma if sigma else 0.
-        eps = sigma * torch.randn_like(penalties)
-        for i in range(num_halves):
-            j = (i + num_halves + 1) % num_halves
-            x = (  (grads[i] / (szs[i, ..., None]+1e-12))
-                 * (penalties[j, ..., None] + eps[j, ..., None])
-                 / num_env 
-                )
-            if reduction == 'sum':
-                x = x.sum(dim=(0,1)) / num_partitions  # shape (param_numel,)
-            elif reduction == 'none':
-                pass
-            if i == 0:
-                total_grad_flat = x
-            else:
-                total_grad_flat += x
-
-        if debug:
-            print("total_grad_flat", total_grad_flat)
-        return total_grad_flat
-
-    @staticmethod
-    def num_halves():
-        return 2
-
-# ---------------------------
-# CE-based IRM (for MoCo)
-# ---------------------------
-class CE_IRMCalculator(IRMCalculator):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-    def penalty(self, *args, idxs=None, **kwargs):
-        device = self.loss_module.logits().device
-        # one scalar (requires grad)
-        batch_size = self.loss_module.logits(idxs=idxs).size(0)
-        # s = torch.ones(batch_size, device=device, requires_grad=True)  # one s per sample
-        s = torch.tensor(1.0, requires_grad=True, device=device)
-        s = s.expand(batch_size)        
-
-        # Compute g_i in a CE-specific way
-        # scaler (s) multiplies a tensor (B,logits), so need to unsqueeze dim=1
-        losses = self.loss_module.compute_loss_micro(idxs=idxs, scale=s.unsqueeze(1), temperature=self.irm_temp, **kwargs)
-        # losses is a scalar
-        g_i = torch.autograd.grad(
-            losses,
-            s,
-            create_graph=True,  # keep graph for next loss
-        )
-        # g_i is a tuple w/ entries corresponding to gradients w.r.t each parameter (here - s)
-        g_i = g_i[0].squeeze(0).sum() # sum the per-sample gradients into a micro-batch gradient
-        return g_i
-
-class SimSiamIRMCalculator(IRMCalculator):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-    def penalty(self, losses, idxs=None, **kwargs):
-        device = self.loss_module._representations[0].device
-        # one scalar (requires grad)
-        batch_size = self.loss_module.representations(idxs=idxs)[0].size(0)
-        #s = torch.ones(batch_size, device=device, requires_grad=True)  # one s per sample
-        s = torch.tensor(1.0, requires_grad=True, device=device)
-        s = s.expand(batch_size)        
-
-        # Compute g_i in a CE-specific way
-        # normalize=False results in use of dot product instead of cosine difference 
-        losses = self.loss_module.compute_loss_micro(idxs=idxs, normalize=False, **kwargs)
-        grad_outputs = torch.ones(1, losses.size(0), device=device)
-        g_i = torch.autograd.grad(
-            losses * s, # losses is a tensor of scalars
-            s,
-            create_graph=True,  # keep graph for next loss
-            grad_outputs=grad_outputs, 
-            is_grads_batched=True
-        )
-        # g_i is a tuple w/ entries corresponding to gradients w.r.t each parameter (here - s)
-        # each entry is a tensor w/ dim=0 corresponding to each row in 'grad_outputs'
-        # select 1st parameter (s) and squeeze out the dim dimension (which is 1)
-        g_i = g_i[0].squeeze(0)
-        return g_i
-        
-# ---------------------------
-# Base Loss Module
-# ---------------------------
-class LossModule:
-    """
-    Base class for pluggable loss module.
-    Subclass for MoCo, SimSiam, etc.
-    """
-    def __init__(self, net, device='cuda', **kwargs):
-        self.net = net
-
-    def pre_batch(self, batch_data, *args, **kwargs):
-        pass
-
-    def pre_micro_batch(self, batch_data, **kwargs):
-        pass
-
-    def compute_loss_micro(self, batch_data):
-        raise NotImplementedError
-
-    def post_micro_batch(self):
-        pass
-
-    def post_batch(self):
-        pass
-
-    def prepare_for_free(self):
-        for k, v in list(self.__dict__.items()):
-            if isinstance(v, torch.Tensor) and v.is_cuda:
-                setattr(self, k, None)    
-
-    def get_debug_info_str(self):
-        return ""
-
-
-    def loss_grads_finalize(self, grads, losses, szs, reduction='sum'):
-        """
-            grads:  Penalty per half, unnormalized per env, weighted
-            losses: Losses per half, normalized per env, unweighted
-            szs:    sizes of halves of environments
-        """
-        num_env = prod(szs.size())
-        total_grad_flat  = (  grads  
-                            / (szs[..., None]+1e-12) 
-                            / num_env
-                           )
-        if reduction == 'sum':
-            total_grad_flat = total_grad_flat.sum(dim=(0,1,2))        # shape (param_numel,)
-        elif reduction == 'none':
-            pass                                                      # shape (half, part, env, param_numel)
-        return total_grad_flat
-
-# ---------------------------
-# MoCo+SupCon Loss Module
-# ---------------------------
-class MoCoSupConLossModule(LossModule):
-    def __init__(self, *args, net_momentum=None, queue=None, temperature=None, debug=False, **kwargs):
-        super().__init__(*args, **kwargs)
-        assert net_momentum is not None
-        assert queue is not None
-        self.net_momentum = net_momentum
-        self.momentum = kwargs['momentum']
-        self.net_momentum.train()
-        self.queue = queue
-        self.temperature = temperature or 1.0
-        self.this_batch_size = 0
-        self.debug = debug
-        self.neg_idxs = []
-        if self.debug:
-            self.total_pos = 0.0
-            self.total_neg = 0.0
-            self.total_maxneg = 0.0
-            self.count = 0
-
-    def pre_batch(self, batch_data, index_data, partitions, device='cuda'):
-        self.this_batch_size = len(batch_data)
-        self.queue.get(self.this_batch_size) # advance read pointer
-        
-        if partitions is None or (len(partitions) == 0) or (partitions[0] is None):
-            return
-        
-        # get the dataset indices of samples in queue
-        _, indexs = self.queue.get(self.queue.queue_size - self.this_batch_size, advance=False, idx=True)
-        # holds per-partition lists of per-env tensors of indices into the queue
-        self.neg_idxs = [[] for _ in partitions]
-        for pidx, p in enumerate(partitions):
-            for env in range(p.size(-1)):
-                # assign_idxs returns a tensor of indices into 'indexs' in 'env' in 'p'
-                self.neg_idxs[pidx].append(utils.assign_idxs(indexs, p, env)) # append the tensor of indices to envs list
-
-    def pre_micro_batch(self, pos, transform, indexs=None, normalize=True, dataset=None, **kwargs):
-        # 'indexs' are samples indices in the dataset
-        """
-        Calculating SupCon w/ LogSumExp:
-        Step 1 - Write the positive term:
-            For a fixed anchor 'i' the positive part of SupCon is:
-               1/|P(i)| \sum_{p \in P(i)} logexp(s_{ip})
-               logexp(s_{ip}) = s_{ip}
-               Hence, 1/|P(i)| \sum_{p \in P(i)} s_{ip}
-        Step 2 - Rewrite the same quantity in the form used by the code
-            Now apply a pure algebraic identity (no approximations):
-                1/|P(i)| sum_{p \in P(i)} s_{ip} = A = B - [B - A] =
-                log(1/|P(i)| \sum_{p \in P(i)|} exp(s_{ip})) - [log(1/|P(i)| \sum_{p \in P(i)| exp(s_ip)) - 1/|P(i)| sum_{p \in P(i)} s_{ip}]
-            Now regroup:
-                log(\sum_{p \in P(i)|} exp(s_{ip})) - log(|P(i)|) - C_i
-            where:
-                C_i = log(1/|P(i)| \sum_{p \in P(i)| exp(s_{ip})) - 1/|P(i)| \sum_{p \in P(i)} s_{ip}
-            and C_i depends only on the positives of anchor i.
-        Step 3 - Plug Step 2 into the full SupCon loss:
-            Full SupCon loss for anchor i:
-                l_i = -1/|P(i)| \sum_{p \in P(i)} s_{ip} + log(\sum_{a \in A} exp(s_ia}))
-            Substitute the expression from Step 2:
-                1/|P(i)| sum_{p \in P(i)} s_{ip} = log(\sum_{p \in P(i)|} exp(s_ip)) - log(|P(i)|) - C_i
-            So:
-                l_i = -log(\sum_{p \in P(i)|} exp(s_ip)) + log(\sum_{a \in A} exp(s_ia})) + log(|P(i)|) + C_i
-        Step 4 - The code drops C_i
-            The implementation uses:
-                -logsum_pos + logsum_all - log(|P(i)|)
-           During training the gradients of this method and standard SupCon differ.
-            * The implementation is not algebraically identical to the definition
-            * It is a surrogate objective
-            * The surrogate has the same global minimizers as the original 
-            * It does not produce the same optimization path            
-        Step 5 - Why this helps TerraInc specifically
-            TerraInc has:
-                * strong domain shortcuts (background, color, texture)
-                * same-class / different-domain positives are hard
-                * many positives per anchor
-            Under LSE SupCon:
-                * same-domain positives stop contributing early
-                * hardest (cross-domain) positives dominate gradients
-                * embedding becomes domain-invariant
-            This is exactly why:
-                * kNN with large k improves
-                * class clusters become tighter
-                * domain leakage decreases
-        Step 6 - In the LSE SupCon surrogate, the gradient does not explicitly depend on |P(i)|.
-            As |P(i)| increases:
-                True SupCon:
-                    * each positive gets weaker pull
-                        dl / ds_{ip} = -1/|P(i)| + softmax_A(s_{ip})
-                        -> As |P(i)| grows, each positive is weakened, including the hard cross-domain ones.
-            LSE SupCon:
-                    * hardest positives still dominate
-                    * total pull does not dilute
-                    dl / ds_{ip} = -softmax_{P(i)}(s_{ip}) + softmax_A(s_{ip})                    
-                    -> Hard positives dominate regardless of how many easy (same-domain) positives exist.
-            LSE SupCon prevents easy same-domain positives from diluting the gradient, forcing alignment 
-            to the hardest cross-domain positives - exactly what TerraInc needs to break domain clustering.
-        """
-        assert indexs is not None, 'indexs cannot be None'
-        assert len(pos) == len(indexs), f"len(pos) {len(pos)} != len(indexs) {len(indexs)}"
-        pos_q = transform(pos)
-        pos_k = transform(pos)
-
-        _, out_q = self.net(pos_q)
-        if normalize:
-            out_q = F.normalize(out_q, dim=1)
-        with torch.no_grad():
-            _, out_k = self.net_momentum(pos_k)
-            if normalize:
-                out_k = F.normalize(out_k, dim=1)
-        
-        k_queue, idx_queue = self.queue.get((self.queue.queue_size - self.this_batch_size), advance=False, idx=True)
-        k_all = torch.cat([out_k, k_queue], dim=0) # (N,D), N=B+K 
-        
-        def get_targets(idcs, dataset, device):
-            targets = [dataset.targets[i] for i in idcs]
-            if dataset.target_transform is not None:
-                labels = [dataset.target_transform(t) for t in targets]
-            else:
-                labels = targets
-            return torch.tensor(labels, dtype=torch.long, device=device)
-        y_batch = get_targets(indexs, dataset, pos.device)
-        y_queue = get_targets(idx_queue, dataset, pos.device)
-        y_all = torch.cat([y_batch, y_queue], dim=0) # (N,)
-
-        logits = (out_q @ k_all.T) / self.temperature # (B,N)
-        
-        pos_mask = (y_batch[:, None] == y_all[None, :])   # (B,N)
-        pos_mask[:, :len(y_batch)].fill_diagonal_(False)  # remove self-keys
-        num_pos = pos_mask.sum(dim=1, keepdim=True).clamp(min=1)
-
-        # Replace non-positives with -inf
-        pos_logits = logits.masked_fill(~pos_mask, -1e9)
-        # One logit per anchor = logsumexp over positives
-        l_pos = torch.logsumexp(pos_logits, dim=1, keepdim=True) #- num_pos.log() # (B,1)
-        
-        l_neg = logits.masked_fill(pos_mask, -1e9) # (B,N)
-        
-        self._logits = torch.cat([l_pos, l_neg], dim=1) # (B,N+1)
-        self.labels = torch.zeros(self._logits.size(0), dtype=torch.long, device=self._logits.device)
-        if self.debug:
-            self.total_pos    += l_pos.mean().item() * l_pos.size(0)
-            self.total_neg    += l_neg.mean().item() * l_pos.size(0)
-            self.total_maxneg += l_neg.max().item()  * l_pos.size(0)
-            self.count        += l_pos.size(0)
-
-        # save in state for queue update at end of batch
-        self.out_k        = out_k 
-        self.out_k_indexs = indexs
-
-        self.l_pos = l_pos
-        self.l_neg = l_neg
-
-    def logits(self, idxs=None):
-        if idxs is None:
-            idxs = torch.arange(self._logits.size(0), device=self._logits.device)
-        return self._logits[idxs]
-        
-    def targets(self, idxs=None):
-        if idxs is None:
-            idxs = torch.arange(self._logits.size(0), device=self._logits.device)
-        return self.labels[idxs]
-
-    def compute_loss_micro(self, p=None, env=None, idxs=None, scale=1.0, temperature=None, reduction='sum', **kwargs):
-        # 'idxs' selects the POSITIVES in the batch
-        # 'p', 'env' select the NEGATIVES in the queue
-        if idxs is None:
-            idxs = torch.arange(self._logits.size(0), device=self._logits.device)
-        l_pos = self.l_pos
-        l_neg = self.l_neg
-        if p is not None:
-            l_neg = l_neg[:, self.neg_idxs[p][env]]
-        self._logits = torch.cat([l_pos, l_neg], dim=1) # (B,N'+1)
-        self.labels = torch.zeros(self._logits.size(0), dtype=torch.long, device=self._logits.device)
-        if self.debug:
-            self.total_pos    += l_pos.mean().item() * l_pos.size(0)
-            self.total_neg    += l_neg.mean().item() * l_pos.size(0)
-            self.total_maxneg += l_neg.max().item()  * l_pos.size(0)
-            self.count        += l_pos.size(0)
-
-        # sum over batch, per env handled by driver
-        # get the samples that have POSITIVES (column 0)
-        l_pos = self._logits[idxs][:, 0]
-        valid = l_pos > -1e9
-
-        loss = F.cross_entropy(scale * self._logits[idxs][valid], self.labels[idxs][valid], reduction=reduction)
-        return loss
-
-    def post_micro_batch(self):
-        self.queue.update(self.out_k.detach(), idx=self.out_k_indexs)
-
-    def post_batch(self):
-        with torch.no_grad():
-            for param_q, param_k in zip(self.net.parameters(), self.net_momentum.parameters()):
-                param_k.mul_(self.momentum).add_(param_q, alpha=1.0 - self.momentum)
-        if self.debug:
-            self.total_pos = 0.0
-            self.total_neg = 0.0
-            self.total_maxneg = 0.0
-            self.count = 0
-
-    def get_debug_info_str(self):
-        if self.debug:
-            mean_pos = self.total_pos / self.count
-            mean_neg = self.total_neg / self.count
-            mean_maxneg = self.total_maxneg / self.count
-            return f' mean_pos: {mean_pos:.4f} mean_neg: {mean_neg:.4f} mean_maxneg: {mean_maxneg:.4f}'
-        else:
-            return ""
-
-    @staticmethod
-    def is_per_env():
-        return True
-
-# ---------------------------
-# MoCo Loss Module
-# ---------------------------
-class MoCoLossModule(LossModule):
-    def __init__(self, *args, net_momentum=None, queue=None, temperature=None, debug=False, **kwargs):
-        super().__init__(*args, **kwargs)
-        assert net_momentum is not None
-        assert queue is not None
-        self.net_momentum = net_momentum
-        self.momentum = kwargs['momentum']
-        self.net_momentum.train()
-        self.queue = queue
-        self.temperature = temperature or 1.0
-        self.this_batch_size = 0
-        self.debug = debug
-        self.neg_idxs = []
-        if self.debug:
-            self.total_pos = 0.0
-            self.total_neg = 0.0
-            self.total_maxneg = 0.0
-            self.count = 0
-
-    def pre_batch(self, batch_data, index_data, partitions, device='cuda'):
-        self.this_batch_size = len(batch_data)
-        self.queue.get(self.this_batch_size) # advance read pointer
-        
-        if partitions is None or (len(partitions) == 0) or (partitions[0] is None):
-            return
-        
-        # get the dataset indices of samples in queue
-        _, indexs = self.queue.get(self.queue.queue_size - self.this_batch_size, advance=False, idx=True)
-        # holds per-partition lists of per-env tensors of indices into the queue
-        self.neg_idxs = [[] for _ in partitions]
-        for pidx, p in enumerate(partitions):
-            for env in range(p.size(-1)):
-                # assign_idxs returns a tensor of indices into 'indexs' in 'env' in 'p'
-                self.neg_idxs[pidx].append(utils.assign_idxs(indexs, p, env)) # append the tensor of indices to envs list
-
-    def pre_micro_batch(self, pos, transform, indexs=None, normalize=True, **kwargs):
-        assert indexs is not None, 'indexs cannot be None'
-        assert len(pos) == len(indexs), f"len(pos) {len(pos)} != len(indexs) {len(indexs)}"
-        pos_q = transform(pos)
-        pos_k = transform(pos)
-
-        _, out_q = self.net(pos_q)
-        if normalize:
-            out_q = F.normalize(out_q, dim=1)
-        with torch.no_grad():
-            _, out_k = self.net_momentum(pos_k)
-            if normalize:
-                out_k = F.normalize(out_k, dim=1)
-        
-        l_pos = torch.sum(out_q * out_k, dim=1, keepdim=True)
-        l_neg = torch.matmul(out_q, self.queue.get((self.queue.queue_size - self.this_batch_size), advance=False).t())
-        self._logits = torch.cat([l_pos, l_neg], dim=1)
-        self.labels = torch.zeros(self._logits.size(0), dtype=torch.long, device=self._logits.device)
-        if self.debug:
-            self.total_pos    += l_pos.mean().item() * l_pos.size(0)
-            self.total_neg    += l_neg.mean().item() * l_pos.size(0)
-            self.total_maxneg += l_neg.max().item()  * l_pos.size(0)
-            self.count        += l_pos.size(0)
-
-        # save in state for queue update at end of batch
-        self.out_k        = out_k 
-        self.out_k_indexs = indexs
-
-        self.l_pos = l_pos
-        self.l_neg = l_neg
-
-    def logits(self, idxs=None):
-        if idxs is None:
-            idxs = torch.arange(self._logits.size(0), device=self._logits.device)
-        return self._logits[idxs]
-        
-    def targets(self, idxs=None):
-        if idxs is None:
-            idxs = torch.arange(self._logits.size(0), device=self._logits.device)
-        return self.labels[idxs]
-
-    def compute_loss_micro(self, p=None, env=None, idxs=None, scale=1.0, temperature=None, reduction='sum', **kwargs):
-        # 'idxs' selects the POSITIVES in the batch
-        # 'p', 'env' select the NEGATIVES in the queue
-        if idxs is None:
-            idxs = torch.arange(self._logits.size(0), device=self._logits.device)
-        l_pos = self.l_pos
-        l_neg = self.l_neg
-        if p is not None:
-            l_neg = l_neg[:, self.neg_idxs[p][env]]
-        self._logits = torch.cat([l_pos, l_neg], dim=1)
-        self.labels = torch.zeros(self._logits.size(0), dtype=torch.long, device=self._logits.device)
-        if self.debug:
-            self.total_pos    += l_pos.mean().item() * l_pos.size(0)
-            self.total_neg    += l_neg.mean().item() * l_pos.size(0)
-            self.total_maxneg += l_neg.max().item()  * l_pos.size(0)
-            self.count        += l_pos.size(0)
-
-        # sum over batch, per env handled by driver
-        temperature = temperature or self.temperature
-        loss = F.cross_entropy(scale * self._logits[idxs] / temperature, self.labels[idxs], reduction=reduction)
-        return loss
-
-    def post_micro_batch(self):
-        self.queue.update(self.out_k.detach(), idx=self.out_k_indexs)
-
-    def post_batch(self):
-        with torch.no_grad():
-            for param_q, param_k in zip(self.net.parameters(), self.net_momentum.parameters()):
-                param_k.mul_(self.momentum).add_(param_q, alpha=1.0 - self.momentum)
-        if self.debug:
-            self.total_pos = 0.0
-            self.total_neg = 0.0
-            self.total_maxneg = 0.0
-            self.count = 0
-
-    def get_debug_info_str(self):
-        if self.debug:
-            mean_pos = self.total_pos / self.count
-            mean_neg = self.total_neg / self.count
-            mean_maxneg = self.total_maxneg / self.count
-            return f' mean_pos: {mean_pos:.4f} mean_neg: {mean_neg:.4f} mean_maxneg: {mean_maxneg:.4f}'
-        else:
-            return ""
-
-    @staticmethod
-    def is_per_env():
-        return True
-
-# ---------------------------
-# SimSiam Loss Module
-# ---------------------------
-class SimSiamLossModule(LossModule):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-    def pre_micro_batch(self, pos, transform, normalize=True, **kwargs):
-        x1 = transform(pos)
-        x2 = transform(pos)
-
-        _, z1 = self.net(x1, normalize=False)
-        _, z2 = self.net(x2, normalize=False)
-        p1 = self.net.module.predictor(z1, normalize=False)
-        p2 = self.net.module.predictor(z2, normalize=False)
-        self._representations = (z1, z2, p1, p2)
-
-    def compute_loss_micro(self, idxs=None, scale=1.0, reduction='sum', normalize=True):
-        """
-        Computes unnormalized loss of a micro-batch
-        """
-        z1, z2, p1, p2 = self._representations
-        if idxs is None:
-            idxs = torch.arange(z1.size(0), device=z1.device)
-        # symmetric SimSiam loss (neg cosine, average two directions)
-        if normalize:
-            loss_dir1 = - F.cosine_similarity(scale * p1[idxs], z2[idxs].detach(), dim=-1)
-            loss_dir2 = - F.cosine_similarity(scale * p2[idxs], z1[idxs].detach(), dim=-1)
-        else:
-            loss_dir1 = - F.dot(scale * p1[idxs], z2[idxs].detach(), dim=-1)
-            loss_dir2 = - F.dot(scale * p2[idxs], z1[idxs].detach(), dim=-1)
-        loss = 0.5 * (loss_dir1 + loss_dir2)
-        if reduction == 'sum':
-            loss = loss.sum()
-        return loss
-
-    def representations(self, idxs=None):
-        if idxs is None:
-            idxs = torch.arange(self._representations[0].size(0), device=self._representations[0].device)
-        return tuple(r[idxs] for r in self._representations)
-
-    @staticmethod
-    def is_per_env():
-        return False
-
-# ---------------------------
-# CE Loss Module
-# ---------------------------
-class CELossModule(LossModule):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-    def pre_micro_batch(self, pos, transform, normalize=True, labels=None, weights=None, **kwargs):
-        x = transform(pos)
-
-        features, _ = self.net(x)
-        out = self.net.module.second_fc(features)
-        if normalize:
-            out = F.normalize(out, dim=1)
-        self._logits = out
-        self.labels = labels
-        self.weights = weights
-
-    def compute_loss_micro(self, normalize=True, **kwargs):
-        """
-        Computes unnormalized loss of a micro-batch
-        """
-        out = self._logits
-        loss = F.cross_entropy(self._logits, self.labels, reduction='sum', weight=self.weights)
-        return loss
-
-
-    @staticmethod
-    def is_per_env():
-        return False
+from testenv import test_env
 
 def clamp_scalers_for_progress(norm2_dict, dot_dict, scaler_dict, ema=False):
     def consistent_dots(dot_dict, norm2_dict, eps=1e-12):
@@ -985,7 +185,8 @@ def rotate_penalty_grads(penalty_grads_final, loss_grads_final, grad_rotate, do_
     if do_penalty and grad_rotate is not None:
         theta = float(torch.empty(1).uniform_(min(grad_rotate), max(grad_rotate)).item())
         penalty_grads_final = [rotate_pen_toward_orthogonal( # returns list w/ 1 element, w/ size (parnum,)
-            [g], [loss_grads_final[pind]], theta=theta)[0].clone() for pind, g in enumerate(penalty_grads_final)
+                                 [g], [loss_grads_final[pind]], theta=theta)[0].clone() 
+                               for pind, g in enumerate(penalty_grads_final)
         ]
     return penalty_grads_final
 
@@ -997,14 +198,14 @@ def calculate_scalers(loss_unsplit_grads_final, loss_grads_final, penalty_grads_
                       args, do_unsplit_loss, do_loss, do_penalty, device):
     def setup_grads_and_norms(grads_final, weight, Lscaler, device, do_flag, default_grads_weighted_vector=None):
         if do_flag:
-            grads_weighted = [g.detach().clone() * weight * Lscaler for g in grads_final if g is not None]
+            grads_weighted        = [g.detach().clone() * weight * Lscaler for g in grads_final if g is not None]
             grads_weighted_vector = torch.cat([g for g in grads_weighted]) 
-            grads_norm_weighted = grads_weighted_vector.norm()
+            grads_norm_weighted   = grads_weighted_vector.norm()
         else:
             grads_weighted = [torch.zeros_like(g) for g in grads_final if g is not None]
             assert default_grads_weighted_vector is not None, "default_grads_weighted_vector not given when do_flag is False"
             grads_weighted_vector = default_grads_weighted_vector
-            grads_norm_weighted = torch.tensor(0., dtype=torch.float, device=device)
+            grads_norm_weighted   = torch.tensor(0., dtype=torch.float, device=device)
         return grads_weighted, grads_weighted_vector, grads_norm_weighted
 
     loss_unsplit_grads_final_weighted, l_unsplit_grads_flat_weighted, loss_unsplit_grad_norm_weighted = \
@@ -1020,17 +221,17 @@ def calculate_scalers(loss_unsplit_grads_final, loss_grads_final, penalty_grads_
     delta_lp = l_grads_flat_weighted.dot(p_grads_flat_weighted)
     delta_kp = l_unsplit_grads_flat_weighted.dot(p_grads_flat_weighted)
     cos_lk   = delta_lk / (loss_unsplit_grad_norm_weighted * loss_grad_norm_weighted    + 1e-12)
-    cos_lp   = delta_lp / (loss_grad_norm_weighted      * penalty_grad_norm_weighted + 1e-12)
+    cos_lp   = delta_lp / (loss_grad_norm_weighted         * penalty_grad_norm_weighted + 1e-12)
     cos_kp   = delta_kp / (loss_unsplit_grad_norm_weighted * penalty_grad_norm_weighted + 1e-12)
 
     Loss_grads_flat_weighted = [loss_unsplit_grads_final_weighted[p] + loss_grads_final_weighted[p] for p in range(len(loss_grads_final_weighted))]
-    L_grads_flat_weighted = l_unsplit_grads_flat_weighted + l_grads_flat_weighted
-    cos_Lp   = F.cosine_similarity(L_grads_flat_weighted, p_grads_flat_weighted, dim=0)
-    dot_Lp   = L_grads_flat_weighted.dot(p_grads_flat_weighted)
+    L_grads_flat_weighted    = l_unsplit_grads_flat_weighted + l_grads_flat_weighted
+    cos_Lp                   = F.cosine_similarity(L_grads_flat_weighted, p_grads_flat_weighted, dim=0)
+    dot_Lp                   = L_grads_flat_weighted.dot(p_grads_flat_weighted)
 
-    loss_weighted      = loss_weight      * loss_env.mean()
+    loss_weighted         = loss_weight         * loss_env.mean()
     loss_unsplit_weighted = loss_unsplit_weight * loss_unsplit_aggregator.mean()
-    penalty_weighted   = penalty_weight   * penalty_env.mean()
+    penalty_weighted      = penalty_weight      * penalty_env.mean()
 
     if args.ema:
         emas = ema.update({'ngk':      loss_unsplit_grad_norm_weighted, 
@@ -1067,11 +268,11 @@ def calculate_scalers(loss_unsplit_grads_final, loss_grads_final, penalty_grads_
     gradnorm_rates = torch.zeros(int(args.penalty_weight>0) + int(do_loss) + int(do_unsplit_loss), dtype=torch.float, device=device)
     losses_dict, grad_norms_dict = {}, {}
     if do_penalty:
-        losses_dict['penalty']       = penalty_weighted
-        grad_norms_dict['penalty']   = ngp
+        losses_dict['penalty']          = penalty_weighted
+        grad_norms_dict['penalty']      = ngp
     if do_loss:
-        losses_dict['loss']          = loss_weighted
-        grad_norms_dict['loss']      = ngl
+        losses_dict['loss']             = loss_weighted
+        grad_norms_dict['loss']         = ngl
     if do_unsplit_loss:
         losses_dict['loss_unsplit']     = loss_unsplit_weighted
         grad_norms_dict['loss_unsplit'] = ngk            
@@ -1133,14 +334,14 @@ def calculate_scalers(loss_unsplit_grads_final, loss_grads_final, penalty_grads_
         'w_l':               loss_grad_scaler.item(),
         'w_p':               penalty_grad_scaler.item(),
         'v_k':               gradnorm_balancer.task_weights['loss_unsplit'].item() if 'loss_unsplit' in gradnorm_balancer.task_weights else 0.,
-        'v_l':               gradnorm_balancer.task_weights['loss'].item()      if 'loss'      in gradnorm_balancer.task_weights else 0.,
-        'v_p':               gradnorm_balancer.task_weights['penalty'].item()   if 'penalty'   in gradnorm_balancer.task_weights else 0.,
+        'v_l':               gradnorm_balancer.task_weights['loss'].item()         if 'loss'         in gradnorm_balancer.task_weights else 0.,
+        'v_p':               gradnorm_balancer.task_weights['penalty'].item()      if 'penalty'      in gradnorm_balancer.task_weights else 0.,
         'gn_pm':             gn_pm,
         # if cond > 0, the corresponding quantity would decrease
-        'loss_decrease_cond':      loss_grad_scaler      * ngl2 + loss_unsplit_grad_scaler*dot_lk + penalty_grad_scaler*dot_lp,
-        'loss_unsplit_decrease_cond': loss_unsplit_grad_scaler * ngk2 + loss_grad_scaler*dot_lk      + penalty_grad_scaler*dot_kp,
-        'penalty_decrease_cond':   penalty_grad_scaler   * ngl2 + loss_unsplit_grad_scaler*dot_kp + loss_grad_scaler*dot_lp,
-        'gradnorm_rates_str':     " ".join([f'{n} {r:.4f}' for n,r in zip([task_names_2_klp[k] for k in task_names], gradnorm_rates)]) if do_gradnorm else "",  
+        'loss_decrease_cond':         loss_grad_scaler         * ngl2 + loss_unsplit_grad_scaler*dot_lk + penalty_grad_scaler*dot_lp,
+        'loss_unsplit_decrease_cond': loss_unsplit_grad_scaler * ngk2 + loss_grad_scaler*dot_lk         + penalty_grad_scaler*dot_kp,
+        'penalty_decrease_cond':      penalty_grad_scaler      * ngl2 + loss_unsplit_grad_scaler*dot_kp + loss_grad_scaler*dot_lp,
+        'gradnorm_rates_str':         " ".join([f'{n} {r:.4f}' for n,r in zip([task_names_2_klp[k] for k in task_names], gradnorm_rates)]) if do_gradnorm else "",  
     }
 
     return loss_unsplit_grad_scaler, loss_grad_scaler, penalty_grad_scaler, gradnorm_loss, info_dict
@@ -1247,13 +448,12 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
     gpu_accum_steps              = ceil(loader_batch_size / gpu_batch_size) # better round up 
 
     gradients_accumulation_step  = 0
-    alternating_gradients_update = 0
     total_samples                = len(train_loader.dataset)
     
     trained_samples             = 0
     total_unsplit_loss_weighted = 0.0
     total_env_loss_weighted     = 0.0
-    total_irm_loss_weighted     = 0.0
+    total_pen_loss_weighted     = 0.0
     total_loss_weighted         = 0.0
 
     bar_format = '{l_bar}{bar:' + str(args.bar) + '}{r_bar}' #{bar:-' + str(args.bar) + 'b}'
@@ -1266,8 +466,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
 
     # instantiate LossModule and IRMCalculator based on args (pluggable)
     # default to MoCo if args.loss_type not provided
-    loss_type = getattr(args, 'ssl_type', 'moco').lower()
-    penalty_type = getattr(args, 'penalty_type', 'irm').lower()
+    loss_type         = getattr(args, 'ssl_type', 'moco').lower()
+    penalty_type      = getattr(args, 'penalty_type', 'irm').lower()
     loss_unsplit_type = getattr(args, 'loss_unsplit_type', None)
     loss_unsplit_type = loss_unsplit_type.lower() if loss_unsplit_type is not None else None
 
@@ -1337,8 +537,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
     ]
 
     train_optimizer.zero_grad(set_to_none=True) # clear gradients at the beginning 
-    k = 0 # number of consecutive batches r_mag is within bounds
-    macro_batch_index = 0
 
     for batch_index, data_env in enumerate(train_bar):
 
@@ -1472,7 +670,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
 
                             # 1. Calculate base indices once
                             # Using standard Python ints for indexing is faster than creating 0-d Tensors
-                            base_idx = partition_num * args.env_num + env
+                            base_idx   = partition_num  * args.env_num + env
                             row_stride = num_partitions * args.env_num
 
                             # 2. Determine Mask and Initial Offset
@@ -1602,20 +800,18 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
         if gradients_accumulation_step < gradients_accumulation_steps:
             continue
         
-        macro_batch_index           += 1
-
         loss_weight_env    = make_rand_dither_weight(num_partitions, args.env_num, args.weight_env_eps, device)
         penalty_weight_env = make_rand_dither_weight(num_partitions, args.env_num, args.weight_env_eps, device)
 
         if do_loss:
             partition_sz = halves_sz.sum(dim=0, keepdim=True) # (1,J,K) # sizes of envs in macro-batch
-            loss_env = loss_aggregator.sum(dim=0, keepdim=True) / partition_sz  # per env for macro-batch, normalized per env, unweighted
+            loss_env     = loss_aggregator.sum(dim=0, keepdim=True) / partition_sz  # per env for macro-batch, normalized per env, unweighted
         else:
-            loss_env = torch.tensor(0, dtype=torch.float, device=device)
+            loss_env     = torch.tensor(0, dtype=torch.float, device=device)
         if do_penalty:
-            penalty_env = penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz) # normalized per env for macro-batch, unweighted
+            penalty_env  = penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz) # normalized per env for macro-batch, unweighted
         else:
-            penalty_env = torch.tensor(0, dtype=torch.float, device=device)
+            penalty_env  = torch.tensor(0, dtype=torch.float, device=device)
 
         # Environments gradients
         loss_grads_final = calculate_loss_grads_final(loss_grads, loss_env, loss_weight_env, halves_sz, loss_module, reduction, device, do_loss)
@@ -1657,7 +853,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
             utils.reset_optimizer(train_optimizer)
 
         train_optimizer.step()
-        train_optimizer.zero_grad(set_to_none=True)        # clear gradients at beginning of next gradients batch
+        train_optimizer.zero_grad(set_to_none=True)    # clear gradients at beginning of next gradients batch
 
         gradnorm_update(gradnorm_balancer, gradnorm_loss, gradnorm_optimizer, args, do_gradnorm)
 
@@ -1673,9 +869,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
 
         # total loss is sum of losses so far over entire batch aggregation period.
         total_unsplit_loss_weighted += (loss_unsplit_weight * loss_unsplit_aggregator).item() * this_batch_size * gradients_accumulation_steps
-        total_irm_loss_weighted  += (penalty_weight   * penalty_env.mean()).item()   * this_batch_size * gradients_accumulation_steps
-        total_env_loss_weighted  += (loss_weight      * loss_env.mean()).item()      * this_batch_size * gradients_accumulation_steps
-        total_loss_weighted      += loss_batch_weighted.item()                       * this_batch_size * gradients_accumulation_steps
+        total_pen_loss_weighted     += (penalty_weight      * penalty_env.mean()).item()      * this_batch_size * gradients_accumulation_steps
+        total_env_loss_weighted     += (loss_weight         * loss_env.mean()).item()         * this_batch_size * gradients_accumulation_steps
+        total_loss_weighted         += loss_batch_weighted.item()                             * this_batch_size * gradients_accumulation_steps
         
         if args.print_batch:
             print() # this causes each tqdm update to be printed on a separare line
@@ -1686,7 +882,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                    f" Total {total_loss_weighted/trained_samples:.3e}" + \
                    f" {unsplit_str} {total_unsplit_loss_weighted/trained_samples:.3e}" + \
                    f" Env {total_env_loss_weighted/trained_samples:.3e}" + \
-                   f" {args.penalty_type} {total_irm_loss_weighted/trained_samples:.3e}" + \
+                   f" {args.penalty_type} {total_pen_loss_weighted/trained_samples:.3e}" + \
                    f" LR {train_optimizer.param_groups[0]['lr']:.4f} PW {penalty_weight_orig:.6g}" + \
                    f" dot: ll {info_dict['ngl2']:.2e} lk {info_dict['dot_lk']:.2e} lp {info_dict['dot_lp']:.2e} kk {info_dict['ngk2']:.2e}" + \
                    f" kp {info_dict['dot_kp']:.2e} pp {info_dict['ngp2']:.2e}" + \
@@ -1706,7 +902,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                     total_unsplit_loss_weighted/trained_samples, 
                                     total_env_loss_weighted/trained_samples) + 
                             ' {}: {:.4g} LR: {:.4f} PW {:.4f} GN {:.4f}'
-                            .format(args.penalty_type, total_irm_loss_weighted/trained_samples, train_optimizer.param_groups[0]['lr'], 
+                            .format(args.penalty_type, total_pen_loss_weighted/trained_samples, train_optimizer.param_groups[0]['lr'], 
                                     penalty_weight_orig, info_dict['gradnorm_loss']) + 
                             ' dot {:.2e} {:.2e} {:.2e} {:.2e} {:.2e} {:.2e}'
                             .format(info_dict['ngl2'], info_dict['dot_lk'], info_dict['dot_lp'], info_dict['ngk2'], info_dict['dot_kp'], info_dict['ngp2']) +
@@ -1719,7 +915,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, args, 
                                         
         # Prepare for next iteration
         gradients_accumulation_step = 0
-        alternating_gradients_update = 0 if alternating_gradients_update > 0 else 1
         penalty_aggregator.zero_()
         loss_unsplit_aggregator.zero_()
         loss_aggregator.zero_()
@@ -2323,62 +1518,11 @@ if __name__ == '__main__':
     elif args.dataset == 'ImageNet':
         train_transform = utils.make_train_transform(image_size, randgray=not args.norandgray, normalize=args.image_class)
         test_transform = utils.make_test_transform(normalize=args.image_class)
-        if False:
-            wrap = args.extract_features
-            # descriptors of train data
-            train_desc  =   {'dataset': utils.Imagenet_idx,
-                              'transform': train_transform,
-                              'target_transform': target_transform,
-                              'class_to_index': class_to_idx,
-                              'wrap': False, # for changeable target transform
-                              'required_split': "in",
-                            }
-            update_desc =   {'dataset': utils.Imagenet_idx,
-                              'transform': train_transform,
-                              'target_transform': target_transform,
-                              'class_to_index': class_to_idx,
-                              'wrap': False, # for changeable target transform
-                              'required_split': "in",
-                            }
-            memory_desc =   {'dataset': utils.Imagenet,
-                              'transform': test_transform,
-                              'target_transform': target_transform,
-                              'class_to_index': class_to_idx,
-                              'wrap': False, # for changeable target transform
-                              'required_split': "in",
-                            }
-            val_desc    =   {'dataset': utils.Imagenet,
-                              'transform': test_transform,
-                              'target_transform': target_transform,
-                              'class_to_index': class_to_idx,
-                              'wrap': wrap, # for changeable target transform
-                              'required_split': "out",
-                            }
-            # descriptors of test data
-            test_desc   =   {'dataset': utils.Imagenet,
-                              'transform': test_transform,
-                              'target_transform': target_transform,
-                              'class_to_index': class_to_idx,
-                              'wrap': wrap, # for changeable target transform
-                              'required_split': "in",
-                            }
-
-
-            datas = prepare_datasets(args.data, args.train_envs, [train_desc, update_desc, memory_desc, val_desc], args.holdout_fraction, args.seed)
-            train_data, update_data, memory_data, val_data = tuple(data[0] for data in datas)
-
-            datas = prepare_datasets(args.data, args.test_envs, [test_desc], 1.0, args.seed)
-            test_data = datas[0][0]
-
-            #traverse_objects(update_data)
-            #exit()
-
-        else:
-            train_data  = utils.Imagenet_idx(root=args.data + '/train', transform=train_transform, target_transform=target_transform, class_to_idx=class_to_idx)
-            update_data = utils.Imagenet_idx(root=args.data + '/train', transform=train_transform, target_transform=target_transform, class_to_idx=class_to_idx)
-            memory_data = utils.Imagenet(root=args.data     + '/train', transform=test_transform,  target_transform=target_transform, class_to_idx=class_to_idx)
-            test_data   = utils.Imagenet(root=args.data     + '/test',  transform=test_transform,  target_transform=target_transform, class_to_idx=class_to_idx)
-            val_data    = utils.Imagenet(root=args.data     + '/val',   transform=test_transform,  target_transform=target_transform, class_to_idx=class_to_idx)
+        train_data  = utils.Imagenet_idx(root=args.data + '/train', transform=train_transform, target_transform=target_transform, class_to_idx=class_to_idx)
+        update_data = utils.Imagenet_idx(root=args.data + '/train', transform=train_transform, target_transform=target_transform, class_to_idx=class_to_idx)
+        memory_data = utils.Imagenet(root=args.data     + '/train', transform=test_transform,  target_transform=target_transform, class_to_idx=class_to_idx)
+        test_data   = utils.Imagenet(root=args.data     + '/test',  transform=test_transform,  target_transform=target_transform, class_to_idx=class_to_idx)
+        val_data    = utils.Imagenet(root=args.data     + '/val',   transform=test_transform,  target_transform=target_transform, class_to_idx=class_to_idx)
         
     # pretrain model
     assert (args.pretrain_path is None) or (args.pretrain_path is not None and os.path.isfile(args.pretrain_path)), f"pretrain file {args.pretrain_path} is missing"
@@ -2419,7 +1563,7 @@ if __name__ == '__main__':
             p.requires_grad = False
         momentum = args.momentum              # momentum for model_momentum
         queue_size = args.queue_size
-        queue = FeatureQueue(queue_size, feature_dim, device=device, dtype=torch.float32, indices=True)
+        queue = utils.FeatureQueue(queue_size, feature_dim, device=device, dtype=torch.float32, indices=True)
     elif ssl_type == 'simsiam':
         model_momentum = None
         queue = None
