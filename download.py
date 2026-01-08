@@ -230,6 +230,7 @@ def download_terra_incognita(data_dir):
             image_location = str(image['location'])
 
             if image_location not in include_locations:
+                pbar.update(1)
                 continue
 
             loc_folder = os.path.join(destination_folder,
@@ -247,6 +248,7 @@ def download_terra_incognita(data_dir):
                     category = category_dict[annotation['category_id']]
 
                     if category not in include_categories:
+                        pbar.update(1)
                         continue
 
                     if category not in stats[image_location]:
