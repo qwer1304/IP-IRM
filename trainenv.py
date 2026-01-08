@@ -1226,7 +1226,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         # -----------------------
         # Step 0: micro-batches
         # -----------------------
-        mb_list = list(microbatches([data_batch, labels_batch, indexs_batch], gpu_batch_size))
+        mb_list = list(utils.microbatches([data_batch, labels_batch, indexs_batch], gpu_batch_size))
 
         for j in range(num_halves): # over halves of micro-batches
             for i in [i_ for i_ in range(len(mb_list)) if i_ % num_halves == j]: # loop over micro-batches
