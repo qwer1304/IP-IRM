@@ -24,7 +24,7 @@ import time
 import warnings
 from collections import defaultdict
 from typing import Union, List, Dict
-from testenv import test_env
+from trainenv import train_env
 
 def train_partition(net, update_loader, soft_split, random_init=False, args=None, net_momentum=None, queue=None, **kwargs):
 
