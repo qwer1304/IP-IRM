@@ -855,7 +855,7 @@ if __name__ == '__main__':
             updated_split = None
             updated_split_all = None            
 
-        train_loss = train_env(model, train_loader, optimizer, upd_split, tr_bs, args, **kwargs)
+        train_loss = train_env(model, train_loader, optimizer, upd_split, tr_bs, epoch, args, **kwargs)
 
         if (epoch % args.maximize_iter == 0) and (not args.baseline):
             # Maximize Step (Step 2)
