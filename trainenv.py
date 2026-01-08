@@ -835,7 +835,7 @@ def calculate_loss_grads_final(loss_grads, loss_env, loss_weight_env, halves_sz,
         loss_grads_final = [torch.tensor(0., dtype=torch.float, device=device)] * len(loss_grads)
     return loss_grads_final
 
-def calculate_penalty_grads_final(penalty_grads, penalty_aggregator, penalty_weight_env, halves_sz, penalty_calculator, reduction, device, do_penalty):
+def calculate_penalty_grads_final(penalty_grads, penalty_aggregator, penalty_weight_env, halves_sz, penalty_calculator, penalty_sigma, reduction, device, do_penalty):
     if do_penalty:
         penalty_grads_final = []
         pen = penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz, for_grads=True) # normalized per env for macro-batch, unweighted
@@ -847,7 +847,7 @@ def calculate_penalty_grads_final(penalty_grads, penalty_aggregator, penalty_wei
                     dPenalty_dTheta_env, 
                     pen, 
                     halves_sz,
-                    sigma=args.penalty_sigma,
+                    sigma=penalty_sigma,
                     reduction=reduction
                 )                                                                     
             penalty_grads_final.append(total_grad_flat.detach())
@@ -1488,7 +1488,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
             penalty_env  = torch.tensor(0, dtype=torch.float, device=device)
 
         # Environments gradients
-        loss_grads_final = calculate_loss_grads_final(loss_grads, loss_env, loss_weight_env, halves_sz, loss_module, reduction, device, do_loss)
+        loss_grads_final = calculate_loss_grads_final(loss_grads, loss_env, loss_weight_env, halves_sz, loss_module, args.penalty_sigma, reduction, device, do_loss)
 
         penalty_grads_final = calculate_penalty_grads_final(penalty_grads, penalty_aggregator, penalty_weight_env, halves_sz, penalty_calculator, reduction, device, do_penalty)
         penalty_grads_final = rotate_penalty_grads(penalty_grads_final, loss_grads_final, args.grad_rotate, do_penalty)
