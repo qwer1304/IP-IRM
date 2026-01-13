@@ -1230,7 +1230,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 # per micro-batch pipeline
                 batch_micro, labels, indexs = mb_list[i]
                 if (loss_unsplit_module is not None) and (kwargs['CEweights'] is not None):
-                    weights         = kwargs['CEweights'][indexs]
+                    weights         = kwargs['CEweights'] # weights are PER class weights
                 else:
                     weights         = None
                 batch_micro         = batch_micro.cuda(non_blocking=True)
