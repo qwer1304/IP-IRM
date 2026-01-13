@@ -152,7 +152,7 @@ class MultiArmModel(nn.Module):
         self.feature_dim = self.f.fc.in_features
         self.f.fc = nn.Identity()
 
-        self.f = self._load_backbone(state_dict)
+        self._load_backbone(state_dict) # uodates self.f
         
         # 2. Mask layer
         if mask_blueprint:
