@@ -644,7 +644,7 @@ if __name__ == '__main__':
         arms_blueprints = {"projector": partial(create_mlp, output_dim=feature_dim, hidden_dims=[512], norm_layer=nn.BatchNorm1d, bias=[False, True],
                                                             last_layer_norm=False, last_layer_act=False)
         }
-        shortcuts = {'g': 'projector'}
+        shortcuts = {'g': 'proj'}
         
     elif ssl_type == 'simsiam':
         arms_blueprints = {"projector": partial(create_mlp, output_dim=feature_dim, hidden_dims=[512], norm_layer=nn.BatchNorm1d, bias=[False, False, False],
@@ -709,7 +709,7 @@ if __name__ == '__main__':
             if args.featurizer_lr > 0:
                 params.append({'params': model.module.f.parameters(), 'lr': args.featurizer_lr})
             if args.projector_lr > 0:
-                params.append({'params': model.module.arms['projector'].parameters(), 'lr': args.projector_lr})
+                params.append({'params': model.module.arms['proj'].parameters(), 'lr': args.projector_lr})
         optimizer = optim.Adam(params, weight_decay=args.weight_decay, betas=args.betas)
 
         gradnorm_optimizer = optim.Adam(gradnorm_balancer.parameters(), lr=args.gradnorm_lr, weight_decay=args.gradnorm_weight_decay, betas=args.gradnorm_betas)        
