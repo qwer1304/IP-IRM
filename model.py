@@ -67,7 +67,7 @@ def create_mlp(
     hidden_dims: List[int] = None,
     activation_layer: type[nn.Module] = nn.ReLU,
     norm_layer: type[nn.Module] = None,
-    norm_kwargs = Union[None, dict, List[dict]] = None, 
+    norm_kwargs: Union[None, dict, List[dict]] = None, 
     dropout: float = 0.0,
     bias: Union[bool, List[bool]] = True,
     last_layer_norm: bool = False,
