@@ -662,7 +662,7 @@ if __name__ == '__main__':
         print("<= loaded pretrained checkpoint '{}'".format(args.pretrain_path))
 
     model = nn.DataParallel(model)
-    model_old = nn.DataParallel(model_old)
+    #model_old = nn.DataParallel(model_old)
 
     if ssl_type == 'moco' or ssl_type == 'mocosupcon':
         model_momentum = copy.deepcopy(model)
