@@ -769,7 +769,7 @@ if __name__ == '__main__':
             print("=> no checkpoint found at '{}'".format(args.resume))
             
         utils.atomic_save({
-            'epoch':                epoch, # restore is from epoch+1
+            'epoch':                start_epoch, # restore is from epoch+1
             'state_dict':           model_new.state_dict(),
             'best_acc1':            best_acc1,
             'best_epoch':           best_epoch,
