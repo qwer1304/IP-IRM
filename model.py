@@ -17,7 +17,7 @@ from typing import Union, List
 from functools import partial
 
 class Mask():
-    def __init__(self, map_type, K=None, tau=1.0, soft=False):
+    def __init__(self, mask_type, K=None, tau=1.0, soft=False):
         self.mask_type = mask_type
         self.K = K
         self.tau = tau
@@ -157,8 +157,8 @@ class MultiArmModel(nn.Module):
         # 2. Mask layer
         if mask_blueprint:
             self.mask_fun = mask_blueprint(self.feature_dim)
-        else:
-            self.mask_fun = Mask('ident', self.feature_dim, trainable=False)
+        else:    
+            self.mask_fun = MaskModule(Mask('ident'), self.feature_dim, trainable=False)
             
         # 3. Arms
         self.arms = nn.ModuleDict()
