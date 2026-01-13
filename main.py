@@ -641,12 +641,12 @@ if __name__ == '__main__':
     if ssl_type == 'moco' or ssl_type == 'mocosupcon':
         model = ModelResnet(feature_dim, image_class=image_class, state_dict=state_dict, second_fc=second_fc).cuda()
         
-        arms_blueprints = {partial("proj": create_mlp(output_dim=feature_dim, hidden_dims=[512], norm_layer=nn.BatchNorm1d, bias=[False, True],
-                                                last_layer_norm=False, last_layer_act=False)}
+        arms_blueprints = {"proj": partial(create_mlp(output_dim=feature_dim, hidden_dims=[512], norm_layer=nn.BatchNorm1d, bias=[False, True],
+                                                last_layer_norm=False, last_layer_act=False))}
         shortcuts = {'g': 'proj'}
         
         if second_fc:
-            arms_blueprints.append({"classifier": partial(create_mlp(output_dim=second_fc, bias=True)})
+            arms_blueprints.append({"classifier": partial(create_mlp(output_dim=second_fc, bias=True))})
             shortcuts.append({'fc': 'classifier'})
             
         model_new = MultiArmModel(backbone_name='resnet50', mask_blueprint=None, arms_blueprints=arms_blueprints, in_transform=None, out_transforms=None, 
