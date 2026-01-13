@@ -768,6 +768,7 @@ if __name__ == '__main__':
         else:
             print("=> no checkpoint found at '{}'".format(args.resume))
             
+        cuda_rng_state = torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None
         utils.atomic_save({
             'epoch':                start_epoch, # restore is from epoch+1
             'state_dict':           model_new.state_dict(),
