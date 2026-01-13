@@ -386,7 +386,7 @@ class MoCoSupConLossModule(LossModule):
         assert len(pos_q) == len(indexs), f"len(pos_q) {len(pos_q)} != len(indexs) {len(indexs)}"
         assert len(pos_q) == len(pos_k), f"len(pos_q) {len(pos_q)} != len(pos_k) {len(pos_k)}"
 
-        out_q = self.net.g(pos_q)
+        out_q = self.net.moduleg(pos_q)
         if normalize:
             out_q = F.normalize(out_q, dim=1)
         with torch.no_grad():
@@ -540,7 +540,7 @@ class MoCoLossModule(LossModule):
         assert len(pos_q) == len(indexs), f"len(pos_q) {len(pos_q)} != len(indexs) {len(indexs)}"
         assert len(pos_q) == len(pos_k), f"len(pos_q) {len(pos_q)} != len(pos_k) {len(pos_k)}"
 
-        out_q = self.net.g(pos_q)
+        out_q = self.net.moduleg(pos_q)
         if normalize:
             out_q = F.normalize(out_q, dim=1)
         with torch.no_grad():
@@ -632,10 +632,10 @@ class SimSiamLossModule(LossModule):
 
     def pre_micro_batch(self, x1, x2, **kwargs):
         # Unnormalized!
-        z1 = self.net.g(x1)
-        z2 = self.net.g(x2)
-        p1 = self.net.h(z1)
-        p2 = self.net.h(z2)
+        z1 = self.net.moduleg(x1)
+        z2 = self.net.moduleg(x2)
+        p1 = self.net.moduleh(z1)
+        p2 = self.net.moduleh(z2)
         self._representations = (z1, z2, p1, p2)
 
     def compute_loss_micro(self, idxs=None, scale=1.0, reduction='sum', normalize=True):
@@ -674,7 +674,7 @@ class CELossModule(LossModule):
         super().__init__(*args, **kwargs)
 
     def pre_micro_batch(self, x, normalize=True, labels=None, weights=None, **kwargs):
-        out = self.net.fc(x)
+        out = self.net.modulefc(x)
         if normalize:
             out = F.normalize(out, dim=1)
         self._logits = out
@@ -1262,7 +1262,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                     MoCo:    generate two views, get their embeddings from respective encoders, normalize them, etc
                     SimSiam: generate two views, get their projections and predictions, etc
                 """
-                features_1, features_2 = net.f(transform(batch_micro)), net.f(transform(batch_micro))
+                features_1, features_2 = net.modulef(transform(batch_micro)), net.modulef(transform(batch_micro))
                 if do_unsplit_loss and loss_unsplit_module is not None:
                     loss_unsplit_module.pre_micro_batch(features_1, features_2, indexs=indexs, labels=labels, normalize=False,
                         dataset=train_loader.dataset, weights=weights)
