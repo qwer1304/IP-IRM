@@ -220,7 +220,7 @@ class MultiArmModel(nn.Module):
     def backbone(self, x):
         return self.f(self.in_transform(x)) if self.in_transform else self.f(x)
         
-    def mask(self, x)
+    def mask(self, x):
         return self.mask_fun(x)
         
     def arm(self, name, x, **kwargs):
