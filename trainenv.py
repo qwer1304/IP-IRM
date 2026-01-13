@@ -673,12 +673,13 @@ class CELossModule(LossModule):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    def pre_micro_batch(self, x, normalize=True, labels=None, weights=None, **kwargs):
+    def pre_micro_batch(self, x1, x2, normalize=True, labels=None, weights=None, **kwargs):
+        x = torch.cat([x1, x2], dim=0)
         out = self.net.module.fc(x)
         if normalize:
             out = F.normalize(out, dim=1)
         self._logits = out
-        self.labels = labels
+        self.labels = torch.cat[labels, labels], dim=0)
         self.weights = weights
 
     def compute_loss_micro(self, normalize=True, **kwargs):
@@ -1380,7 +1381,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                     # sum() is for the case when 'is_per_env'==False; otherwise - it's harmless
                     # 'losses_samples_all' are the losses of ALL samples in this micro-batch
                     # loss - loss is ALWAYS a scalar
-                    loss = losses_samples_all.sum().detach()  / this_batch_size / gradients_accumulation_steps
+                    # CE is computed for BOTH views concatenated
+                    loss = losses_samples_all.sum().detach()  / 2 / this_batch_size / gradients_accumulation_steps
                     # compute unnormalized gradients for this loss
                     # grad_outputs: one per sample
                     loss_unsplit_aggregator += loss # before scaler
