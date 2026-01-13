@@ -311,9 +311,10 @@ def load_checkpoint(path, model, model_momentum, optimizer, gradnorm_balancer, g
 
     # Restore main model
     msg_model = model.load_state_dict(checkpoint["state_dict"], strict=False)
+    msg_model = msg_model._asdict()
     # Don't care about if classifier not present, if not needed
     if classifier_not_needed:
-        msg_model.unexpected_keys = [k for k in msg_model.unexpected_keys if not k.startswith('module.arms.classifier')]
+        msg_model['unexpected_keys'] = [k for k in msg_model['unexpected_keys'] if not k.startswith('module.arms.classifier')]
 
     # Restore momentum model if applicable
     queue = None
@@ -324,7 +325,8 @@ def load_checkpoint(path, model, model_momentum, optimizer, gradnorm_balancer, g
             )
             # Don't care about if classifier not present, if not needed
             if classifier_not_needed:
-                msg_momentum.unexpected_keys = [k for k in msg_momentum.unexpected_keys if not k.startswith('module.arms.classifier')]
+                msg_momentum = msg_momentum._asdict()
+                msg_momentum['unexpected_keys'] = [k for k in msg_momentum['unexpected_keys'] if not k.startswith('module.arms.classifier')]
         else:
             msg_momentum = "no momentum encoder in checkpoint"
 
