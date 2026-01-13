@@ -1230,7 +1230,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
             for i in [i_ for i_ in range(len(mb_list)) if i_ % num_halves == j]: # loop over micro-batches
                 # per micro-batch pipeline
                 batch_micro, labels, indexs = mb_list[i]
-                if (loss_unsplit_module is not None) and (kwargs['CEweights'] is not None):
+                if (loss_unsplit_module is not None) and ('CEweights' in kwargs) and (kwargs['CEweights'] is not None):
                     weights         = kwargs['CEweights'] # weights are PER class weights
                 else:
                     weights         = None
