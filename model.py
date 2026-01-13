@@ -182,8 +182,6 @@ class MultiArmModel(nn.Module):
             print("\tMissing keys (ignoring fc):", [k for k in msg.missing_keys if not k.startswith("fc.")])
             print("\tUnexpected keys (ignoring fc):", [k for k in msg.unexpected_keys if not k.startswith("fc.")])
 
-        return f
-
     def add_arms(self, arms_blueprints, out_transforms=None, shortcuts=None):
         """
         Takes names and partial() blueprints in a dict, transforms and shortcuts to them.
