@@ -296,7 +296,7 @@ def test(net, feature_bank, feature_labels, test_data_loader, args, progress=Fal
 
     return total_top1 / total_num * 100, total_top5 / total_num * 100, macro_acc * 100
     
-def load_checkpoint(path, model, model_momentum, optimizer, gradnorm_balancer, gradnorm_optimizer, device="cuda"):
+def load_checkpoint(path, model, model_momentum, optimizer, gradnorm_balancer, gradnorm_optimizer, device="cuda", classifier_not_needed=False):
     print("=> loading checkpoint '{}'".format(path))
     checkpoint = torch.load(path, map_location=device, weights_only=False)
 
@@ -311,6 +311,9 @@ def load_checkpoint(path, model, model_momentum, optimizer, gradnorm_balancer, g
 
     # Restore main model
     msg_model = model.load_state_dict(checkpoint["state_dict"], strict=False)
+    # Don't care about if classifier not present, if not needed
+    if classifier_not_needed:
+        msg.unexpected_keys = [k for k in msg.unexpected_keys if not k.startswith('module.arms.classifier')]
 
     # Restore momentum model if applicable
     queue = None
@@ -319,6 +322,9 @@ def load_checkpoint(path, model, model_momentum, optimizer, gradnorm_balancer, g
             msg_momentum = model_momentum.load_state_dict(
                 checkpoint["state_dict_momentum"], strict=False
             )
+            # Don't care about if classifier not present, if not needed
+            if classifier_not_needed:
+                msg_momentum.unexpected_keys = [k for k in msg_momentum.unexpected_keys if not k.startswith('module.arms.classifier')]
         else:
             msg_momentum = "no momentum encoder in checkpoint"
 
@@ -727,7 +733,7 @@ if __name__ == '__main__':
             (model, model_momentum, optimizer, queue,
              start_epoch, best_acc1, best_epoch,
              updated_split, updated_split_all, ema_, gradnorm_balancer, gradnorm_optimizer) = \
-                load_checkpoint(args.resume, model, model_momentum, optimizer, gradnorm_balancer, gradnorm_optimizer)
+                load_checkpoint(args.resume, model, model_momentum, optimizer, gradnorm_balancer, gradnorm_optimizer, classifier_not_needed=classifier_dim is None)
  
             # dummy for debug multiple partitions
             # updated_split_all.append(torch.randn((len(update_data), args.env_num), requires_grad=True, device=device))
