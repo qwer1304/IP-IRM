@@ -641,7 +641,7 @@ if __name__ == '__main__':
     ssl_type = args.ssl_type.lower()
     second_fc = c if args.loss_unsplit_type else None
     if ssl_type == 'moco' or ssl_type == 'mocosupcon':
-        model_old = ModelResnet(feature_dim, image_class=image_class, state_dict=state_dict, second_fc=second_fc).cuda()
+        #model_old = ModelResnet(feature_dim, image_class=image_class, state_dict=state_dict, second_fc=second_fc).cuda()
         
         arms_blueprints = {"proj": partial(create_mlp, output_dim=feature_dim, hidden_dims=[512], norm_layer=nn.BatchNorm1d, bias=[False, True],
                                                 last_layer_norm=False, last_layer_act=False)}
@@ -666,11 +666,11 @@ if __name__ == '__main__':
 
     if ssl_type == 'moco' or ssl_type == 'mocosupcon':
         model_momentum = copy.deepcopy(model)
-        model_momentum_old = copy.deepcopy(model_old)
+        #model_momentum_old = copy.deepcopy(model_old)
         for p in model_momentum.parameters():
             p.requires_grad = False
-        for p in model_momentum_old.parameters():
-            p.requires_grad = False
+        #for p in model_momentum_old.parameters():
+        #    p.requires_grad = False
         momentum = args.momentum              # momentum for model_momentum
         queue_size = args.queue_size
         queue = utils.FeatureQueue(queue_size, feature_dim, device=device, dtype=torch.float32, indices=True)
@@ -696,7 +696,7 @@ if __name__ == '__main__':
         #FIX ME!!!!!!!!!
         #optimizer          = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay, betas=args.betas)
         params = []
-        params_old = []
+        #params_old = []
         if ssl_type == "simsiam":
             if args.featurizer_lr > 0:
                 params.append({'params': model.module.f.parameters(), 'lr': args.featurizer_lr})
@@ -707,12 +707,12 @@ if __name__ == '__main__':
         else:
             if args.featurizer_lr > 0:
                 params.append({'params': model.module.f.parameters(), 'lr': args.featurizer_lr})
-                params_old.append({'params': model_old.module.f.parameters(), 'lr': args.featurizer_lr})
+                #params_old.append({'params': model_old.module.f.parameters(), 'lr': args.featurizer_lr})
             if args.projector_lr > 0:
-                params_old.append({'params': model_old.module.g.parameters(), 'lr': args.projector_lr})
+                #params_old.append({'params': model_old.module.g.parameters(), 'lr': args.projector_lr})
                 params.append({'params': model.module.arms['proj'].parameters(), 'lr': args.projector_lr})
         optimizer = optim.Adam(params, weight_decay=args.weight_decay, betas=args.betas)
-        optimizer_old = optim.Adam(params_old, weight_decay=args.weight_decay, betas=args.betas)
+        #optimizer_old = optim.Adam(params_old, weight_decay=args.weight_decay, betas=args.betas)
 
         gradnorm_optimizer = optim.Adam(gradnorm_balancer.parameters(), lr=args.gradnorm_lr, weight_decay=args.gradnorm_weight_decay, betas=args.gradnorm_betas)        
     elif args.opt == 'SGD':
@@ -792,8 +792,6 @@ if __name__ == '__main__':
             'ema':                  ema,
         }, False, filename='{}/{}/checkpoint_multiarm.pth.tar'.format(args.save_root, args.name))
         """
-        print("loaded")
-        exit(1)
         
     # training loop
     # start epoch is what the user provided, if provided, or from checkpoint, if exists, or 1 (default)
