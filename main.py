@@ -641,7 +641,7 @@ if __name__ == '__main__':
     ssl_type = args.ssl_type.lower()
     second_fc = c if args.loss_unsplit_type else None
     if ssl_type == 'moco' or ssl_type == 'mocosupcon':
-        model = ModelResnet(feature_dim, image_class=image_class, state_dict=state_dict, second_fc=second_fc).cuda()
+        model_old = ModelResnet(feature_dim, image_class=image_class, state_dict=state_dict, second_fc=second_fc).cuda()
         
         arms_blueprints = {"proj": partial(create_mlp, output_dim=feature_dim, hidden_dims=[512], norm_layer=nn.BatchNorm1d, bias=[False, True],
                                                 last_layer_norm=False, last_layer_act=False)}
@@ -651,25 +651,25 @@ if __name__ == '__main__':
             arms_blueprints.append({"classifier": partial(create_mlp, output_dim=second_fc, bias=True)})
             shortcuts.append({'fc': 'classifier'})
             
-        model_new = MultiArmModel(backbone_name='resnet50', mask_blueprint=None, arms_blueprints=arms_blueprints, in_transform=None, out_transforms=None, 
+        model = MultiArmModel(backbone_name='resnet50', mask_blueprint=None, arms_blueprints=arms_blueprints, in_transform=None, out_transforms=None, 
                  shortcuts=shortcuts, image_class=image_class, state_dict=state_dict).cuda()
 
     elif ssl_type == 'simsiam':
-        model = SimSiam(feature_dim, image_class=image_class, state_dict=state_dict).cuda()
+        model_old = SimSiam(feature_dim, image_class=image_class, state_dict=state_dict).cuda()
     else:
         raise NotImplemented
     if state_dict is not None:
         print("<= loaded pretrained checkpoint '{}'".format(args.pretrain_path))
 
     model = nn.DataParallel(model)
-    model_new = nn.DataParallel(model_new)
+    model_old = nn.DataParallel(model_old)
 
     if ssl_type == 'moco' or ssl_type == 'mocosupcon':
         model_momentum = copy.deepcopy(model)
-        model_momentum_new = copy.deepcopy(model_new)
+        model_momentum_old = copy.deepcopy(model_old)
         for p in model_momentum.parameters():
             p.requires_grad = False
-        for p in model_momentum_new.parameters():
+        for p in model_momentum_old.parameters():
             p.requires_grad = False
         momentum = args.momentum              # momentum for model_momentum
         queue_size = args.queue_size
@@ -696,7 +696,7 @@ if __name__ == '__main__':
         #FIX ME!!!!!!!!!
         #optimizer          = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay, betas=args.betas)
         params = []
-        params_new = []
+        params_old = []
         if ssl_type == "simsiam":
             if args.featurizer_lr > 0:
                 params.append({'params': model.module.f.parameters(), 'lr': args.featurizer_lr})
@@ -707,12 +707,12 @@ if __name__ == '__main__':
         else:
             if args.featurizer_lr > 0:
                 params.append({'params': model.module.f.parameters(), 'lr': args.featurizer_lr})
-                params_new.append({'params': model_new.module.f.parameters(), 'lr': args.featurizer_lr})
+                params_old.append({'params': model_old.module.f.parameters(), 'lr': args.featurizer_lr})
             if args.projector_lr > 0:
-                params.append({'params': model.module.g.parameters(), 'lr': args.projector_lr})
-                params_new.append({'params': model_new.module.arms['proj'].parameters(), 'lr': args.projector_lr})
+                params_old.append({'params': model_old.module.g.parameters(), 'lr': args.projector_lr})
+                params.append({'params': model.module.arms['proj'].parameters(), 'lr': args.projector_lr})
         optimizer = optim.Adam(params, weight_decay=args.weight_decay, betas=args.betas)
-        optimizer_new = optim.Adam(params_new, weight_decay=args.weight_decay, betas=args.betas)
+        optimizer_old = optim.Adam(params_old, weight_decay=args.weight_decay, betas=args.betas)
 
         gradnorm_optimizer = optim.Adam(gradnorm_balancer.parameters(), lr=args.gradnorm_lr, weight_decay=args.gradnorm_weight_decay, betas=args.gradnorm_betas)        
     elif args.opt == 'SGD':
@@ -731,6 +731,7 @@ if __name__ == '__main__':
              updated_split, updated_split_all, ema_, gradnorm_balancer, gradnorm_optimizer) = \
                 load_checkpoint(args.resume, model, model_momentum, optimizer, gradnorm_balancer, gradnorm_optimizer)
  
+            """
             # 1. Copy the Backbone (Assuming it's named 'f' in the old model)
             model_new.module.f.load_state_dict(model.module.f.state_dict())
             model_momentum_new.module.f.load_state_dict(model_momentum.module.f.state_dict())
@@ -740,7 +741,7 @@ if __name__ == '__main__':
             if second_fc:
                 model_new.module.arms['classifier'].load_state_dict(model.module.fc.state_dict())                
                 model_momentum_new.module.arms['classifier'].load_state_dict(model_momentum.module.fc.state_dict())                
-
+            """
             # dummy for debug multiple partitions
             # updated_split_all.append(torch.randn((len(update_data), args.env_num), requires_grad=True, device=device))
             if not args.baseline:
@@ -768,6 +769,7 @@ if __name__ == '__main__':
         else:
             print("=> no checkpoint found at '{}'".format(args.resume))
             
+        """
         cuda_rng_state = torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None
         utils.atomic_save({
             'epoch':                start_epoch, # restore is from epoch+1
@@ -789,7 +791,8 @@ if __name__ == '__main__':
             },
             'ema':                  ema,
         }, False, filename='{}/{}/checkpoint_multiarm.pth.tar'.format(args.save_root, args.name))
-        print("Saved")
+        """
+        print("loaded")
         exit(1)
         
     # training loop
