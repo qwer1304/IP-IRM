@@ -390,7 +390,7 @@ class MoCoSupConLossModule(LossModule):
         if normalize:
             out_q = F.normalize(out_q, dim=1)
         with torch.no_grad():
-            out_k = self.net_momentum.g(pos_k)
+            out_k = self.net_momentum.module.g(pos_k)
             if normalize:
                 out_k = F.normalize(out_k, dim=1)
         
@@ -544,7 +544,7 @@ class MoCoLossModule(LossModule):
         if normalize:
             out_q = F.normalize(out_q, dim=1)
         with torch.no_grad():
-            out_k = self.net_momentum.g(pos_k)
+            out_k = self.net_momentum.module.g(pos_k)
             if normalize:
                 out_k = F.normalize(out_k, dim=1)
         
