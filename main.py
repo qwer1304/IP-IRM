@@ -789,6 +789,7 @@ if __name__ == '__main__':
             },
             'ema':                  ema,
         }, False, filename='{}/{}/checkpoint_multiarm.pth.tar'.format(args.save_root, args.name))
+        print("Saved")
         exit(1)
         
     # training loop
