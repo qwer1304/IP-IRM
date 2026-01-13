@@ -639,7 +639,7 @@ if __name__ == '__main__':
 
     # model setup and optimizer config
     ssl_type = args.ssl_type.lower()
-    second_fc = c if args.loss_unsplit_type else None
+    classifier_dim = c if args.loss_unsplit_type else None
     if ssl_type == 'moco' or ssl_type == 'mocosupcon':       
         arms_blueprints = {"proj": partial(create_mlp, output_dim=feature_dim, hidden_dims=[512], norm_layer=nn.BatchNorm1d, bias=[False, True],
                                                             last_layer_norm=False, last_layer_act=False)
@@ -657,9 +657,9 @@ if __name__ == '__main__':
     else:
         raise NotImplemented
 
-    if second_fc:
-        arms_blueprints.append({"classifier": partial(create_mlp, output_dim=second_fc, bias=True)})
-        shortcuts.append({'fc': 'classifier'})
+    if classifier_dim:
+        arms_blueprints.update({"classifier": partial(create_mlp, output_dim=classifier_dim, bias=True)})
+        shortcuts.update({'fc': 'classifier'})
 
     model = MultiArmModel(backbone_name='resnet50', mask_blueprint=None, arms_blueprints=arms_blueprints, in_transform=None, out_transforms=None, 
              shortcuts=shortcuts, image_class=image_class, state_dict=state_dict).cuda()
