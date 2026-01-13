@@ -649,16 +649,17 @@ if __name__ == '__main__':
     ssl_type = args.ssl_type.lower()
     classifier_dim = c if args.loss_unsplit_type else None
     if ssl_type == 'moco' or ssl_type == 'mocosupcon':       
-        arms_blueprints = {"proj": partial(create_mlp, output_dim=feature_dim, hidden_dims=[512], norm_layer=nn.BatchNorm1d, bias=[False, True],
-                                                            last_layer_norm=False, last_layer_act=False)
+        arms_blueprints = {"projection": partial(create_mlp, output_dim=feature_dim, hidden_dims=[512], norm_layer=nn.BatchNorm1d, bias=[False, True],
+                                                       last_layer_norm=False, last_layer_act=False)
         }
-        shortcuts = {'g': 'proj'}
+        shortcuts = {'g': 'projection'}
         
     elif ssl_type == 'simsiam':
         arms_blueprints = {"projector": partial(create_mlp, output_dim=feature_dim, hidden_dims=[512], norm_layer=nn.BatchNorm1d, bias=[False, False, False],
-                                                last_layer_norm=True, last_layer_act=False, norm_params=[{"affine": True}, {"affine": True}, {"affine": False}]),  
+                                                            last_layer_norm=True, last_layer_act=False, 
+                                                            norm_params=[{"affine": True}, {"affine": True}, {"affine": False}]),  
                            "predictor": partial(create_mlp, output_dim=feature_dim, hidden_dims=[feature_dim/2], norm_layer=nn.BatchNorm1d, bias=[False, True],
-                                                last_layer_norm=False, last_layer_act=False)
+                                                            last_layer_norm=False, last_layer_act=False)
         }
         shortcuts = {'g': 'projector', 'h': 'predictor'}
 
@@ -717,7 +718,7 @@ if __name__ == '__main__':
             if args.featurizer_lr > 0:
                 params.append({'params': model.module.f.parameters(), 'lr': args.featurizer_lr})
             if args.projector_lr > 0:
-                params.append({'params': model.module.arms['proj'].parameters(), 'lr': args.projector_lr})
+                params.append({'params': model.module.arms['projection'].parameters(), 'lr': args.projector_lr})
         optimizer = optim.Adam(params, weight_decay=args.weight_decay, betas=args.betas)
 
         gradnorm_optimizer = optim.Adam(gradnorm_balancer.parameters(), lr=args.gradnorm_lr, weight_decay=args.gradnorm_weight_decay, betas=args.gradnorm_betas)        
