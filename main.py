@@ -756,7 +756,7 @@ if __name__ == '__main__':
         else:
             print("=> no checkpoint found at '{}'".format(args.resume))
             
-        #"""
+        """
         cuda_rng_state = torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None
         utils.atomic_save({
             'epoch':                start_epoch-1, # restore is from epoch+1
@@ -779,7 +779,7 @@ if __name__ == '__main__':
             'ema':                  ema,
         }, False, filename='{}/{}/checkpoint_multiarm2.pth.tar'.format(args.save_root, args.name))
         exit(1)
-        #"""
+        """
         
     # training loop
     # start epoch is what the user provided, if provided, or from checkpoint, if exists, or 1 (default)
