@@ -641,7 +641,7 @@ if __name__ == '__main__':
     ssl_type = args.ssl_type.lower()
     second_fc = c if args.loss_unsplit_type else None
     if ssl_type == 'moco' or ssl_type == 'mocosupcon':       
-        arms_blueprints = {"projector": partial(create_mlp, output_dim=feature_dim, hidden_dims=[512], norm_layer=nn.BatchNorm1d, bias=[False, True],
+        arms_blueprints = {"proj": partial(create_mlp, output_dim=feature_dim, hidden_dims=[512], norm_layer=nn.BatchNorm1d, bias=[False, True],
                                                             last_layer_norm=False, last_layer_act=False)
         }
         shortcuts = {'g': 'proj'}
