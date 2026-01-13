@@ -679,7 +679,7 @@ class CELossModule(LossModule):
         if normalize:
             out = F.normalize(out, dim=1)
         self._logits = out
-        self.labels = torch.cat[labels, labels], dim=0)
+        self.labels = torch.cat([labels, labels], dim=0)
         self.weights = weights
 
     def compute_loss_micro(self, normalize=True, **kwargs):
