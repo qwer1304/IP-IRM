@@ -89,7 +89,7 @@ def create_mlp(
     # Helper to ensure we have a list of config dicts
     if isinstance(norm_kwargs, dict) or norm_kwargs is None:
         # Turn single dict into a list of identical dicts
-        norm_params = [norm_kwargs or {} for _ in range(num_layers)]
+        norm_params = [norm_kwargs or {} for _ in range(num_linear_layers)]
     else:
         # User provided a list [{}, {}, {}]
         norm_params = norm_kwargs
