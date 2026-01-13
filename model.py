@@ -108,13 +108,14 @@ def create_mlp(
     layers = []
     for i in range(num_linear_layers):
         is_last = (i == num_linear_layers - 1)
+        in_dim, out_dim = all_dims[i], all_dims[i+1]
         
         # 1. Linear Layer with specific bias
-        layers.append(nn.Linear(all_dims[i], all_dims[i+1], bias=bias_list[i]))
+        layers.append(nn.Linear(in_dim, out_dim, bias=bias_list[i]))
         
         # 2. Normalization
         if norm_layer and (not is_last or last_layer_norm):
-            layers.append(norm_layer(next_dim, **norm_params[i+1]))
+            layers.append(norm_layer(out_dim, **norm_params[i]))
             
         # 3. Activation
         if not is_last or last_layer_act:
