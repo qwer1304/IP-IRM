@@ -313,7 +313,7 @@ def load_checkpoint(path, model, model_momentum, optimizer, gradnorm_balancer, g
     msg_model = model.load_state_dict(checkpoint["state_dict"], strict=False)
     # Don't care about if classifier not present, if not needed
     if classifier_not_needed:
-        msg.unexpected_keys = [k for k in msg.unexpected_keys if not k.startswith('module.arms.classifier')]
+        msg_model.unexpected_keys = [k for k in msg_model.unexpected_keys if not k.startswith('module.arms.classifier')]
 
     # Restore momentum model if applicable
     queue = None
