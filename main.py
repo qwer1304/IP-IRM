@@ -702,16 +702,14 @@ if __name__ == '__main__':
             if args.featurizer_lr > 0:
                 params.append({'params': model.module.f.parameters(), 'lr': args.featurizer_lr})
             if args.projector_lr > 0:
-                params.append({'params': model.module.projector.parameters(), 'lr': args.projector_lr})
+                params.append({'params': model.module.arms['projector'].parameters(), 'lr': args.projector_lr})
             if args.predictor_lr > 0:
-                params.append({'params': model.module.predictor.parameters(), 'lr': args.predictor_lr})
+                params.append({'params': model.module.arms['predictor'].parameters(), 'lr': args.predictor_lr})
         else:
             if args.featurizer_lr > 0:
                 params.append({'params': model.module.f.parameters(), 'lr': args.featurizer_lr})
-                #params_old.append({'params': model_old.module.f.parameters(), 'lr': args.featurizer_lr})
             if args.projector_lr > 0:
-                #params_old.append({'params': model_old.module.g.parameters(), 'lr': args.projector_lr})
-                params.append({'params': model.module.arms['proj'].parameters(), 'lr': args.projector_lr})
+                params.append({'params': model.module.arms['projector'].parameters(), 'lr': args.projector_lr})
         optimizer = optim.Adam(params, weight_decay=args.weight_decay, betas=args.betas)
 
         gradnorm_optimizer = optim.Adam(gradnorm_balancer.parameters(), lr=args.gradnorm_lr, weight_decay=args.gradnorm_weight_decay, betas=args.gradnorm_betas)        
