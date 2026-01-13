@@ -404,8 +404,8 @@ class MoCoSupConLossModule(LossModule):
             else:
                 labels = targets
             return torch.tensor(labels, dtype=torch.long, device=device)
-        y_batch = get_targets(indexs, dataset, pos.device)
-        y_queue = get_targets(idx_queue, dataset, pos.device)
+        y_batch = get_targets(indexs, dataset, pos_q.device)
+        y_queue = get_targets(idx_queue, dataset, pos_q.device)
         y_all = torch.cat([y_batch, y_queue], dim=0) # (N,)
 
         logits = (out_q @ k_all.T) / self.temperature # (B,N)
