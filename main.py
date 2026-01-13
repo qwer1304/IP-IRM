@@ -785,7 +785,7 @@ if __name__ == '__main__':
                 "python_rng_state": random.getstate(),
             },
             'ema':                  ema,
-        }, False, filename='{}/{}/checkpoint_1st.pth.tar'.format(args.save_root, args.name))
+        }, False, filename='{}/{}/checkpoint_multiarm.pth.tar'.format(args.save_root, args.name))
         exit(1)
         
     # training loop
