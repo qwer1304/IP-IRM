@@ -9,6 +9,234 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torchvision.models import resnet50
 
+import torch
+import torch.nn as nn
+
+from typing import Union, List
+
+from functools import partial
+
+class Mask():
+    def __init__(self, map_type, K=None, tau=1.0, soft=False):
+        self.mask_type = mask_type
+        self.K = K
+        self.tau = tau
+        self.soft = soft
+
+    def __call__(self, x):
+        # x: (num_features,) tensor
+        if self.mask_type == 'sigmoid':
+            return torch.sigmoid(x)
+        elif self.mask_type == 'ident':
+            return x
+        elif self.mask_type == 'gumbel':
+            # Sample Gumbel noise
+            u = torch.rand_like(x)
+            g = -torch.log(-torch.log(u + 1e-20) + 1e-20)
+            x_soft = torch.sigmoid((x + g) / self.tau)  # (N,)
+
+            if self.soft:
+                x_ret = x_soft
+            else:
+                # Hard straight-through: forward 0/1, backward gradient through soft
+                x_hard = (x_soft > 0.5).float()
+                x_ret = x_hard + x_soft - x_soft.detach()
+            return x_ret
+        else:
+            raise ValueError(f"Unknown mask type: {self.mask_type}")
+
+class MaskModule(nn.Module):
+    def __init__(self, activation_method, input_dim, trainable=True):
+        super().__init__()
+        # Initialize the mask as a trainable parameter
+        if trainable:
+            self.mask = nn.Parameter(torch.ones(input_dim))
+        else:
+            self.mask = torch.ones(input_dim)
+        self.activation_method = activation_method
+
+    def forward(self, x):
+        # Simply multiply the features by the mask
+        return self.activation_method(x)
+
+
+def create_mlp(
+    input_dim: int,
+    output_dim: int,
+    *, # all pars that follow must be named
+    hidden_dims: List[int] = None,
+    activation_layer: type[nn.Module] = nn.ReLU,
+    norm_layer: type[nn.Module] = None,
+    dropout: float = 0.0,
+    bias: Union[bool, List[bool]] = True,
+    last_layer_norm: bool = False,
+    last_layer_act: bool = False
+) -> nn.Sequential:
+    """
+    Returns an n-hidden layer MLP module.
+    
+    Args:
+        bias: 
+            - True: All layers have bias.
+            - False/None: No layers have bias.
+            - List[bool]: Individual bias setting for each linear layer.
+    """
+    hidden_dims = hidden_dims or []
+    all_dims = [input_dim] + hidden_dims + [output_dim]
+    num_linear_layers = len(all_dims) - 1
+    
+    # Resolve bias into a list of booleans (one per linear layer)
+    if isinstance(bias, list):
+        if len(bias) != num_linear_layers:
+            raise ValueError(f"Bias list length ({len(bias)}) must match "
+                             f"num_layers ({num_linear_layers})")
+        bias_list = bias
+    else:
+        # Broadcast single bool/None to all layers
+        bias_val = bool(bias) if bias is not None else False
+        bias_list = [bias_val] * num_linear_layers
+
+    layers = []
+    for i in range(num_linear_layers):
+        is_last = (i == num_linear_layers - 1)
+        
+        # 1. Linear Layer with specific bias
+        layers.append(nn.Linear(all_dims[i], all_dims[i+1], bias=bias_list[i]))
+        
+        # 2. Normalization
+        if norm_layer and (not is_last or last_layer_norm):
+            layers.append(norm_layer(all_dims[i+1]))
+            
+        # 3. Activation
+        if not is_last or last_layer_act:
+            layers.append(activation_layer())
+            
+        # 4. Dropout
+        if dropout > 0 and not is_last:
+            layers.append(nn.Dropout(dropout))
+            
+    return nn.Sequential(*layers)
+    
+"""
+A multi-arm model is comprised of:
+    - backbone (e.g., Resnet50)
+    - mask layer (optional), stateless; can be learnable or fixed
+    - multiple "arm" layers which correspond to different network processing required for specific losses
+'aliases' ({alias: target} dict) are optional alternative names for the different components s.t. they can be invoked through net.alias(...)
+'blueprints' are partial model creation functions s.t. the caller instantiates all the parameters except for those that come from within
+'out_transforms' are transformations of module's outputs (e.g., normalization)
+'in_transform' is a transformation (e.g., augmentation) applied to the input BEFORE applying the backbone
+the model (e.g., feature dimension) which the callee instantiates
+It is the caller's resposibility to invoke different elements in the correct order and to pass parameters between them appropriately
+"""
+class MultiArmModel(nn.Module):
+    def __init__(self, backbone_name='resnet50', mask_blueprint=None, arms_blueprints={}, in_transform=None, out_transforms=None, 
+                 shortcuts=None, image_class='ImageNet', state_dict=None):
+        super().__init__()
+        self.in_transform = in_transform
+
+        # 1. Internal Backbone logic
+        if backbone_name == 'resnet50':
+            self.f = resnet50(weights=None)
+        else:
+            raise ValueError(f"Unknown backbone name: {backbone_name}")
+
+        # Modify input layers for CIFAR/STL if needed
+        if image_class != 'ImageNet':
+            self.f.conv1 = nn.Conv2d(
+                3, 64, kernel_size=3, stride=1, padding=1, bias=False
+            )
+            self.f.maxpool = nn.Identity()
+
+        # Remove final classification head (fc)
+        self.feature_dim = self.f.fc.in_features
+        self.f.fc = nn.Identity()
+
+        self.f = self._load_backbone(image_class=image_class, state_dict=state_dict)
+        
+        # 2. Mask layer
+        if mask_blueprint:
+            self.mask_fun = mask_blueprint(self.feature_dim)
+        else:
+            self.mask_fun = Mask('ident', self.feature_dim, trainable=False)
+            
+        # 3. Arms
+        self.arms = nn.ModuleDict()
+        self.out_transforms = {}
+        
+        self.add_arms(arms_blueprints=arms_blueprints, out_transforms=out_transforms, shortcuts=shortcuts)
+        
+    def _load_backbone(self, image_class=image_class, state_dict=state_dict):
+        # Load pretrained weights (if provided)
+        if state_dict is not None:
+            # Handle MoCo checkpoints (strip encoder_q prefix)
+            new_state_dict = {}
+            for k, v in state_dict.items():
+                if k.startswith("module.encoder_q."):
+                    k = k[len("module.encoder_q."):]
+                new_state_dict[k] = v
+
+            msg = self.f.load_state_dict(new_state_dict, strict=False)
+
+            # Don't care about fc layer from pretrained
+            print("\tMissing keys (ignoring fc):", [k for k in msg.missing_keys if not k.startswith("fc.")])
+            print("\tUnexpected keys (ignoring fc):", [k for k in msg.unexpected_keys if not k.startswith("fc.")])
+
+        return f
+
+    def add_arms(self, arms_blueprints, out_transforms=None, shortcuts=None):
+        """
+        Takes names and partial() blueprints in a dict, transforms and shortcuts to them.
+        Instantiates the arms using the system's known feature_dim.
+        """
+        common_keys = arms_blueprints.keys() & self.arms.keys()
+        if common_keys:
+            raise ValueError(f"The following arm names overlap: {common_keys}.")
+
+        #  1. Register arms (modules)
+        for name, module in arms_blueprints.items():
+            self.arms[name] = module(input_dim=self.feature_dim)        
+
+        # 2. Register post-processing (e.g., normalization)
+        if out_transforms:
+            self.out_transforms.update(out_transforms)
+
+        # 3. Aliases
+        if shortcuts:
+            for alias, target_name in shortcuts.items():
+                # Check for attribute collisions on 'self'
+                if hasattr(self, alias):
+                    raise AttributeError(f"Cannot create shortcut '{alias}'; attribute already exists.")
+                    
+                if target_name not in arms_blueprints:
+                    raise AttributeError(f"Cannot alias '{alias}' to non-existent arm '{target_name}'")
+
+                # Point the shortcut to a wrapper that calls the main arm() method
+                setattr(self, alias, partial(self.arm, target_name))
+
+    def forward(self, x):
+        raise NotImplementedError
+
+    def backbone(self, x):
+        return self.f(self.in_transform(x)) if self.in_transform else self.f(x)
+        
+    def mask(self, x)
+        return self.mask_fun(x)
+        
+    def arm(self, name, x, **kwargs):
+        """The single entry point for all arm logic."""
+        assert name in self.arms, f"arm {name} not in arm names {self.arms.keys()}"
+        # 1. Apply the module (e.g., MLP)
+        out = self.arms[name](x)
+
+        # 2. Apply transform, if it exists, for this arm name
+        if name in self.out_transforms:
+            out = self.out_transforms[name](out, **kwargs)
+
+        return out
+
+# ================================================
+
 class ModelResnet(nn.Module):
     def __init__(self, feature_dim=128, image_class='ImageNet', state_dict=None, second_fc=None):
         super().__init__()

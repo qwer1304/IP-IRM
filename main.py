@@ -13,7 +13,7 @@ from torch.utils.data import Dataset, DataLoader, random_split, Subset
 from tqdm.auto import tqdm
 
 import utils
-from model import ModelResnet, SimSiam
+from model import ModelResnet, SimSiam, MultiArmModel
 import gradnorm as gn
 import gc
 from math import ceil, prod
@@ -640,6 +640,18 @@ if __name__ == '__main__':
     second_fc = c if args.loss_unsplit_type else None
     if ssl_type == 'moco' or ssl_type == 'mocosupcon':
         model = ModelResnet(feature_dim, image_class=image_class, state_dict=state_dict, second_fc=second_fc).cuda()
+        
+        arms_blueprints = {partial("proj": create_mlp(output_dim=feature_dim, hidden_dims=[512], norm_layer=nn.BatchNorm1d, bias=[False, True],
+                                                last_layer_norm=False, last_layer_act=False)}
+        shortcuts = {'g': 'proj'}
+        
+        if second_fc:
+            arms_blueprints.append({"classifier": partial(create_mlp(output_dim=second_fc, bias=True)})
+            shortcuts.append({'fc': 'classifier'})
+            
+        model_new = MultiArmModel(backbone_name='resnet50', mask_blueprint=None, arms_blueprints=arms_blueprints, in_transform=None, out_transforms=None, 
+                 shortcuts=shortcuts, image_class=image_class, state_dict=state_dict).cuda()
+
     elif ssl_type == 'simsiam':
         model = SimSiam(feature_dim, image_class=image_class, state_dict=state_dict).cuda()
     else:
@@ -648,10 +660,14 @@ if __name__ == '__main__':
         print("<= loaded pretrained checkpoint '{}'".format(args.pretrain_path))
 
     model = nn.DataParallel(model)
+    model_new = nn.DataParallel(model_new)
 
     if ssl_type == 'moco' or ssl_type == 'mocosupcon':
         model_momentum = copy.deepcopy(model)
+        model_momentum_new = copy.deepcopy(model_new)
         for p in model_momentum.parameters():
+            p.requires_grad = False
+        for p in model_momentum_new.parameters():
             p.requires_grad = False
         momentum = args.momentum              # momentum for model_momentum
         queue_size = args.queue_size
@@ -678,6 +694,7 @@ if __name__ == '__main__':
         #FIX ME!!!!!!!!!
         #optimizer          = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay, betas=args.betas)
         params = []
+        params_new = []
         if ssl_type == "simsiam":
             if args.featurizer_lr > 0:
                 params.append({'params': model.module.f.parameters(), 'lr': args.featurizer_lr})
@@ -688,9 +705,12 @@ if __name__ == '__main__':
         else:
             if args.featurizer_lr > 0:
                 params.append({'params': model.module.f.parameters(), 'lr': args.featurizer_lr})
+                params_new.append({'params': model_new.module.f.parameters(), 'lr': args.featurizer_lr})
             if args.projector_lr > 0:
                 params.append({'params': model.module.g.parameters(), 'lr': args.projector_lr})
+                params_new.append({'params': model_new.module.g.parameters(), 'lr': args.projector_lr})
         optimizer = optim.Adam(params, weight_decay=args.weight_decay, betas=args.betas)
+        optimizer_new = optim.Adam(params_new, weight_decay=args.weight_decay, betas=args.betas)
 
         gradnorm_optimizer = optim.Adam(gradnorm_balancer.parameters(), lr=args.gradnorm_lr, weight_decay=args.gradnorm_weight_decay, betas=args.gradnorm_betas)        
     elif args.opt == 'SGD':
@@ -708,7 +728,17 @@ if __name__ == '__main__':
              start_epoch, best_acc1, best_epoch,
              updated_split, updated_split_all, ema_, gradnorm_balancer, gradnorm_optimizer) = \
                 load_checkpoint(args.resume, model, model_momentum, optimizer, gradnorm_balancer, gradnorm_optimizer)
-            
+ 
+            # 1. Copy the Backbone (Assuming it's named 'f' in the old model)
+            model_new.module.f.load_state_dict(model.module.f.state_dict())
+            model_momentum_new.module.f.load_state_dict(model_momentum.module.f.state_dict())
+            # 2. Copy the MLP Arms specifically into the .arms registry
+            model_new.module.arms['proj'].load_state_dict(model.module.g.state_dict())
+            model_momentum_new.module.arms['proj'].load_state_dict(model_momentum.module.g.state_dict())
+            if second_fc:
+                model_new.module.arms['classifier'].load_state_dict(model.module.fc.state_dict())                
+                model_momentum_new.module.arms['classifier'].load_state_dict(model_momentum.module.fc.state_dict())                
+
             # dummy for debug multiple partitions
             # updated_split_all.append(torch.randn((len(update_data), args.env_num), requires_grad=True, device=device))
             if not args.baseline:
@@ -729,12 +759,35 @@ if __name__ == '__main__':
             # use current LR, not the one from checkpoint
             for param_group in optimizer.param_groups:
                 param_group['lr'] = args.lr
+
             for param_group in gradnorm_optimizer.param_groups:
                 param_group['lr'] = args.gradnorm_lr 
             resumed = True
         else:
             print("=> no checkpoint found at '{}'".format(args.resume))
-
+            
+        utils.atomic_save({
+            'epoch':                epoch, # restore is from epoch+1
+            'state_dict':           model_new.state_dict(),
+            'best_acc1':            best_acc1,
+            'best_epoch':           best_epoch,
+            'optimizer':            optimizer_new.state_dict(),
+            'updated_split':        updated_split,
+            'updated_split_all':    updated_split_all,
+            'state_dict_momentum':  model_momentum_new.state_dict() if model_momentum_new else None,
+            'queue':                queue,
+            'state_dict_gradnorm':  gradnorm_balancer.state_dict(),
+            'gradnorm_optimizer':   gradnorm_optimizer.state_dict(),
+            "rng_dict": {
+                "rng_state":        torch.get_rng_state(),
+                "cuda_rng_state":   cuda_rng_state,
+                "numpy_rng_state":  np.random.get_state(),
+                "python_rng_state": random.getstate(),
+            },
+            'ema':                  ema,
+        }, False, filename='{}/{}/checkpoint_1st.pth.tar'.format(args.save_root, args.name))
+        exit(1)
+        
     # training loop
     # start epoch is what the user provided, if provided, or from checkpoint, if exists, or 1 (default)
     start_epoch = args.start_epoch if args.start_epoch else start_epoch
