@@ -152,7 +152,7 @@ class MultiArmModel(nn.Module):
         self.feature_dim = self.f.fc.in_features
         self.f.fc = nn.Identity()
 
-        self.f = self._load_backbone(image_class=image_class, state_dict=state_dict)
+        self.f = self._load_backbone(state_dict)
         
         # 2. Mask layer
         if mask_blueprint:
@@ -166,7 +166,7 @@ class MultiArmModel(nn.Module):
         
         self.add_arms(arms_blueprints=arms_blueprints, out_transforms=out_transforms, shortcuts=shortcuts)
         
-    def _load_backbone(self, image_class=image_class, state_dict=state_dict):
+    def _load_backbone(self, state_dict):
         # Load pretrained weights (if provided)
         if state_dict is not None:
             # Handle MoCo checkpoints (strip encoder_q prefix)
