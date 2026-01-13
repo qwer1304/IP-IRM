@@ -640,37 +640,39 @@ if __name__ == '__main__':
     # model setup and optimizer config
     ssl_type = args.ssl_type.lower()
     second_fc = c if args.loss_unsplit_type else None
-    if ssl_type == 'moco' or ssl_type == 'mocosupcon':
-        #model_old = ModelResnet(feature_dim, image_class=image_class, state_dict=state_dict, second_fc=second_fc).cuda()
+    if ssl_type == 'moco' or ssl_type == 'mocosupcon':       
+        arms_blueprints = {"projector": partial(create_mlp, output_dim=feature_dim, hidden_dims=[512], norm_layer=nn.BatchNorm1d, bias=[False, True],
+                                                            last_layer_norm=False, last_layer_act=False)
+        }
+        shortcuts = {'g': 'projector'}
         
-        arms_blueprints = {"proj": partial(create_mlp, output_dim=feature_dim, hidden_dims=[512], norm_layer=nn.BatchNorm1d, bias=[False, True],
-                                                last_layer_norm=False, last_layer_act=False)}
-        shortcuts = {'g': 'proj'}
-        
-        if second_fc:
-            arms_blueprints.append({"classifier": partial(create_mlp, output_dim=second_fc, bias=True)})
-            shortcuts.append({'fc': 'classifier'})
-            
-        model = MultiArmModel(backbone_name='resnet50', mask_blueprint=None, arms_blueprints=arms_blueprints, in_transform=None, out_transforms=None, 
-                 shortcuts=shortcuts, image_class=image_class, state_dict=state_dict).cuda()
-
     elif ssl_type == 'simsiam':
-        model_old = SimSiam(feature_dim, image_class=image_class, state_dict=state_dict).cuda()
+        arms_blueprints = {"projector": partial(create_mlp, output_dim=feature_dim, hidden_dims=[512], norm_layer=nn.BatchNorm1d, bias=[False, False, False],
+                                                last_layer_norm=True, last_layer_act=False, norm_params=[{"affine": True}, {"affine": True}, {"affine": False}],  
+                           "predictor": partial(create_mlp, output_dim=feature_dim, hidden_dims=[feature_dim/2], norm_layer=nn.BatchNorm1d, bias=[False, True],
+                                                last_layer_norm=False, last_layer_act=False)
+        }
+        shortcuts = {'g': 'projector', 'h': 'predictor'}
+
     else:
         raise NotImplemented
+
+    if second_fc:
+        arms_blueprints.append({"classifier": partial(create_mlp, output_dim=second_fc, bias=True)})
+        shortcuts.append({'fc': 'classifier'})
+
+    model = MultiArmModel(backbone_name='resnet50', mask_blueprint=None, arms_blueprints=arms_blueprints, in_transform=None, out_transforms=None, 
+             shortcuts=shortcuts, image_class=image_class, state_dict=state_dict).cuda()
+
     if state_dict is not None:
         print("<= loaded pretrained checkpoint '{}'".format(args.pretrain_path))
 
     model = nn.DataParallel(model)
-    #model_old = nn.DataParallel(model_old)
 
     if ssl_type == 'moco' or ssl_type == 'mocosupcon':
         model_momentum = copy.deepcopy(model)
-        #model_momentum_old = copy.deepcopy(model_old)
         for p in model_momentum.parameters():
             p.requires_grad = False
-        #for p in model_momentum_old.parameters():
-        #    p.requires_grad = False
         momentum = args.momentum              # momentum for model_momentum
         queue_size = args.queue_size
         queue = utils.FeatureQueue(queue_size, feature_dim, device=device, dtype=torch.float32, indices=True)
@@ -696,7 +698,6 @@ if __name__ == '__main__':
         #FIX ME!!!!!!!!!
         #optimizer          = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay, betas=args.betas)
         params = []
-        #params_old = []
         if ssl_type == "simsiam":
             if args.featurizer_lr > 0:
                 params.append({'params': model.module.f.parameters(), 'lr': args.featurizer_lr})
@@ -712,7 +713,6 @@ if __name__ == '__main__':
                 #params_old.append({'params': model_old.module.g.parameters(), 'lr': args.projector_lr})
                 params.append({'params': model.module.arms['proj'].parameters(), 'lr': args.projector_lr})
         optimizer = optim.Adam(params, weight_decay=args.weight_decay, betas=args.betas)
-        #optimizer_old = optim.Adam(params_old, weight_decay=args.weight_decay, betas=args.betas)
 
         gradnorm_optimizer = optim.Adam(gradnorm_balancer.parameters(), lr=args.gradnorm_lr, weight_decay=args.gradnorm_weight_decay, betas=args.gradnorm_betas)        
     elif args.opt == 'SGD':
@@ -731,17 +731,6 @@ if __name__ == '__main__':
              updated_split, updated_split_all, ema_, gradnorm_balancer, gradnorm_optimizer) = \
                 load_checkpoint(args.resume, model, model_momentum, optimizer, gradnorm_balancer, gradnorm_optimizer)
  
-            """
-            # 1. Copy the Backbone (Assuming it's named 'f' in the old model)
-            model_new.module.f.load_state_dict(model.module.f.state_dict())
-            model_momentum_new.module.f.load_state_dict(model_momentum.module.f.state_dict())
-            # 2. Copy the MLP Arms specifically into the .arms registry
-            model_new.module.arms['proj'].load_state_dict(model.module.g.state_dict())
-            model_momentum_new.module.arms['proj'].load_state_dict(model_momentum.module.g.state_dict())
-            if second_fc:
-                model_new.module.arms['classifier'].load_state_dict(model.module.fc.state_dict())                
-                model_momentum_new.module.arms['classifier'].load_state_dict(model_momentum.module.fc.state_dict())                
-            """
             # dummy for debug multiple partitions
             # updated_split_all.append(torch.randn((len(update_data), args.env_num), requires_grad=True, device=device))
             if not args.baseline:

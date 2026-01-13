@@ -67,6 +67,7 @@ def create_mlp(
     hidden_dims: List[int] = None,
     activation_layer: type[nn.Module] = nn.ReLU,
     norm_layer: type[nn.Module] = None,
+    norm_kwargs = Union[None, dict, List[dict]] = None, 
     dropout: float = 0.0,
     bias: Union[bool, List[bool]] = True,
     last_layer_norm: bool = False,
@@ -84,6 +85,14 @@ def create_mlp(
     hidden_dims = hidden_dims or []
     all_dims = [input_dim] + hidden_dims + [output_dim]
     num_linear_layers = len(all_dims) - 1
+    
+    # Helper to ensure we have a list of config dicts
+    if isinstance(norm_kwargs, dict) or norm_kwargs is None:
+        # Turn single dict into a list of identical dicts
+        norm_params = [norm_kwargs or {} for _ in range(num_layers)]
+    else:
+        # User provided a list [{}, {}, {}]
+        norm_params = norm_kwargs
     
     # Resolve bias into a list of booleans (one per linear layer)
     if isinstance(bias, list):
@@ -105,7 +114,7 @@ def create_mlp(
         
         # 2. Normalization
         if norm_layer and (not is_last or last_layer_norm):
-            layers.append(norm_layer(all_dims[i+1]))
+            layers.append(norm_layer(next_dim, **norm_params[i+1]))
             
         # 3. Activation
         if not is_last or last_layer_act:
