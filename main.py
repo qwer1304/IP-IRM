@@ -710,7 +710,7 @@ if __name__ == '__main__':
                 params_new.append({'params': model_new.module.f.parameters(), 'lr': args.featurizer_lr})
             if args.projector_lr > 0:
                 params.append({'params': model.module.g.parameters(), 'lr': args.projector_lr})
-                params_new.append({'params': model_new.module.g.parameters(), 'lr': args.projector_lr})
+                params_new.append({'params': model_new.module.arms['proj'].parameters(), 'lr': args.projector_lr})
         optimizer = optim.Adam(params, weight_decay=args.weight_decay, betas=args.betas)
         optimizer_new = optim.Adam(params_new, weight_decay=args.weight_decay, betas=args.betas)
 
