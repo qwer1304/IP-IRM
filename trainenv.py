@@ -247,7 +247,7 @@ class LossModule:
     def pre_batch(self, batch_data, *args, **kwargs):
         pass
 
-    def pre_micro_batch(self, batch_data, **kwargs):
+    def pre_micro_batch(self, features_1, features_2, **kwargs):
         pass
 
     def compute_loss_micro(self, batch_data):
@@ -322,7 +322,7 @@ class MoCoSupConLossModule(LossModule):
                 # assign_idxs returns a tensor of indices into 'indexs' in 'env' in 'p'
                 self.neg_idxs[pidx].append(utils.assign_idxs(indexs, p, env)) # append the tensor of indices to envs list
 
-    def pre_micro_batch(self, pos, transform, indexs=None, normalize=True, dataset=None, **kwargs):
+    def pre_micro_batch(self, pos_q, pos_k, indexs=None, normalize=True, dataset=None, **kwargs):
         # 'indexs' are samples indices in the dataset
         """
         Calculating SupCon w/ LogSumExp:
@@ -383,15 +383,14 @@ class MoCoSupConLossModule(LossModule):
             to the hardest cross-domain positives - exactly what TerraInc needs to break domain clustering.
         """
         assert indexs is not None, 'indexs cannot be None'
-        assert len(pos) == len(indexs), f"len(pos) {len(pos)} != len(indexs) {len(indexs)}"
-        pos_q = transform(pos)
-        pos_k = transform(pos)
+        assert len(pos_q) == len(indexs), f"len(pos_q) {len(pos_q)} != len(indexs) {len(indexs)}"
+        assert len(pos_q) == len(pos_k), f"len(pos_q) {len(pos_q)} != len(pos_k) {len(pos_k)}"
 
-        _, out_q = self.net(pos_q)
+        out_q = self.net.g(pos_q)
         if normalize:
             out_q = F.normalize(out_q, dim=1)
         with torch.no_grad():
-            _, out_k = self.net_momentum(pos_k)
+            out_k = self.net_momentum.g(pos_k)
             if normalize:
                 out_k = F.normalize(out_k, dim=1)
         
@@ -536,17 +535,16 @@ class MoCoLossModule(LossModule):
                 # assign_idxs returns a tensor of indices into 'indexs' in 'env' in 'p'
                 self.neg_idxs[pidx].append(utils.assign_idxs(indexs, p, env)) # append the tensor of indices to envs list
 
-    def pre_micro_batch(self, pos, transform, indexs=None, normalize=True, **kwargs):
+    def pre_micro_batch(self, pos_q, pos_k, indexs=None, normalize=True, **kwargs):
         assert indexs is not None, 'indexs cannot be None'
-        assert len(pos) == len(indexs), f"len(pos) {len(pos)} != len(indexs) {len(indexs)}"
-        pos_q = transform(pos)
-        pos_k = transform(pos)
+        assert len(pos_q) == len(indexs), f"len(pos_q) {len(pos_q)} != len(indexs) {len(indexs)}"
+        assert len(pos_q) == len(pos_k), f"len(pos_q) {len(pos_q)} != len(pos_k) {len(pos_k)}"
 
-        _, out_q = self.net(pos_q)
+        out_q = self.net.g(pos_q)
         if normalize:
             out_q = F.normalize(out_q, dim=1)
         with torch.no_grad():
-            _, out_k = self.net_momentum(pos_k)
+            out_k = self.net_momentum.g(pos_k)
             if normalize:
                 out_k = F.normalize(out_k, dim=1)
         
@@ -632,14 +630,12 @@ class SimSiamLossModule(LossModule):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    def pre_micro_batch(self, pos, transform, normalize=True, **kwargs):
-        x1 = transform(pos)
-        x2 = transform(pos)
-
-        _, z1 = self.net(x1, normalize=False)
-        _, z2 = self.net(x2, normalize=False)
-        p1 = self.net.module.predictor(z1, normalize=False)
-        p2 = self.net.module.predictor(z2, normalize=False)
+    def pre_micro_batch(self, x1, x2, **kwargs):
+        # Unnormalized!
+        z1 = self.net.g(x1)
+        z2 = self.net.g(x2)
+        p1 = self.net.h(z1)
+        p2 = self.net.h(z2)
         self._representations = (z1, z2, p1, p2)
 
     def compute_loss_micro(self, idxs=None, scale=1.0, reduction='sum', normalize=True):
@@ -677,11 +673,8 @@ class CELossModule(LossModule):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    def pre_micro_batch(self, pos, transform, normalize=True, labels=None, weights=None, **kwargs):
-        x = transform(pos)
-
-        features, _ = self.net(x)
-        out = self.net.module.second_fc(features)
+    def pre_micro_batch(self, x, normalize=True, labels=None, weights=None, **kwargs):
+        out = self.net.fc(x)
         if normalize:
             out = F.normalize(out, dim=1)
         self._logits = out
@@ -1269,14 +1262,15 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                     MoCo:    generate two views, get their embeddings from respective encoders, normalize them, etc
                     SimSiam: generate two views, get their projections and predictions, etc
                 """
+                features_1, features_2 = net.f(transform(batch_micro)), net.f(transform(batch_micro))
                 if do_unsplit_loss and loss_unsplit_module is not None:
-                    loss_unsplit_module.pre_micro_batch(batch_micro, transform=transform, indexs=indexs, labels=labels, normalize=False, 
+                    loss_unsplit_module.pre_micro_batch(features_1, features_2, indexs=indexs, labels=labels, normalize=False,
                         dataset=train_loader.dataset, weights=weights)
                     losses_samples_all = loss_unsplit_module.compute_loss_micro(reduction='sum')
                     # Must be first to be in 1st column 
                     differentiate_this.append(losses_samples_all)
 
-                loss_module.pre_micro_batch(batch_micro, transform=transform, indexs=indexs, normalize=(loss_type != 'supcon'), dataset=train_loader.dataset)
+                loss_module.pre_micro_batch(features_1, features_2, indexs=indexs, normalize=(loss_type != 'supcon'), dataset=train_loader.dataset)
                 
                 # Even if 'do_loss'==False, when SAME loss is used for BOTH loss_cont and loss_unsplit, 'reduction' reflects the correct reduction
                 if (do_unsplit_loss and loss_unsplit_module is None) or (do_loss and not is_per_env):
