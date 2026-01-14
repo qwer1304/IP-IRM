@@ -153,10 +153,8 @@ class NetResnet(nn.Module):
                 continue
             if k.startswith("module.encoder_q."):
                 k = k[len("module.encoder_q."):]
-            if k.startswith("module.f."):
-                print("starts with module.f", k)
+            if k.startswith("module.f."): # drop f.<layer> prefix in backbone
                 k = k[len("module.f."):]
-                print("after trim", k)
             if k.startswith("module."):
                 k = k[len("module."):]
             new_state_dict[k] = v
