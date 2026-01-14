@@ -246,7 +246,7 @@ class MultiArmModel(nn.Module):
 # ================================================
 
 class ModelResnet(nn.Module):
-    def __init__(self, feature_dim=128, image_class='ImageNet', state_dict=None, second_fc=None):
+    def __init__(self, feature_dim=128, image_class='ImageNet', state_dict=None):
         super().__init__()
 
         # Backbone
@@ -271,9 +271,6 @@ class ModelResnet(nn.Module):
             nn.Linear(512, feature_dim, bias=True),
         )
         
-        if second_fc:
-            self.second_fc = nn.Linear(dim_mlp, second_fc, bias=True)
-            
         # Load pretrained weights (if provided)
         if state_dict is not None:
             # Handle MoCo checkpoints (strip encoder_q prefix)
@@ -401,7 +398,7 @@ class prediction_MLP(nn.Module):
         return x 
 
 class SimSiam(nn.Module):
-    def __init__(self, feature_dim=128, image_class='ImageNet', state_dict=None, second_fc=None):
+    def __init__(self, feature_dim=128, image_class='ImageNet', state_dict=None):
         super().__init__()
 
         # Backbone
@@ -445,10 +442,7 @@ class SimSiam(nn.Module):
         self.projector = projection_MLP(dim_mlp, hidden_dim=512, out_dim=feature_dim)
 
         self.predictor = prediction_MLP(in_dim=feature_dim, hidden_dim=int(feature_dim/2), out_dim=feature_dim)
-
-        if second_fc:
-            self.second_fc = nn.Linear(dim_mlp, second_fc, bias=True)
-    
+   
     def forward(self, x, normalize=True):
         x = self.f(x)
         feature = torch.flatten(x, start_dim=1)
