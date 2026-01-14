@@ -149,10 +149,14 @@ class NetResnet(nn.Module):
         for k, v in state_dict.items():
             if k.startswith("module.g."): # drop projector if loading from IP-IRM
                 continue
+            if k.startswith("module.arms."): # drop arms from IP-IRM
+                continue
             if k.startswith("module.encoder_q."):
                 k = k[len("module.encoder_q."):]
             if k.startswith("module.f."):
+                print("starts with module.f", k)
                 k = k[len("module.f."):]
+                print("after trim", k)
             if k.startswith("module."):
                 k = k[len("module."):]
             new_state_dict[k] = v
