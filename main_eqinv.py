@@ -78,9 +78,9 @@ def test(net, test_data_loader, args, num_classes, progress=False, prefix="Test:
             if args.extract_features and target_transform is not None:
                 target = target_transform(target_raw).cuda(non_blocking=True)
 
-            features = net.backbone(data)
-            masked_features = net.mask(features)
-            out = net.fc(masked_features)
+            features = net.module.backbone(data)
+            masked_features = net.module.mask(features)
+            out = net.module.fc(masked_features)
 
             total_num += data.size(0)
 
