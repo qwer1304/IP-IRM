@@ -281,6 +281,7 @@ if __name__ == '__main__':
     parser.add_argument('--penalty_sigma', default=None, type=float, help='Noise level to inject into penalty')        
     parser.add_argument('--grad_rotate', default=None, type=float, nargs=2, help='rotate gradients')      
     parser.add_argument('--loss_unsplit_type', required=True, type=str, choices=['CE', 'CEweighted'], help='Loss unsplit type')    
+    parser.add_argument('--irm_temp', default=0.5, type=float, help='irm loss temperature')
 
     parser.add_argument('--feature_dim', default=128, type=int, help='Feature dim for latent vector')
     parser.add_argument('--temperature', default=0.5, type=float, help='Temperature in SSL softmax')
