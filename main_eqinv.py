@@ -753,8 +753,8 @@ if __name__ == '__main__':
         # 'env_ref_set' is a dictionary w/ key equal to class index and value a tuple w/ size equal to the number of envs each one a tensor of samples' indices  
         def convert_env_ref_set_2_partitions(env_ref_set):
             partitions = []
-            for class_envs in env_ref_set.values():
-                assert all([len(env) == len(class_envs[0]) for env in class_envs]), "all envs in a class must be the same length" 
+            for cid, class_envs in env_ref_set.items():
+                assert all([len(env) == len(class_envs[0]) for env in class_envs]), f"class {i} envs aren't the same length; lengths {[len(env) for env in class_envs]}" 
                 partitions.append(torch.cat(class_envs, dim=-1))
             return partitions
                 
