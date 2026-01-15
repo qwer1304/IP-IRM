@@ -744,15 +744,15 @@ if __name__ == '__main__':
 
     # 'partitions' should be a list of splits, each one a tensor w/ dim=1 equal to the number of environment and dim=0 equal to the number of samples
     # 'env_ref_set' is a dictionary w/ key equal to class index and value a tuple w/ size equal to the number of envs each one a tensor of samples' indices  
-    def convert_env_ref_set_2_partitions(env_ref_set):
+    def convert_env_ref_set_2_partitions(env_ref_set, device):
         partitions = []
         for cid, class_envs in env_ref_set.items():
             num_samples = [len(e) for e in class_envs]
             min_size = min(num_samples)
-            partitions.append(torch.stack([e[:min_size] for e in class_envs], dim=-1))
+            partitions.append(torch.stack([e[:min_size] for e in class_envs], dim=-1).to(device))
         return partitions
 
-    partitions = convert_env_ref_set_2_partitions(env_ref_set).to(device)
+    partitions = convert_env_ref_set_2_partitions(env_ref_set, device)
 
     train_loader = None
 
