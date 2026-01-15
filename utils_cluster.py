@@ -4,7 +4,8 @@ from torch.utils import data
 from tqdm import tqdm
 from torch import nn, optim, autograd
 
-def cal_cosine_distance(net, memory_data_loader, c, temperature, transform=None, anchor_class=None, class_debias_logits=False, mask=None, K=2, return_dist=False):
+def cal_cosine_distance(net, memory_data_loader, c, temperature, transform=None, anchor_class=None, class_debias_logits=False, mask=None, K=2, 
+                            return_dist=False):
     net.eval()
     total_top1, total_top5, total_num, feature_bank, target_bank, idx_bank = 0.0, 0.0, 0, [], [], []
     target_transform = memory_data_loader.dataset.target_transform
@@ -34,10 +35,11 @@ def cal_cosine_distance(net, memory_data_loader, c, temperature, transform=None,
 
     env_set = {}
     env_set_dist = {}
+    partitions = [] # list of partitions. each partition is a tensor (N,K) of weights. Biggest weight indicates the env a sample is assigned to.
     for anchor_class_ in anchor_class_set:
         print('cosine distance to anchor class {}'.format(anchor_class_)) #, end='')
-        anchor_mask = feature_labels_digit == anchor_class_
-        candidate_mask = ~anchor_mask
+        anchor_mask = feature_labels_digit == anchor_class_ # mask of samples w/ anchor label
+        candidate_mask = ~anchor_mask # 'other' samples
 
         # (D,Na)
         anchor_feature, anchor_idx = feature_bank[:, anchor_mask], idx_bank[anchor_mask]
@@ -87,13 +89,20 @@ def cal_cosine_distance(net, memory_data_loader, c, temperature, transform=None,
         is not divisible by chunks, all returned chunks will be the same size, except the last one. 
         If such division is not possible, this function may return fewer than the specified number of chunks.
         """
-        env_set[anchor_class_] = torch.chunk(candidate_idx_sort, K) # tuple of K environments, each one a tensor
-        env_set_dist[anchor_class_] = sim_all
+        env_set[anchor_class_] = torch.chunk(candidate_idx_sort, K) # tuple of K environments, each one a tensor of "other" samples indices
+        env_set_dist[anchor_class_] = sim_all # similarity distances
+        weights = torch.zeros((len(idx_bank), K) dtype=torch.float)
+        for eidx, env in enumerate(env_set[anchor_class_]): # for each environment in a partition
+            num_others = sum([len(e) for e in env]) # number of all "other" samples after split
+            idcs = torch.cat([env, anchor_idx], dim=0).sort() # ascending
+            weights[eidx, idcs] = 1.
+        partitions.append(weights)
+    #end for anchor_class_ in anchor_class_set:
 
     if return_dist:
-        return env_set, env_set_dist
+        return env_set, partitions, env_set_dist
     else:
-        return env_set
+        return env_set, partitions
 
 class SampleFeature(data.Dataset):
     def __init__(self, feature_bank):

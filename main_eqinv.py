@@ -718,17 +718,17 @@ if __name__ == '__main__':
         else:
             print('No cluster file, creating... ')
         if args.cluster_save_dist: # save cluster distances
-            env_ref_set, dist = utils_cluster.cal_cosine_distance(model, memory_loader, args.class_num, temperature=args.cluster_temp, 
+            env_ref_set, partitions, dist = utils_cluster.cal_cosine_distance(model, memory_loader, args.class_num, temperature=args.cluster_temp, 
                 anchor_class=None, class_debias_logits=True, return_dist=True, K=args.num_clusters)
             os.makedirs(os.path.dirname(fp_dist), exist_ok=True)
             # dist is a dictionary with anchor classes as keys of similarity scores
             torch.save(dist, fp_dist)
             print(f"Cluster distances saved in {fp_dist}")
         else:
-            env_ref_set = utils_cluster.cal_cosine_distance(model, memory_loader, args.class_num, temperature=args.cluster_temp, 
+            env_ref_set, partitions = utils_cluster.cal_cosine_distance(model, memory_loader, args.class_num, temperature=args.cluster_temp, 
                 anchor_class=None, class_debias_logits=True, K=args.num_clusters)
         os.makedirs(os.path.dirname(fp), exist_ok=True)
-        torch.save(env_ref_set, fp)
+        torch.save(partitions, fp)
         print(f'cluster {fp} ready!') 
         if args.only_cluster:
             exit(1)
@@ -736,23 +736,14 @@ if __name__ == '__main__':
         memory_loader = shutdown_loader(memory_loader)
         gc.collect()              # run Python's garbage collector
     else:
-        env_ref_set = torch.load(fp)
+        partitions = torch.load(fp)
         print(f'Cluster {fp} loaded.')
         assert len(env_ref_set[0]) == args.num_clusters, "Num clusters in cluster file {} != num_clusters {}".format(len(env_ref_set[0]), args.num_clusters)
         assert args.clusters_to_use is None or \
             max(args.clusters_to_use) <= args.num_clusters-1, "Largest cluster to use {} must be < {}".format(max(args.clusters_to_use), args.num_clusters)
 
-    # 'partitions' should be a list of splits, each one a tensor w/ dim=1 equal to the number of environment and dim=0 equal to the number of samples
-    # 'env_ref_set' is a dictionary w/ key equal to class index and value a tuple w/ size equal to the number of envs each one a tensor of samples' indices  
-    def convert_env_ref_set_2_partitions(env_ref_set, device):
-        partitions = []
-        for cid, class_envs in env_ref_set.items():
-            num_samples = [len(e) for e in class_envs]
-            min_size = min(num_samples)
-            partitions.append(torch.stack([e[:min_size] for e in class_envs], dim=-1).to(device))
-        return partitions
-
-    partitions = convert_env_ref_set_2_partitions(env_ref_set, device)
+    # 'partitions' should be a list of splits, each one the size of the whole dataset w/ dim=1 equal to the number of environments.
+    # each entry is a weight of sample's membership "strength" in an environment
 
     train_loader = None
 
