@@ -741,6 +741,7 @@ if __name__ == '__main__':
         assert len(env_ref_set[0]) == args.num_clusters, "Num clusters in cluster file {} != num_clusters {}".format(len(env_ref_set[0]), args.num_clusters)
         assert args.clusters_to_use is None or \
             max(args.clusters_to_use) <= args.num_clusters-1, "Largest cluster to use {} must be < {}".format(max(args.clusters_to_use), args.num_clusters)
+    partitions = [p.to(device) for p in partitions]
 
     # 'partitions' should be a list of splits, each one the size of the whole dataset w/ dim=1 equal to the number of environments.
     # each entry is a weight of sample's membership "strength" in an environment
