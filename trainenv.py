@@ -1448,7 +1448,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                                 is_grads_batched=False 
                             )
 
-                            print(current_loss.size(), current_weight.size(), current_loss_expanded.size(), current_grads.size())
+                            print(current_loss.size(), current_weight.size(), current_loss_expanded.size(), len(current_grads))
                             for j, g in enumerate(current_grads):
                                 if g is not None:
                                     if grads_all[j] is None:
