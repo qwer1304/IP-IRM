@@ -1437,6 +1437,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                             # This satisfies the requirement that outputs and grad_outputs match.
                             # Mathematically, this is identical to what your batched code did.
                             current_loss_expanded = current_loss.expand_as(current_weight)
+                            print(current_loss.size(), current_weight.size(), current_loss_expanded.size())
 
                             current_grads = torch.autograd.grad(
                                 outputs=current_loss_expanded,
@@ -1447,6 +1448,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                                 is_grads_batched=False 
                             )
 
+                            print(current_loss.size(), current_weight.size(), current_loss_expanded.size(), current_grads.size())
                             for j, g in enumerate(current_grads):
                                 if g is not None:
                                     if grads_all[j] is None:
@@ -1455,6 +1457,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                                         grads_all[j].add_(g)
 
                         grads_all = tuple(grads_all)
+                        print(len(grads_all))
+                        exit(1)
                     return grads_all    
                 
                 grads_all = calc_grads(differentiate_this, grad_outputs, net, looped=True)
