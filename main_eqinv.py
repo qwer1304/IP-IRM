@@ -748,7 +748,7 @@ if __name__ == '__main__':
             train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, shuffle=True, 
                                 pin_memory=True, persistent_workers=tr_pw, drop_last=tr_dl)
 
-        partitions = env_ref_set
+        partitions = [list(v) for v in env_ref_set.values()]
         train_loss = train_env(model, train_loader, optimizer, partitions, tr_bs, epoch, args, **kwargs)
 
         # eval model every test_freq/val_freq and last epochs
