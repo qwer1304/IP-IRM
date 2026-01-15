@@ -1468,6 +1468,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                     return grads_all    
                 
                 grads_all = calc_grads(differentiate_this, grad_outputs, net, looped=True)
+                print()
+                print(f"done calc_grads, i={i}, j={j}")
 
                 # 1. Pre-calculate bounds and offsets
                 num_tasks      = (num_grads - num_baseline_repeates) // max(1, num_split_repeates)
