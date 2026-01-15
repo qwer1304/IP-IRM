@@ -13,7 +13,7 @@ def cal_cosine_distance(net, memory_data_loader, c, temperature, transform=None,
         # generate feature bank
         for images, target, images_idx in tqdm(memory_data_loader, desc='Feature extracting'):
             images = images.cuda(non_blocking=True)
-            images = transform(images) if images is not None else images
+            images = transform(images) if transform is not None else images
             feature = net.backbone(images)
             feature = net.mask(feature)
             feature_bank.append(F.normalize(feature, dim=-1))
