@@ -325,6 +325,7 @@ if __name__ == '__main__':
     parser.add_argument('--penalty_cont', default=1.0, type=float, help='cont loss weight')
     parser.add_argument('--unsplit_cont', action="store_true", default=False, help='unsplit original contrastive?')
     parser.add_argument('--penalty_unsplit_cont', default=1.0, type=float, help='unsplit loss weight')
+    parser.add_argument('--retain_group', action="store_true", default=False, help='dummy')
     parser.add_argument('--Lscaler', default=1.0, type=float, help='Global scaler for losses gards')
     parser.add_argument('--penalty_iters', default=0, type=int, help='penalty weight start iteration')
     parser.add_argument('--increasing_weight', nargs=5, type=float, default=None, help='increasing penalty weight', 
