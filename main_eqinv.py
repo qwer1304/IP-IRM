@@ -573,7 +573,7 @@ if __name__ == '__main__':
             params.append({'params': model.module.arms['classifier'].parameters(), 'lr': args.lr})
         else:
             params.append({'params': model.module.f.parameters(), 'lr': args.featurizer_lr if args.featurizer_lr > 0 else args.lr})
-            params.append({'params': model.module.arms['projector'].parameters(), 'lr': args.projector_lr if args.projector_lr > 0 else args.lr})
+            params.append({'params': model.module.arms['projection'].parameters(), 'lr': args.projector_lr if args.projector_lr > 0 else args.lr})
             params.append({'params': model.module.arms['classifier'].parameters(), 'lr': args.lr})
 
     if args.opt == "Adam":
