@@ -730,7 +730,8 @@ if __name__ == '__main__':
         torch.save(env_ref_set, fp)
         print(f'cluster {fp} ready!') 
         if args.only_cluster:
-            return
+            exit(1)
+        
         memory_loader = shutdown_loader(memory_loader)
         gc.collect()              # run Python's garbage collector
     else:
