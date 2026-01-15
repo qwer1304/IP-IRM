@@ -1423,37 +1423,46 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                             is_grads_batched=True
                         )
                     else:
-                        grads_all = [None] * len(list(net.parameters()))
+                        # 1. Store gradients in a nested list: [num_items, num_parameters]
+                        grads_list = [] 
+
                         num_items = differentiate_this.shape[0]
 
                         for i in range(num_items):
                             is_last = (i == num_items - 1)
 
-                            # 1. Standard indexing
-                            current_loss = differentiate_this[i]    # Shape: []
-                            current_weight = grad_outputs[i]        # Shape: [X]
+                            current_loss = differentiate_this[i]
+                            current_weight = grad_outputs[i]
 
-                            # 2. THE FIX: Expand scalar loss to match weight vector shape
-                            # This satisfies the requirement that outputs and grad_outputs match.
-                            # Mathematically, this is identical to what your batched code did.
+                            # Expand scalar to match the [41] vector weight
                             current_loss_expanded = current_loss.expand_as(current_weight)
-                            print(current_loss.size(), current_weight.size(), current_loss_expanded.size())
 
+                            # current_grads will be a tuple of [num_parameters]
                             current_grads = torch.autograd.grad(
                                 outputs=current_loss_expanded,
                                 inputs=tuple(net.parameters()),
                                 grad_outputs=current_weight,
                                 retain_graph=not is_last,
                                 allow_unused=True,
-                                is_grads_batched=False 
+                                is_grads_batched=False
                             )
 
-                            for j, g in enumerate(current_grads):
-                                if g is not None:
-                                    if grads_all[j] is None:
-                                        grads_all[j] = g.clone()
-                                    else:
-                                        grads_all[j].add_(g)
+                            grads_list.append(current_grads)
+
+                        # 2. Reconstruct 'grads_all' to have the per-sample dimension
+                        # We transpose the list and stack each parameter's gradients along Dim 0
+                        grads_all = []
+                        num_params = len(grads_list[0])
+
+                        for j in range(num_params):
+                            # Gather the j-th parameter gradient from every sample
+                            param_samples = [g[j] for g in grads_list]
+
+                            if param_samples[0] is None:
+                                grads_all.append(None)
+                            else:
+                                # stack() creates the [num_items, ...] shape subsequent code expects
+                                grads_all.append(torch.stack(param_samples, dim=0))
 
                         grads_all = tuple(grads_all)
                     return grads_all    
