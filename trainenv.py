@@ -1271,6 +1271,12 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                     # Must be first to be in 1st column 
                     differentiate_this.append(losses_samples_all)
 
+                if loss_unsplit_module is None:
+                    if args.backbone_propagate:
+                        features_1, features_2 = net.module.mask(features_1), net.module.mask(features_2) 
+                    else:
+                        features_1, features_2 = net.module.mask(features_1.detach()), net.module.mask(features_2.detach()) 
+
                 loss_module.pre_micro_batch(features_1, features_2, indexs=indexs, normalize=(loss_type != 'supcon'), dataset=train_loader.dataset)
                 
                 # Even if 'do_loss'==False, when SAME loss is used for BOTH loss_cont and loss_unsplit, 'reduction' reflects the correct reduction
