@@ -1423,23 +1423,17 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                             is_grads_batched=True
                         )
                     else:
-                        # --- Drop-in Loop Replacement ---
-                        # differentiate_this is a tensor of shape [2B]
-                        # grad_outputs is likely [2B, X] or [2B]
-
                         grads_all = [None] * len(list(net.parameters()))
                         num_items = differentiate_this.shape[0]
 
                         for i in range(num_items):
                             is_last = (i == num_items - 1)
 
-                            # We use [i:i+1] to keep the 'batch' dimension of 1
-                            # This allows is_grads_batched=True to work exactly like before
-                            current_loss = differentiate_this[i:i+1] 
-                            current_weight = grad_outputs[i:i+1]
-                            
-                            print(current_loss.size(), current_weight.size())
-                            exit(1)
+                            # Use [i] to get scalar loss and vector weights
+                            # loss shape: []
+                            # weight shape: [41]
+                            current_loss = differentiate_this[i]
+                            current_weight = grad_outputs[i]
 
                             current_grads = torch.autograd.grad(
                                 outputs=current_loss,
@@ -1447,7 +1441,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                                 grad_outputs=current_weight,
                                 retain_graph=not is_last,
                                 allow_unused=True,
-                                is_grads_batched=True # Now the shapes [1] and [1, X] will match
+                                is_grads_batched=False # Standard autograd handles broadcasting better here
                             )
 
                             for j, g in enumerate(current_grads):
