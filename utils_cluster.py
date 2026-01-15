@@ -93,9 +93,8 @@ def cal_cosine_distance(net, memory_data_loader, c, temperature, transform=None,
         env_set_dist[anchor_class_] = sim_all # similarity distances
         weights = torch.zeros((len(idx_bank), K), dtype=torch.float)
         for eidx, env in enumerate(env_set[anchor_class_]): # for each environment in a partition
-            num_others = sum([len(e) for e in env]) # number of all "other" samples after split
             idcs = torch.cat([env, anchor_idx], dim=0).sort() # ascending
-            weights[eidx, idcs] = 1.
+            weights[idcs, eidx] = 1.
         partitions.append(weights)
     #end for anchor_class_ in anchor_class_set:
 
