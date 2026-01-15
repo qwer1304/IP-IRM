@@ -1264,6 +1264,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                     SimSiam: generate two views, get their projections and predictions, etc
                 """
                 features_1, features_2 = net.module.f(transform(batch_micro)), net.module.f(transform(batch_micro))
+                del batch_micro
+                torch.cuda.empty_cache()
+                
                 if do_unsplit_loss and loss_unsplit_module is not None:
                     loss_unsplit_module.pre_micro_batch(features_1, features_2, indexs=indexs, labels=labels, normalize=False,
                         dataset=train_loader.dataset, weights=weights)
@@ -1509,7 +1512,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                     loss_unsplit_module.prepare_for_free()
                 
                 # free memory of micro-batch
-                del batch_micro, indexs, g_flat, g, grads_all, differentiate_this
+                del features_1, features_2, indexs, g_flat, g, grads_all, differentiate_this
                 if do_loss or do_unsplit_loss:
                     del loss
                 if do_unsplit_loss:
