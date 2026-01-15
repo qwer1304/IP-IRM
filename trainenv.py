@@ -1282,8 +1282,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 # Even if 'do_loss'==False, when SAME loss is used for BOTH loss_cont and loss_unsplit, 'reduction' reflects the correct reduction
                 if (do_unsplit_loss and loss_unsplit_module is None) or (do_loss and not is_per_env):
                     # compute unnormalized WHOLE micro-batch loss, no split into envs
-                    losses_samples_all = loss_module.compute_loss_micro(reduction=reduction)
-                    differentiate_this.append(losses_samples_all)
+                    losses_samples = loss_module.compute_loss_micro(reduction=reduction)
+                    differentiate_this.append(losses_samples)
 
                 if do_penalty and not is_per_env:
                     penalties_samples = penalty_calculator.penalty(losses_samples, reduction=reduction)
@@ -1404,12 +1404,12 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 # 'grads_all' is a tuple w/ an entry per parameter.
                 # each entry is a tensor w/ 1st dim = 'grad_outputs.size(0)' and other dims matching the parameter
 
-                #"""
+                """
                 print()
                 print(f"num_samples {num_samples}, num_split_repeates {num_split_repeates}, num_baseline_repeates {num_baseline_repeates}, " +                                  
                       f"num_repeats {num_repeats}, num_grads {num_grads}, number_of_columns {number_of_columns}, " + 
                       f"grad_outputs {grad_outputs.size()}, differentiate_this {differentiate_this.size()}")
-                #"""
+                """
 
                 # autograd sums all gradients in each row for each parameter
                 def calc_grads(differentiate_this, grad_outputs, net, looped=False):
@@ -1432,9 +1432,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                             is_last = (i == num_items - 1)
 
                             current_loss = differentiate_this[i]
-                            current_weight = grad_outputs[i]
+                            current_weight = grad_outputs[i][i]
 
-                            # Expand scalar to match the [41] vector weight
+                            # Expand scalar to match the [X] vector weight
                             current_loss_expanded = current_loss.expand_as(current_weight)
 
                             # current_grads will be a tuple of [num_parameters]
