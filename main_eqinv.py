@@ -749,7 +749,16 @@ if __name__ == '__main__':
             train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, shuffle=True, 
                                 pin_memory=True, persistent_workers=tr_pw, drop_last=tr_dl)
 
-        partitions = [list(v) for v in env_ref_set.values()]
+        # 'partitions' should be a list of splits, each one a tensor w/ dim=1 equal to the number of environment and dim=0 equal to the number of samples
+        # 'env_ref_set' is a dictionary w/ key equal to class index and value a tuple w/ size equal to the number of envs each one a tensor of samples' indices  
+        def convert_env_ref_set_2_partitions(env_ref_set):
+            partitions = []
+            for class_envs in env_ref_set.values():
+                assert all([len(env) == len(class_envs[0]) for env in class_envs]), "all envs in a class must be the same length" 
+                partitions.append(torch.cat(class_envs, dim=-1))
+            return partitions
+                
+        partitions = convert_env_ref_set_2_partitions(env_ref_set)
         train_loss = train_env(model, train_loader, optimizer, partitions, tr_bs, epoch, args, **kwargs)
 
         # eval model every test_freq/val_freq and last epochs

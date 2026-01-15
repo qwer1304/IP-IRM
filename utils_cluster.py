@@ -87,7 +87,7 @@ def cal_cosine_distance(net, memory_data_loader, c, temperature, transform=None,
         is not divisible by chunks, all returned chunks will be the same size, except the last one. 
         If such division is not possible, this function may return fewer than the specified number of chunks.
         """
-        env_set[anchor_class_] = torch.chunk(candidate_idx_sort, K) # K environments
+        env_set[anchor_class_] = torch.chunk(candidate_idx_sort, K) # tuple of K environments, each one a tensor
         env_set_dist[anchor_class_] = sim_all
 
     if return_dist:
