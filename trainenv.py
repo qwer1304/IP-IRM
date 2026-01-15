@@ -1429,18 +1429,18 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                         for i in range(num_losses):
                             is_last = (i == num_losses - 1)
 
-                            # FIX: Ensure grad_output is a scalar if the loss is a scalar
-                            # Use .squeeze() or [i] to get the specific weight for this loss
-                            current_grad_output = grad_outputs[i].reshape(differentiate_this[i].shape)
-
+                            # We wrap the scalar loss in a list/tensor to give it a 'batch' dim of 1
+                            # and slice grad_outputs to [1, X] to match.
                             current_grads = torch.autograd.grad(
-                                differentiate_this[i],
-                                tuple(net.parameters()),
-                                grad_outputs=current_grad_output, 
+                                outputs=[differentiate_this[i]], # List makes it 'batched'
+                                inputs=tuple(net.parameters()),
+                                grad_outputs=grad_outputs[i:i+1], # Shape [1, X]
                                 retain_graph=not is_last,
-                                allow_unused=True
+                                allow_unused=True,
+                                is_grads_batched=True  # Keeps the logic identical to the original
                             )
 
+                            # Accumulate
                             for j, g in enumerate(current_grads):
                                 if g is not None:
                                     if grads_all[j] is None:
