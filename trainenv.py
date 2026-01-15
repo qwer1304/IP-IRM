@@ -1423,24 +1423,30 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                             is_grads_batched=True
                         )
                     else:
+                        # --- Drop-in Loop Replacement ---
+                        # differentiate_this is a tensor of shape [2B]
+                        # grad_outputs is likely [2B, X] or [2B]
+
                         grads_all = [None] * len(list(net.parameters()))
+                        num_items = differentiate_this.shape[0]
 
-                        num_losses = len(differentiate_this)
-                        for i in range(num_losses):
-                            is_last = (i == num_losses - 1)
+                        for i in range(num_items):
+                            is_last = (i == num_items - 1)
 
-                            # We wrap the scalar loss in a list/tensor to give it a 'batch' dim of 1
-                            # and slice grad_outputs to [1, X] to match.
+                            # We use [i:i+1] to keep the 'batch' dimension of 1
+                            # This allows is_grads_batched=True to work exactly like before
+                            current_loss = differentiate_this[i:i+1] 
+                            current_weight = grad_outputs[i:i+1]
+
                             current_grads = torch.autograd.grad(
-                                outputs=[differentiate_this[i]], # List makes it 'batched'
+                                outputs=current_loss,
                                 inputs=tuple(net.parameters()),
-                                grad_outputs=grad_outputs[i:i+1], # Shape [1, X]
+                                grad_outputs=current_weight,
                                 retain_graph=not is_last,
                                 allow_unused=True,
-                                is_grads_batched=True  # Keeps the logic identical to the original
+                                is_grads_batched=True # Now the shapes [1] and [1, X] will match
                             )
 
-                            # Accumulate
                             for j, g in enumerate(current_grads):
                                 if g is not None:
                                     if grads_all[j] is None:
