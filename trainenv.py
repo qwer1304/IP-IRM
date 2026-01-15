@@ -1437,6 +1437,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                             # This allows is_grads_batched=True to work exactly like before
                             current_loss = differentiate_this[i:i+1] 
                             current_weight = grad_outputs[i:i+1]
+                            
+                            print(current_loss.size(), current_weight.size())
+                            exit(1)
 
                             current_grads = torch.autograd.grad(
                                 outputs=current_loss,
