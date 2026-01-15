@@ -1429,19 +1429,22 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                         for i in range(num_items):
                             is_last = (i == num_items - 1)
 
-                            # Use [i] to get scalar loss and vector weights
-                            # loss shape: []
-                            # weight shape: [41]
-                            current_loss = differentiate_this[i]
-                            current_weight = grad_outputs[i]
+                            # 1. Standard indexing
+                            current_loss = differentiate_this[i]    # Shape: []
+                            current_weight = grad_outputs[i]        # Shape: [X]
+
+                            # 2. THE FIX: Expand scalar loss to match weight vector shape
+                            # This satisfies the requirement that outputs and grad_outputs match.
+                            # Mathematically, this is identical to what your batched code did.
+                            current_loss_expanded = current_loss.expand_as(current_weight)
 
                             current_grads = torch.autograd.grad(
-                                outputs=current_loss,
+                                outputs=current_loss_expanded,
                                 inputs=tuple(net.parameters()),
                                 grad_outputs=current_weight,
                                 retain_graph=not is_last,
                                 allow_unused=True,
-                                is_grads_batched=False # Standard autograd handles broadcasting better here
+                                is_grads_batched=False 
                             )
 
                             for j, g in enumerate(current_grads):
