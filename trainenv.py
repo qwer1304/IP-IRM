@@ -1412,14 +1412,48 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 """
 
                 # autograd sums all gradients in each row for each parameter
-                grads_all = torch.autograd.grad(
-                    differentiate_this,
-                    tuple(net.parameters()),
-                    retain_graph=False,  # no need to keep graph for next loss
-                    allow_unused=True,
-                    grad_outputs=grad_outputs, 
-                    is_grads_batched=True
-                )
+                def calc_grads(differentiate_this, grad_outputs, net, looped=False):
+                    if not looped:
+                        grads_all = torch.autograd.grad(
+                            differentiate_this,
+                            tuple(net.parameters()),
+                            retain_graph=False,  # no need to keep graph for next loss
+                            allow_unused=True,
+                            grad_outputs=grad_outputs, 
+                            is_grads_batched=True
+                        )
+                    else:
+                        # Initialize the accumulation list based on the number of parameters
+                        grads_all = [None] * len(list(net.parameters()))
+
+                        num_losses = len(differentiate_this)
+                        for i in range(num_losses):
+                            # Retain graph for all but the last loss in the list to free memory
+                            is_last = (i == num_losses - 1)
+
+                            current_grads = torch.autograd.grad(
+                                differentiate_this[i],
+                                tuple(net.parameters()),
+                                grad_outputs=grad_outputs[i:i+1], # Slice to keep batch dim if needed, or grad_outputs[i]
+                                retain_graph=not is_last,
+                                allow_unused=True
+                            )
+
+                            # Accumulate into the grads_all list
+                            for j, g in enumerate(current_grads):
+                                if g is not None:
+                                    if grads_all[j] is None:
+                                        # Initialize with a clone to avoid modifying the graph version
+                                        grads_all[j] = g.clone()
+                                    else:
+                                        grads_all[j].add_(g)
+
+                        # Convert back to tuple to match original output format
+                        grads_all = tuple(grads_all)
+                        # --------------------------------
+                    return grads_all    
+                
+                grads_all = calc_grads(differentiate_this, grad_outputs, net, looped=True)
 
                 # 1. Pre-calculate bounds and offsets
                 num_tasks      = (num_grads - num_baseline_repeates) // max(1, num_split_repeates)
