@@ -13,7 +13,7 @@ from torch.utils.data import Dataset, DataLoader, random_split, Subset
 from tqdm.auto import tqdm
 
 import utils
-from model import ModelResnet, SimSiam, MultiArmModel, create_mlp
+from model import ModelResnet, SimSiam, MultiArmModel, create_mlp, Mask, MaskModule
 import gradnorm as gn
 import gc
 from math import ceil, prod
