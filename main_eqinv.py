@@ -602,7 +602,7 @@ if __name__ == '__main__':
                 gradnorm_balancer.set_tau(args.gradnorm_tau) # always set tau to currently provided value; also converts None to values
 
             # use current LR, not the one from checkpoint
-            params = set_optimizer_params(model, ssl_type)
+            params = get_optimizer_params(model, ssl_type)
             for pind, param_group in enumerate(optimizer.param_groups):
                 param_group['lr'] = params[pind]['lr']
 
