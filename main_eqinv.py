@@ -742,6 +742,18 @@ if __name__ == '__main__':
         assert args.clusters_to_use is None or \
             max(args.clusters_to_use) <= args.num_clusters-1, "Largest cluster to use {} must be < {}".format(max(args.clusters_to_use), args.num_clusters)
 
+    # 'partitions' should be a list of splits, each one a tensor w/ dim=1 equal to the number of environment and dim=0 equal to the number of samples
+    # 'env_ref_set' is a dictionary w/ key equal to class index and value a tuple w/ size equal to the number of envs each one a tensor of samples' indices  
+    def convert_env_ref_set_2_partitions(env_ref_set):
+        partitions = []
+        for cid, class_envs in env_ref_set.items():
+            num_samples = [len(e) for e in class_envs]
+            min_size = min(num_samples)
+            partitions.append(torch.stack([e[:min_size] for e in class_envs], dim=-1))
+        return partitions
+
+    partitions = convert_env_ref_set_2_partitions(env_ref_set).to(device)
+
     train_loader = None
 
     for epoch in range(start_epoch, epochs + 1):
@@ -749,17 +761,6 @@ if __name__ == '__main__':
             train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, shuffle=True, 
                                 pin_memory=True, persistent_workers=tr_pw, drop_last=tr_dl)
 
-        # 'partitions' should be a list of splits, each one a tensor w/ dim=1 equal to the number of environment and dim=0 equal to the number of samples
-        # 'env_ref_set' is a dictionary w/ key equal to class index and value a tuple w/ size equal to the number of envs each one a tensor of samples' indices  
-        def convert_env_ref_set_2_partitions(env_ref_set):
-            partitions = []
-            for cid, class_envs in env_ref_set.items():
-                num_samples = [len(e) for e in class_envs]
-                min_size = min(num_samples)
-                partitions.append(torch.stack([e[:min_size] for e in class_envs], dim=-1))
-            return partitions
-                
-        partitions = convert_env_ref_set_2_partitions(env_ref_set)
         train_loss = train_env(model, train_loader, optimizer, partitions, tr_bs, epoch, args, **kwargs)
 
         # eval model every test_freq/val_freq and last epochs
