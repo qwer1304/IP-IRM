@@ -754,7 +754,7 @@ if __name__ == '__main__':
         def convert_env_ref_set_2_partitions(env_ref_set):
             partitions = []
             for cid, class_envs in env_ref_set.items():
-                assert all([len(env) == len(class_envs[0]) for env in class_envs]), f"class {i} envs aren't the same length; lengths {[len(env) for env in class_envs]}" 
+                assert all([len(env) == len(class_envs[0]) for env in class_envs]), f"class {cid} envs aren't the same length; lengths {[len(env) for env in class_envs]}" 
                 partitions.append(torch.cat(class_envs, dim=-1))
             return partitions
                 
