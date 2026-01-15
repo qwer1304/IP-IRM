@@ -738,7 +738,7 @@ if __name__ == '__main__':
     else:
         partitions = torch.load(fp)
         print(f'Cluster {fp} loaded.')
-        assert len(env_ref_set[0]) == args.num_clusters, "Num clusters in cluster file {} != num_clusters {}".format(len(env_ref_set[0]), args.num_clusters)
+        assert len(partitions[0]) == args.num_clusters, "Num clusters in cluster file {} != num_clusters {}".format(len(partitions[0]), args.num_clusters)
         assert args.clusters_to_use is None or \
             max(args.clusters_to_use) <= args.num_clusters-1, "Largest cluster to use {} must be < {}".format(max(args.clusters_to_use), args.num_clusters)
     partitions = [p.to(device) for p in partitions]
