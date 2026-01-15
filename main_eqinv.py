@@ -419,6 +419,8 @@ if __name__ == '__main__':
     parser.add_argument('--num_clusters', type=int, default=2, help='number of custer K') 
     parser.add_argument('--clusters_to_use', type=int, nargs='+', default=None, help='clusters to use out of K clusters') 
 
+    parser.add_argument('--backbone_propagate', action="store_true", default=False, help='whether to propagate inv loss to backbone')
+
     # args parse
     args = parser.parse_args()
     args.gradnorm_tau = {args.gradnorm_tau[i]: args.gradnorm_tau[i+1] for i in range(0,len(args.gradnorm_tau),2)} if args.gradnorm_tau is not None else None
