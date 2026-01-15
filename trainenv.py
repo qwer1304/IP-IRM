@@ -1404,12 +1404,12 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 # 'grads_all' is a tuple w/ an entry per parameter.
                 # each entry is a tensor w/ 1st dim = 'grad_outputs.size(0)' and other dims matching the parameter
 
-                """
+                #"""
                 print()
                 print(f"num_samples {num_samples}, num_split_repeates {num_split_repeates}, num_baseline_repeates {num_baseline_repeates}, " +                                  
                       f"num_repeats {num_repeats}, num_grads {num_grads}, number_of_columns {number_of_columns}, " + 
                       f"grad_outputs {grad_outputs.size()}, differentiate_this {differentiate_this.size()}")
-                """
+                #"""
 
                 # autograd sums all gradients in each row for each parameter
                 def calc_grads(differentiate_this, grad_outputs, net, looped=False):
@@ -1468,8 +1468,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                     return grads_all    
                 
                 grads_all = calc_grads(differentiate_this, grad_outputs, net, looped=True)
-                print()
-                print(f"done calc_grads, i={i}, j={j}")
 
                 # 1. Pre-calculate bounds and offsets
                 num_tasks      = (num_grads - num_baseline_repeates) // max(1, num_split_repeates)
