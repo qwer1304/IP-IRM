@@ -1440,7 +1440,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                             torch.cuda.empty_cache()
 
                         return tuple(grads_all_new)
-                    grads_all = convert_grads_all(grads_all, net)
+                    grads_all = convert_grads_all(grads_all, net).to(device)
                 else:
                     differentiate_this = [t.reshape(-1) for t in differentiate_this] # ensure common shape of 1D tensors
                     differentiate_this = torch.cat(differentiate_this, dim=0) # cat losses and penalties into a single vector length 2B
