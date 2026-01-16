@@ -191,18 +191,6 @@ def load_checkpoint(path, model, model_momentum, optimizer, gradnorm_balancer, g
         msg_momentum = "momentum encoder not used"
         queue = None
         
-        if "state_dict_momentum" in checkpoint and checkpoint["state_dict_momentum"] is not None:
-            msg_momentum = model_momentum.load_state_dict(
-                checkpoint["state_dict_momentum"], strict=False
-            )
-        else:
-            msg_momentum = "no momentum encoder in checkpoint"
-
-        if "queue" in checkpoint and checkpoint["queue"] is not None:
-            queue = checkpoint["queue"]
-        else:
-            queue = None    
-
     if (gradnorm_balancer is not None):
         if ("state_dict_gradnorm" in checkpoint) and (checkpoint["state_dict_gradnorm"] is not None):
             state_dict = checkpoint["state_dict_gradnorm"]
