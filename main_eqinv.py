@@ -516,7 +516,8 @@ if __name__ == '__main__':
         arms_blueprints = {"projector": partial(create_mlp, output_dim=feature_dim, hidden_dims=[512, 512], norm_layer=nn.BatchNorm1d, bias=[False, False, False],
                                                             last_layer_norm=True, last_layer_act=False, 
                                                             norm_kwargs=[{"affine": True}, {"affine": True}, {"affine": False}]),  
-                           "predictor": partial(create_mlp, output_dim=feature_dim, hidden_dims=[int(feature_dim/2)], norm_layer=nn.BatchNorm1d, bias=[False, True],
+                           "predictor": partial(create_mlp, input_dim=feature_dim, output_dim=feature_dim, hidden_dims=[int(feature_dim/2)], 
+                                                            norm_layer=nn.BatchNorm1d, bias=[False, True],
                                                             last_layer_norm=False, last_layer_act=False)
         }
         shortcuts = {'g': 'projector', 'h': 'predictor'}
