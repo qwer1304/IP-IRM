@@ -1314,7 +1314,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                     for partition_num, partition in enumerate(partitions):
                         for env in range(args.env_num):
                         
-                            is_last = ((partition_num == (num_partitions-1) and (env == args.env_num-1))
+                            is_last = (partition_num == (num_partitions-1)) and (env == (args.env_num-1))
 
                             # split mb: 'idxs' are indices into 'indexs' that correspond to domain 'env' in 'partition'
                             # 'indexs' are the indices of samples in dataset which are in this micro-batch
