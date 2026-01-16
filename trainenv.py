@@ -1076,6 +1076,15 @@ def set_BN_adapt(net, adapt_bn, bn_momentum):
                 m.track_running_stats = True
                 m.momentum = bn_momentum
 
+def calculate_grads(loss, net, retain_graph=False):
+    grads = torch.autograd.grad(
+        outputs=loss,
+        inputs=tuple(net.parameters()),
+        retain_graph=retain_graph,
+        allow_unused=True,
+    )
+    return grads
+
 # ssl training with IP-IRM
 def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch, args, **kwargs):
 
@@ -1257,6 +1266,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                     else:
                         grad_outputs      = torch.zeros((num_grads, num_samples*num_repeats), dtype=torch.float, device=device) 
                 differentiate_this    = []
+                grads_all             = []
 
                 """
                 prepare for micro-batch in loss-sepcific way:
@@ -1267,45 +1277,50 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 del batch_micro
                 torch.cuda.empty_cache()
                 
-                if do_unsplit_loss and loss_unsplit_module is not None:
+                # if want unsplit loss w/ its own loss method
+                if do_unsplit_loss and (loss_unsplit_module is not None):
                     loss_unsplit_module.pre_micro_batch(features_1, features_2, indexs=indexs, labels=labels, normalize=False,
                         dataset=train_loader.dataset, weights=weights)
                     losses_samples_all = loss_unsplit_module.compute_loss_micro(reduction='sum')
-                    # Must be first to be in 1st column 
-                    differentiate_this.append(losses_samples_all)
-
-                if loss_unsplit_module is None:
-                    if args.backbone_propagate:
-                        features_1, features_2 = net.module.mask(features_1), net.module.mask(features_2) 
+                    if is_per_env:
+                        loss = losses_samples_all / 2 / this_batch_size / gradients_accumulation_steps # CE uses both views
+                        grads_all.append(calculate_grads(loss, net, retain_graph=True)
                     else:
-                        features_1, features_2 = net.module.mask(features_1.detach()), net.module.mask(features_2.detach()) 
+                        # Must be first to be in 1st column 
+                        differentiate_this.append(losses_samples_all)
+
+                # mask: assume user sets mask and args.backbone_propagate properly:
+                # when it's not needed it's set to 'ident' and args.backbone_propagate==True
+                # must apply mask only after unsplit loss has been applied
+                if args.backbone_propagate:
+                    features_1, features_2 = net.module.mask(features_1), net.module.mask(features_2) 
+                else:
+                    features_1, features_2 = net.module.mask(features_1.detach()), net.module.mask(features_2.detach()) 
 
                 loss_module.pre_micro_batch(features_1, features_2, indexs=indexs, normalize=(loss_type != 'supcon'), dataset=train_loader.dataset)
                 
                 # Even if 'do_loss'==False, when SAME loss is used for BOTH loss_cont and loss_unsplit, 'reduction' reflects the correct reduction
-                if (do_unsplit_loss and loss_unsplit_module is None) or (do_loss and not is_per_env):
+                # If SAME loss is used for unsplit and cont losses and any of them has been requested and this is a non-per-env loss
+                if (do_unsplit_loss or do_loss) and (loss_unsplit_module is None) and (not is_per_env):
                     # compute unnormalized WHOLE micro-batch loss, no split into envs
-                    losses_samples = loss_module.compute_loss_micro(reduction=reduction)
-                    differentiate_this.append(losses_samples)
+                    losses_samples_all = loss_module.compute_loss_micro(reduction=reduction)
+                    differentiate_this.append(losses_samples_all)
 
-                if do_penalty and not is_per_env:
-                    penalties_samples = penalty_calculator.penalty(losses_samples, reduction=reduction)
+                if do_penalty and (not is_per_env):
+                    penalties_samples = penalty_calculator.penalty(losses_samples_all, reduction=reduction)
                     differentiate_this.append(penalties_samples)
 
                 if do_loss or do_penalty:
                     for partition_num, partition in enumerate(partitions):
                         for env in range(args.env_num):
+                        
+                            is_last = ((partition_num == (num_partitions-1) and (env == args.env_num-1))
 
                             # split mb: 'idxs' are indices into 'indexs' that correspond to domain 'env' in 'partition'
                             # 'indexs' are the indices of samples in dataset which are in this micro-batch
                             idxs = utils.assign_idxs(indexs, partition, env)
 
                             if (N := len(idxs)) == 0:
-                                if is_per_env:
-                                    if do_loss:
-                                        differentiate_this.append(torch.zeros(1, dtype=torch.float, device=device)) # dummy loss
-                                    if do_penalty:
-                                        differentiate_this.append(torch.zeros(1, dtype=torch.float, device=device)) # dummy penalty
                                 continue
                             
                             halves_sz[j,partition_num,env] += N # update number of elements in environment
@@ -1319,7 +1334,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                                     # 'loss_samples' are either the per-sample losses or thie sum depending on 'reduction'
                                     # for 'is_per_env'==True, it's always 'sum'
                                     losses_samples = loss_module.compute_loss_micro(p=partition_num, env=env, reduction=reduction, idxs=idxs)
-                                    differentiate_this.append(losses_samples)
+                                    grads_all.append(calculate_grads(losses_samples, net, retain_graph=(not is_last) or do_penalty))
                                     loss = losses_samples.detach()
                                 else:
                                     # For 'is_per_env'==False, convert per-sample losses to a sum
@@ -1329,7 +1344,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                             if do_penalty:
                                 if is_per_env:
                                     penalties_samples = penalty_calculator.penalty(losses_samples, reduction=reduction)
-                                    differentiate_this.append(penalties_samples)
+                                    grads_all.append(calculate_grads(losses_samples, net, retain_graph=not is_last))
                                     penalty = penalties_samples.detach()
                                 else:
                                     penalty = penalties_samples[idxs].sum(dim=0).detach()
@@ -1350,35 +1365,31 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                             'grad_outputs[i,j]' is a multiplier of the [i,j]-th entry to differentiate.
                             """
 
-                            # 1. Calculate base indices once
-                            # Using standard Python ints for indexing is faster than creating 0-d Tensors
-                            base_idx   = partition_num  * args.env_num + env
-                            row_stride = num_partitions * args.env_num
+                            if not is_per_env:
+                                # 1. Calculate base indices once
+                                # Using standard Python ints for indexing is faster than creating 0-d Tensors
+                                base_idx   = partition_num  * args.env_num + env
+                                row_stride = num_partitions * args.env_num
 
-                            # 2. Determine Mask and Initial Offset
-                            if is_per_env:
-                                # Per-env: Mask is solid 1.0; Offset is based on the partition index
-                                mask = 1.0
-                                current_offset = base_idx + int(do_unsplit_loss)
-                            else:
+                                # 2. Determine Mask and Initial Offset
                                 # Shared: Mask is sparse (zeros with ones at idxs); Offset starts at 0
                                 mask = torch.zeros(num_samples, dtype=torch.float, device=device)
                                 mask[idxs] = 1.0
                                 current_offset = 0
 
-                            # 3. Apply Updates Sequentially
-                            current_row = base_idx
+                                # 3. Apply Updates Sequentially
+                                current_row = base_idx
 
-                            if do_loss:
-                                # Use comma indexing [row, col] for efficiency
-                                grad_outputs[current_row, current_offset : current_offset + num_samples] = mask
+                                if do_loss:
+                                    # Use comma indexing [row, col] for efficiency
+                                    grad_outputs[current_row, current_offset : current_offset + num_samples] = mask
 
-                                # Shift indices for the penalty step
-                                current_row += row_stride
-                                current_offset += num_samples
+                                    # Shift indices for the penalty step
+                                    current_row += row_stride
+                                    current_offset += num_samples
 
-                            if do_penalty:
-                                grad_outputs[current_row, current_offset : current_offset + num_samples] = mask
+                                if do_penalty:
+                                    grad_outputs[current_row, current_offset : current_offset + num_samples] = mask
 
                         # end for env in range(args.env_num):
                     # end for partition_num, partition in enumerate(partitions):
@@ -1391,7 +1402,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                     # 'losses_samples_all' are the losses of ALL samples in this micro-batch
                     # loss - loss is ALWAYS a scalar
                     # CE is computed for BOTH views concatenated
-                    loss = losses_samples_all.sum().detach()  / 2 / this_batch_size / gradients_accumulation_steps
+                    num_views = 2 if loss_unsplit_module is not None else 1
+                    loss = losses_samples_all.sum().detach()  / num_views / this_batch_size / gradients_accumulation_steps
                     # compute unnormalized gradients for this loss
                     # grad_outputs: one per sample
                     loss_unsplit_aggregator += loss # before scaler
@@ -1400,78 +1412,33 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                     number_of_columns = num_samples if loss_unsplit_module is None else 1
                     grad_outputs[-1][offset:offset+number_of_columns]  = 1.0 / this_batch_size / gradients_accumulation_steps # unweighted
 
-                differentiate_this = [t.reshape(-1) for t in differentiate_this] # ensure common shape of 1D tensors
-                differentiate_this = torch.cat(differentiate_this, dim=0) # cat losses and penalties into a single vector length 2B
+                if is_per_env:
+                    grads_all = torch.stack(grads_all, dim=0)
+                else:
+                    differentiate_this = [t.reshape(-1) for t in differentiate_this] # ensure common shape of 1D tensors
+                    differentiate_this = torch.cat(differentiate_this, dim=0) # cat losses and penalties into a single vector length 2B
 
-                # compute all needed grads
-                # 'grads_all' is a tuple w/ an entry per parameter.
-                # each entry is a tensor w/ 1st dim = 'grad_outputs.size(0)' and other dims matching the parameter
+                    # compute all needed grads
+                    # 'grads_all' is a tuple w/ an entry per parameter.
+                    # each entry is a tensor w/ 1st dim = 'grad_outputs.size(0)' and other dims matching the parameter
 
-                """
-                print()
-                print(f"num_samples {num_samples}, num_split_repeates {num_split_repeates}, num_baseline_repeates {num_baseline_repeates}, " +                                  
-                      f"num_repeats {num_repeats}, num_grads {num_grads}, number_of_columns {number_of_columns}, " + 
-                      f"grad_outputs {grad_outputs.size()}, differentiate_this {differentiate_this.size()}")
-                """
+                    """
+                    print()
+                    print(f"num_samples {num_samples}, num_split_repeates {num_split_repeates}, num_baseline_repeates {num_baseline_repeates}, " +                                  
+                          f"num_repeats {num_repeats}, num_grads {num_grads}, number_of_columns {number_of_columns}, " + 
+                          f"grad_outputs {grad_outputs.size()}, differentiate_this {differentiate_this.size()}")
+                    """
 
-                # autograd sums all gradients in each row for each parameter
-                def calc_grads(differentiate_this, grad_outputs, net, looped=False):
-                    if not looped:
-                        grads_all = torch.autograd.grad(
-                            differentiate_this,
-                            tuple(net.parameters()),
-                            retain_graph=False,  # no need to keep graph for next loss
-                            allow_unused=True,
-                            grad_outputs=grad_outputs, 
-                            is_grads_batched=True
-                        )
-                    else:
-                        # 1. Store gradients in a nested list: [num_items, num_parameters]
-                        grads_list = [] 
-
-                        num_items = differentiate_this.shape[0]
-
-                        for i in range(num_items):
-                            is_last = (i == num_items - 1)
-
-                            current_loss = differentiate_this[i]
-                            current_weight = grad_outputs[i][i]
-
-                            # Expand scalar to match the [X] vector weight
-                            current_loss_expanded = current_loss.expand_as(current_weight)
-
-                            # current_grads will be a tuple of [num_parameters]
-                            current_grads = torch.autograd.grad(
-                                outputs=current_loss_expanded,
-                                inputs=tuple(net.parameters()),
-                                grad_outputs=current_weight,
-                                retain_graph=not is_last,
-                                allow_unused=True,
-                                is_grads_batched=False
-                            )
-
-                            grads_list.append(current_grads)
-
-                        # 2. Reconstruct 'grads_all' to have the per-sample dimension
-                        # We transpose the list and stack each parameter's gradients along Dim 0
-                        grads_all = []
-                        num_params = len(grads_list[0])
-
-                        for j in range(num_params):
-                            # Gather the j-th parameter gradient from every sample
-                            param_samples = [g[j] for g in grads_list]
-
-                            if param_samples[0] is None:
-                                grads_all.append(None)
-                            else:
-                                # stack() creates the [num_items, ...] shape subsequent code expects
-                                grads_all.append(torch.stack(param_samples, dim=0))
-
-                        grads_all = tuple(grads_all)
-                    return grads_all    
+                    # autograd sums all gradients in each row for each parameter
+                    grads_all = torch.autograd.grad(
+                        differentiate_this,
+                        tuple(net.parameters()),
+                        retain_graph=False,  # no need to keep graph for next loss
+                        allow_unused=True,
+                        grad_outputs=grad_outputs, 
+                        is_grads_batched=True
+                    )
                 
-                grads_all = calc_grads(differentiate_this, grad_outputs, net, looped=True)
-
                 # 1. Pre-calculate bounds and offsets
                 num_tasks      = (num_grads - num_baseline_repeates) // max(1, num_split_repeates)
                 penalty_offset = num_partitions * args.env_num
