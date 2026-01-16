@@ -1418,8 +1418,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                     number_of_columns = num_samples if loss_unsplit_module is None else 1
                     grad_outputs[-1][offset:offset+number_of_columns]  = 1.0 / this_batch_size / gradients_accumulation_steps # unweighted
 
-                # compute all needed grads
-                # 'grads_all' must be a list of all gradients per loss.
                 if is_per_env:
                     """
                     print()
@@ -1448,7 +1446,52 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                         grad_outputs=grad_outputs, 
                         is_grads_batched=True
                     )
-                
+
+                    def convert_batched_to_list_mapped(grads_all_batched):
+                        """
+                        Converts: Tuple of Tensors [Batch, *Shape]
+                        To: List of Tuples arranged as [Original_Last, Original_0, Original_1, ...]
+                        """
+                        # 1. Determine batch size
+                        num_items = 0
+                        for g in grads_all_batched:
+                            if g is not None:
+                                num_items = g.shape[0]
+                                break
+
+                        if num_items == 0:
+                            return []
+
+                        grads_per_loss = [None] * num_items
+
+                        # 2. Map indices: 
+                        # Original (i) -> List (k)
+                        # num_items - 1 -> 0
+                        # 0             -> 1
+                        # 1             -> 2
+                        for i in range(num_items):
+                            # The mapping: (i + 1) % num_items
+                            # i = 0           => k = 1
+                            # i = num_items-1 => k = 0
+                            target_k = (i + 1) % num_items
+
+                            current_loss_params = []
+                            for g in grads_all_batched:
+                                if g is None:
+                                    current_loss_params.append(None)
+                                else:
+                                    # Slicing the i-th batch row
+                                    current_loss_params.append(g[i].detach().clone())
+
+                            grads_per_loss[target_k] = tuple(current_loss_params)
+
+                        return grads_per_loss
+
+                    # 'grads_all' must be a list of gradients per loss.
+                    grads_all = convert_batched_to_list_mapped(grads_all)
+                #end if is_per_env:
+
+                # update grads' aggregators
                 # 1. Setup metadata
                 num_tasks = (num_grads - num_baseline_repeates) // max(1, num_split_repeates)
                 penalty_offset = num_partitions * args.env_num
@@ -1457,7 +1500,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 # 2. Consume the list of gradients sample-by-sample
                 # This is better for memory because we can clear each sample after processing
                 for ii in range(num_grads):
-                    # current_grads is the tuple of all parameter grads for sample 'ii'
+                    # current_grads is the tuple of all parameter grads for sample 'i'
                     current_grads = grads_all[ii]
 
                     for param_idx, g in enumerate(current_grads):
@@ -1466,8 +1509,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
 
                         # Flatten the parameter gradient: (*Param_Dims) -> (Flattened_Dim)
                         g_flat = g.detach().reshape(-1)
-
-                        # --- Mapping logic (matching your requested 0 -> last shift) ---
 
                         # 1. Unsplit Loss (Original index 0)
                         if ii == 0 and do_unsplit_loss:
@@ -1488,10 +1529,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                             e = k % args.env_num
                             penalty_grads[param_idx][j][p, e] += g_flat
 
-                    # 3. Memory Cleanup: Nullify the sample after all parameters are processed
-                    grads_all[ii] = None 
-
                 # end if not args.baseline:
+
                 loss_module.post_micro_batch()
                 loss_module.prepare_for_free()
                 if loss_unsplit_module is not None:
