@@ -1449,32 +1449,25 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                         is_grads_batched=True
                     )
                 
-
                 # 1. Setup metadata
                 num_tasks = (num_grads - num_baseline_repeates) // max(1, num_split_repeates)
                 penalty_offset = num_partitions * args.env_num
                 view_shape = (num_partitions, args.env_num, -1)
 
-                # 2. Iterate through the parameters first (to match your aggregator structure)
-                # This assumes loss_grads[param_idx] exists
-                for param_idx in range(len(net.parameters())):
+                # 2. Consume the list of gradients sample-by-sample
+                # This is better for memory because we can clear each sample after processing
+                for ii in range(num_grads):
+                    # current_grads is the tuple of all parameter grads for sample 'ii'
+                    current_grads = grads_all[ii]
 
-                    # Process each 'loss item' from your original list
-                    for ii in range(num_grads):
-                        # ii is the index in your grads_all list: 0, 1, 2...
-                        # g is the gradient for parameter 'param_idx' for loss 'ii'
-                        g = grads_all[ii][param_idx]
-
+                    for param_idx, g in enumerate(current_grads):
                         if g is None:
                             continue
 
                         # Flatten the parameter gradient: (*Param_Dims) -> (Flattened_Dim)
                         g_flat = g.detach().reshape(-1)
 
-                        # --- Mapping logic ---
-                        # Note: Your previous 'rearrange' logic: 
-                        # ii=0 (Unsplit loss) moves to the LAST position of the batch logic
-                        # ii=1..N (Tasks/Penalty) moves to the FIRST positions
+                        # --- Mapping logic (matching your requested 0 -> last shift) ---
 
                         # 1. Unsplit Loss (Original index 0)
                         if ii == 0 and do_unsplit_loss:
@@ -1482,12 +1475,10 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
 
                         # 2. Loss Tasks (Original indices 1 to num_tasks)
                         elif 1 <= ii <= num_tasks and do_loss:
-                            # Task index k goes from 0 to num_tasks-1
                             k = ii - 1 
-                            # Calculate where in the (Partitions, Envs) grid this k falls
-                            # This replicates the .view(view_shape) logic on a per-sample basis
                             p = k // args.env_num
                             e = k % args.env_num
+                            # Adding directly into the aggregator grid
                             loss_grads[param_idx][j][p, e] += g_flat
 
                         # 3. Penalty Tasks (Original indices starting at offset+1)
@@ -1496,6 +1487,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                             p = k // args.env_num
                             e = k % args.env_num
                             penalty_grads[param_idx][j][p, e] += g_flat
+
+                    # 3. Memory Cleanup: Nullify the sample after all parameters are processed
+                    grads_all[ii] = None 
 
                 # end if not args.baseline:
                 loss_module.post_micro_batch()
