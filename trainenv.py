@@ -1436,7 +1436,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
 
                                 # Place the per-sample grad into its specific slot. First slot becomes last (unsplit loss)
                                 k = i - 1 if i > 0 else num_items - 1
-                                grads_all[j][k] = g
+                                grads_all_new[j][k] = g
 
                     grads_all = tuple(grads_all_new)
                 else:
