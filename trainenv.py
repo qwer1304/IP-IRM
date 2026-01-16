@@ -1304,11 +1304,12 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 # Even if 'do_loss'==False, when SAME loss is used for BOTH loss_cont and loss_unsplit, 'reduction' reflects the correct reduction
                 # If SAME loss is used for unsplit and cont losses and any of them has been requested and this is a non-per-env loss
                 if not is_per_env:
-                    if (do_unsplit_loss or do_loss) and (loss_unsplit_module is None):
+                    if (do_unsplit_loss and (loss_unsplit_module is None)) or do_loss:
                         # compute unnormalized WHOLE micro-batch loss, no split into envs
                         losses_samples = loss_module.compute_loss_micro(reduction=reduction)
                         differentiate_this.append(losses_samples)
-                        losses_samples_all = losses_samples.sum()
+                        if loss_unsplit_module is None:
+                            losses_samples_all = losses_samples.sum()
 
                     if do_penalty:
                         penalties_samples = penalty_calculator.penalty(losses_samples, reduction=reduction)
