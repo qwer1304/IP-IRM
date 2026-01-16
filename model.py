@@ -111,8 +111,7 @@ def create_mlp(
         in_dim, out_dim = all_dims[i], all_dims[i+1]
         
         # 1. Linear Layer with specific bias
-        print(in_dim, out_dim, bias_list[i])
-        layers.append(nn.Linear(in_dim, out_dim, bias=bias_list[i]))
+        layers.append(nn.Linear(int(in_dim), int(out_dim), bias=bias_list[i]))
         
         # 2. Normalization
         if norm_layer and (not is_last or last_layer_norm):
