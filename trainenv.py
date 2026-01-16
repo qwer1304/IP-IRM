@@ -634,7 +634,6 @@ class SimSiamLossModule(LossModule):
         # Unnormalized!
         z1 = self.net.module.g(x1)
         z2 = self.net.module.g(x2)
-        print(x1.size(), z1.size())
         p1 = self.net.module.h(z1)
         p2 = self.net.module.h(z2)
         self._representations = (z1, z2, p1, p2)

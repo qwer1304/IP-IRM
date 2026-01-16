@@ -203,7 +203,13 @@ class MultiArmModel(nn.Module):
 
         #  1. Register arms (modules)
         for name, module in arms_blueprints.items():
-            self.arms[name] = module(input_dim=self.feature_dim)        
+            # Check if 'input_dim' was already set in the partial blueprint
+            if isinstance(module, partial) and 'input_dim' in module.keywords:
+                # It's already set (e.g. predictor), so call it without arguments
+                self.arms[name] = module()
+            else:
+                # It's missing (e.g. projector), so provide the default
+                self.arms[name] = module(input_dim=self.feature_dim)
 
         # 2. Register post-processing (e.g., normalization)
         if out_transforms:
