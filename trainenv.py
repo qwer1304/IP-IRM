@@ -1324,9 +1324,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                                 if is_per_env:
                                     assert len(grads_all) > 0, f"env ({partition_num},{env}) has no samples and we don't know the grads shape yet"
                                     if do_loss:
-                                        grads_all.append(torch.zeros_like(grads_all[0])) # dummy loss's grads
+                                        grads_all.append(tuple([g.detach() if g is not None else None for g in grads_all[0]])) # dummy loss's grads
                                     if do_penalty:
-                                        grads_all.append(torch.zeros_like(grads_all[0])) # dummy penalty's grads
+                                        grads_all.append(tuple([g.detach() if g is not None else None for g in grads_all[0]])) # dummy penalty's grads
                                 continue
                             
                             halves_sz[j,partition_num,env] += N # update number of elements in environment
