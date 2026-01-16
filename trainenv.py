@@ -1419,7 +1419,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                     # grads_all is a list of per-loss grads - a tuple of per-parameter grads. 
                     # 1. Setup metadata
                     num_items = len(grads_all)
-                    grads_all_new = [None] * len(net.parameters())
+                    params = tuple(net.parameters())
+                    grads_all_new = [None] * len(params)
 
                     # 2. Sequential Gradient Conversion
                     for i in range(num_items):
