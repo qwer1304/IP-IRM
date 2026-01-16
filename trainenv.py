@@ -1237,6 +1237,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
 
         for j in range(num_halves): # over halves of micro-batches
             for i in [i_ for i_ in range(len(mb_list)) if i_ % num_halves == j]: # loop over micro-batches
+                losses_samples_all, losses_samples, penalties_samples, penalty = None, None, None, None
+                
                 # per micro-batch pipeline
                 batch_micro, labels, indexs = mb_list[i]
                 if (loss_unsplit_module is not None) and ('CEweights' in kwargs) and (kwargs['CEweights'] is not None):
@@ -1344,7 +1346,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                                     loss = losses_samples.detach()
                                 else:
                                     # For 'is_per_env'==False, convert per-sample losses to a sum
-                                    loss = losses_samples[idxs].sum(dim=0).detach()
+                                    loss = losses_samples_all[idxs].sum(dim=0).detach()
                                 loss_aggregator[j,partition_num,env] += loss # unnormalized, before penalty scaler
                             # penalties - penalties are ALWAYS a scalar
                             if do_penalty:
@@ -1539,14 +1541,11 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 
                 # free memory of micro-batch
                 del features_1, features_2, indexs, g_flat, g, grads_all, differentiate_this
-                if do_loss or do_unsplit_loss:
-                    del loss
-                if do_unsplit_loss:
-                    del losses_samples_all
-                if do_loss:
-                    del losses_samples
-                if do_penalty:
-                    del penalties_samples, penalty
+                if loss: del loss
+                if losses_samples_all: del losses_samples_all
+                if losses_samples: del losses_samples
+                if penalties_samples: del penalties_samples
+                if penalty: del penalty
             # end for i in [i_ for i_ in range(len(mb_list)) if i_ % 2 == j]:
             torch.cuda.empty_cache()
         # end for j in range(idxs):
