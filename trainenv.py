@@ -1542,11 +1542,11 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 
                 # free memory of micro-batch
                 del features_1, features_2, indexs, g_flat, g, grads_all, differentiate_this
-                if loss: del loss
-                if losses_samples_all: del losses_samples_all
-                if losses_samples: del losses_samples
-                if penalties_samples: del penalties_samples
-                if penalty: del penalty
+                if loss is not None: del loss
+                if losses_samples_all is not None: del losses_samples_all
+                if losses_samples is not None: del losses_samples
+                if penalties_samples is not None: del penalties_samples
+                if penalty is not None: del penalty
             # end for i in [i_ for i_ in range(len(mb_list)) if i_ % 2 == j]:
             torch.cuda.empty_cache()
         # end for j in range(idxs):
