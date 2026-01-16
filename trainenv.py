@@ -1412,15 +1412,35 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                     number_of_columns = num_samples if loss_unsplit_module is None else 1
                     grad_outputs[-1][offset:offset+number_of_columns]  = 1.0 / this_batch_size / gradients_accumulation_steps # unweighted
 
+                # compute all needed grads
+                # 'grads_all' must be a tuple w/ an entry per parameter.
+                # each entry is a tensor w/ 1st dim = 'grad_outputs.size(0)' and other dims matching the parameter
                 if is_per_env:
-                    grads_all = torch.stack(grads_all, dim=0)
+                    # grads_all is a list of per-loss grads - a tuple of per-parameter grads. 
+                    # 1. Setup metadata
+                    num_items = len(grads_all)
+                    grads_all_new = [None] * len(params)
+
+                    # 2. Sequential Gradient Conversion
+                    for i in range(num_items):
+                        current_grads = grads_all[i]
+    
+                        # 3. Store/Allocate results to maintain the [num_items, ...] shape
+                        for j, g in enumerate(current_grads):
+                            if g is not None:
+                                if grads_all_new[j] is None:
+                                    # Pre-allocate the full tensor on the first successful grad
+                                    new_shape = (num_items,) + g.shape
+                                    grads_all_new[j] = torch.zeros(new_shape, dtype=g.dtype, device=g.device)
+
+                                # Place the per-sample grad into its specific slot. First slot becomes last (unsplit loss)
+                                k = i - 1 if i > 0 else num_items - 1
+                                grads_all[j][k] = g
+
+                    grads_all = tuple(grads_all_new)
                 else:
                     differentiate_this = [t.reshape(-1) for t in differentiate_this] # ensure common shape of 1D tensors
                     differentiate_this = torch.cat(differentiate_this, dim=0) # cat losses and penalties into a single vector length 2B
-
-                    # compute all needed grads
-                    # 'grads_all' is a tuple w/ an entry per parameter.
-                    # each entry is a tensor w/ 1st dim = 'grad_outputs.size(0)' and other dims matching the parameter
 
                     """
                     print()
