@@ -513,7 +513,7 @@ if __name__ == '__main__':
         shortcuts = {'g': 'projection'}
         
     elif ssl_type == 'simsiam':
-        arms_blueprints = {"projector": partial(create_mlp, output_dim=feature_dim, hidden_dims=[512], norm_layer=nn.BatchNorm1d, bias=[False, False, False],
+        arms_blueprints = {"projector": partial(create_mlp, output_dim=feature_dim, hidden_dims=[512, 512], norm_layer=nn.BatchNorm1d, bias=[False, False, False],
                                                             last_layer_norm=True, last_layer_act=False, 
                                                             norm_kwargs=[{"affine": True}, {"affine": True}, {"affine": False}]),  
                            "predictor": partial(create_mlp, output_dim=feature_dim, hidden_dims=[feature_dim/2], norm_layer=nn.BatchNorm1d, bias=[False, True],
