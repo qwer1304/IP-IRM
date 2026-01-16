@@ -1442,6 +1442,12 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                         return tuple(grads_all_new)
                     grads_all = convert_grads_all(grads_all, net)
                     grads_all = [g.to(device) if g is not None else None for g in grads_all]
+                    #"""
+                    print()
+                    print(f"num_samples {num_samples}, num_split_repeates {num_split_repeates}, num_baseline_repeates {num_baseline_repeates}, " +                                  
+                          f"num_repeats {num_repeats}, num_grads {num_grads}, number_of_columns {number_of_columns}, " + 
+                          f"grads_all {len(grads_all)} grads_all[0] {grads_all[0].size()}")
+                    #"""
                 else:
                     differentiate_this = [t.reshape(-1) for t in differentiate_this] # ensure common shape of 1D tensors
                     differentiate_this = torch.cat(differentiate_this, dim=0) # cat losses and penalties into a single vector length 2B
