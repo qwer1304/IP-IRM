@@ -1419,41 +1419,15 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                     grad_outputs[-1][offset:offset+number_of_columns]  = 1.0 / this_batch_size / gradients_accumulation_steps # unweighted
 
                 # compute all needed grads
-                # 'grads_all' must be a tuple w/ an entry per parameter.
-                # each entry is a tensor w/ 1st dim = 'grad_outputs.size(0)' and other dims matching the parameter
+                # 'grads_all' must be a list of all gradients per loss.
                 if is_per_env:
-                    def convert_grads_all(grads_all, net):
-                        num_items = len(grads_all)
-                        params = tuple(net.parameters())
-                        grads_all_new = [None] * len(params)
-
-                        for i in range(num_items):
-                            current_grads = grads_all[i]
-                            grads_all[i] = None # Free the GPU list reference
-
-                            for j, g in enumerate(current_grads):
-                                if g is not None:
-                                    if grads_all_new[j] is None:
-                                        # ALLOCATE ON CPU
-                                        new_shape = (num_items,) + g.shape
-                                        grads_all_new[j] = torch.zeros(new_shape, dtype=g.dtype, device='cpu')
-
-                                    # Move the small grad to CPU and place it in the big tensor
-                                    k = i - 1 if i > 0 else num_items - 1
-                                    grads_all_new[j][k] = g.to('cpu')
-
-                            # Clean up the GPU after each loss item is moved to CPU
-                            torch.cuda.empty_cache()
-
-                        return tuple(grads_all_new)
-                    grads_all = convert_grads_all(grads_all, net)
-                    grads_all = [g.to(device) if g is not None else None for g in grads_all]
-                    #"""
+                    """
                     print()
                     print(f"num_samples {num_samples}, num_split_repeates {num_split_repeates}, num_baseline_repeates {num_baseline_repeates}, " +                                  
                           f"num_repeats {num_repeats}, num_grads {num_grads}, number_of_columns {number_of_columns}, " + 
                           f"grads_all {len(grads_all)} grads_all[0] {grads_all[0].size()}")
-                    #"""
+                    """
+                    pass
                 else:
                     differentiate_this = [t.reshape(-1) for t in differentiate_this] # ensure common shape of 1D tensors
                     differentiate_this = torch.cat(differentiate_this, dim=0) # cat losses and penalties into a single vector length 2B
@@ -1475,37 +1449,53 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                         is_grads_batched=True
                     )
                 
-                # 1. Pre-calculate bounds and offsets
-                num_tasks      = (num_grads - num_baseline_repeates) // max(1, num_split_repeates)
+
+                # 1. Setup metadata
+                num_tasks = (num_grads - num_baseline_repeates) // max(1, num_split_repeates)
                 penalty_offset = num_partitions * args.env_num
+                view_shape = (num_partitions, args.env_num, -1)
 
-                # 2. Single pass over parameters
-                # 'grads_all' is a tuple w/ an entry per parameter.
-                # each entry is a tensor w/ 1st dim = 'grad_outputs.size(0)' and other dims matching the parameter
-                for _j, g in enumerate(grads_all):
-                    if g is None:
-                        continue
+                # 2. Iterate through the parameters first (to match your aggregator structure)
+                # This assumes loss_grads[param_idx] exists
+                for param_idx in range(len(net.parameters())):
 
-                    # Flatten: (Batch, *Param_Dims) -> (Batch, Flattened_Dim)
-                    # Using reshape/view here avoids repeating it inside inner loops
-                    g_flat = g.detach().reshape(g.size(0), -1)
+                    # Process each 'loss item' from your original list
+                    for ii in range(num_grads):
+                        # ii is the index in your grads_all list: 0, 1, 2...
+                        # g is the gradient for parameter 'param_idx' for loss 'ii'
+                        g = grads_all[ii][param_idx]
 
-                    # --- Keep Loss (Last Row) ---
-                    if do_unsplit_loss:
-                        loss_unsplit_grads_final[_j] += g_flat[-1]
+                        if g is None:
+                            continue
 
-                    # --- Loss & Penalty (Batch Slicing) ---
-                    if (do_loss or do_penalty) and num_tasks > 0:
-                        # Shape to broadcast: (Partitions, Envs, Flattened_Dim)
-                        view_shape = (num_partitions, args.env_num, -1)
+                        # Flatten the parameter gradient: (*Param_Dims) -> (Flattened_Dim)
+                        g_flat = g.detach().reshape(-1)
 
-                        if do_loss:
-                            # Slice first 'num_tasks' rows -> Reshape -> Add
-                            loss_grads[_j][j] += g_flat[:num_tasks].view(view_shape)
+                        # --- Mapping logic ---
+                        # Note: Your previous 'rearrange' logic: 
+                        # ii=0 (Unsplit loss) moves to the LAST position of the batch logic
+                        # ii=1..N (Tasks/Penalty) moves to the FIRST positions
 
-                        if do_penalty:
-                            # Slice rows starting at offset -> Reshape -> Add
-                            penalty_grads[_j][j] += g_flat[penalty_offset : penalty_offset + num_tasks].view(view_shape)
+                        # 1. Unsplit Loss (Original index 0)
+                        if ii == 0 and do_unsplit_loss:
+                            loss_unsplit_grads_final[param_idx] += g_flat
+
+                        # 2. Loss Tasks (Original indices 1 to num_tasks)
+                        elif 1 <= ii <= num_tasks and do_loss:
+                            # Task index k goes from 0 to num_tasks-1
+                            k = ii - 1 
+                            # Calculate where in the (Partitions, Envs) grid this k falls
+                            # This replicates the .view(view_shape) logic on a per-sample basis
+                            p = k // args.env_num
+                            e = k % args.env_num
+                            loss_grads[param_idx][j][p, e] += g_flat
+
+                        # 3. Penalty Tasks (Original indices starting at offset+1)
+                        elif (penalty_offset + 1) <= ii <= (penalty_offset + num_tasks) and do_penalty:
+                            k = ii - (penalty_offset + 1)
+                            p = k // args.env_num
+                            e = k % args.env_num
+                            penalty_grads[param_idx][j][p, e] += g_flat
 
                 # end if not args.baseline:
                 loss_module.post_micro_batch()
