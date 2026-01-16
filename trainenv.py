@@ -1428,6 +1428,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                         for i in range(num_items):
                             current_grads = grads_all[i]
                             grads_all[i] = None # <--- EXTREMELY IMPORTANT: Clear the reference in the original list
+                            torch.cuda.empty_cache()
                             # 3. Store/Allocate results to maintain the [num_items, ...] shape
                             for j, g in enumerate(current_grads):
                                 if g is not None:
