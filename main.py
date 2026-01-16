@@ -158,7 +158,7 @@ def get_feature_bank(net, memory_data_loader, args, progress=False, prefix="Test
     return feature_bank, feature_labels
 
 # test for one epoch, use weighted knn to find the most similar images' label to assign the test image
-def test(net, feature_bank, feature_labels, test_data_loader, args, progress=False, prefix="Test:"):
+def test(net, feature_bank, feature_labels, test_data_loader, num_classes, args, progress=False, prefix="Test:"):
     net.eval()
        
     total_top1, total_top5, total_num = 0.0, 0.0, 0
@@ -194,8 +194,8 @@ def test(net, feature_bank, feature_labels, test_data_loader, args, progress=Fal
         target_list = []
         target_raw_list = []
         # For macro-accuracy computation
-        per_class_correct = torch.zeros(c, dtype=torch.long, device=feature_bank[0].device)
-        per_class_total   = torch.zeros(c, dtype=torch.long, device=feature_bank[0].device)
+        per_class_correct = torch.zeros(num_classes, dtype=torch.long, device=feature_bank[0].device)
+        per_class_total   = torch.zeros(num_classes, dtype=torch.long, device=feature_bank[0].device)
 
         for data, target in test_bar:
             data, target = data.cuda(non_blocking=True), target.cuda(non_blocking=True)
@@ -338,18 +338,6 @@ def load_checkpoint(path, model, model_momentum, optimizer, gradnorm_balancer, g
         msg_momentum = "momentum encoder not used"
         queue = None
         
-        if "state_dict_momentum" in checkpoint and checkpoint["state_dict_momentum"] is not None:
-            msg_momentum = model_momentum.load_state_dict(
-                checkpoint["state_dict_momentum"], strict=False
-            )
-        else:
-            msg_momentum = "no momentum encoder in checkpoint"
-
-        if "queue" in checkpoint and checkpoint["queue"] is not None:
-            queue = checkpoint["queue"]
-        else:
-            queue = None    
-
     if (gradnorm_balancer is not None):
         if ("state_dict_gradnorm" in checkpoint) and (checkpoint["state_dict_gradnorm"] is not None):
             state_dict = checkpoint["state_dict_gradnorm"]
@@ -783,19 +771,19 @@ if __name__ == '__main__':
             print('eval on train data')
             train_loader = DataLoader(mem_data[1], batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
                 pin_memory=True, persistent_workers=te_pw)
-            train_acc_1, train_acc_5, train_macro_acc = test(model, feauture_bank, feature_labels, train_loader, args, progress=True, prefix="Train:")
+            train_acc_1, train_acc_5, train_macro_acc = test(model, feauture_bank, feature_labels, train_loader, c, args, progress=True, prefix="Train:")
         if len(args.evaluate) == 0:
             args.evaluate = ['val', 'test']
         if 'val' in args.evaluate:
             print('eval on val data')
             val_loader = DataLoader(val_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=True, 
                 pin_memory=True, persistent_workers=te_pw)
-            val_acc_1, val_acc_5, val_macro_acc = test(model, feauture_bank, feature_labels, val_loader, args, progress=True, prefix="Val:")
+            val_acc_1, val_acc_5, val_macro_acc = test(model, feauture_bank, feature_labels, val_loader, c, args, progress=True, prefix="Val:")
         if 'test' in args.evaluate:
             print('eval on test data')
             test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=True, 
                 pin_memory=True, persistent_workers=te_pw)
-            test_acc_1, test_acc_5, test_macro_acc = test(model, feauture_bank, feature_labels, test_loader, args, progress=True, prefix="Test:")
+            test_acc_1, test_acc_5, test_macro_acc = test(model, feauture_bank, feature_labels, test_loader, c, args, progress=True, prefix="Test:")
         exit()
 
     if not args.resume and os.path.exists(log_file):
@@ -923,7 +911,7 @@ if __name__ == '__main__':
         if (epoch >= args.test_freq) and ((epoch % args.test_freq == 0) or (epoch == epochs)): # eval knn every test_freq epochs
             test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=True, 
                 pin_memory=False, persistent_workers=te_pw)
-            test_acc_1, test_acc_5, test_macro_acc = test(model, feauture_bank, feature_labels, test_loader, args, progress=True, prefix="Test:")
+            test_acc_1, test_acc_5, test_macro_acc = test(model, feauture_bank, feature_labels, test_loader, c, args, progress=True, prefix="Test:")
             test_loader = shutdown_loader(test_loader)
             gc.collect()              # run Python's garbage collector
             txt_write = open("results/{}/{}/{}".format(args.dataset, args.name, 'knn_result.txt'), 'a')
@@ -934,7 +922,7 @@ if __name__ == '__main__':
             # evaluate on validation set
             val_loader = DataLoader(val_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=True, 
                 pin_memory=False, persistent_workers=te_pw)
-            acc1, _, _ = test(model, feauture_bank, feature_labels, val_loader, args, progress=True, prefix="Val:")
+            acc1, _, _ = test(model, feauture_bank, feature_labels, val_loader, c, args, progress=True, prefix="Val:")
             val_loader = shutdown_loader(val_loader)
             gc.collect()              # run Python's garbage collector
 
