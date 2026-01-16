@@ -1417,30 +1417,27 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 # each entry is a tensor w/ 1st dim = 'grad_outputs.size(0)' and other dims matching the parameter
                 if is_per_env:
                     def convert_grads_all(grads_all, net):
-                        print()
-                        # grads_all is a list of per-loss grads - a tuple of per-parameter grads. 
-                        # 1. Setup metadata
                         num_items = len(grads_all)
                         params = tuple(net.parameters())
                         grads_all_new = [None] * len(params)
 
-                        # 2. Sequential Gradient Conversion
                         for i in range(num_items):
                             current_grads = grads_all[i]
-                            grads_all[i] = None # <--- EXTREMELY IMPORTANT: Clear the reference in the original list
-                            torch.cuda.empty_cache()
-                            # 3. Store/Allocate results to maintain the [num_items, ...] shape
+                            grads_all[i] = None # Free the GPU list reference
+
                             for j, g in enumerate(current_grads):
                                 if g is not None:
                                     if grads_all_new[j] is None:
-                                        # Pre-allocate the full tensor on the first successful grad
+                                        # ALLOCATE ON CPU
                                         new_shape = (num_items,) + g.shape
-                                        grads_all_new[j] = torch.zeros(new_shape, dtype=g.dtype, device=g.device)
+                                        grads_all_new[j] = torch.zeros(new_shape, dtype=g.dtype, device='cpu')
 
-                                    # Place the per-sample grad into its specific slot. First slot becomes last (unsplit loss)
+                                    # Move the small grad to CPU and place it in the big tensor
                                     k = i - 1 if i > 0 else num_items - 1
-                                    grads_all_new[j][k] = g
-                                    print(f"loss {i}/{num_items}, parameter {j}/{len(current_grads)}")
+                                    grads_all_new[j][k] = g.to('cpu')
+
+                            # Clean up the GPU after each loss item is moved to CPU
+                            torch.cuda.empty_cache()
 
                         return tuple(grads_all_new)
                     grads_all = convert_grads_all(grads_all, net)
