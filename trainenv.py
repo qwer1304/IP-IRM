@@ -1303,14 +1303,16 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 
                 # Even if 'do_loss'==False, when SAME loss is used for BOTH loss_cont and loss_unsplit, 'reduction' reflects the correct reduction
                 # If SAME loss is used for unsplit and cont losses and any of them has been requested and this is a non-per-env loss
-                if (do_unsplit_loss or do_loss) and (loss_unsplit_module is None) and (not is_per_env):
-                    # compute unnormalized WHOLE micro-batch loss, no split into envs
-                    losses_samples_all = loss_module.compute_loss_micro(reduction=reduction)
-                    differentiate_this.append(losses_samples_all)
+                if not is_per_env:
+                    if (do_unsplit_loss or do_loss) and (loss_unsplit_module is None):
+                        # compute unnormalized WHOLE micro-batch loss, no split into envs
+                        losses_samples = loss_module.compute_loss_micro(reduction=reduction)
+                        differentiate_this.append(losses_samples)
+                        losses_samples_all = losses_samples.sum()
 
-                if do_penalty and (not is_per_env):
-                    penalties_samples = penalty_calculator.penalty(losses_samples_all, reduction=reduction)
-                    differentiate_this.append(penalties_samples)
+                    if do_penalty:
+                        penalties_samples = penalty_calculator.penalty(losses_samples, reduction=reduction)
+                        differentiate_this.append(penalties_samples)
 
                 if do_loss or do_penalty:
                     for partition_num, partition in enumerate(partitions):
@@ -1346,7 +1348,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                                     loss = losses_samples.detach()
                                 else:
                                     # For 'is_per_env'==False, convert per-sample losses to a sum
-                                    loss = losses_samples_all[idxs].sum(dim=0).detach()
+                                    loss = losses_samples[idxs].sum(dim=0).detach()
                                 loss_aggregator[j,partition_num,env] += loss # unnormalized, before penalty scaler
                             # penalties - penalties are ALWAYS a scalar
                             if do_penalty:
@@ -1406,12 +1408,10 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 if do_unsplit_loss: # global loss @ 1st partition
                     # This could be done w/o the split into two halves, but this streamlines the code w/o any harm
                     # Here we know that losses are over the whole macro-batch, so we can normalize up-front
-                    # sum() is for the case when 'is_per_env'==False; otherwise - it's harmless
-                    # 'losses_samples_all' are the losses of ALL samples in this micro-batch
                     # loss - loss is ALWAYS a scalar
                     # CE is computed for BOTH views concatenated
                     num_views = 2 if loss_unsplit_module is not None else 1
-                    loss = losses_samples_all.sum().detach()  / num_views / this_batch_size / gradients_accumulation_steps
+                    loss = losses_samples_all.detach()  / num_views / this_batch_size / gradients_accumulation_steps
                     # compute unnormalized gradients for this loss
                     # grad_outputs: one per sample
                     loss_unsplit_aggregator += loss # before scaler
