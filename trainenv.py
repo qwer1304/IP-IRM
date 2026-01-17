@@ -1286,24 +1286,29 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 weights             = weights.cuda(non_blocking=True) if weights is not None else None
 
                 num_samples           = 1 if is_per_env else len(batch_micro)
-                num_split_repeates    = int(not args.baseline) * (int(loss_weight>0) + int(penalty_weight>0)) # 0, 1 or 2
-                num_baseline_repeates = int(loss_unsplit_weight>0) * int(args.unsplit_cont) # 0 or 1                                  
-                num_repeats           = max(num_split_repeates, num_baseline_repeates) # max is for the case 'num_split_repeates' is 0
-                num_grads             = num_partitions * args.env_num * num_split_repeates + num_baseline_repeates # number of rows
-                if is_per_env:
-                    # For per-env loss_cont, each env gets its own column + one more column for loss_unsplit, if requested, whether same to loss_cont or not
-                    grad_outputs          = torch.zeros((num_grads, num_grads), dtype=torch.float, device=device) 
-                else:
+                num_grads_per_env     = int(not args.baseline) * (int(loss_weight>0) + int(penalty_weight>0)) # 0, 1 or 2
+                num_baseline_grads    = int(loss_unsplit_weight>0) * int(args.unsplit_cont) # 0 or 1                                  
+                num_grads_per_sample  = max(num_grads_per_env, num_baseline_grads) # max is for the case 'num_grads_per_env' is 0
+                num_grads             = num_partitions * args.env_num * num_grads_per_env + num_baseline_grads # number of rows
+                if not is_per_env:
                     # for per-sample loss_cont, the number of columns is the number of samples times the number of repeats. 
                     # loss_cont and loss_unsplit share the SAME columns, if loss_unsplit is similar to loss_cont; otherwise loss_unsplit has its own extra column
-                    if num_baseline_repeates and loss_unsplit_module is None:
-                        grad_outputs      = torch.zeros((num_grads, num_samples*num_repeats), dtype=torch.float, device=device) 
-                    elif num_baseline_repeates and loss_unsplit_module is not None:
-                        grad_outputs      = torch.zeros((num_grads, num_samples*num_split_repeates + 1), dtype=torch.float, device=device) 
+                    if num_baseline_grads and loss_unsplit_module is None:
+                        grad_outputs      = torch.zeros((num_grads, num_samples*num_grads_per_sample), dtype=torch.float, device=device) 
+                    elif num_baseline_grads and loss_unsplit_module is not None:
+                        grad_outputs      = torch.zeros((num_grads, num_samples*num_grads_per_env + 1), dtype=torch.float, device=device) 
                     else:
-                        grad_outputs      = torch.zeros((num_grads, num_samples*num_repeats), dtype=torch.float, device=device) 
+                        grad_outputs      = torch.zeros((num_grads, num_samples*num_grads_per_sample), dtype=torch.float, device=device) 
                 differentiate_this    = []
-                grads_all             = []
+                """
+                grads_all: 
+                    Each row holds gradients for a task
+                    First half hold gradients of per-env cont losses, if requested
+                    Second half holds gradients for per-env penalties, if requested
+                    Last row holds gradients for unsplit loss, if requested
+                    Each entry is a tuple with an entry for per net's parameter grad or None
+                """
+                grads_all             = [None] * num_grads
 
                 """
                 prepare for micro-batch in loss-sepcific way:
@@ -1321,8 +1326,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                     losses_samples_all = loss_unsplit_module.compute_loss_micro(reduction='sum')
                     if is_per_env:
                         loss = losses_samples_all / 2 / this_batch_size / gradients_accumulation_steps # CE uses both views
-                        grads_all.append(calculate_grads(loss, net, retain_graph=True))
-                        print_grads(grads_all[-1], net, prefix="k:")
+                        grads_all[-1] = (calculate_grads(loss, net, retain_graph=True)
                     else:
                         # Must be first to be in 1st column 
                         differentiate_this.append(losses_samples_all)
@@ -1385,8 +1389,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                                     # 'loss_samples' are either the per-sample losses or thie sum depending on 'reduction'
                                     # for 'is_per_env'==True, it's always 'sum'
                                     losses_samples = loss_module.compute_loss_micro(p=partition_num, env=env, reduction=reduction, idxs=idxs)
-                                    grads_all.append(calculate_grads(losses_samples, net, retain_graph=(not is_last) or do_penalty))
-                                    print_grads(grads_all[-1], net, prefix="l:")
+                                    grads_all[partition_num*args.env_num + env] = calculate_grads(losses_samples, net, retain_graph=(not is_last) or do_penalty)
                                     loss = losses_samples.detach()
                                 else:
                                     # For 'is_per_env'==False, convert per-sample losses to a sum
@@ -1396,29 +1399,24 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                             if do_penalty:
                                 if is_per_env:
                                     penalties_samples = penalty_calculator.penalty(losses_samples, reduction=reduction)
-                                    grads_all.append(calculate_grads(losses_samples, net, retain_graph=not is_last))
-                                    print_grads(grads_all[-1], net, prefix="p:")
+                                    grads_all[partition_num*args.env_num + env] = calculate_grads(losses_samples, net, retain_graph=not is_last)
                                     penalty = penalties_samples.detach()
                                 else:
                                     penalty = penalties_samples[idxs].sum(dim=0).detach()
                                 penalty_aggregator[j,partition_num,env] += penalty # unnormalized penalty components before penalty scaler
 
-                            # gradients
-                            """
-                            'grad_outputs' is a table w/ each row corresponding to a loss/penalty of an env in a partition.
-                            The top half coresponds to cont losses; the bottom half corresponds to penalties.
-                            The last row corresponds to loss_unsplit.
-                            For per_env losses (e.g., MoCo):
-                                each column corresponds to an env in a partition loss/penalty. 
-                                The 1st column corresponds to loss_unsplit if requested.
-                            For non-per-env losses (e.g., SimSiam):
-                                each column corresponds to a sample loss/penalty.
-                                The left half corresponds to losses; the right half corresponds to penalties.
-                                The 1st to 'num_samples' columns correspond to loss_unsplit if requested.                                
-                            'grad_outputs[i,j]' is a multiplier of the [i,j]-th entry to differentiate.
-                            """
-
                             if not is_per_env:
+                                # gradients
+                                """
+                                For non-per-env losses (e.g., SimSiam):
+                                    'grad_outputs' is a table w/ each row corresponding to a loss/penalty of an env in a partition.
+                                    The top half coresponds to cont losses; the bottom half corresponds to penalties.
+                                    The last row corresponds to loss_unsplit.
+                                    Each column corresponds to a sample loss/penalty.
+                                    The left half corresponds to losses; the right half corresponds to penalties.
+                                    The 1st to 'num_samples' columns correspond to loss_unsplit if requested.                                
+                                    'grad_outputs[i,j]' is a multiplier of the [i,j]-th entry to differentiate.
+                                """
                                 # 1. Calculate base indices once
                                 # Using standard Python ints for indexing is faster than creating 0-d Tensors
                                 base_idx   = partition_num  * args.env_num + env
@@ -1466,8 +1464,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 if is_per_env:
                     """
                     print()
-                    print(f"num_samples {num_samples}, num_split_repeates {num_split_repeates}, num_baseline_repeates {num_baseline_repeates}, " +                                  
-                          f"num_repeats {num_repeats}, num_grads {num_grads}, number_of_columns {number_of_columns}, " + 
+                    print(f"num_samples {num_samples}, num_grads_per_env {num_grads_per_env}, num_baseline_grads {num_baseline_grads}, " +                                  
+                          f"num_grads_per_sample {num_grads_per_sample}, num_grads {num_grads}, number_of_columns {number_of_columns}, " + 
                           f"grads_all {len(grads_all)} grads_all[0] {grads_all[0].size()}")
                     """
                     pass
@@ -1477,8 +1475,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
 
                     """
                     print()
-                    print(f"num_samples {num_samples}, num_split_repeates {num_split_repeates}, num_baseline_repeates {num_baseline_repeates}, " +                                  
-                          f"num_repeats {num_repeats}, num_grads {num_grads}, number_of_columns {number_of_columns}, " + 
+                    print(f"num_samples {num_samples}, num_grads_per_env {num_grads_per_env}, num_baseline_grads {num_baseline_grads}, " +                                  
+                          f"num_grads_per_sample {num_grads_per_sample}, num_grads {num_grads}, number_of_columns {number_of_columns}, " + 
                           f"grad_outputs {grad_outputs.size()}, differentiate_this {differentiate_this.size()}")
                     """
 
@@ -1538,8 +1536,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
 
                 # update grads' aggregators
                 # 1. Setup metadata
-                num_tasks = (num_grads - num_baseline_repeates) // max(1, num_split_repeates)
-                penalty_offset = num_partitions * args.env_num
+                num_env_tasks = (num_grads - num_baseline_grads) // max(1, num_grads_per_env)
+                penalty_offset = num_partitions * args.env_num * int(do_loss)
                 view_shape = (num_partitions, args.env_num, -1)
 
                 # 2. Consume the list of gradients sample-by-sample
@@ -1556,20 +1554,20 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                         g_flat = g.detach().reshape(-1)
 
                         # 1. Unsplit Loss (Original index 0)
-                        if ii == 0 and do_unsplit_loss:
+                        if ii == num_grads-1 and do_unsplit_loss:
                             loss_unsplit_grads_final[param_idx] += g_flat
 
-                        # 2. Loss Tasks (Original indices 1 to num_tasks)
-                        elif 1 <= ii <= num_tasks and do_loss:
-                            k = ii - 1 
+                        # 2. Loss Tasks (Original indices 1 to num_env_tasks)
+                        elif 0 <= ii < num_env_tasks and do_loss:
+                            k = ii 
                             p = k // args.env_num
                             e = k % args.env_num
                             # Adding directly into the aggregator grid
                             loss_grads[param_idx][j][p, e] += g_flat
 
                         # 3. Penalty Tasks (Original indices starting at offset+1)
-                        elif (penalty_offset + 1) <= ii <= (penalty_offset + num_tasks) and do_penalty:
-                            k = ii - (penalty_offset + 1)
+                        elif penalty_offset <= ii < (penalty_offset + num_env_tasks) and do_penalty:
+                            k = ii - penalty_offset
                             p = k // args.env_num
                             e = k % args.env_num
                             penalty_grads[param_idx][j][p, e] += g_flat
