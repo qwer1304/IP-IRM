@@ -284,11 +284,14 @@ class LossModule:
             pass                                                      # shape (half, part, env, param_numel)
         return total_grad_flat
 
+    def filter_indices(self, indices, **kwargs):
+        return indices
+
 # ---------------------------
 # MoCo+SupCon Loss Module
 # ---------------------------
 class MoCoSupConLossModule(LossModule):
-    def __init__(self, *args, net_momentum=None, queue=None, temperature=None, debug=False, **kwargs):
+    def __init__(self, *args, net_momentum=None, queue=None, temperature=None, debug=False, filter_indices=None, **kwargs):
         super().__init__(*args, **kwargs)
         assert net_momentum is not None
         assert queue is not None
@@ -300,6 +303,7 @@ class MoCoSupConLossModule(LossModule):
         self.this_batch_size = 0
         self.debug = debug
         self.neg_idxs = []
+        self.filter_indices_hook = filter_indices
         if self.debug:
             self.total_pos = 0.0
             self.total_neg = 0.0
@@ -323,7 +327,7 @@ class MoCoSupConLossModule(LossModule):
                 self.neg_idxs[pidx].append(utils.assign_idxs(indexs, p, env)) # append the tensor of indices to envs list
 
     def pre_micro_batch(self, pos_q, pos_k, indexs=None, normalize=True, dataset=None, **kwargs):
-        # 'indexs' are samples indices in the dataset
+        # 'indexs' are batch samples indices in the dataset
         """
         Calculating SupCon w/ LogSumExp:
         Step 1 - Write the positive term:
@@ -410,6 +414,7 @@ class MoCoSupConLossModule(LossModule):
 
         logits = (out_q @ k_all.T) / self.temperature # (B,N)
         
+        # for each sample in the batch (row) give the samples in the batch and queue w/ the same label
         pos_mask = (y_batch[:, None] == y_all[None, :])   # (B,N)
         pos_mask[:, :len(y_batch)].fill_diagonal_(False)  # remove self-keys
         num_pos = pos_mask.sum(dim=1, keepdim=True).clamp(min=1)
@@ -421,7 +426,7 @@ class MoCoSupConLossModule(LossModule):
         
         l_neg = logits.masked_fill(pos_mask, -1e9) # (B,N)
         
-        self._logits = torch.cat([l_pos, l_neg], dim=1) # (B,N+1)
+        self._logits = torch.cat([l_pos, l_neg], dim=1) # (B,1+N), positive logit is in column 0
         self.labels = torch.zeros(self._logits.size(0), dtype=torch.long, device=self._logits.device)
         if self.debug:
             self.total_pos    += l_pos.mean().item() * l_pos.size(0)
@@ -447,15 +452,15 @@ class MoCoSupConLossModule(LossModule):
         return self.labels[idxs]
 
     def compute_loss_micro(self, p=None, env=None, idxs=None, scale=1.0, temperature=None, reduction='sum', **kwargs):
-        # 'idxs' selects the POSITIVES in the batch
-        # 'p', 'env' select the NEGATIVES in the queue
+        # 'idxs' are indices into the batch
+        # 'p', 'env' select the indices into the queue of the relevant samples
         if idxs is None:
             idxs = torch.arange(self._logits.size(0), device=self._logits.device)
-        l_pos = self.l_pos
-        l_neg = self.l_neg
+        l_pos = self.l_pos # (B,1), positive logit for the whole micro-batch
+        l_neg = self.l_neg # (B,N), negative logits for the whole micro-batch
         if p is not None:
-            l_neg = l_neg[:, self.neg_idxs[p][env]]
-        self._logits = torch.cat([l_pos, l_neg], dim=1) # (B,N'+1)
+            l_neg = l_neg[:, self.neg_idxs[p][env]] # scope negative logits to (p,env)-samples
+        self._logits = torch.cat([l_pos, l_neg], dim=1) # (B,1+N')
         self.labels = torch.zeros(self._logits.size(0), dtype=torch.long, device=self._logits.device)
         if self.debug:
             self.total_pos    += l_pos.mean().item() * l_pos.size(0)
@@ -471,6 +476,9 @@ class MoCoSupConLossModule(LossModule):
         loss = F.cross_entropy(scale * self._logits[idxs][valid], self.labels[idxs][valid], reduction=reduction)
         return loss
 
+    def filter_indices(self, indices, **kwargs):
+        return self.filter_indices_hook(indices, **kwargs) if self.filter_indices_hook is not None else super().filter_indices(indices, **kwargs)
+        
     def post_micro_batch(self):
         self.queue.update(self.out_k.detach(), idx=self.out_k_indexs)
 
@@ -1322,8 +1330,11 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                             is_last = (partition_num == (num_partitions-1)) and (env == (args.env_num-1))
 
                             # split mb: 'idxs' are indices into 'indexs' that correspond to domain 'env' in 'partition'
-                            # 'indexs' are the indices of samples in dataset which are in this micro-batch
+                            # 'indexs' are the indices in dataset of samples which are in this micro-batch
+                            # For EqInv each partition corresponds to a class. Each env holds positive AND negative samples.
+                            # Need to filter the samples s.t. the samples in micro-batch are ONLY those which class==partition
                             idxs = utils.assign_idxs(indexs, partition, env)
+                            idxs = loss_module.filter_indices(idxs, labels=labels, partition=partition, env=env)
 
                             if (N := len(idxs)) == 0:
                                 if is_per_env:

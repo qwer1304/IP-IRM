@@ -637,6 +637,10 @@ if __name__ == '__main__':
     kwargs = {'ema': ema, 'gradnorm_balancer': gradnorm_balancer, 'gradnorm_optimizer': gradnorm_optimizer, 'log_file': log_file}
     if ssl_type == 'moco' or ssl_type == 'mocosupcon':
         kwargs.update({'net_momentum': model_momentum, 'queue': queue, 'temperature': temperature, 'momentum': momentum})
+        if ssl_type == 'mocosupcon':
+            def filter_indices(idxs, labels, partition, **kwargs):
+                idxs = idxs[labels==partition]
+            kwargs.update({'filter_indices': filter_indices})
     elif ssl_type == 'simsiam':
         pass
         
