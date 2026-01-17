@@ -314,7 +314,7 @@ class MoCoSupConLossModule(LossModule):
         self.this_batch_size = len(batch_data)
         self.queue.get(self.this_batch_size) # advance read pointer
         
-        if partitions is None or (len(partitions) == 0) or all([p is None for p in partitions]):
+        if partitions is None or (len(partitions) == 0) or (partitions[0] is None):
             return
         
         # get the dataset indices of samples in queue
@@ -533,7 +533,7 @@ class MoCoLossModule(LossModule):
         self.this_batch_size = len(batch_data)
         self.queue.get(self.this_batch_size) # advance read pointer
         
-        if partitions is None or (len(partitions) == 0) or all([p is None for p in partitions]):
+        if partitions is None or (len(partitions) == 0) or (partitions[0] is None):
             return
         
         # get the dataset indices of samples in queue
@@ -1124,12 +1124,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         assert args.retain_group
     else:
         partitions = [partitions]
-
-    if args.decimate_partitions:
-        assert args.decimate_partitions <= len(partitions), f"# of partitions to decimate {args.decimate_partitions} > # partitions {len(partitions)}"
-        num_partitions = args.decimate_partitions
-    else:    
-        num_partitions = len(partitions)
+    num_partitions = len(partitions) # some partitions may become None subsequent to decimation application
     
     device = next(net.parameters()).device
 
@@ -1252,9 +1247,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
     for batch_index, data_env in enumerate(train_bar):
 
         if args.decimate_partitions:
-            partitions, active_partitions_idx = get_stochastic_partitions(partitions, k=args.decimate_partitions)
-        else:
-            active_partitions_idx = list(range(num_partitions))
+            assert args.decimate_partitions <= len(partitions), f"# of partitions to decimate {args.decimate_partitions} > # partitions {len(partitions)}"
+            partitions, active_partition_idx = get_stochastic_partitions(partitions, k=args.decimate_partitions)
         
         reduction = 'sum' if is_per_env else 'none' # make sure it's the correct one
 
@@ -1351,11 +1345,12 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                         differentiate_this.append(penalties_samples)
 
                 if do_loss or do_penalty:
-                    for partition_num in active_partitions_idx:
-                        partition = partitions[partition_num]
+                    for partition_num, partition in enumerate(partitions):
+                        if partition is None:
+                            continue 
                         for env in range(args.env_num):
                         
-                            is_last = (partition_num == active_partitions_idx[-1]) and (env == (args.env_num-1))
+                            is_last = (partition_num == active_partition_idx[-1]) and (env == (args.env_num-1))
 
                             # split mb: 'idxs' are indices into 'indexs' that correspond to domain 'env' in 'partition'
                             # 'indexs' are the indices in dataset of samples which are in this micro-batch
