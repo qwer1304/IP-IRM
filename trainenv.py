@@ -322,6 +322,8 @@ class MoCoSupConLossModule(LossModule):
         # holds per-partition lists of per-env tensors of indices into the queue
         self.neg_idxs = [[] for _ in partitions]
         for pidx, p in enumerate(partitions):
+            if p is None:
+                continue
             for env in range(p.size(-1)):
                 # assign_idxs returns a tensor of indices into 'indexs' in 'env' in 'p'
                 self.neg_idxs[pidx].append(utils.assign_idxs(indexs, p, env)) # append the tensor of indices to envs list
@@ -539,6 +541,8 @@ class MoCoLossModule(LossModule):
         # holds per-partition lists of per-env tensors of indices into the queue
         self.neg_idxs = [[] for _ in partitions]
         for pidx, p in enumerate(partitions):
+            if p is None:
+                continue
             for env in range(p.size(-1)):
                 # assign_idxs returns a tensor of indices into 'indexs' in 'env' in 'p'
                 self.neg_idxs[pidx].append(utils.assign_idxs(indexs, p, env)) # append the tensor of indices to envs list
