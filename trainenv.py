@@ -1467,7 +1467,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                     print()
                     print(f"num_samples {num_samples}, num_grads_per_env {num_grads_per_env}, num_baseline_grads {num_baseline_grads}, " +                                  
                           f"num_grads_per_sample {num_grads_per_sample}, num_grads {num_grads}, number_of_columns {number_of_columns}, " + 
-                          f"grads_all {len(grads_all)} grads_all[0] {grads_all[0].size()} is None {sum([g is None for g in grads_all])}")
+                          f"grads_all {len(grads_all)} 'is None' = {sum([g is None for g in grads_all])}")
                     #"""
                     pass
                 else:
