@@ -1457,9 +1457,10 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                     # grad_outputs: one per sample
                     loss_unsplit_aggregator += loss # before scaler
 
-                    offset = 0 # 1st column
-                    number_of_columns = num_samples if loss_unsplit_module is None else 1
-                    grad_outputs[-1][offset:offset+number_of_columns]  = 1.0 / this_batch_size / gradients_accumulation_steps # unweighted
+                    if not is_per_env:
+                        offset = 0 # 1st column
+                        number_of_columns = num_samples if loss_unsplit_module is None else 1
+                        grad_outputs[-1][offset:offset+number_of_columns]  = 1.0 / this_batch_size / gradients_accumulation_steps # unweighted
 
                 if is_per_env:
                     """
