@@ -1101,7 +1101,7 @@ def get_stochastic_partitions(all_partitions, k=5):
     # all_partitions a list of tensors
     num_total = len(all_partitions)
     # Pick k random indices to keep
-    active_idxs = torch.randperm(num_total)[:k].tolist()
+    active_idxs = torch.randperm(num_total)[:k].tolist().sort()
     
     # Create list: tensor if index was picked, else None
     subset = [
@@ -1252,7 +1252,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
     for batch_index, data_env in enumerate(train_bar):
 
         if args.decimate_partitions:
-            partitions, _ = get_stochastic_partitions(partitions, k=args.decimate_partitions)
+            partitions, active_partitions_idx = get_stochastic_partitions(partitions, k=args.decimate_partitions)
+        else:
+            active_partitions_idx = list(range(num_partitions))
         
         reduction = 'sum' if is_per_env else 'none' # make sure it's the correct one
 
@@ -1349,12 +1351,11 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                         differentiate_this.append(penalties_samples)
 
                 if do_loss or do_penalty:
-                    for partition_num, partition in enumerate(partitions):
-                        if not partition: # decimated partition
-                            continue 
+                    for partition_num in active_partitions_idx:
+                        partition = partitions[partition_num]
                         for env in range(args.env_num):
                         
-                            is_last = (partition_num == (len(partitions)-1)) and (env == (args.env_num-1))
+                            is_last = (partition_num == active_partitions_idx[-1]) and (env == (args.env_num-1))
 
                             # split mb: 'idxs' are indices into 'indexs' that correspond to domain 'env' in 'partition'
                             # 'indexs' are the indices in dataset of samples which are in this micro-batch
