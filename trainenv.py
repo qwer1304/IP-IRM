@@ -1099,11 +1099,9 @@ def get_stochastic_partitions(all_partitions, k=5):
     # Pick k random indices to keep
     active_idxs = sorted(torch.randperm(num_total)[:k].tolist())
     
-    # Create list: tensor if index was picked, else None
-    subset = [
-        all_partitions[i] if i in active_idxs
-        for i in range(k)
-    ]
+    # Create list: tensor of index that was picked
+    subset = [all_partitions[i] for i in active_idxs]
+    
     return subset, active_idxs
 
 # ssl training with IP-IRM
