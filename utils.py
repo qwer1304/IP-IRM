@@ -1154,6 +1154,7 @@ def assign_feature(feature, idxs, split, env_idx):
     # 'split' is a (dataset_size,env_num) of weights of sample i belonging to env j
     # feature1/2 are the corresponding features in a batch
     # idxs are their indices in the dataset
+    # argmax ALWAYS returns the FIRST entry in case of a tie
     group_assign = split[idxs].argmax(dim=1)
     # torch.where(condition) is identical to torch.nonzero(condition, as_tuple=True)
     # Returns a tuple of 1-D tensors, one for each dimension in input, each containing the indices 
@@ -1170,6 +1171,25 @@ def assign_idxs(idxs, split, env_idx):
     select_idx = torch.where(group_assign==env_idx)[0]
     return select_idx
 
+def assign_idxs_multi(idxs, split, env_idx):
+    # 1. Get the slice: shape (N, 2)
+    data = split[idxs]
+    
+    # 2. Find the max value in each row: shape (N, 1)
+    max_vals, _ = data.max(dim=1, keepdim=True)
+    
+    # 3. Find all positions that equal the max value: shape (N, 2)
+    # Using torch.isclose is safer than == for floating point math
+    is_max = torch.isclose(data, max_vals)
+    
+    # 4. Check if the specific environment index we want is a winner
+    # This will be True even if there is a tie.
+    env_is_winner = is_max[:, env_idx]
+    
+    # 5. Get the local indices for this subset
+    select_idx = torch.where(env_is_winner)[0]
+    
+    return select_idx
 
 def cal_entropy(prob, dim=1):
     return -(prob * prob.log()).sum(dim=dim)

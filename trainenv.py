@@ -1333,7 +1333,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                             # 'indexs' are the indices in dataset of samples which are in this micro-batch
                             # For EqInv each partition corresponds to a class. Each env holds positive AND negative samples.
                             # Need to filter the samples s.t. the samples in micro-batch are ONLY those which class==partition
-                            idxs = utils.assign_idxs(indexs, partition, env)
+                            idxs = utils.assign_idxs_multi(indexs, partition, env)
                             print()
                             print(f"p={partition_num}, e={env}")
                             print(f"partition[indexs]={partition[indexs]}")
