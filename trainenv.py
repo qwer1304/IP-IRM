@@ -322,8 +322,6 @@ class MoCoSupConLossModule(LossModule):
         # holds per-partition lists of per-env tensors of indices into the queue
         self.neg_idxs = [[] for _ in partitions]
         for pidx, p in enumerate(partitions):
-            if p is None:
-                continue
             for env in range(p.size(-1)):
                 # assign_idxs returns a tensor of indices into 'indexs' in 'env' in 'p'
                 self.neg_idxs[pidx].append(utils.assign_idxs(indexs, p, env)) # append the tensor of indices to envs list
@@ -541,8 +539,6 @@ class MoCoLossModule(LossModule):
         # holds per-partition lists of per-env tensors of indices into the queue
         self.neg_idxs = [[] for _ in partitions]
         for pidx, p in enumerate(partitions):
-            if p is None:
-                continue
             for env in range(p.size(-1)):
                 # assign_idxs returns a tensor of indices into 'indexs' in 'env' in 'p'
                 self.neg_idxs[pidx].append(utils.assign_idxs(indexs, p, env)) # append the tensor of indices to envs list
@@ -1105,8 +1101,8 @@ def get_stochastic_partitions(all_partitions, k=5):
     
     # Create list: tensor if index was picked, else None
     subset = [
-        all_partitions[i] if i in active_idxs else None 
-        for i in range(num_total)
+        all_partitions[i] if i in active_idxs
+        for i in range(k)
     ]
     return subset, active_idxs
 
@@ -1124,7 +1120,11 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         assert args.retain_group
     else:
         partitions = [partitions]
-    num_partitions = len(partitions) # some partitions may become None subsequent to decimation application
+    if args.decimate_partitions:
+        assert args.decimate_partitions <= len(partitions), f"# of partitions to decimate {args.decimate_partitions} > # partitions {len(partitions)}"
+        num_partitions = args.decimate_partitions
+    else:    
+        num_partitions = len(partitions) # some partitions may become None subsequent to decimation application
     
     device = next(net.parameters()).device
 
@@ -1249,6 +1249,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         if args.decimate_partitions:
             assert args.decimate_partitions <= len(partitions), f"# of partitions to decimate {args.decimate_partitions} > # partitions {len(partitions)}"
             partitions, active_partition_idx = get_stochastic_partitions(partitions, k=args.decimate_partitions)
+        else:
+            active_partition_idx = list(range(num_partitions))
         
         reduction = 'sum' if is_per_env else 'none' # make sure it's the correct one
 
@@ -1346,11 +1348,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
 
                 if do_loss or do_penalty:
                     for partition_num, partition in enumerate(partitions):
-                        if partition is None:
-                            continue 
                         for env in range(args.env_num):
                         
-                            is_last = (partition_num == active_partition_idx[-1]) and (env == (args.env_num-1))
+                            is_last = (partition_num == (num_partitions-1)) and (env == (args.env_num-1))
 
                             # split mb: 'idxs' are indices into 'indexs' that correspond to domain 'env' in 'partition'
                             # 'indexs' are the indices in dataset of samples which are in this micro-batch
@@ -1358,7 +1358,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                             # Need to filter the samples s.t. the samples in micro-batch are ONLY those which class==partition
                             # Use 'assign_idxs_multi' to break ties correctly
                             idxs = utils.assign_idxs_multi(indexs, partition, env)
-                            idxs = loss_module.filter_indices(idxs, labels=labels[idxs], partition=partition_num, env=env)
+                            idxs = loss_module.filter_indices(idxs, labels=labels[idxs], partition=active_partition_idx[partition_num], env=env)
 
                             if (N := len(idxs)) == 0:
                                 if is_per_env:
