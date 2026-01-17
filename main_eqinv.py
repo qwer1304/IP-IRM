@@ -33,13 +33,13 @@ import utils_cluster
 
 sys.modules['__main__'].FeatureQueue = utils.FeatureQueue
 
-# test for one epoch, use weighted knn to find the most similar images' label to assign the test image
+# test for one epoch
 def test(net, test_data_loader, args, num_classes, progress=False, prefix="Test:"):
     net.eval()
        
     total_top1, total_top5, total_num = 0.0, 0.0, 0
     with torch.no_grad():
-        # loop test data to predict the label by weighted knn search
+        # loop test data to predict the label
         bar_format = '{l_bar}{bar:' + str(args.bar) + '}{r_bar}' #{bar:-' + str(args.bar) + 'b}'
         
         if progress:
@@ -106,7 +106,7 @@ def test(net, test_data_loader, args, num_classes, progress=False, prefix="Test:
                 # Avoid division by zero in rare cases
                 valid = per_class_total > 0
                 macro_acc = (per_class_correct[valid].float() / per_class_total[valid].float()).mean().item()
-                test_bar.set_description('KNN {} Epoch: [{}/{}] Acc@1:{:.2f}% Acc@5:{:.2f}% Macro-Acc:{:.2f}%'
+                test_bar.set_description('{} Epoch: [{}/{}] Acc@1:{:.2f}% Acc@5:{:.2f}% Macro-Acc:{:.2f}%'
                                          .format(prefix, epoch, epochs, total_top1 / total_num * 100, total_top5 / total_num * 100, macro_acc * 100))
 
             # compute output
@@ -767,7 +767,7 @@ if __name__ == '__main__':
             test_acc_1, test_acc_5, test_macro_acc = test(model, test_loader, args, num_classes=c, progress=True, prefix="Test:")
             test_loader = shutdown_loader(test_loader)
             gc.collect()              # run Python's garbage collector
-            txt_write = open("results-eqinv/{}/{}/{}".format(args.dataset, args.name, 'knn_result.txt'), 'a')
+            txt_write = open("results-eqinv/{}/{}/{}".format(args.dataset, args.name, 'inference_result.txt'), 'a')
             txt_write.write('\ntest_acc@1: {}, test_acc@5: {}, test_macro_acc: {}'.format(test_acc_1, test_acc_5, test_macro_acc))
             torch.save(model.state_dict(), 'results-eqinv/{}/{}/model_{}.pth'.format(args.dataset, args.name, epoch))
 
@@ -775,7 +775,7 @@ if __name__ == '__main__':
             # evaluate on validation set
             val_loader = DataLoader(val_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=True, 
                 pin_memory=False, persistent_workers=te_pw)
-            acc1, _, _ = test(model, feauture_bank, feature_labels, val_loader, args, num_classes=c, progress=True, prefix="Val:")
+            acc1, _, _ = test(model, val_loader, args, num_classes=c, progress=True, prefix="Val:")
             val_loader = shutdown_loader(val_loader)
             gc.collect()              # run Python's garbage collector
 
