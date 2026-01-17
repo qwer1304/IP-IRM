@@ -1375,7 +1375,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                                     if do_loss:
                                         grads_all[partition_num*args.env_num + env] = tuple([g.detach() if g is not None else None for g in grads_all[0]]) # dummy loss's grads
                                     if do_penalty:
-                                        grads_all[num_partitions*args.env_num*int(do_loss) + partition_num*args.env_num* + env] = \
+                                        grads_all[num_partitions*args.env_num*int(do_loss) + partition_num*args.env_num + env] = \
                                             tuple([g.detach() if g is not None else None for g in grads_all[0]]) # dummy penalty's grads
                                 continue
                             
@@ -1401,7 +1401,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                             if do_penalty:
                                 if is_per_env:
                                     penalties_samples = penalty_calculator.penalty(losses_samples, reduction=reduction)
-                                    grads_all[num_partitions*args.env_num*int(do_loss) + partition_num*args.env_num* + env] = \
+                                    grads_all[num_partitions*args.env_num*int(do_loss) + partition_num*args.env_num + env] = \
                                         calculate_grads(losses_samples, net, retain_graph=not is_last)
                                     penalty = penalties_samples.detach()
                                 else:
