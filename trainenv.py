@@ -1631,7 +1631,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                                          + loss_grads_final[pind]         * loss_weight         * loss_grad_scaler     
                                          + penalty_grads_final[pind]      * penalty_weight      * penalty_grad_scaler  
                                        )
-            print(f"pind {pind}, ngl {loss_grads_final[pind].norm()}, ngp {penalty_grads_final[pind].norm()}")
+            print(f"pind {pind}, ngk {loss_unsplit_grads_final[pind].norm():.2e}, ngl {loss_grads_final[pind].norm():.2e}, ngp {penalty_grads_final[pind].norm():.2e}")
             if p.grad is None:
                 p.grad  = total_grad_flat_weighted.view(p.shape)
             else:
