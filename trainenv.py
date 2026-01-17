@@ -1335,7 +1335,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                             # Need to filter the samples s.t. the samples in micro-batch are ONLY those which class==partition
                             idxs = utils.assign_idxs(indexs, partition, env)
                             print()
-                            print(f"p={partition_num}, e={env}, indexs={indexs.tolist()}, labels[idxs]={labels[idxs].tolist()}, ", end="")
+                            print(f"p={partition_num}, e={env}")
+                            print(f"partition[indexs]={partition[indexs]}")
                             idxs = loss_module.filter_indices(idxs, labels=labels[idxs], partition=partition_num, env=env)
 
                             if (N := len(idxs)) == 0:
