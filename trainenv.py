@@ -1334,7 +1334,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                             # For EqInv each partition corresponds to a class. Each env holds positive AND negative samples.
                             # Need to filter the samples s.t. the samples in micro-batch are ONLY those which class==partition
                             idxs = utils.assign_idxs(indexs, partition, env)
-                            idxs = loss_module.filter_indices(idxs, labels=labels, partition=partition_num, env=env)
+                            idxs = loss_module.filter_indices(idxs, labels=labels[idxs], partition=partition_num, env=env)
 
                             if (N := len(idxs)) == 0:
                                 if is_per_env:
