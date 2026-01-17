@@ -1370,14 +1370,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                             idxs = loss_module.filter_indices(idxs, labels=labels[idxs], partition=active_partition_idx[partition_num], env=env)
 
                             if (N := len(idxs)) == 0:
-                                if is_per_env:
-                                    valid_grad = next((g for g in grads_all if g is not None), None)
-                                    assert valid_grad is not None, f"env ({partition_num},{env}) has no samples and we don't know the grads shape yet"
-                                    if do_loss:
-                                        grads_all[partition_num*args.env_num + env] = tuple([g.detach() if g is not None else None for g in valid_grad]) # dummy loss's grads
-                                    if do_penalty:
-                                        grads_all[num_partitions*args.env_num*int(do_loss) + partition_num*args.env_num + env] = \
-                                            tuple([g.detach() if g is not None else None for g in valid_grad]) # dummy penalty's grads
                                 continue
                             
                             halves_sz[j,partition_num,env] += N # update number of elements in environment
@@ -1541,6 +1533,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 for ii in range(num_grads):
                     # current_grads is the tuple of all parameter grads for sample 'i'
                     current_grads = grads_all[ii]
+                    if current_grads is None: # no grads for this row, e.g. - no valid samples in this micro-batch
+                        continue
 
                     for param_idx, g in enumerate(current_grads):
                         if g is None:
