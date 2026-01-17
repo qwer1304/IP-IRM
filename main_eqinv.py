@@ -640,6 +640,7 @@ if __name__ == '__main__':
         if ssl_type == 'mocosupcon':
             def filter_indices(idxs, labels, partition, **kwargs):
                 idxs = idxs[labels==partition]
+                return idxs
             kwargs.update({'filter_indices': filter_indices})
     elif ssl_type == 'simsiam':
         pass
