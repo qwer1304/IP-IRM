@@ -65,9 +65,11 @@ def test(net, test_data_loader, args, num_classes, progress=False, prefix="Test:
         pred_scores_list = []
         target_list = []
         target_raw_list = []
+        device = next(net.parameters()).device
+
         # For macro-accuracy computation
-        per_class_correct = torch.zeros(num_classes, dtype=torch.long, device=feature_bank[0].device)
-        per_class_total   = torch.zeros(num_classes, dtype=torch.long, device=feature_bank[0].device)
+        per_class_correct = torch.zeros(num_classes, dtype=torch.long, device=device)
+        per_class_total   = torch.zeros(num_classes, dtype=torch.long, device=device)
 
         for data, target in test_bar:
             data, target = data.cuda(non_blocking=True), target.cuda(non_blocking=True)
@@ -762,7 +764,7 @@ if __name__ == '__main__':
         if (epoch >= args.test_freq) and ((epoch % args.test_freq == 0) or (epoch == epochs)): # eval model every test_freq epochs
             test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=True, 
                 pin_memory=False, persistent_workers=te_pw)
-            test_acc_1, test_acc_5, test_macro_acc = test(model, feauture_bank, test_loader, args, num_classes=c, progress=True, prefix="Test:")
+            test_acc_1, test_acc_5, test_macro_acc = test(model, test_loader, args, num_classes=c, progress=True, prefix="Test:")
             test_loader = shutdown_loader(test_loader)
             gc.collect()              # run Python's garbage collector
             txt_write = open("results-eqinv/{}/{}/{}".format(args.dataset, args.name, 'knn_result.txt'), 'a')
