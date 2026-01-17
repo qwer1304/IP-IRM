@@ -314,7 +314,7 @@ class MoCoSupConLossModule(LossModule):
         self.this_batch_size = len(batch_data)
         self.queue.get(self.this_batch_size) # advance read pointer
         
-        if partitions is None or (len(partitions) == 0) or (partitions[0] is None):
+        if partitions is None or (len(partitions) == 0) or all([p is None for p in partitions]):
             return
         
         # get the dataset indices of samples in queue
@@ -322,6 +322,8 @@ class MoCoSupConLossModule(LossModule):
         # holds per-partition lists of per-env tensors of indices into the queue
         self.neg_idxs = [[] for _ in partitions]
         for pidx, p in enumerate(partitions):
+            if not p:
+                continue
             for env in range(p.size(-1)):
                 # assign_idxs returns a tensor of indices into 'indexs' in 'env' in 'p'
                 self.neg_idxs[pidx].append(utils.assign_idxs(indexs, p, env)) # append the tensor of indices to envs list
@@ -531,7 +533,7 @@ class MoCoLossModule(LossModule):
         self.this_batch_size = len(batch_data)
         self.queue.get(self.this_batch_size) # advance read pointer
         
-        if partitions is None or (len(partitions) == 0) or (partitions[0] is None):
+        if partitions is None or (len(partitions) == 0) or all([o is None for p in partitions])):
             return
         
         # get the dataset indices of samples in queue
@@ -539,6 +541,8 @@ class MoCoLossModule(LossModule):
         # holds per-partition lists of per-env tensors of indices into the queue
         self.neg_idxs = [[] for _ in partitions]
         for pidx, p in enumerate(partitions):
+            if not p:
+                continue
             for env in range(p.size(-1)):
                 # assign_idxs returns a tensor of indices into 'indexs' in 'env' in 'p'
                 self.neg_idxs[pidx].append(utils.assign_idxs(indexs, p, env)) # append the tensor of indices to envs list
@@ -1093,6 +1097,19 @@ def calculate_grads(loss, net, retain_graph=False):
     )
     return grads
 
+def get_stochastic_partitions(all_partitions, k=5):
+    # all_partitions a list of tensors
+    num_total = len(all_partitions)
+    # Pick k random indices to keep
+    active_idxs = torch.randperm(num_total)[:k].tolist()
+    
+    # Create list: tensor if index was picked, else None
+    subset = [
+        all_partitions[i] if i in active_idxs else None 
+        for i in range(num_total)
+    ]
+    return subset, active_idxs
+
 # ssl training with IP-IRM
 def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch, args, **kwargs):
 
@@ -1107,7 +1124,12 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         assert args.retain_group
     else:
         partitions = [partitions]
-    num_partitions = len(partitions)
+
+    if args.decimate_partitions:
+        assert args.decimate_partitions <= len(partitions), f"# of partitions to decimate {args.decimate_partitions} > # partitions {len(partitions)}"
+        num_partitions = args.decimate_partitions
+    else:    
+        num_partitions = len(partitions)
     
     device = next(net.parameters()).device
 
@@ -1229,6 +1251,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
 
     for batch_index, data_env in enumerate(train_bar):
 
+        if args.decimate_partitions:
+            partitions, _ = get_stochastic_partitions(partitions, k=args.decimate_partitions)
+        
         reduction = 'sum' if is_per_env else 'none' # make sure it's the correct one
 
         data_batch, labels_batch, indexs_batch = data_env # 'data_batch' is an batch of images, 'indexs_batch' is their corresponding indices 
@@ -1325,9 +1350,11 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
 
                 if do_loss or do_penalty:
                     for partition_num, partition in enumerate(partitions):
+                        if not partition: # decimated partition
+                            continue 
                         for env in range(args.env_num):
                         
-                            is_last = (partition_num == (num_partitions-1)) and (env == (args.env_num-1))
+                            is_last = (partition_num == (len(partitions)-1)) and (env == (args.env_num-1))
 
                             # split mb: 'idxs' are indices into 'indexs' that correspond to domain 'env' in 'partition'
                             # 'indexs' are the indices in dataset of samples which are in this micro-batch

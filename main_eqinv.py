@@ -408,6 +408,7 @@ if __name__ == '__main__':
     parser.add_argument('--clusters_to_use', type=int, nargs='+', default=None, help='clusters to use out of K clusters') 
 
     parser.add_argument('--backbone_propagate', action="store_true", default=False, help='whether to propagate inv loss to backbone')
+    parser.add_argument('--decimate_partitions', type=int, default=None, help='whether to decimate partitions')
 
     # args parse
     args = parser.parse_args()
