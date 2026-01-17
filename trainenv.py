@@ -1371,12 +1371,13 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
 
                             if (N := len(idxs)) == 0:
                                 if is_per_env:
-                                    assert len(grads_all) > 0, f"env ({partition_num},{env}) has no samples and we don't know the grads shape yet"
+                                    valid_grad = next((g for g in grads_all if g is not None), None)
+                                    assert valid_grad is not None, f"env ({partition_num},{env}) has no samples and we don't know the grads shape yet"
                                     if do_loss:
-                                        grads_all[partition_num*args.env_num + env] = tuple([g.detach() if g is not None else None for g in grads_all[0]]) # dummy loss's grads
+                                        grads_all[partition_num*args.env_num + env] = tuple([g.detach() if g is not None else None for g in valid_grad]) # dummy loss's grads
                                     if do_penalty:
                                         grads_all[num_partitions*args.env_num*int(do_loss) + partition_num*args.env_num + env] = \
-                                            tuple([g.detach() if g is not None else None for g in grads_all[0]]) # dummy penalty's grads
+                                            tuple([g.detach() if g is not None else None for g in valid_grad]) # dummy penalty's grads
                                 continue
                             
                             halves_sz[j,partition_num,env] += N # update number of elements in environment
