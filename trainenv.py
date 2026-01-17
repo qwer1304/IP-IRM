@@ -1508,16 +1508,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                         grads_per_loss = [None] * num_items
 
                         # 2. Map indices: 
-                        # Original (i) -> List (k)
-                        # num_items - 1 -> 0
-                        # 0             -> 1
-                        # 1             -> 2
                         for i in range(num_items):
-                            # The mapping: (i + 1) % num_items
-                            # i = 0           => k = 1
-                            # i = num_items-1 => k = 0
-                            target_k = (i + 1) % num_items
-
                             current_loss_params = []
                             for g in grads_all_batched:
                                 if g is None:
@@ -1526,7 +1517,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                                     # Slicing the i-th batch row
                                     current_loss_params.append(g[i].detach().clone())
 
-                            grads_per_loss[target_k] = tuple(current_loss_params)
+                            grads_per_loss[i] = tuple(current_loss_params)
 
                         return grads_per_loss
 
