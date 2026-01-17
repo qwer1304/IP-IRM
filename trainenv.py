@@ -1337,8 +1337,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                             print()
                             print(f"p={partition_num}, e={env}")
                             print(f"partition[indexs]={partition[indexs]}")
+                            print(f"idxs={idxs}")
                             print(f"labels[idxs]={labels[idxs]}")
-                            idxs = loss_module.filter_indices(idxs, labels=labels[idxs], partition=partition_num, env=env)
+                            #idxs = loss_module.filter_indices(idxs, labels=labels[idxs], partition=partition_num, env=env)
 
                             if (N := len(idxs)) == 0:
                                 if is_per_env:
