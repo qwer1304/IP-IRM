@@ -1101,7 +1101,7 @@ def get_stochastic_partitions(all_partitions, k=5):
     # all_partitions a list of tensors
     num_total = len(all_partitions)
     # Pick k random indices to keep
-    active_idxs = torch.randperm(num_total)[:k].tolist().sort()
+    active_idxs = sorted(torch.randperm(num_total)[:k].tolist())
     
     # Create list: tensor if index was picked, else None
     subset = [
