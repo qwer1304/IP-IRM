@@ -1316,6 +1316,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                     if is_per_env:
                         loss = losses_samples_all / 2 / this_batch_size / gradients_accumulation_steps # CE uses both views
                         grads_all.append(calculate_grads(loss, net, retain_graph=True))
+                        print("k", grads_all[-1][0].view(-1).norm())
                     else:
                         # Must be first to be in 1st column 
                         differentiate_this.append(losses_samples_all)
@@ -1379,6 +1380,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                                     # for 'is_per_env'==True, it's always 'sum'
                                     losses_samples = loss_module.compute_loss_micro(p=partition_num, env=env, reduction=reduction, idxs=idxs)
                                     grads_all.append(calculate_grads(losses_samples, net, retain_graph=(not is_last) or do_penalty))
+                                    print("l", grads_all[-1][0].view(-1).norm())
                                     loss = losses_samples.detach()
                                 else:
                                     # For 'is_per_env'==False, convert per-sample losses to a sum
