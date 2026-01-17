@@ -1335,10 +1335,11 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                             # Need to filter the samples s.t. the samples in micro-batch are ONLY those which class==partition
                             idxs = utils.assign_idxs(indexs, partition, env)
                             print()
-                            print(f"p={partition_num}, e={env}, labels={labels.tolist()}, labels[idxs]={labels[idxs].tolist()}")
+                            print(f"p={partition_num}, e={env}, labels={labels.tolist()}, labels[idxs]={labels[idxs].tolist()}, ", end="")
                             idxs = loss_module.filter_indices(idxs, labels=labels[idxs], partition=partition_num, env=env)
 
                             if (N := len(idxs)) == 0:
+                                print(f"N={N}")
                                 if is_per_env:
                                     assert len(grads_all) > 0, f"env ({partition_num},{env}) has no samples and we don't know the grads shape yet"
                                     if do_loss:
@@ -1347,6 +1348,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                                         grads_all.append(tuple([g.detach() if g is not None else None for g in grads_all[0]])) # dummy penalty's grads
                                 continue
                             
+                            print(f"N={N}")
                             halves_sz[j,partition_num,env] += N # update number of elements in environment
                             
                             # losses - losses are ALWAYS a scalar
