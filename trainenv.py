@@ -533,7 +533,7 @@ class MoCoLossModule(LossModule):
         self.this_batch_size = len(batch_data)
         self.queue.get(self.this_batch_size) # advance read pointer
         
-        if partitions is None or (len(partitions) == 0) or all([o is None for p in partitions])):
+        if partitions is None or (len(partitions) == 0) or all([p is None for p in partitions]):
             return
         
         # get the dataset indices of samples in queue
