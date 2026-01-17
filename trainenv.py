@@ -1577,7 +1577,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         else:
             loss_env     = torch.tensor(0, dtype=torch.float, device=device)
         print()
-        print(loss_env)
+        print(loss_aggregator.sum(dim=0, keepdim=True))
         if do_penalty:
             penalty_env  = penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz) # normalized per env for macro-batch, unweighted
         else:
