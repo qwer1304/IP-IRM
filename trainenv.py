@@ -1622,13 +1622,14 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         loss_weighted      *= loss_grad_scaler
         penalty_weighted   *= penalty_grad_scaler 
         """
-        print()
+        #print()
         #for pind, p in enumerate(net.parameters()):        
         for pind, (name, p) in enumerate(net.named_parameters()):
             total_grad_flat_weighted = (   loss_unsplit_grads_final[pind] * loss_unsplit_weight * loss_unsplit_grad_scaler
                                          + loss_grads_final[pind]         * loss_weight         * loss_grad_scaler     
                                          + penalty_grads_final[pind]      * penalty_weight      * penalty_grad_scaler  
                                        )
+            """
             # Logic to identify the source
             if "f." in name:
                 label = "BACKBONE"
@@ -1641,6 +1642,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
             else:
                 label = "OTHER"
             print(f"pind {pind}, label {label}, name {name}, ngk {loss_unsplit_grads_final[pind].norm():.2e}, ngl {loss_grads_final[pind].norm():.2e}, ngp {penalty_grads_final[pind].norm():.2e}")
+            """
             if p.grad is None:
                 p.grad  = total_grad_flat_weighted.view(p.shape)
             else:
