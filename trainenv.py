@@ -1373,9 +1373,10 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                                 if is_per_env:
                                     assert len(grads_all) > 0, f"env ({partition_num},{env}) has no samples and we don't know the grads shape yet"
                                     if do_loss:
-                                        grads_all.append(tuple([g.detach() if g is not None else None for g in grads_all[0]])) # dummy loss's grads
+                                        grads_all[partition_num*args.env_num + env] = tuple([g.detach() if g is not None else None for g in grads_all[0]]) # dummy loss's grads
                                     if do_penalty:
-                                        grads_all.append(tuple([g.detach() if g is not None else None for g in grads_all[0]])) # dummy penalty's grads
+                                        grads_all[num_partitions*args.env_num*int(do_loss) + partition_num*args.env_num* + env] = \
+                                            tuple([g.detach() if g is not None else None for g in grads_all[0]]) # dummy penalty's grads
                                 continue
                             
                             halves_sz[j,partition_num,env] += N # update number of elements in environment
@@ -1389,7 +1390,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                                     # 'loss_samples' are either the per-sample losses or thie sum depending on 'reduction'
                                     # for 'is_per_env'==True, it's always 'sum'
                                     losses_samples = loss_module.compute_loss_micro(p=partition_num, env=env, reduction=reduction, idxs=idxs)
-                                    grads_all[partition_num*args.env_num + env] = calculate_grads(losses_samples, net, retain_graph=(not is_last) or do_penalty)
+                                    grads_all[partition_num*args.env_num + env] = \
+                                        calculate_grads(losses_samples, net, retain_graph=(not is_last) or do_penalty)
                                     loss = losses_samples.detach()
                                 else:
                                     # For 'is_per_env'==False, convert per-sample losses to a sum
@@ -1399,7 +1401,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                             if do_penalty:
                                 if is_per_env:
                                     penalties_samples = penalty_calculator.penalty(losses_samples, reduction=reduction)
-                                    grads_all[partition_num*args.env_num + env] = calculate_grads(losses_samples, net, retain_graph=not is_last)
+                                    grads_all[num_partitions*args.env_num*int(do_loss) + partition_num*args.env_num* + env] = \
+                                        calculate_grads(losses_samples, net, retain_graph=not is_last)
                                     penalty = penalties_samples.detach()
                                 else:
                                     penalty = penalties_samples[idxs].sum(dim=0).detach()
