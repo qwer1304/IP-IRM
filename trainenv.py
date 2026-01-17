@@ -1633,11 +1633,11 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                                          + penalty_grads_final[pind]      * penalty_weight      * penalty_grad_scaler  
                                        )
             # Logic to identify the source
-            if "backbone" in name:
+            if "f." in name:
                 label = "BACKBONE"
             elif "mask" in name:
                 label = "MASK"
-            elif "projector" in name or "predictor" in name:
+            elif "projector" in name or "predictor" or "projection" in name:
                 label = "CONTRASTIVE_ARM"
             elif "classifier" in name:
                 label = "CE_ARM"
