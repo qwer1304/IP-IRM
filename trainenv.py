@@ -1104,6 +1104,12 @@ def get_stochastic_partitions(all_partitions, k=5):
     
     return subset, active_idxs
 
+def print_grads(grads, net, prefix=""):
+    for pind, (name, p) in enumerate(net.named_parameters()):
+        if grads[pind] is None:
+            continue
+        print(f"{prefix} pind {pind} name {name} norm {grads[pind].norm():.2e}")
+        
 # ssl training with IP-IRM
 def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch, args, **kwargs):
 
@@ -1316,7 +1322,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                     if is_per_env:
                         loss = losses_samples_all / 2 / this_batch_size / gradients_accumulation_steps # CE uses both views
                         grads_all.append(calculate_grads(loss, net, retain_graph=True))
-                        print("k", grads_all[-1][0].view(-1).norm())
+                        print_grads(grads_all[-1], net, prefix="k:")
                     else:
                         # Must be first to be in 1st column 
                         differentiate_this.append(losses_samples_all)
@@ -1380,7 +1386,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                                     # for 'is_per_env'==True, it's always 'sum'
                                     losses_samples = loss_module.compute_loss_micro(p=partition_num, env=env, reduction=reduction, idxs=idxs)
                                     grads_all.append(calculate_grads(losses_samples, net, retain_graph=(not is_last) or do_penalty))
-                                    print("l", grads_all[-1][0].view(-1).norm())
+                                    print_grads(grads_all[-1], net, prefix="l:")
                                     loss = losses_samples.detach()
                                 else:
                                     # For 'is_per_env'==False, convert per-sample losses to a sum
@@ -1391,6 +1397,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                                 if is_per_env:
                                     penalties_samples = penalty_calculator.penalty(losses_samples, reduction=reduction)
                                     grads_all.append(calculate_grads(losses_samples, net, retain_graph=not is_last))
+                                    print_grads(grads_all[-1], net, prefix="p:")
                                     penalty = penalties_samples.detach()
                                 else:
                                     penalty = penalties_samples[idxs].sum(dim=0).detach()
