@@ -1336,7 +1336,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                             idxs = utils.assign_idxs(indexs, partition, env)
                             idxs = loss_module.filter_indices(idxs, labels=labels[idxs], partition=partition_num, env=env)
 
+                            print()
                             if (N := len(idxs)) == 0:
+                                print(f"p={partition_num}, env={env}, N={N}")
                                 if is_per_env:
                                     assert len(grads_all) > 0, f"env ({partition_num},{env}) has no samples and we don't know the grads shape yet"
                                     if do_loss:
@@ -1344,6 +1346,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                                     if do_penalty:
                                         grads_all.append(tuple([g.detach() if g is not None else None for g in grads_all[0]])) # dummy penalty's grads
                                 continue
+
+                            print(f"p={partition_num}, env={env}, N={N}")
                             
                             halves_sz[j,partition_num,env] += N # update number of elements in environment
                             
@@ -1572,10 +1576,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         penalty_weight_env = make_rand_dither_weight(num_partitions, args.env_num, args.weight_env_eps, device)
 
         if do_loss:
-            partition_sz = halves_sz.sum(dim=0, keepdim=True) + 1e-9 # (1,J,K) # sizes of envs in macro-batch
-            print()
-            print(partition_sz.size())
-            loss_env     = loss_aggregator.sum(dim=0, keepdim=True) / partition_sz  # per env for macro-batch, normalized per env, unweighted
+            partition_sz = halves_sz.sum(dim=0, keepdim=True) # (1,J,K) # sizes of envs in macro-batch
+            loss_env     = loss_aggregator.sum(dim=0, keepdim=True) / (partition_sz + 1e-9)  # per env for macro-batch, normalized per env, unweighted
         else:
             loss_env     = torch.tensor(0, dtype=torch.float, device=device)
         if do_penalty:
