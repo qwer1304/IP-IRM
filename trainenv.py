@@ -931,6 +931,8 @@ def calculate_scalers(loss_unsplit_grads_final, loss_grads_final, penalty_grads_
 
     # Compute SHARED dot products & cosines
     shared_pind = get_shared_ind(param_groups_2_pind, args)
+    print()
+    print(shared_pind)
     def calc_delta_and_cos(x_grads, y_grads, shared_ind):
         xx_grads = [x_grads[i] for i in shared_ind]
         yy_grads = [y_grads[i] for i in shared_ind]
