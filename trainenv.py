@@ -1752,11 +1752,11 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                    f" decr: l {info_dict['loss_decrease_cond']:.2e} k {info_dict['loss_unsplit_decrease_cond']:.2e} p {info_dict['penalty_decrease_cond']:.2e}" + \
                    f" gn_loss {info_dict['gradnorm_loss']:.4e} rates: {info_dict['gradnorm_rates_str']} gn_gpm: {info_dict['gn_pm']}" + \
                    f" Lp: cos {info_dict['cos_Lp']:.3e} dot {info_dict['dot_Lp']:.3e} gn_prgrs {info_dict['gradnorm_progress']:.6g}" + \
-                   f" shared_dot: llk2 {info_dict['ngllk']**2:.2e} llp2 {info_dict['ngllk']**2:.2e} lk {info_dict['shared_dot_lk']:.2e}" + \ 
+                   f" shared_dot: llk2 {info_dict['ngllk']**2:.2e} llp2 {info_dict['ngllk']**2:.2e} lk {info_dict['shared_dot_lk']:.2e}" + \
                    f" lp {info_dict['shared_dot_lp']:.2e} klk {info_dict['shared_ngklk']**2:.2e} kkp {info_dict['shared_ngkkp']**2:.2e}" + \
                    f" kp {info_dict['shared_dot_kp']:.2e} plp {info_dict['shared_ngplp']**2:.2e} pkp {info_dict['shared_ngpkp']**2:.2e}" + \
                    f" shared_cos: lk {info_dict['shared_cos_lk']:.3e} lp {info_dict['shared_cos_lp']:.3e} kp {info_dict['shared_cos_kp']:.2e}" + \
-                   f" Lp: shared cos {info_dict['shared_cos_Lp']:.3e} shared dot {info_dict['shared_dot_Lp']:.3e}" + \ 
+                   f" Lp: shared cos {info_dict['shared_cos_Lp']:.3e} shared dot {info_dict['shared_dot_Lp']:.3e}" + \
                    f" gn_prgrs {info_dict['gradnorm_progress']:.6g}"
         desc_str += loss_module.get_debug_info_str()
         train_bar.set_description(desc_str)
