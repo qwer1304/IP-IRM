@@ -219,11 +219,11 @@ def load_checkpoint(path, model, model_momentum, optimizer, gradnorm_balancer, g
                 if p not in optimizer.state:
                     # This creates the m and v buffers (for Adam) or momentum (for SGD)
                     # as zeros, so the parameter actually starts updating.
-                    optimizer.state[p] = {} 
-                    # For Adam, you might want to explicitly init the buffers:
-                    optimizer.state[p]['step'] = 0
-                    optimizer.state[p]['exp_avg'] = torch.zeros_like(p)
-                    optimizer.state[p]['exp_avg_sq'] = torch.zeros_like(p)
+                    optimizer.state[p] = {
+                                    'step': torch.tensor(0.0, device=p.device), 
+                                    'exp_avg': torch.zeros_like(p),
+                                    'exp_avg_sq': torch.zeros_like(p)
+                                }
         # Move optimizer tensors to the correct device
         for state in optimizer.state.values():
             for k, v in state.items():
