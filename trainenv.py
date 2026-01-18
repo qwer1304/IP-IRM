@@ -857,6 +857,25 @@ def calculate_penalty_grads_final(penalty_grads, penalty_aggregator, penalty_wei
         penalty_grads_final = [torch.tensor(0., dtype=torch.float, device=device)] * len(penalty_grads)
     return penalty_grads_final
 
+def get_shared_ind(param_groups_2_pind, args):
+    if 'ce' in param_groups_2_pind: # separate CE head
+        if not args.backbone_propagate: # w/o backbone propagation
+            assert 'mask' in param_groups_2_pind, "separate CE, no propagation into backbone but NO mask layer"
+            assert args.opt_mask, "separate CE, no propagation into backbone but mask layer NOT trainable"
+            shared_ind = {"lk": param_groups_2_pind['mask'], "lp": param_groups_2_pind['mask+cont'], "kp": param_groups_2_pind['mask']}
+        else: # w/ backbone propagation
+            if 'mask' in param_groups_2_pind: # w/ mask
+                shared_ind = {"lk": param_groups_2_pind['backbone+mask'], "lp": param_groups_2_pind['backbone+mask+cont'], "kp": param_groups_2_pind['backbone+mask']}
+            else: # w/o mask
+                shared_ind = {"lk": param_groups_2_pind['backbone'], "lp": param_groups_2_pind['backbone+cont'], "kp": param_groups_2_pind['backbone']}
+    else: # shared CE & cont head
+        if 'mask' in param_groups_2_pind: # w/ mask
+            shared_ind = {"lk": param_groups_2_pind['backbone+mask+cont'], "lp": param_groups_2_pind['backbone+mask+cont'], "kp": param_groups_2_pind['backbone+mask+cont']}
+        else: # w/o mask
+            shared_ind = {"lk": param_groups_2_pind['backbone+cont'], "lp": param_groups_2_pind['backbone+cont'], "kp": param_groups_2_pind['backbone+cont']}
+    
+    return shared_ind
+
 def rotate_penalty_grads(penalty_grads_final, loss_grads_final, grad_rotate, do_penalty):
     if do_penalty and grad_rotate is not None:
         theta = float(torch.empty(1).uniform_(min(grad_rotate), max(grad_rotate)).item())
@@ -871,7 +890,8 @@ def calculate_scalers(loss_unsplit_grads_final, loss_grads_final, penalty_grads_
                       loss_unsplit_weight,      loss_weight,      penalty_weight,
                       ema,
                       gradnorm_balancer, do_gradnorm,
-                      args, do_unsplit_loss, do_loss, do_penalty, device):
+                      args, do_unsplit_loss, do_loss, do_penalty, device,
+                      param_groups_2_pind):
     def setup_grads_and_norms(grads_final, weight, Lscaler, device, do_flag, default_grads_weighted_vector=None):
         if do_flag:
             grads_weighted        = [g.detach().clone() * weight * Lscaler for g in grads_final if g is not None]
@@ -908,6 +928,21 @@ def calculate_scalers(loss_unsplit_grads_final, loss_grads_final, penalty_grads_
     loss_weighted         = loss_weight         * loss_env.mean()
     loss_unsplit_weighted = loss_unsplit_weight * loss_unsplit_aggregator.mean()
     penalty_weighted      = penalty_weight      * penalty_env.mean()
+
+    # Compute SHARED dot products & cosines
+    shared_pind = get_shared_ind(param_groups_2_pind, args)
+    def calc_delta_and_cos(x_grads, y_grads, shared_ind):
+        shared_x_grads_vector = torch.cat([g for g in x_grads[shared_ind]]) 
+        shared_y_grads_vector = torch.cat([g for g in y_grads[shared_ind]]) 
+        delta_xy = shared_x_grads_vector.dot(shared_y_grads_vector)
+        shared_ngx = shared_x_grads_vector.norm()
+        shared_ngy = shared_y_grads_vector.norm()
+        cos_xy = delta_xy / (shared_ngx + shared_ngy + 1e-12)
+        return delta_xy, cos_xy, shared_ngx, shared_ngy
+    shared_delta_lk, shared_cos_lk, shared_ngllk, shared_ngklk = calc_delta_and_cos(loss_grads_final_weighted, loss_unsplit_grads_final_weighted, shared_pind['lk'])      
+    shared_delta_lp, shared_cos_lp, shared_ngllp, shared_ngplp = calc_delta(loss_grads_final_weighted, penalty_grads_final_weighted, shared_pind['lp'])
+    shared_delta_kp, shared_cos_kp, shared_ngkkp, shared_ngpkp = calc_delta(loss_unsplit_grads_final_weighted, penalty_grads_final_weighted, shared_pind['kp'])     
+    shared_dot_Lp,   shared_cos_Lp, shared_ngLLp, shared_ngpLp = calc_delta_and_cos(Loss_grads_flat_weighted, penalty_grads_final_weighted, shared_pind['kp']) # 'l' and 'p' share same pars
 
     if args.ema:
         emas = ema.update({'ngk':      loss_unsplit_grad_norm_weighted, 
@@ -992,18 +1027,34 @@ def calculate_scalers(loss_unsplit_grads_final, loss_grads_final, penalty_grads_
         'ngk':               ngk.item(),
         'ngl':               ngl.item(),
         'ngp':               ngp.item(),
+        'ngklk':             shared_ngklk.item(),
+        'ngkkp':             shared_ngkkp.item(), 
+        'ngllk':             shared_ngllk.item(),
+        'ngllp':             shared_ngllp.item(), 
+        'ngplp':             shared_ngplp.item(),
+        'ngpkp':             shared_ngpkp.item(),
+        'ngLLp':             shared_ngLLp.item(), 
+        'ngpLp':             shared_ngpLp.item(),
         'dot_lk':            dot_lk.item(),               
         'dot_lp':            dot_lp.item(),
         'dot_kp':            dot_kp.item(),
+        'dot_Lp':            dot_Lp.item(),
         'cos_lk':            cos_lk.item(),               
         'cos_lp':            cos_lp.item(),
         'cos_kp':            cos_kp.item(),
-        'gradnorm_loss':     gradnorm_loss.item()    if do_gradnorm else 0.,
+        'cos_Lp':            cos_Lp.item(),
+        'shared_dot_lk':     shared_delta_lk.item(), 
+        'shared_dot_lp':     shared_delta_lp.item(), 
+        'shared_dot_kp':     shared_delta_kp.item(), 
+        'shared_dot_Lp':     shared_dot_Lp.item(), 
+        'shared_cos_lk':     shared_cos_lk.item(),
+        'shared_cos_lp':     shared_cos_lp.item(),
+        'shared_cos_kp':     shared_cos_kp.item(),
+        'shared_cos_Lp':     shared_cos_Lp.item(),
         'ngk2':              ngk2.item(),
         'ngl2':              ngl2.item(),
         'ngp2':              ngp2.item(),
-        'cos_Lp':            cos_Lp.item(),
-        'dot_Lp':            dot_Lp.item(),
+        'gradnorm_loss':     gradnorm_loss.item()    if do_gradnorm else 0.,
         'gradnorm_progress': gradnorm_progress.item(),
         # get these before gradnorm optimizer updates them
         'w_k':               loss_unsplit_grad_scaler.item(),
@@ -1116,7 +1167,28 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
     ema = kwargs['ema']
     gradnorm_balancer, gradnorm_optimizer = kwargs['gradnorm_balancer'], kwargs['gradnorm_optimizer']
     log_file = kwargs['log_file']
-    
+
+    # Create mapping of net parameters to their layer names
+    # Assumes net.parameters() order matches your aggregator's pind
+    param_map = {name: pind for pind, (name, p) in enumerate(net.named_parameters())}
+
+    # Group indices by their component names
+    cont_names = ['projector', 'predictor', 'projection']
+    param_groups_2_pind = {'mask': [idx for name, idx in param_map.items() if 'mask.' in name],
+                           'backbone': [idx for name, idx in param_map.items() if 'f.' in name],
+                           'heads': [idx for name, idx in param_map.items() if 'arm.' in name],    
+                           'cont': [idx for name, idx in param_map.items() if any(target in name for target in cont_names)],   
+                           'ce': [idx for name, idx in param_map.items() if 'classifier.' in name],
+    }
+    param_groups_2_pind.update({'mask+cont': param_groups_2_pind['mask'] + param_groups_2_pind['cont'],
+                                'mask+ce': param_groups_2_pind['mask'] + param_groups_2_pind['ce'],
+                                'backbone+mask': param_groups_2_pind['backbone'] + param_groups_2_pind['mask'],
+                                'backbone+mask+cont': param_groups_2_pind['backbone'] + param_groups_2_pind['mask'] + param_groups_2_pind['cont'],
+                                'backbone+mask+ce': param_groups_2_pind['backbone'] + param_groups_2_pind['mask'] + param_groups_2_pind['ce'],
+                                'backbone+cont': param_groups_2_pind['backbone'] + param_groups_2_pind['cont'],
+                                'backbone+ce': param_groups_2_pind['backbone'] + param_groups_2_pind['ce'],
+    })
+ 
     net.train()
     set_BN_adapt(net, args.adapt_bn, args.bn_momentum)
 
@@ -1613,7 +1685,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                               loss_unsplit_weight,      loss_weight,      penalty_weight,
                               ema,
                               gradnorm_balancer, do_gradnorm,
-                              args, do_unsplit_loss, do_loss, do_penalty, device)
+                              args, do_unsplit_loss, do_loss, do_penalty, device, param_groups_2_pind)
 
         """
         Don't multiply individual task's loss by scaler, since it's misleading
@@ -1622,27 +1694,11 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         loss_weighted      *= loss_grad_scaler
         penalty_weighted   *= penalty_grad_scaler 
         """
-        #print()
-        #for pind, p in enumerate(net.parameters()):        
         for pind, (name, p) in enumerate(net.named_parameters()):
             total_grad_flat_weighted = (   loss_unsplit_grads_final[pind] * loss_unsplit_weight * loss_unsplit_grad_scaler
                                          + loss_grads_final[pind]         * loss_weight         * loss_grad_scaler     
                                          + penalty_grads_final[pind]      * penalty_weight      * penalty_grad_scaler  
                                        )
-            """
-            # Logic to identify the source
-            if "f." in name:
-                label = "BACKBONE"
-            elif "mask" in name:
-                label = "MASK"
-            elif "projector" in name or "predictor" or "projection" in name:
-                label = "CONTRASTIVE_ARM"
-            elif "classifier" in name:
-                label = "CE_ARM"
-            else:
-                label = "OTHER"
-            print(f"pind {pind}, label {label}, name {name}, ngk {loss_unsplit_grads_final[pind].norm():.2e}, ngl {loss_grads_final[pind].norm():.2e}, ngp {penalty_grads_final[pind].norm():.2e}")
-            """
             if p.grad is None:
                 p.grad  = total_grad_flat_weighted.view(p.shape)
             else:
@@ -1695,7 +1751,13 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                    f" p {info_dict['w_p']:.4f}/{info_dict['v_p']:.4f}" + \
                    f" decr: l {info_dict['loss_decrease_cond']:.2e} k {info_dict['loss_unsplit_decrease_cond']:.2e} p {info_dict['penalty_decrease_cond']:.2e}" + \
                    f" gn_loss {info_dict['gradnorm_loss']:.4e} rates: {info_dict['gradnorm_rates_str']} gn_gpm: {info_dict['gn_pm']}" + \
-                   f" Lp: cos {info_dict['cos_Lp']:.3e} dot {info_dict['dot_Lp']:.3e} gn_prgrs {info_dict['gradnorm_progress']:.6g}"
+                   f" Lp: cos {info_dict['cos_Lp']:.3e} dot {info_dict['dot_Lp']:.3e} gn_prgrs {info_dict['gradnorm_progress']:.6g}" + \
+                   f" shared_dot: llk2 {info_dict['ngllk']**2:.2e} llp2 {info_dict['ngllk']**2:.2e} lk {info_dict['shared_dot_lk']:.2e}" + \ 
+                   f" lp {info_dict['shared_dot_lp']:.2e} klk {info_dict['shared_ngklk']**2:.2e} kkp {info_dict['shared_ngkkp']**2:.2e}" + \
+                   f" kp {info_dict['shared_dot_kp']:.2e} plp {info_dict['shared_ngplp']**2:.2e} pkp {info_dict['shared_ngpkp']**2:.2e}" + \
+                   f" shared_cos: lk {info_dict['shared_cos_lk']:.3e} lp {info_dict['shared_cos_lp']:.3e} kp {info_dict['shared_cos_kp']:.2e}" + \
+                   f" Lp: shared cos {info_dict['shared_cos_Lp']:.3e} shared dot {info_dict['shared_dot_Lp']:.3e}" + \ 
+                   f" gn_prgrs {info_dict['gradnorm_progress']:.6g}"
         desc_str += loss_module.get_debug_info_str()
         train_bar.set_description(desc_str)
 
