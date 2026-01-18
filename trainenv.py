@@ -942,9 +942,6 @@ def calculate_scalers(loss_unsplit_grads_final, loss_grads_final, penalty_grads_
         cos_xy = delta_xy / (shared_ngx + shared_ngy + 1e-12)
         return delta_xy, cos_xy, shared_ngx, shared_ngy
     shared_delta_lk, shared_cos_lk, shared_ngllk, shared_ngklk = calc_delta_and_cos(loss_grads_final_weighted, loss_unsplit_grads_final_weighted, shared_pind['lk'])
-    print()
-    print(shared_ngllk, shared_ngklk, shared_pind['lk'])
-    exit(1)
     shared_delta_lp, shared_cos_lp, shared_ngllp, shared_ngplp = calc_delta_and_cos(loss_grads_final_weighted, penalty_grads_final_weighted, shared_pind['lp'])
     shared_delta_kp, shared_cos_kp, shared_ngkkp, shared_ngpkp = calc_delta_and_cos(loss_unsplit_grads_final_weighted, penalty_grads_final_weighted, shared_pind['kp'])     
     shared_dot_Lp,   shared_cos_Lp, shared_ngLLp, shared_ngpLp = calc_delta_and_cos(Loss_grads_flat_weighted, penalty_grads_final_weighted, shared_pind['kp']) # 'l' and 'p' share same pars
@@ -1395,9 +1392,15 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 del batch_micro
                 torch.cuda.empty_cache()
                 
+                # mask: assume user sets mask and args.backbone_propagate properly:
+                # when it's not needed it's set to 'ident' and args.backbone_propagate==True
+                # must apply mask only after unsplit loss has been applied
+                features_1_nondetached, features_2_nondetached = net.module.mask(features_1), net.module.mask(features_2) 
+                features_1_detached, features_2_detached = net.module.mask(features_1.detach()), net.module.mask(features_2.detach()) 
+
                 # if want unsplit loss w/ its own loss method
                 if do_unsplit_loss and (loss_unsplit_module is not None):
-                    loss_unsplit_module.pre_micro_batch(features_1, features_2, indexs=indexs, labels=labels, normalize=False,
+                    loss_unsplit_module.pre_micro_batch(features_1_nondetached, features_2_nondetached, indexs=indexs, labels=labels, normalize=False,
                         dataset=train_loader.dataset, weights=weights)
                     losses_samples_all = loss_unsplit_module.compute_loss_micro(reduction='sum')
                     if is_per_env:
@@ -1407,13 +1410,10 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                         # Must be first to be in 1st column 
                         differentiate_this.append(losses_samples_all)
 
-                # mask: assume user sets mask and args.backbone_propagate properly:
-                # when it's not needed it's set to 'ident' and args.backbone_propagate==True
-                # must apply mask only after unsplit loss has been applied
                 if args.backbone_propagate:
-                    features_1, features_2 = net.module.mask(features_1), net.module.mask(features_2) 
+                    features_1, features_2 = features_1_nondetached, features_2_nondetached
                 else:
-                    features_1, features_2 = net.module.mask(features_1.detach()), net.module.mask(features_2.detach()) 
+                    features_1, features_2 = features_1_detached, features_2_detached
 
                 loss_module.pre_micro_batch(features_1, features_2, indexs=indexs, normalize=(loss_type != 'supcon'), dataset=train_loader.dataset)
                 
@@ -1647,7 +1647,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                     loss_unsplit_module.prepare_for_free()
                 
                 # free memory of micro-batch
-                del features_1, features_2, indexs, g_flat, g, grads_all, differentiate_this
+                del features_1, features_2, features_1_nondetached, features_2_nondetached, features_1_detached, features_2_detached 
+                del indexs, g_flat, g, grads_all, differentiate_this
                 if loss is not None: del loss
                 if losses_samples_all is not None: del losses_samples_all
                 if losses_samples is not None: del losses_samples
