@@ -931,9 +931,6 @@ def calculate_scalers(loss_unsplit_grads_final, loss_grads_final, penalty_grads_
 
     # Compute SHARED dot products & cosines
     shared_pind = get_shared_ind(param_groups_2_pind, args)
-    print()
-    print(param_groups_2_pind)
-    print(shared_pind)
     def calc_delta_and_cos(x_grads, y_grads, shared_ind):
         xx_grads = [x_grads[i] for i in shared_ind]
         yy_grads = [y_grads[i] for i in shared_ind]
@@ -1176,7 +1173,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
     # Create mapping of net parameters to their layer names
     # Assumes net.parameters() order matches your aggregator's pind
     param_map = {name: pind for pind, (name, p) in enumerate(net.named_parameters())}
-
+    print()
+    print(param_map)
+    exit(1)
     # Group indices by their component names
     cont_names = ['projector', 'predictor', 'projection']
     param_groups_2_pind = {'mask': [idx for name, idx in param_map.items() if 'mask.' in name],
