@@ -208,19 +208,19 @@ def load_checkpoint(path, model, model_momentum, optimizer, gradnorm_balancer, g
         msg_gradnorm = "gradnorm not used"
 
     # Restore optimizer (if available)
-    if False and "optimizer" in checkpoint and checkpoint["optimizer"] is not None:
+    if "optimizer" in checkpoint and checkpoint["optimizer"] is not None:
 
         checkpoint["optimizer"]["param_groups"] = optimizer.param_groups  # keep current hparams
         optimizer.load_state_dict(checkpoint["optimizer"])
 
-        # 2. Force-initialize the state for parameters that were missing from the checkpoint
+        # Force-initialize the state for parameters that were missing from the checkpoint
         for group in optimizer.param_groups:
             for p in group['params']:
                 if p not in optimizer.state:
                     # This creates the m and v buffers (for Adam) or momentum (for SGD)
                     # as zeros, so the parameter actually starts updating.
                     optimizer.state[p] = {
-                                    'step': torch.tensor(0.0, device=p.device), 
+                                    'step': torch.tensor(0.0), 
                                     'exp_avg': torch.zeros_like(p),
                                     'exp_avg_sq': torch.zeros_like(p)
                                 }
@@ -230,7 +230,7 @@ def load_checkpoint(path, model, model_momentum, optimizer, gradnorm_balancer, g
                 if torch.is_tensor(v):
                     state[k] = v.to(device)
 
-    if False and ("gradnorm_optimizer" in checkpoint) and (checkpoint["gradnorm_optimizer"] is not None):
+    if ("gradnorm_optimizer" in checkpoint) and (checkpoint["gradnorm_optimizer"] is not None):
         checkpoint["gradnorm_optimizer"]["param_groups"] = gradnorm_optimizer.param_groups  # keep current hparams
         gradnorm_optimizer.load_state_dict(checkpoint["gradnorm_optimizer"])
         # Move optimizer tensors to the correct device
