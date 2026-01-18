@@ -943,9 +943,6 @@ def calculate_scalers(loss_unsplit_grads_final, loss_grads_final, penalty_grads_
         return delta_xy, cos_xy, shared_ngx, shared_ngy
     shared_delta_lk, shared_cos_lk, shared_ngllk, shared_ngklk = calc_delta_and_cos(loss_grads_final_weighted, loss_unsplit_grads_final_weighted, shared_pind['lk'])      
     shared_delta_lp, shared_cos_lp, shared_ngllp, shared_ngplp = calc_delta_and_cos(loss_grads_final_weighted, penalty_grads_final_weighted, shared_pind['lp'])
-    print()
-    print(shared_ngllp, shared_ngplp)
-    exit(1)
     shared_delta_kp, shared_cos_kp, shared_ngkkp, shared_ngpkp = calc_delta_and_cos(loss_unsplit_grads_final_weighted, penalty_grads_final_weighted, shared_pind['kp'])     
     shared_dot_Lp,   shared_cos_Lp, shared_ngLLp, shared_ngpLp = calc_delta_and_cos(Loss_grads_flat_weighted, penalty_grads_final_weighted, shared_pind['kp']) # 'l' and 'p' share same pars
 
