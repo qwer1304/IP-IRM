@@ -208,7 +208,7 @@ def load_checkpoint(path, model, model_momentum, optimizer, gradnorm_balancer, g
         msg_gradnorm = "gradnorm not used"
 
     # Restore optimizer (if available)
-    if "optimizer" in checkpoint and checkpoint["optimizer"] is not None:
+    if False and "optimizer" in checkpoint and checkpoint["optimizer"] is not None:
 
         checkpoint["optimizer"]["param_groups"] = optimizer.param_groups  # keep current hparams
         optimizer.load_state_dict(checkpoint["optimizer"])
@@ -230,7 +230,7 @@ def load_checkpoint(path, model, model_momentum, optimizer, gradnorm_balancer, g
                 if torch.is_tensor(v):
                     state[k] = v.to(device)
 
-    if ("gradnorm_optimizer" in checkpoint) and (checkpoint["gradnorm_optimizer"] is not None):
+    if False and ("gradnorm_optimizer" in checkpoint) and (checkpoint["gradnorm_optimizer"] is not None):
         checkpoint["gradnorm_optimizer"]["param_groups"] = gradnorm_optimizer.param_groups  # keep current hparams
         gradnorm_optimizer.load_state_dict(checkpoint["gradnorm_optimizer"])
         # Move optimizer tensors to the correct device
