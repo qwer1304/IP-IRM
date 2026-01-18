@@ -932,8 +932,10 @@ def calculate_scalers(loss_unsplit_grads_final, loss_grads_final, penalty_grads_
     # Compute SHARED dot products & cosines
     shared_pind = get_shared_ind(param_groups_2_pind, args)
     def calc_delta_and_cos(x_grads, y_grads, shared_ind):
-        shared_x_grads_vector = torch.cat([g for g in x_grads[shared_ind]]) 
-        shared_y_grads_vector = torch.cat([g for g in y_grads[shared_ind]]) 
+        xx_grads = [x_grads[i] for i in shared_ind]
+        yy_grads = [y_grads[i] for i in shared_ind]
+        shared_x_grads_vector = torch.cat([g for g in xx_grads]) 
+        shared_y_grads_vector = torch.cat([g for g in yy_grads]) 
         delta_xy = shared_x_grads_vector.dot(shared_y_grads_vector)
         shared_ngx = shared_x_grads_vector.norm()
         shared_ngy = shared_y_grads_vector.norm()
