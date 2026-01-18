@@ -1173,12 +1173,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
     # Create mapping of net parameters to their layer names
     # Assumes net.parameters() order matches your aggregator's pind
     param_map = {name: pind for pind, (name, p) in enumerate(net.named_parameters())}
-    print()
-    print(param_map)
-    exit(1)
     # Group indices by their component names
     cont_names = ['projector', 'predictor', 'projection']
-    param_groups_2_pind = {'mask': [idx for name, idx in param_map.items() if 'mask.' in name],
+    param_groups_2_pind = {'mask': [idx for name, idx in param_map.items() if 'mask' in name],
                            'backbone': [idx for name, idx in param_map.items() if 'f.' in name],
                            'heads': [idx for name, idx in param_map.items() if 'arm.' in name],    
                            'cont': [idx for name, idx in param_map.items() if any(target in name for target in cont_names)],   
