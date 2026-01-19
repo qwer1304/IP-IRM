@@ -860,9 +860,10 @@ def calculate_penalty_grads_final(penalty_grads, penalty_aggregator, penalty_wei
 def get_shared_ind(param_groups_2_pind, args):
     if 'ce' in param_groups_2_pind: # separate CE head
         if not args.backbone_propagate: # w/o backbone propagation
-            assert 'mask' in param_groups_2_pind, "separate CE, no propagation into backbone but NO mask layer"
-            assert args.opt_mask, "separate CE, no propagation into backbone but mask layer NOT trainable"
-            shared_ind = {"lk": param_groups_2_pind['mask'], "lp": param_groups_2_pind['mask+cont'], "kp": param_groups_2_pind['mask']}
+            if 'mask' in param_groups_2_pind and args.opt_mask:
+                shared_ind = {"lk": param_groups_2_pind['mask'], "lp": param_groups_2_pind['mask+cont'], "kp": param_groups_2_pind['mask']}
+            else:
+                shared_ind = {"lk": [], "lp": param_groups_2_pind['cont'], "kp": []}
         else: # w/ backbone propagation
             if 'mask' in param_groups_2_pind: # w/ mask
                 shared_ind = {"lk": param_groups_2_pind['backbone+mask'], "lp": param_groups_2_pind['backbone+mask+cont'], "kp": param_groups_2_pind['backbone+mask']}
@@ -932,7 +933,7 @@ def calculate_scalers(loss_unsplit_grads_final, loss_grads_final, penalty_grads_
     # Compute SHARED dot products & cosines
     shared_pind = get_shared_ind(param_groups_2_pind, args)
     def calc_delta_and_cos(x_grads, y_grads, shared_ind, do_x, do_y):
-        if do_x and do_y:
+        if do_x and do_y and len(shared_ind) > 0:
             xx_grads = [x_grads[i] for i in shared_ind]
             yy_grads = [y_grads[i] for i in shared_ind]
             shared_x_grads_vector = torch.cat([g for g in xx_grads]) 
