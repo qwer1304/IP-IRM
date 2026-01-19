@@ -931,20 +931,28 @@ def calculate_scalers(loss_unsplit_grads_final, loss_grads_final, penalty_grads_
 
     # Compute SHARED dot products & cosines
     shared_pind = get_shared_ind(param_groups_2_pind, args)
-    def calc_delta_and_cos(x_grads, y_grads, shared_ind):
-        xx_grads = [x_grads[i] for i in shared_ind]
-        yy_grads = [y_grads[i] for i in shared_ind]
-        shared_x_grads_vector = torch.cat([g for g in xx_grads]) 
-        shared_y_grads_vector = torch.cat([g for g in yy_grads]) 
-        delta_xy = shared_x_grads_vector.dot(shared_y_grads_vector)
-        shared_ngx = shared_x_grads_vector.norm()
-        shared_ngy = shared_y_grads_vector.norm()
-        cos_xy = delta_xy / (shared_ngx + shared_ngy + 1e-12)
-        return delta_xy, cos_xy, shared_ngx, shared_ngy
-    shared_delta_lk, shared_cos_lk, shared_ngllk, shared_ngklk = calc_delta_and_cos(loss_grads_final_weighted, loss_unsplit_grads_final_weighted, shared_pind['lk'])
-    shared_delta_lp, shared_cos_lp, shared_ngllp, shared_ngplp = calc_delta_and_cos(loss_grads_final_weighted, penalty_grads_final_weighted, shared_pind['lp'])
-    shared_delta_kp, shared_cos_kp, shared_ngkkp, shared_ngpkp = calc_delta_and_cos(loss_unsplit_grads_final_weighted, penalty_grads_final_weighted, shared_pind['kp'])     
-    shared_dot_Lp,   shared_cos_Lp, shared_ngLLp, shared_ngpLp = calc_delta_and_cos(Loss_grads_flat_weighted, penalty_grads_final_weighted, shared_pind['kp']) # 'l' and 'p' share same pars
+    def calc_delta_and_cos(x_grads, y_grads, shared_ind, do_x, do_y):
+        if do_x and do_y:
+            xx_grads = [x_grads[i] for i in shared_ind]
+            yy_grads = [y_grads[i] for i in shared_ind]
+            shared_x_grads_vector = torch.cat([g for g in xx_grads]) 
+            shared_y_grads_vector = torch.cat([g for g in yy_grads]) 
+            delta_xy = shared_x_grads_vector.dot(shared_y_grads_vector)
+            shared_ngx = shared_x_grads_vector.norm()
+            shared_ngy = shared_y_grads_vector.norm()
+            cos_xy = delta_xy / (shared_ngx + shared_ngy + 1e-12)
+            return delta_xy, cos_xy, shared_ngx, shared_ngy
+        else:
+            return torch.tensor(0, dtype=torch.float), torch.tensor(0, dtype=torch.float), torch.tensor(0, dtype=torch.float), torch.tensor(0, dtype=torch.float) 
+
+    shared_delta_lk, shared_cos_lk, shared_ngllk, shared_ngklk = \
+        calc_delta_and_cos(loss_grads_final_weighted, loss_unsplit_grads_final_weighted, shared_pind['lk'], do_loss, do_unsplit_loss)
+    shared_delta_lp, shared_cos_lp, shared_ngllp, shared_ngplp = \
+        calc_delta_and_cos(loss_grads_final_weighted, penalty_grads_final_weighted, shared_pind['lp'], do_loss, do_penalty)
+    shared_delta_kp, shared_cos_kp, shared_ngkkp, shared_ngpkp = \
+        calc_delta_and_cos(loss_unsplit_grads_final_weighted, penalty_grads_final_weighted, shared_pind['kp'], do_unsplit_loss, do_penalty)     
+    shared_dot_Lp,   shared_cos_Lp, shared_ngLLp, shared_ngpLp = \
+        calc_delta_and_cos(Loss_grads_flat_weighted, penalty_grads_final_weighted, shared_pind['kp'], do_unsplit_loss or do_loss, do_penalty) # 'l' and 'p' share same pars
 
     if args.ema:
         emas = ema.update({'ngk':      loss_unsplit_grad_norm_weighted, 
