@@ -57,7 +57,7 @@ class MaskModule(nn.Module):
 
     def forward(self, x):
         # Simply multiply the features by the mask
-        return self.activation_method(self.mask) * x
+        return self.activation_method(self.mask).to(x.device) * x
 
 
 def create_mlp(
