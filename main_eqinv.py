@@ -208,36 +208,43 @@ def load_checkpoint(path, model, model_momentum, optimizer, gradnorm_balancer, g
         msg_gradnorm = "gradnorm not used"
 
     # Restore optimizer (if available)
-    if False and "optimizer" in checkpoint and checkpoint["optimizer"] is not None:
 
-        checkpoint["optimizer"]["param_groups"] = optimizer.param_groups  # keep current hparams
-        optimizer.load_state_dict(checkpoint["optimizer"])
+    def restore_optimizer(optimizer, opt_state_dict, device):
+        # 1. Capture the current params (the ones you want to keep)
+        # This ensures your new mask is known to the system
+        current_param_groups = optimizer.param_groups 
 
-        # Force-initialize the state for parameters that were missing from the checkpoint
+        # 2. Load the old state dict strictly
+        # If the number of groups changed, this might throw an error. 
+        # If it does, load ONLY the 'state' part.
+        try:
+            optimizer.load_state_dict(opt_state_dict)
+        except ValueError:
+            print("Optimizer group mismatch. Loading state values manually...")
+            # Fallback: Load state buffers but keep current group structure
+            optimizer.state.update(opt_state_dict]["state"])
+
+        # 3. Ensure every parameter in your current groups has a state entry
+        # This is your "Initialization" logic, but safer:
         for group in optimizer.param_groups:
             for p in group['params']:
                 if p not in optimizer.state:
-                    # This creates the m and v buffers (for Adam) or momentum (for SGD)
-                    # as zeros, so the parameter actually starts updating.
                     optimizer.state[p] = {
-                                    'step': torch.tensor(0.0), 
-                                    'exp_avg': torch.zeros_like(p),
-                                    'exp_avg_sq': torch.zeros_like(p)
-                                }
-        # Move optimizer tensors to the correct device
-        for state in optimizer.state.values():
-            for k, v in state.items():
-                if torch.is_tensor(v):
-                    state[k] = v.to(device)
+                        'step': torch.tensor(0.0).to(device), 
+                        'exp_avg': torch.zeros_like(p),
+                        'exp_avg_sq': torch.zeros_like(p)
+                    }
+                else:
+                    # Move existing state to correct device
+                    for k, v in optimizer.state[p].items():
+                        if torch.is_tensor(v):
+                            optimizer.state[p][k] = v.to(device)
 
-    if False and ("gradnorm_optimizer" in checkpoint) and (checkpoint["gradnorm_optimizer"] is not None):
-        checkpoint["gradnorm_optimizer"]["param_groups"] = gradnorm_optimizer.param_groups  # keep current hparams
-        gradnorm_optimizer.load_state_dict(checkpoint["gradnorm_optimizer"])
-        # Move optimizer tensors to the correct device
-        for state in gradnorm_optimizer.state.values():
-            for k, v in state.items():
-                if torch.is_tensor(v):
-                    state[k] = v.to(device)
+    if "optimizer" in checkpoint and checkpoint["optimizer"] is not None:
+        restore_optimizer(optimizer, checkpoint["optimizer"], device)
+                        
+    if ("gradnorm_optimizer" in checkpoint) and (checkpoint["gradnorm_optimizer"] is not None):
+        restore_optimizer(gradnorm_optimizer, checkpoint["gradnorm_optimizer"], device)
 
     # Restore RNG states (if present)
     rng_dict = checkpoint.get("rng_dict", None)
@@ -407,10 +414,12 @@ if __name__ == '__main__':
     #### add mask
     parser.add_argument('--mask_nonlinearity', type=str, default='sigmoid', choices=['sigmoid', 'ident', 'gumbel'], help='type of non-linearity in mask')
     parser.add_argument('--opt_mask', action="store_true", default=False, help='optimize the mask')
+    parser.add_argument('--mask_lr', type=float, default=0.0, help="mask LR")
     parser.add_argument('--gumbel_tau', type=float, default=1.0, help='tau for gumbel mask')
     parser.add_argument('--gumbel_soft', action="store_true", help='soft gumbel')
     parser.add_argument('--mask_sparsity', type=int, default=None, help='sparsity K s.t. # of hot masks <= K')
     parser.add_argument('--mask_sparsity_weight', type=float, default=0.0, help='weight of sparsity loss')
+    parser.add_argument('--mask_save_freq', type=int, default=None, help='save mask frequency')
 
     # clustering
     parser.add_argument('--cluster_path', type=str, default=None, 
@@ -582,13 +591,13 @@ if __name__ == '__main__':
         params = []
         if ssl_type == "simsiam":
             params.append({'params': model.module.f.parameters(), 'lr': args.featurizer_lr if args.featurizer_lr > 0 else args.lr})
-            params.append({'params': model.module.mask_fun.parameters(), 'lr': args.lr})
+            params.append({'params': model.module.mask_fun.parameters(), 'lr': args.mask if args.mask_lr > 0 else args.lr})
             params.append({'params': model.module.arms['projector'].parameters(), 'lr': args.projector_lr if args.projector_lr > 0 else args.lr})
             params.append({'params': model.module.arms['predictor'].parameters(), 'lr': args.predictor_lr if args.predictor_lr > 0 else args.lr})
             params.append({'params': model.module.arms['classifier'].parameters(), 'lr': args.lr})
         else:
             params.append({'params': model.module.f.parameters(), 'lr': args.featurizer_lr if args.featurizer_lr > 0 else args.lr})
-            params.append({'params': model.module.mask_fun.parameters(), 'lr': args.lr})
+            params.append({'params': model.module.mask_fun.parameters(), 'lr': args.mask if args.mask_lr > 0 else args.lr})
             params.append({'params': model.module.arms['projection'].parameters(), 'lr': args.projector_lr if args.projector_lr > 0 else args.lr})
             params.append({'params': model.module.arms['classifier'].parameters(), 'lr': args.lr})
         return params
@@ -831,5 +840,5 @@ if __name__ == '__main__':
                 'ema':                  ema,
             }, is_best, filename='{}/{}/checkpoint.pth.tar'.format(args.save_root, args.name))
 
-        if args.opt_mask:
+        if args.opt_mask and ((epoch % args.mask_save_freq == 0) or (epoch == epochs)):
             torch.save(model.module.mask_fun.mask, '{}/{}/mask_layer_opt'.format(args.save_root, args.name))
