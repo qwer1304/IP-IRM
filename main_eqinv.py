@@ -208,7 +208,7 @@ def load_checkpoint(path, model, model_momentum, optimizer, gradnorm_balancer, g
         msg_gradnorm = "gradnorm not used"
 
     # Restore optimizer (if available)
-    False and if "optimizer" in checkpoint and checkpoint["optimizer"] is not None:
+    if False and "optimizer" in checkpoint and checkpoint["optimizer"] is not None:
 
         checkpoint["optimizer"]["param_groups"] = optimizer.param_groups  # keep current hparams
         optimizer.load_state_dict(checkpoint["optimizer"])
