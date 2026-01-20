@@ -424,6 +424,10 @@ if __name__ == '__main__':
     parser.add_argument('--backbone_propagate', action="store_true", default=False, help='whether to propagate inv loss to backbone')
     parser.add_argument('--decimate_partitions', type=int, default=None, help='whether to decimate partitions')
 
+    parser.add_argument('--train_transform', default='test', type=str, choices=['train', 'test', 'train_mixed']) # in LP train transfrom = test transfrom
+    parser.add_argument('--test_transform', default='test', type=str, choices=['train', 'test'])
+    parser.add_argument('--val_transform', default='test', type=str, choices=['train', 'test'])
+
     # args parse
     args = parser.parse_args()
     args.gradnorm_tau = {args.gradnorm_tau[i]: args.gradnorm_tau[i+1] for i in range(0,len(args.gradnorm_tau),2)} if args.gradnorm_tau is not None else None
@@ -480,12 +484,16 @@ if __name__ == '__main__':
         memory_data = utils.CIFAR100(root=args.data, train=True, transform=train_transform, target_transform=target_transform)
         test_data = utils.CIFAR100(root=args.data, train=False, transform=test_transform, target_transform=target_transform)
     elif args.dataset == 'ImageNet':
-        train_transform = utils.make_train_transform(image_size, randgray=not args.norandgray, normalize=args.image_class)
+        train_transform = utils.make_train_transform(image_size, randgray=not args.norandgray, normalize=args.image_class, mixed=args.train_transform=='train_mixed')
         test_transform = utils.make_test_transform(normalize=args.image_class)
-        train_data  = utils.Imagenet_idx(root=args.data + '/train', transform=train_transform, target_transform=target_transform, class_to_idx=class_to_idx)
-        memory_data = utils.Imagenet_idx(root=args.data + '/train', transform=train_transform,  target_transform=target_transform, class_to_idx=class_to_idx)
-        test_data   = utils.Imagenet(root=args.data     + '/test',  transform=test_transform,  target_transform=target_transform, class_to_idx=class_to_idx)
-        val_data    = utils.Imagenet(root=args.data     + '/val',   transform=test_transform,  target_transform=target_transform, class_to_idx=class_to_idx)
+        
+        transform   = train_transform if 'train' in args.train_transform else test_transform
+        train_data  = utils.Imagenet_idx(root=args.data + '/train', transform=transform, target_transform=target_transform, class_to_idx=class_to_idx)
+        memory_data = utils.Imagenet_idx(root=args.data + '/train', transform=transform,  target_transform=target_transform, class_to_idx=class_to_idx)
+        transform   = train_transform if args.test_transform == 'train' else test_transform
+        test_data   = utils.Imagenet(root=args.data     + '/test',  transform=transform,  target_transform=target_transform, class_to_idx=class_to_idx)
+        transform   = train_transform if args.val_transform == 'train' else test_transform
+        val_data    = utils.Imagenet(root=args.data     + '/val',   transform=transform,  target_transform=target_transform, class_to_idx=class_to_idx)
         
     # pretrain model
     assert (args.pretrain_path is None) or (args.pretrain_path is not None and os.path.isfile(args.pretrain_path)), f"pretrain file {args.pretrain_path} is missing"
