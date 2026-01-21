@@ -840,5 +840,5 @@ if __name__ == '__main__':
                 'ema':                  ema,
             }, is_best, filename='{}/{}/checkpoint.pth.tar'.format(args.save_root, args.name))
 
-        if args.opt_mask and ((epoch % args.mask_save_freq == 0) or (epoch == epochs)):
+        if args.opt_mask and args.mask_save_freq and ((epoch % args.mask_save_freq == 0) or (epoch == epochs)):
             torch.save(model.module.mask_fun.mask, '{}/{}/mask_layer_opt'.format(args.save_root, args.name))
