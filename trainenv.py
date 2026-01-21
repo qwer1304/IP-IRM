@@ -250,7 +250,7 @@ class LossModule:
     def pre_micro_batch(self, features_1, features_2, **kwargs):
         pass
 
-    def compute_loss_micro(self, batch_data):
+    def compute_loss_micro(self, batch_data, **kwargs):
         raise NotImplementedError
 
     def post_micro_batch(self):
@@ -444,6 +444,8 @@ class MoCoSupConLossModule(LossModule):
     def logits(self, idxs=None):
         if idxs is None:
             idxs = torch.arange(self._logits.size(0), device=self._logits.device)
+        else:
+            idxs = idxs[1]
         return self._logits[idxs]
         
     def targets(self, idxs=None):
@@ -452,16 +454,20 @@ class MoCoSupConLossModule(LossModule):
         return self.labels[idxs]
 
     def compute_loss_micro(self, p=None, env=None, idxs=None, scale=1.0, temperature=None, reduction='sum', **kwargs):
-        # 'idxs' are indices into the batch
+        # 'idxs' are a tuple of env's (env, pos) indices in the micro-batch
         # 'p', 'env' select the indices into the queue of the relevant samples
+        B = self.l_pos.size(0) # whole micro-batch size
         if idxs is None:
-            idxs = torch.arange(self._logits.size(0), device=self._logits.device)
+            env_idxs = torch.arange(self._logits.size(0), device=self._logits.device)
+            pos_idxs = env_idxs
+        else:
+            env_idxs, pos_idxs = idxs
         l_pos = self.l_pos # (B,1), positive logit for the whole micro-batch
         l_neg = self.l_neg # (B,N), negative logits for the whole micro-batch
         if p is not None:
-            l_neg = l_neg[:, self.neg_idxs[p][env]] # scope negative logits to (p,env)-samples
+            l_neg = l_neg[:, env_idxs + [i+B for i in self.neg_idxs[p][env])]] # scope negative logits to (p,env)-samples, (B,N'=B+Ke)
         self._logits = torch.cat([l_pos, l_neg], dim=1) # (B,1+N')
-        self.labels = torch.zeros(self._logits.size(0), dtype=torch.long, device=self._logits.device)
+        self.labels = torch.zeros(self._logits.size(0), dtype=torch.long, device=self._logits.device) # (B,)
         if self.debug:
             self.total_pos    += l_pos.mean().item() * l_pos.size(0)
             self.total_neg    += l_neg.mean().item() * l_pos.size(0)
@@ -470,10 +476,10 @@ class MoCoSupConLossModule(LossModule):
 
         # sum over batch, per env handled by driver
         # get the samples that have POSITIVES (column 0)
-        l_pos = self._logits[idxs][:, 0]
+        l_pos = self._logits[pos_idxs][:, 0]
         valid = l_pos > -1e9
 
-        loss = F.cross_entropy(scale * self._logits[idxs][valid], self.labels[idxs][valid], reduction=reduction)
+        loss = F.cross_entropy(scale * self._logits[pos_idxs][valid], self.labels[pos_idxs][valid], reduction=reduction)
         return loss
 
     def filter_indices(self, indices, **kwargs):
@@ -576,6 +582,8 @@ class MoCoLossModule(LossModule):
     def logits(self, idxs=None):
         if idxs is None:
             idxs = torch.arange(self._logits.size(0), device=self._logits.device)
+        else:
+            idxs = idxs[0]
         return self._logits[idxs]
         
     def targets(self, idxs=None):
@@ -584,16 +592,20 @@ class MoCoLossModule(LossModule):
         return self.labels[idxs]
 
     def compute_loss_micro(self, p=None, env=None, idxs=None, scale=1.0, temperature=None, reduction='sum', **kwargs):
-        # 'idxs' selects the POSITIVES in the batch
+        # 'idxs' are a tuple of env's (env, pos) indices in the micro-batch
         # 'p', 'env' select the NEGATIVES in the queue
+        B = self.l_pos.size(0)
         if idxs is None:
-            idxs = torch.arange(self._logits.size(0), device=self._logits.device)
-        l_pos = self.l_pos
-        l_neg = self.l_neg
+            env_idxs = torch.arange(self._logits.size(0), device=self._logits.device)
+            pos_idxs = env_idxs
+        else:
+            env_idxs, pos_idxs = idxs
+        l_pos = self.l_pos # (B,1)
+        l_neg = self.l_neg # (B,N)
         if p is not None:
-            l_neg = l_neg[:, self.neg_idxs[p][env]]
-        self._logits = torch.cat([l_pos, l_neg], dim=1)
-        self.labels = torch.zeros(self._logits.size(0), dtype=torch.long, device=self._logits.device)
+            l_neg = l_neg[:, env_idxs + [i+B for i in self.neg_idxs[p][env])]] # scope negative logits to (p,env)-samples, (B,N'=B+Ke)
+        self._logits = torch.cat([l_pos, l_neg], dim=1) # (B,1+N')
+        self.labels = torch.zeros(self._logits.size(0), dtype=torch.long, device=self._logits.device) # (B,)
         if self.debug:
             self.total_pos    += l_pos.mean().item() * l_pos.size(0)
             self.total_neg    += l_neg.mean().item() * l_pos.size(0)
@@ -602,7 +614,7 @@ class MoCoLossModule(LossModule):
 
         # sum over batch, per env handled by driver
         temperature = temperature or self.temperature
-        loss = F.cross_entropy(scale * self._logits[idxs] / temperature, self.labels[idxs], reduction=reduction)
+        loss = F.cross_entropy(scale * self._logits[pos_idxs] / temperature, self.labels[pos_idxs], reduction=reduction)
         return loss
 
     def post_micro_batch(self):
@@ -653,6 +665,8 @@ class SimSiamLossModule(LossModule):
         z1, z2, p1, p2 = self._representations
         if idxs is None:
             idxs = torch.arange(z1.size(0), device=z1.device)
+        else:
+            idxs = idxs[0]
         # symmetric SimSiam loss (neg cosine, average two directions)
         if normalize:
             loss_dir1 = - F.cosine_similarity(scale * p1[idxs], z2[idxs].detach(), dim=-1)
@@ -1451,8 +1465,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                             # For EqInv each partition corresponds to a class. Each env holds positive AND negative samples.
                             # Need to filter the samples s.t. the samples in micro-batch are ONLY those which class==partition
                             # Use 'assign_idxs_multi' to break ties correctly
-                            idxs = utils.assign_idxs_multi(indexs, partition, env)
-                            idxs = loss_module.filter_indices(idxs, labels=labels[idxs], partition=active_partition_idx[partition_num], env=env)
+                            env_idxs = utils.assign_idxs_multi(indexs, partition, env)
+                            idxs = loss_module.filter_indices(env_idxs, labels=labels[env_idxs], partition=active_partition_idx[partition_num], env=env)
 
                             if (N := len(idxs)) == 0:
                                 continue
@@ -1467,7 +1481,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                                     # 'idxs' select the samples from this micro-batch
                                     # 'loss_samples' are either the per-sample losses or thie sum depending on 'reduction'
                                     # for 'is_per_env'==True, it's always 'sum'
-                                    losses_samples = loss_module.compute_loss_micro(p=partition_num, env=env, reduction=reduction, idxs=idxs)
+                                    losses_samples = loss_module.compute_loss_micro(p=partition_num, env=env, reduction=reduction, idxs=(env_idxs, idxs))
                                     grads_all[partition_num*args.env_num + env] = \
                                         calculate_grads(losses_samples, net, retain_graph=(not is_last) or do_penalty)
                                     loss = losses_samples.detach()
