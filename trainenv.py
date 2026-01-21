@@ -1411,15 +1411,20 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                     MoCo:    generate two views, get their embeddings from respective encoders, normalize them, etc
                     SimSiam: generate two views, get their projections and predictions, etc
                 """
-                features_1, features_2 = net.module.f(transform(batch_micro)), net.module.f(transform(batch_micro))
+                features_1, features_2 = net.module.f(transform(batch_micro)), net.module.f(transform(batch_micro)) # UNNORMALIZED!!!!
                 del batch_micro
                 torch.cuda.empty_cache()
+                
+                feature_1, feature_2 = F.normalize(feature_1, dim=-1), F.normalize(feature_2, dim=-1)
                 
                 # mask: assume user sets mask and args.backbone_propagate properly:
                 # when it's not needed it's set to 'ident' and args.backbone_propagate==True
                 # must apply mask only after unsplit loss has been applied
                 features_1_nondetached, features_2_nondetached = net.module.mask(features_1), net.module.mask(features_2) 
                 features_1_detached, features_2_detached = net.module.mask(features_1.detach()), net.module.mask(features_2.detach()) 
+                
+                features_1_nondetached, features_2_nondetached = F.normalize(features_1_nondetached, dim=-1), F.normalize(features_2_nondetached, dim=-1)
+                features_1_detached, features_2_detached = F.normalize(features_1_detached, dim=-1), F.normalize(features_2_detached, dim=-1)
 
                 # if want unsplit loss w/ its own loss method
                 if do_unsplit_loss and (loss_unsplit_module is not None):
