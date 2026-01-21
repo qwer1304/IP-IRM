@@ -324,7 +324,7 @@ class MoCoSupConLossModule(LossModule):
         for pidx, p in enumerate(partitions):
             for env in range(p.size(-1)):
                 # assign_idxs returns a tensor of indices into 'indexs' in 'env' in 'p'
-                self.neg_idxs[pidx].append(utils.assign_idxs(indexs, p, env)) # append the tensor of indices to envs list
+                self.neg_idxs[pidx].append(utils.assign_idxs_multi(indexs, p, env)) # append the tensor of indices to envs list
 
     def pre_micro_batch(self, pos_q, pos_k, indexs=None, normalize=True, dataset=None, **kwargs):
         # 'indexs' are batch samples indices in the dataset
@@ -541,7 +541,7 @@ class MoCoLossModule(LossModule):
         for pidx, p in enumerate(partitions):
             for env in range(p.size(-1)):
                 # assign_idxs returns a tensor of indices into 'indexs' in 'env' in 'p'
-                self.neg_idxs[pidx].append(utils.assign_idxs(indexs, p, env)) # append the tensor of indices to envs list
+                self.neg_idxs[pidx].append(utils.assign_idxs_multi(indexs, p, env)) # append the tensor of indices to envs list
 
     def pre_micro_batch(self, pos_q, pos_k, indexs=None, normalize=True, **kwargs):
         assert indexs is not None, 'indexs cannot be None'
