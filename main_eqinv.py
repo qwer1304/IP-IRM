@@ -222,7 +222,7 @@ def load_checkpoint(path, model, model_momentum, optimizer, gradnorm_balancer, g
         except ValueError:
             print("Optimizer group mismatch. Loading state values manually...")
             # Fallback: Load state buffers but keep current group structure
-            optimizer.state.update(opt_state_dict["state"])
+            optimizer.state.update(opt_state_dict]["state"])
 
         # 3. Ensure every parameter in your current groups has a state entry
         # This is your "Initialization" logic, but safer:
