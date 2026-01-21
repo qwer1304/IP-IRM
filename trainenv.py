@@ -1415,7 +1415,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 del batch_micro
                 torch.cuda.empty_cache()
                 
-                feature_1, feature_2 = F.normalize(feature_1, dim=-1), F.normalize(feature_2, dim=-1)
+                features_1, features_2 = F.normalize(features_1, dim=-1), F.normalize(features_2, dim=-1)
                 
                 # mask: assume user sets mask and args.backbone_propagate properly:
                 # when it's not needed it's set to 'ident' and args.backbone_propagate==True

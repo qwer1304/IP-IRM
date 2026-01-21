@@ -16,7 +16,7 @@ def cal_cosine_distance(net, memory_data_loader, c, temperature, transform=None,
             images = images.cuda(non_blocking=True)
             images = transform(images) if transform is not None else images
             feature = net.module.backbone(images)
-            feature = net.module.mask(feature)
+            feature = net.module.mask(F.normalize(feature, dim=-1))
             feature_bank.append(F.normalize(feature, dim=-1))
             target = target_transform(target) if target_transform is not None else target
             target_bank.append(target)
