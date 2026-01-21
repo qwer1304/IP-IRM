@@ -672,10 +672,11 @@ if __name__ == '__main__':
     if ssl_type == 'moco' or ssl_type == 'mocosupcon':
         kwargs.update({'net_momentum': model_momentum, 'queue': queue, 'temperature': temperature, 'momentum': momentum})
         if ssl_type == 'mocosupcon':
-            def filter_indices(idxs, labels, partition, **kwargs):
-                idxs = idxs[labels==partition]
-                return idxs
-            kwargs.update({'filter_indices': filter_indices})
+            def split_indices(idxs, labels, partition, **kwargs):
+                pos_idxs = idxs[labels==partition]
+                neg_idxs = idxs[labels!=partition]
+                return pos_idxs, neg_idxs
+            kwargs.update({'split_indices': split_indices})
     elif ssl_type == 'simsiam':
         pass
         
