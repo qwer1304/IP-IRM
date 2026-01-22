@@ -17,9 +17,8 @@ from typing import Union, List
 from functools import partial
 
 class Mask():
-    def __init__(self, mask_type, K=None, tau=1.0, soft=False):
+    def __init__(self, mask_type, tau=1.0, soft=False):
         self.mask_type = mask_type
-        self.K = K
         self.tau = tau
         self.soft = soft
 
@@ -50,7 +49,11 @@ class MaskModule(nn.Module):
         super().__init__()
         # Initialize the mask as a trainable parameter
         if trainable:
-            self.mask = nn.Parameter(torch.ones(input_dim))
+            if activation_method != 'gumbel':
+                init_val = torch.ones(input_dim)
+            else:
+                init_val = torch.randn(input_dim) * 0.01) 
+            self.mask = nn.Parameter(init_val)
         else:
             self.mask = torch.ones(input_dim)
         self.activation_method = activation_method

@@ -1185,6 +1185,30 @@ def print_grads(grads, net, prefix=""):
         if grads[pind] is None:
             continue
         print(f"{prefix} pind {pind} name {name} norm {grads[pind].norm():.2e}")
+
+def calculate_mask_sparsity_and_grads(mask, net, args, do_mask_sparsity):
+    if do_mask_sparsity:
+        active_count = mask.sum()
+        loss = F.relu(active_count - args.mask_sparsity)  
+    else:
+        loss = torch.Tensor([0.]).to(mask.device)
+    
+    grads = calculate_grads(loss, net)
+    grads_flat = [  # dLoss / dTheta
+        torch.zeros(p.numel(), dtype=p.dtype, device=p.device)
+        for p in net.parameters()
+    ]
+
+    for param_idx, g in enumerate(grads):
+        if g is None:
+            continue
+
+        # Flatten the parameter gradient: (*Param_Dims) -> (Flattened_Dim)
+        g_flat = g.detach().reshape(-1)
+
+        grads_flat[param_idx] = g_flat
+
+    return loss.detach(), grads_flat
         
 # ssl training with IP-IRM
 def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch, args, **kwargs):
@@ -1243,10 +1267,11 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
     penalty_weight_orig = penalty_weight
     penalty_weight      = 1 if penalty_weight > 1 else penalty_weight
     
-    do_loss         = (not args.baseline) and (loss_weight > 0)
-    do_unsplit_loss = (args.baseline)     or ((args.unsplit_cont)  and (loss_unsplit_weight > 0))
-    do_penalty      = (not args.baseline) and (penalty_weight > 0)
-    do_gradnorm     = (not args.baseline) and args.gradnorm        and (epoch >= args.gradnorm_epoch)
+    do_loss          = (not args.baseline) and (loss_weight > 0)
+    do_unsplit_loss  = (args.baseline)     or ((args.unsplit_cont)  and (loss_unsplit_weight > 0))
+    do_penalty       = (not args.baseline) and (penalty_weight > 0)
+    do_gradnorm      = (not args.baseline) and args.gradnorm        and (epoch >= args.gradnorm_epoch)
+    do_mask_sparsity = (not args.baseline) and (args.mask_nonlinearity == "gumbel") and (args.mask_sparsity is not None) and (not args.gumble_soft)
 
     loader_batch_size            = batch_size
     gradients_accumulation_steps = args.gradients_accumulation_batch_size // loader_batch_size 
@@ -1705,6 +1730,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         else:
             penalty_env  = torch.tensor(0, dtype=torch.float, device=device)
 
+        loss_mask_sparsity, loss_mask_sparsity_grads = calculate_mask_sparsity_and_grads(net.module.mask_fun.mask, net, args, do_mask_sparsity)
+
         # Environments gradients
         loss_grads_final = calculate_loss_grads_final(loss_grads, loss_env, loss_weight_env, halves_sz, loss_module, reduction, device, do_loss)
 
@@ -1731,6 +1758,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
             total_grad_flat_weighted = (   loss_unsplit_grads_final[pind] * loss_unsplit_weight * loss_unsplit_grad_scaler
                                          + loss_grads_final[pind]         * loss_weight         * loss_grad_scaler     
                                          + penalty_grads_final[pind]      * penalty_weight      * penalty_grad_scaler  
+                                         + loss_mask_sparsity_grads[pind] * args.mask_sparsity_weight 
                                        )
             if p.grad is None:
                 p.grad  = total_grad_flat_weighted.view(p.shape)
@@ -1751,13 +1779,15 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         gradnorm_update(gradnorm_balancer, gradnorm_loss, gradnorm_optimizer, args, do_gradnorm)
 
         # True loss reflecting progress does NOT include balancing scalers
-        loss_weighted          = loss_weight         * loss_env.mean()
-        loss_unsplit_weighted  = loss_unsplit_weight * loss_unsplit_aggregator.mean()
-        penalty_weighted       = penalty_weight      * penalty_env.mean()
+        loss_weighted               = loss_weight         * loss_env.mean()
+        loss_unsplit_weighted       = loss_unsplit_weight * loss_unsplit_aggregator.mean()
+        penalty_weighted            = penalty_weight      * penalty_env.mean()
+        loss_mask_sparsity_weighted = args.mask_sparsity_weight * loss_mask_sparsity.mean()
 
         loss_batch_weighted = (loss_unsplit_weighted + # loss_unsplit_aggregator is a scalar normalized over macro-batch
                                penalty_weighted      + # mean over envs normalized over macro-batch
-                               loss_weighted           # mean over envs normalized over macro-batch
+                               loss_weighted         + # mean over envs normalized over macro-batch
+                               loss_mask_sparsity_weighted
                               )
 
         # total loss is sum of losses so far over entire batch aggregation period.

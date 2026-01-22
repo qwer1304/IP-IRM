@@ -209,7 +209,8 @@ def load_checkpoint(path, model, model_momentum, optimizer, gradnorm_balancer, g
 
     # Restore optimizer (if available)
 
-    def restore_optimizer(optimizer, opt_state_dict, device):
+    def restore_optimizer(optimizer, opt_state_dict, device, opt_string):
+        print(f"Restoring optimizer {opt_string}")
         # 1. Capture the current params (the ones you want to keep)
         # This ensures your new mask is known to the system
         current_param_groups = optimizer.param_groups 
@@ -220,7 +221,7 @@ def load_checkpoint(path, model, model_momentum, optimizer, gradnorm_balancer, g
         try:
             optimizer.load_state_dict(opt_state_dict)
         except ValueError:
-            print("Optimizer group mismatch. Loading state values manually...")
+            print(f"Optimizer {opt_string} group mismatch. Loading state values manually...")
             # Fallback: Load state buffers but keep current group structure
             optimizer.state.update(opt_state_dict["state"])
 
@@ -241,10 +242,10 @@ def load_checkpoint(path, model, model_momentum, optimizer, gradnorm_balancer, g
                             optimizer.state[p][k] = v.to(device)
 
     if "optimizer" in checkpoint and checkpoint["optimizer"] is not None:
-        restore_optimizer(optimizer, checkpoint["optimizer"], device)
+        restore_optimizer(optimizer, checkpoint["optimizer"], device, "main")
                         
     if ("gradnorm_optimizer" in checkpoint) and (checkpoint["gradnorm_optimizer"] is not None):
-        restore_optimizer(gradnorm_optimizer, checkpoint["gradnorm_optimizer"], device)
+        restore_optimizer(gradnorm_optimizer, checkpoint["gradnorm_optimizer"], device, "gradnorm")
 
     # Restore RNG states (if present)
     rng_dict = checkpoint.get("rng_dict", None)
