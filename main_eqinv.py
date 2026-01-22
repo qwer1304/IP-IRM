@@ -411,6 +411,7 @@ if __name__ == '__main__':
     parser.add_argument('--mask_lr', type=float, default=0.0, help="mask LR")
     parser.add_argument('--projector_lr', type=float, default=0.0, help="projector LR")
     parser.add_argument('--predictor_lr', type=float, default=0.0, help="predictor LR")
+    parser.add_argument('--classifier_lr', type=float, default=0.0, help="classifer LR")
     parser.add_argument('--bn_momentum', type=float, default=0.1, help="BN momentum")
 
     #### add mask
@@ -595,12 +596,12 @@ if __name__ == '__main__':
             params.append({'params': model.module.mask_fun.parameters(), 'lr': args.mask_lr if args.mask_lr > 0 else args.lr})
             params.append({'params': model.module.arms['projector'].parameters(), 'lr': args.projector_lr if args.projector_lr > 0 else args.lr})
             params.append({'params': model.module.arms['predictor'].parameters(), 'lr': args.predictor_lr if args.predictor_lr > 0 else args.lr})
-            params.append({'params': model.module.arms['classifier'].parameters(), 'lr': args.lr})
+            params.append({'params': model.module.arms['classifier'].parameters(), 'lr': args.classifier_lr if args.classifier_lr > 0 else args.lr})
         else:
             params.append({'params': model.module.f.parameters(), 'lr': args.featurizer_lr if args.featurizer_lr > 0 else args.lr})
             params.append({'params': model.module.mask_fun.parameters(), 'lr': args.mask_lr if args.mask_lr > 0 else args.lr})
             params.append({'params': model.module.arms['projection'].parameters(), 'lr': args.projector_lr if args.projector_lr > 0 else args.lr})
-            params.append({'params': model.module.arms['classifier'].parameters(), 'lr': args.lr})
+            params.append({'params': model.module.arms['classifier'].parameters(), 'lr': args.classifier_lr if args.classifier_lr > 0 else args.lr})
         return params
 
     if args.opt == "Adam":
