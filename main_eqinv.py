@@ -408,6 +408,7 @@ if __name__ == '__main__':
     
     parser.add_argument('--adapt_bn', action="store_true", help="adapt BN layers")
     parser.add_argument('--featurizer_lr', type=float, default=0.0, help="featurizer LR")
+    parser.add_argument('--mask_lr', type=float, default=0.0, help="mask LR")
     parser.add_argument('--projector_lr', type=float, default=0.0, help="projector LR")
     parser.add_argument('--predictor_lr', type=float, default=0.0, help="predictor LR")
     parser.add_argument('--bn_momentum', type=float, default=0.1, help="BN momentum")
@@ -415,7 +416,6 @@ if __name__ == '__main__':
     #### add mask
     parser.add_argument('--mask_nonlinearity', type=str, default='sigmoid', choices=['sigmoid', 'ident', 'gumbel'], help='type of non-linearity in mask')
     parser.add_argument('--opt_mask', action="store_true", default=False, help='optimize the mask')
-    parser.add_argument('--mask_lr', type=float, default=0.0, help="mask LR")
     parser.add_argument('--gumbel_tau', type=float, default=1.0, help='tau for gumbel mask')
     parser.add_argument('--gumbel_soft', action="store_true", help='soft gumbel')
     parser.add_argument('--mask_sparsity', type=int, default=None, help='sparsity K s.t. # of hot masks <= K')
@@ -592,13 +592,13 @@ if __name__ == '__main__':
         params = []
         if ssl_type == "simsiam":
             params.append({'params': model.module.f.parameters(), 'lr': args.featurizer_lr if args.featurizer_lr > 0 else args.lr})
-            params.append({'params': model.module.mask_fun.parameters(), 'lr': args.mask if args.mask_lr > 0 else args.lr})
+            params.append({'params': model.module.mask_fun.parameters(), 'lr': args.mask_lr if args.mask_lr > 0 else args.lr})
             params.append({'params': model.module.arms['projector'].parameters(), 'lr': args.projector_lr if args.projector_lr > 0 else args.lr})
             params.append({'params': model.module.arms['predictor'].parameters(), 'lr': args.predictor_lr if args.predictor_lr > 0 else args.lr})
             params.append({'params': model.module.arms['classifier'].parameters(), 'lr': args.lr})
         else:
             params.append({'params': model.module.f.parameters(), 'lr': args.featurizer_lr if args.featurizer_lr > 0 else args.lr})
-            params.append({'params': model.module.mask_fun.parameters(), 'lr': args.mask if args.mask_lr > 0 else args.lr})
+            params.append({'params': model.module.mask_fun.parameters(), 'lr': args.mask_lr if args.mask_lr > 0 else args.lr})
             params.append({'params': model.module.arms['projection'].parameters(), 'lr': args.projector_lr if args.projector_lr > 0 else args.lr})
             params.append({'params': model.module.arms['classifier'].parameters(), 'lr': args.lr})
         return params
