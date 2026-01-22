@@ -1441,7 +1441,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 """
                 grads_all             = [None] * num_grads
                 
-                mask_activation = net.module.mask_fun.activation(u=None)
+                mask_activation = net.module.mask_fun.activation(u=mask_activation_noise)
 
                 """
                 prepare for micro-batch in loss-sepcific way:
@@ -1739,6 +1739,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         else:
             penalty_env  = torch.tensor(0, dtype=torch.float, device=device)
 
+        mask_activation = net.module.mask_fun.activation(u=mask_activation_noise) # recompute since its graph was released
         loss_mask_sparsity, loss_mask_sparsity_grads, loss_mask_sparsity_norm = \
             calculate_mask_sparsity_and_grads(mask_activation, net, mask_sparsity_weight, do_mask_sparsity, args, param_groups_2_pind)
         mask_activation = mask_activation.sum().item() 
