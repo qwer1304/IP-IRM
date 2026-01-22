@@ -1399,7 +1399,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         mask: assume user sets mask and args.backbone_propagate properly:
             when it's not needed it's set to 'ident' and args.backbone_propagate==True
         """
-        mask_activation_noise = net.module.mask_fun.sample()
+        mask_activation_noise = net.module.mask_fun.sample().detach()
 
         for j in range(num_halves): # over halves of micro-batches
             for i in [i_ for i_ in range(len(mb_list)) if i_ % num_halves == j]: # loop over micro-batches
