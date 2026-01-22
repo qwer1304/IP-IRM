@@ -171,7 +171,11 @@ class MultiArmModel(nn.Module):
         self._load_backbone(state_dict) # updates self.f
         
         # 2. Mask layer
+        print()
+        print('*********************')
+        print(mask_blueprint)
         if mask_blueprint:
+            print('after if')
             self.mask_fun = mask_blueprint(self.feature_dim)
         else:    
             self.mask_fun = MaskModule(Mask('ident'), self.feature_dim, trainable=False)
