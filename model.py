@@ -30,7 +30,7 @@ class Mask():
             return x
         elif self.mask_type == 'gumbel':
             # Sample Gumbel noise
-            u = u or torch.rand_like(x)
+            if u is None: u = torch.rand_like(x)
             g = -torch.log(-torch.log(u + 1e-20) + 1e-20)
             x_soft = torch.sigmoid((x + g) / self.tau)  # (N,)
 
