@@ -1263,16 +1263,16 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         penalty_weight = args.penalty_weight if epoch >= args.penalty_iters else 0.
     else:
         penalty_weight = args.penalty_weight
-        
+    
+    print()
+    print(args.penalty_weight, penalty_weight)
+    exit(1)
+    
     loss_weight          = args.penalty_cont             * (1 if penalty_weight <= 1 else 1 / penalty_weight)
     loss_unsplit_weight  = max(args.penalty_unsplit_cont * (1 if penalty_weight <= 1 else (1 / penalty_weight)), int(args.baseline))
     mask_sparsity_weight = args.mask_sparsity_weight     * (1 if penalty_weight <= 1 else (1 / penalty_weight))
     penalty_weight_orig  = penalty_weight
     penalty_weight       = 1 if penalty_weight > 1 else penalty_weight
-    
-    print()
-    print(loss_weight, loss_unsplit_weight, mask_sparsity_weight, penalty_weight_orig, penalty_weight)
-    exit(1)
     
     do_loss          = (not args.baseline) and (loss_weight > 0)
     do_unsplit_loss  = (args.baseline)     or ((args.unsplit_cont)  and (loss_unsplit_weight > 0))
