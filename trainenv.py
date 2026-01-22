@@ -1399,7 +1399,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         mask: assume user sets mask and args.backbone_propagate properly:
             when it's not needed it's set to 'ident' and args.backbone_propagate==True
         """
-        mask_activation_stable = net.module.mask_fun.activation() # sample once per btach
+        mask_activation_stable = net.module.mask_fun.activation().detach() # sample once per batch; just keep the value
 
         for j in range(num_halves): # over halves of micro-batches
             for i in [i_ for i_ in range(len(mb_list)) if i_ % num_halves == j]: # loop over micro-batches
@@ -1441,7 +1441,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 """
                 grads_all             = [None] * num_grads
                 
-                mask_activation = mask_activation_stable + net.module.mask_fun.mask - net.module.mask_fun.mask.detach()
+                mask_activation = mask_activation_stable + net.module.mask_fun.mask - net.module.mask_fun.mask.detach() # reattach the graph
 
                 """
                 prepare for micro-batch in loss-sepcific way:
