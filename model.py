@@ -47,12 +47,12 @@ class Mask():
 class MaskModule(nn.Module):
     def __init__(self, activation_method, input_dim, trainable=True):
         super().__init__()
-        print()
-        print('**********************************************************')
-        print(activation_method, input_dim, trainable)
         # Initialize the mask as a trainable parameter
         if trainable:
-            if activation_method != 'gumbel':
+            print()
+            print('********************************')
+            print(activation_method.mask_type)
+            if activation_method.mask_type != 'gumbel':
                 init_val = torch.ones(input_dim)
             else:
                 init_val = torch.randn(input_dim) * 0.01 
@@ -171,9 +171,6 @@ class MultiArmModel(nn.Module):
         self._load_backbone(state_dict) # updates self.f
         
         # 2. Mask layer
-        print()
-        print('*********************')
-        print(mask_blueprint)
         if mask_blueprint:
             print('after if')
             self.mask_fun = mask_blueprint(self.feature_dim)
