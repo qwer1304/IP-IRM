@@ -900,6 +900,18 @@ def rotate_penalty_grads(penalty_grads_final, loss_grads_final, grad_rotate, do_
         ]
     return penalty_grads_final
 
+def setup_grads_and_norms(grads_final, weight, Lscaler, device, do_flag, default_grads_weighted_vector=None):
+    if do_flag:
+        grads_weighted        = [g.detach().clone() * weight * Lscaler for g in grads_final if g is not None]
+        grads_weighted_vector = torch.cat([g for g in grads_weighted]) 
+        grads_norm_weighted   = grads_weighted_vector.norm()
+    else:
+        grads_weighted = [torch.zeros_like(g) for g in grads_final if g is not None]
+        assert default_grads_weighted_vector is not None, "default_grads_weighted_vector not given when do_flag is False"
+        grads_weighted_vector = default_grads_weighted_vector
+        grads_norm_weighted   = torch.tensor(0., dtype=torch.float, device=device)
+    return grads_weighted, grads_weighted_vector, grads_norm_weighted
+
 def calculate_scalers(loss_unsplit_grads_final, loss_grads_final, penalty_grads_final, 
                       loss_unsplit_aggregator,  loss_env,         penalty_env,
                       loss_unsplit_weight,      loss_weight,      penalty_weight,
@@ -907,18 +919,6 @@ def calculate_scalers(loss_unsplit_grads_final, loss_grads_final, penalty_grads_
                       gradnorm_balancer, do_gradnorm,
                       args, do_unsplit_loss, do_loss, do_penalty, device,
                       param_groups_2_pind):
-    def setup_grads_and_norms(grads_final, weight, Lscaler, device, do_flag, default_grads_weighted_vector=None):
-        if do_flag:
-            grads_weighted        = [g.detach().clone() * weight * Lscaler for g in grads_final if g is not None]
-            grads_weighted_vector = torch.cat([g for g in grads_weighted]) 
-            grads_norm_weighted   = grads_weighted_vector.norm()
-        else:
-            grads_weighted = [torch.zeros_like(g) for g in grads_final if g is not None]
-            assert default_grads_weighted_vector is not None, "default_grads_weighted_vector not given when do_flag is False"
-            grads_weighted_vector = default_grads_weighted_vector
-            grads_norm_weighted   = torch.tensor(0., dtype=torch.float, device=device)
-        return grads_weighted, grads_weighted_vector, grads_norm_weighted
-
     loss_unsplit_grads_final_weighted, l_unsplit_grads_flat_weighted, loss_unsplit_grad_norm_weighted = \
         setup_grads_and_norms(loss_unsplit_grads_final, loss_unsplit_weight, args.Lscaler, device, True)
     default_grads_weighted_vector = torch.zeros_like(l_unsplit_grads_flat_weighted)
@@ -1186,8 +1186,8 @@ def print_grads(grads, net, prefix=""):
             continue
         print(f"{prefix} pind {pind} name {name} norm {grads[pind].norm():.2e}")
 
-def calculate_mask_sparsity_and_grads(mask, net, args, do_mask_sparsity, param_groups_2_pind):
-    if do_mask_sparsity:
+def calculate_mask_sparsity_and_grads(mask, net, weight, do_flag, args, param_groups_2_pind):
+    if do_flag:
         active_count = mask.sum()
         loss = F.relu(active_count - args.mask_sparsity)  
     else:
@@ -1208,9 +1208,10 @@ def calculate_mask_sparsity_and_grads(mask, net, args, do_mask_sparsity, param_g
 
         grads_flat[param_idx] = g_flat
 
-    grads_vector = torch.cat([g for g in grads_flat]) 
-    ng = grads_vector.norm()
-    return loss.detach(), grads_flat, ng
+    _, _, grads_norm_weighted =  \
+        setup_grads_and_norms(grads_flat, weight, args.Lscaler, mask.device, do_flag, default_grads_weighted_vector=grads_flat)
+
+    return loss.detach(), grads_flat, grads_norm_weighted
         
 # ssl training with IP-IRM
 def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch, args, **kwargs):
@@ -1734,7 +1735,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
             penalty_env  = torch.tensor(0, dtype=torch.float, device=device)
 
         loss_mask_sparsity, loss_mask_sparsity_grads, loss_mask_sparsity_norm = \
-            calculate_mask_sparsity_and_grads(net.module.mask_fun.activation(), net, args, do_mask_sparsity, param_groups_2_pind)
+            calculate_mask_sparsity_and_grads(net.module.mask_fun.activation(), net, mask_sparsity_weight, do_mask_sparsity, args, param_groups_2_pind)
 
         # Environments gradients
         loss_grads_final = calculate_loss_grads_final(loss_grads, loss_env, loss_weight_env, halves_sz, loss_module, reduction, device, do_loss)
