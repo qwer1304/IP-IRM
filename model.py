@@ -52,7 +52,7 @@ class MaskModule(nn.Module):
             if activation_method != 'gumbel':
                 init_val = torch.ones(input_dim)
             else:
-                init_val = torch.randn(input_dim) * 0.01) 
+                init_val = torch.randn(input_dim) * 0.01 
             self.mask = nn.Parameter(init_val)
         else:
             self.mask = torch.ones(input_dim)
