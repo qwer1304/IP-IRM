@@ -1208,7 +1208,9 @@ def calculate_mask_sparsity_and_grads(mask, net, args, do_mask_sparsity):
 
         grads_flat[param_idx] = g_flat
 
-    return loss.detach(), grads_flat
+    grads_vector = torch.cat([g for g in grads_flat]) 
+    ng = grads_vector.norm()
+    return loss.detach(), grads_flat, ng
         
 # ssl training with IP-IRM
 def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch, args, **kwargs):
@@ -1262,10 +1264,11 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
     else:
         penalty_weight = args.penalty_weight
         
-    loss_weight         = args.penalty_cont             * (1 if penalty_weight <= 1 else 1 / penalty_weight)
-    loss_unsplit_weight = max(args.penalty_unsplit_cont * (1 if penalty_weight <= 1 else (1 / penalty_weight)), int(args.baseline))
-    penalty_weight_orig = penalty_weight
-    penalty_weight      = 1 if penalty_weight > 1 else penalty_weight
+    loss_weight          = args.penalty_cont             * (1 if penalty_weight <= 1 else 1 / penalty_weight)
+    loss_unsplit_weight  = max(args.penalty_unsplit_cont * (1 if penalty_weight <= 1 else (1 / penalty_weight)), int(args.baseline))
+    mask_sparsity_weight = args.mask_sparsity_weight     * (1 if penalty_weight <= 1 else (1 / penalty_weight))
+    penalty_weight_orig  = penalty_weight
+    penalty_weight       = 1 if penalty_weight > 1 else penalty_weight
     
     do_loss          = (not args.baseline) and (loss_weight > 0)
     do_unsplit_loss  = (args.baseline)     or ((args.unsplit_cont)  and (loss_unsplit_weight > 0))
@@ -1730,7 +1733,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         else:
             penalty_env  = torch.tensor(0, dtype=torch.float, device=device)
 
-        loss_mask_sparsity, loss_mask_sparsity_grads = calculate_mask_sparsity_and_grads(net.module.mask_fun.mask, net, args, do_mask_sparsity)
+        loss_mask_sparsity, loss_mask_sparsity_grads, loss_mask_sparsity_norm = \
+            calculate_mask_sparsity_and_grads(net.module.mask_fun.mask, net, args, do_mask_sparsity)
 
         # Environments gradients
         loss_grads_final = calculate_loss_grads_final(loss_grads, loss_env, loss_weight_env, halves_sz, loss_module, reduction, device, do_loss)
@@ -1755,10 +1759,10 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         penalty_weighted   *= penalty_grad_scaler 
         """
         for pind, (name, p) in enumerate(net.named_parameters()):
-            total_grad_flat_weighted = (   loss_unsplit_grads_final[pind] * loss_unsplit_weight * loss_unsplit_grad_scaler
-                                         + loss_grads_final[pind]         * loss_weight         * loss_grad_scaler     
-                                         + penalty_grads_final[pind]      * penalty_weight      * penalty_grad_scaler  
-                                         + loss_mask_sparsity_grads[pind] * args.mask_sparsity_weight 
+            total_grad_flat_weighted = (   loss_unsplit_grads_final[pind] * loss_unsplit_weight  * args.Lscaler * loss_unsplit_grad_scaler
+                                         + loss_grads_final[pind]         * loss_weight          * args.Lscaler * loss_grad_scaler     
+                                         + penalty_grads_final[pind]      * penalty_weight       * args.Lscaler * penalty_grad_scaler  
+                                         + loss_mask_sparsity_grads[pind] * mask_sparsity_weight * args.Lscaler * 1.0
                                        )
             if p.grad is None:
                 p.grad  = total_grad_flat_weighted.view(p.shape)
@@ -1779,10 +1783,10 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         gradnorm_update(gradnorm_balancer, gradnorm_loss, gradnorm_optimizer, args, do_gradnorm)
 
         # True loss reflecting progress does NOT include balancing scalers
-        loss_weighted               = loss_weight         * loss_env.mean()
-        loss_unsplit_weighted       = loss_unsplit_weight * loss_unsplit_aggregator.mean()
-        penalty_weighted            = penalty_weight      * penalty_env.mean()
-        loss_mask_sparsity_weighted = args.mask_sparsity_weight * loss_mask_sparsity.mean()
+        loss_weighted               = loss_weight          * loss_env.mean()
+        loss_unsplit_weighted       = loss_unsplit_weight  * loss_unsplit_aggregator.mean()
+        penalty_weighted            = penalty_weight       * penalty_env.mean()
+        loss_mask_sparsity_weighted = mask_sparsity_weight * loss_mask_sparsity.mean()
 
         loss_batch_weighted = (loss_unsplit_weighted + # loss_unsplit_aggregator is a scalar normalized over macro-batch
                                penalty_weighted      + # mean over envs normalized over macro-batch
@@ -1806,6 +1810,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                    f" {unsplit_str} {total_unsplit_loss_weighted/trained_samples:.3e}" + \
                    f" Env {total_env_loss_weighted/trained_samples:.3e}" + \
                    f" {args.penalty_type} {total_pen_loss_weighted/trained_samples:.3e}" + \
+                   f" Sparsity {loss_mask_sparsity_weighted.item():.3e}" + \
                    f" LR {train_optimizer.param_groups[0]['lr']:.4f} PW {penalty_weight_orig:.6g}" + \
                    f" dot: ll {info_dict['ngl2']:.2e} lk {info_dict['dot_lk']:.2e} lp {info_dict['dot_lp']:.2e} kk {info_dict['ngk2']:.2e}" + \
                    f" kp {info_dict['dot_kp']:.2e} pp {info_dict['ngp2']:.2e}" + \
@@ -1820,6 +1825,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                    f" kp {info_dict['shared_dot_kp']:.2e} plp2 {info_dict['ngplp']**2:.2e} pkp2 {info_dict['ngpkp']**2:.2e}" + \
                    f" shared_cos: lk {info_dict['shared_cos_lk']:.3e} lp {info_dict['shared_cos_lp']:.3e} kp {info_dict['shared_cos_kp']:.2e}" + \
                    f" Lp: shared cos {info_dict['shared_cos_Lp']:.3e} shared dot {info_dict['shared_dot_Lp']:.3e}" + \
+                   f" ngsparsity2 {loss_mask_sparsity_norm**2:.2e}" + \
                    f" gn_prgrs {info_dict['gradnorm_progress']:.6g}"
         desc_str += loss_module.get_debug_info_str()
         train_bar.set_description(desc_str)
