@@ -1752,6 +1752,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                               gradnorm_balancer, do_gradnorm,
                               args, do_unsplit_loss, do_loss, do_penalty, device, param_groups_2_pind)
 
+        mask_sparsity_activation = net.module.mask_fun.activation().sum().item() # before parameter's update!
+
         """
         Don't multiply individual task's loss by scaler, since it's misleading
         Only multiply the gradients since this is what determines how tasks' losses are updated
@@ -1778,7 +1780,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
             # magnitudes that happens at this step.
             utils.reset_optimizer(train_optimizer)
 
-        mask_sparsity_activation = net.module.mask_fun.activation().sum().item() # before the optimizer!
         train_optimizer.step()
         train_optimizer.zero_grad(set_to_none=True)    # clear gradients at beginning of next gradients batch
 
