@@ -1441,7 +1441,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 """
                 grads_all             = [None] * num_grads
                 
-                mask_activation = mask_activation_stable.clone()
+                mask_activation = mask_activation_stable + net.module.mask_fun.mask - net.module.mask_fun.mask.detach()
 
                 """
                 prepare for micro-batch in loss-sepcific way:
