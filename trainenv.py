@@ -1395,6 +1395,12 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         # -----------------------
         mb_list = list(utils.microbatches([data_batch, labels_batch, indexs_batch], gpu_batch_size))
 
+        """
+        mask: assume user sets mask and args.backbone_propagate properly:
+            when it's not needed it's set to 'ident' and args.backbone_propagate==True
+        """
+        mask_activation = net.module.mask_fun.activation() # sample once per btach
+
         for j in range(num_halves): # over halves of micro-batches
             for i in [i_ for i_ in range(len(mb_list)) if i_ % num_halves == j]: # loop over micro-batches
                 losses_samples_all, losses_samples, penalties_samples, penalty = None, None, None, None
@@ -1446,11 +1452,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 
                 features_1, features_2 = F.normalize(features_1, dim=-1), F.normalize(features_2, dim=-1)
                 
-                # mask: assume user sets mask and args.backbone_propagate properly:
-                # when it's not needed it's set to 'ident' and args.backbone_propagate==True
-                # must apply mask only after unsplit loss has been applied
-                features_1_nondetached, features_2_nondetached = net.module.mask(features_1), net.module.mask(features_2) 
-                features_1_detached, features_2_detached = net.module.mask(features_1.detach()), net.module.mask(features_2.detach()) 
+                features_1_nondetached, features_2_nondetached = mask_activation * features_1, mask_activation * features_2 
+                features_1_detached, features_2_detached = mask_activation * features_1.detach(), mask_activation * features_2.detach() 
                 
                 features_1_nondetached, features_2_nondetached = F.normalize(features_1_nondetached, dim=-1), F.normalize(features_2_nondetached, dim=-1)
                 features_1_detached, features_2_detached = F.normalize(features_1_detached, dim=-1), F.normalize(features_2_detached, dim=-1)
@@ -1734,10 +1737,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         else:
             penalty_env  = torch.tensor(0, dtype=torch.float, device=device)
 
-        mask_sparsity_activation = net.module.mask_fun.activation() # before parameter's update!
         loss_mask_sparsity, loss_mask_sparsity_grads, loss_mask_sparsity_norm = \
-            calculate_mask_sparsity_and_grads(mask_sparsity_activation, net, mask_sparsity_weight, do_mask_sparsity, args, param_groups_2_pind)
-        mask_sparsity_activation = mask_sparsity_activation.sum().item() 
+            calculate_mask_sparsity_and_grads(mask_activation, net, mask_sparsity_weight, do_mask_sparsity, args, param_groups_2_pind)
+        mask_activation = mask_activation.sum().item() 
         
         # Environments gradients
         loss_grads_final = calculate_loss_grads_final(loss_grads, loss_env, loss_weight_env, halves_sz, loss_module, reduction, device, do_loss)
@@ -1828,7 +1830,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                    f" kp {info_dict['shared_dot_kp']:.2e} plp2 {info_dict['ngplp']**2:.2e} pkp2 {info_dict['ngpkp']**2:.2e}" + \
                    f" shared_cos: lk {info_dict['shared_cos_lk']:.3e} lp {info_dict['shared_cos_lp']:.3e} kp {info_dict['shared_cos_kp']:.2e}" + \
                    f" Lp: shared cos {info_dict['shared_cos_Lp']:.3e} shared dot {info_dict['shared_dot_Lp']:.3e}" + \
-                   f" sparsity: ngs2 {loss_mask_sparsity_norm**2:.2e} sum(activation) {mask_sparsity_activation:.3e}" + \
+                   f" sparsity: ngs2 {loss_mask_sparsity_norm**2:.2e} sum(activation) {mask_activation:.3e}" + \
                    f" gn_prgrs {info_dict['gradnorm_progress']:.6g}"
         desc_str += loss_module.get_debug_info_str()
         train_bar.set_description(desc_str)
