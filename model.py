@@ -22,7 +22,7 @@ class Mask():
         self.tau = tau
         self.soft = soft
 
-    def __call__(self, x):
+    def __call__(self, x, u=None):
         # x: (num_features,) tensor
         if self.mask_type == 'sigmoid':
             return torch.sigmoid(x)
@@ -30,7 +30,7 @@ class Mask():
             return x
         elif self.mask_type == 'gumbel':
             # Sample Gumbel noise
-            u = torch.rand_like(x)
+            u = u or torch.rand_like(x)
             g = -torch.log(-torch.log(u + 1e-20) + 1e-20)
             x_soft = torch.sigmoid((x + g) / self.tau)  # (N,)
 
@@ -69,8 +69,12 @@ class MaskModule(nn.Module):
         # Simply multiply the features by the mask
         return self.activation().to(x.device) * x
 
-    def activation(self):
-        return self.activation_method(self.mask)
+    def activation(self, u=None):
+        return self.activation_method(self.mask, u=u)
+        
+    def sample(self)
+        return torch.rand_like(self.mask)
+
 
 def create_mlp(
     input_dim: int,
