@@ -47,9 +47,11 @@ class Mask():
 class MaskModule(nn.Module):
     def __init__(self, activation_method, input_dim, trainable=True):
         super().__init__()
+        print()
+        print('**********************************************************')
+        print(activation_method, input_dim, trainable)
         # Initialize the mask as a trainable parameter
         if trainable:
-            print(activation_method)
             if activation_method != 'gumbel':
                 init_val = torch.ones(input_dim)
             else:
