@@ -1734,7 +1734,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
             penalty_env  = torch.tensor(0, dtype=torch.float, device=device)
 
         loss_mask_sparsity, loss_mask_sparsity_grads, loss_mask_sparsity_norm = \
-            calculate_mask_sparsity_and_grads(net.module.mask_fun.mask, net, args, do_mask_sparsity, param_groups_2_pind)
+            calculate_mask_sparsity_and_grads(net.module.mask_fun.activation(), net, args, do_mask_sparsity, param_groups_2_pind)
 
         # Environments gradients
         loss_grads_final = calculate_loss_grads_final(loss_grads, loss_env, loss_weight_env, halves_sz, loss_module, reduction, device, do_loss)
@@ -1825,7 +1825,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                    f" kp {info_dict['shared_dot_kp']:.2e} plp2 {info_dict['ngplp']**2:.2e} pkp2 {info_dict['ngpkp']**2:.2e}" + \
                    f" shared_cos: lk {info_dict['shared_cos_lk']:.3e} lp {info_dict['shared_cos_lp']:.3e} kp {info_dict['shared_cos_kp']:.2e}" + \
                    f" Lp: shared cos {info_dict['shared_cos_Lp']:.3e} shared dot {info_dict['shared_dot_Lp']:.3e}" + \
-                   f" ngsparsity2 {loss_mask_sparsity_norm**2:.2e} sparsity {net.module.mask_fun.mask.sum().item():.3e}" + \
+                   f" sparsity: ngs2 {loss_mask_sparsity_norm**2:.2e} sum(mask) {net.module.mask_fun.mask.sum().item():.3e}" + \
                    f" gn_prgrs {info_dict['gradnorm_progress']:.6g}"
         desc_str += loss_module.get_debug_info_str()
         train_bar.set_description(desc_str)
