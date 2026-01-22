@@ -1194,7 +1194,7 @@ def calculate_mask_sparsity_and_grads(mask, net, args, do_mask_sparsity, param_g
         loss = torch.Tensor([0.]).to(mask.device)
     
     print()
-    print(f"mask count {active_count.item()}, sparsity {args.mask_sparsity}")
+    print(f"mask count {active_count.item()}, sparsity {args.mask_sparsity}, do {do_mask_sparsity}")
     grads = calculate_grads(loss, net)
     grads_flat = [  # dLoss / dTheta
         torch.zeros(p.numel(), dtype=p.dtype, device=p.device)
