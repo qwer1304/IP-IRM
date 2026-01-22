@@ -1270,6 +1270,10 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
     penalty_weight_orig  = penalty_weight
     penalty_weight       = 1 if penalty_weight > 1 else penalty_weight
     
+    print()
+    print(loss_weight, loss_unsplit_weight, mask_sparsity_weight, penalty_weight_orig, penalty_weight)
+    exit(1)
+    
     do_loss          = (not args.baseline) and (loss_weight > 0)
     do_unsplit_loss  = (args.baseline)     or ((args.unsplit_cont)  and (loss_unsplit_weight > 0))
     do_penalty       = (not args.baseline) and (penalty_weight > 0)
