@@ -1210,9 +1210,9 @@ def calculate_mask_sparsity_and_grads(mask, net, args, do_mask_sparsity, param_g
 
     grads_vector = torch.cat([g for g in grads_flat]) 
     ng = grads_vector.norm()
-    ng1 = grads_flat[param_groups_2_pind['mask']].norm()
+    ng1 = grads_flat[param_groups_2_pind['mask'][0]].norm()
     print()
-    print(ng, ng1)
+    print(ng, ng1, len(param_groups_2_pind['mask']))
     return loss.detach(), grads_flat, ng
         
 # ssl training with IP-IRM
