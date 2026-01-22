@@ -1734,9 +1734,11 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         else:
             penalty_env  = torch.tensor(0, dtype=torch.float, device=device)
 
+        mask_sparsity_activation = net.module.mask_fun.activation() # before parameter's update!
         loss_mask_sparsity, loss_mask_sparsity_grads, loss_mask_sparsity_norm = \
-            calculate_mask_sparsity_and_grads(net.module.mask_fun.activation(), net, mask_sparsity_weight, do_mask_sparsity, args, param_groups_2_pind)
-
+            calculate_mask_sparsity_and_grads(mask_sparsity_activation, net, mask_sparsity_weight, do_mask_sparsity, args, param_groups_2_pind)
+        mask_sparsity_activation = mask_sparsity_activation.sum().item() 
+        
         # Environments gradients
         loss_grads_final = calculate_loss_grads_final(loss_grads, loss_env, loss_weight_env, halves_sz, loss_module, reduction, device, do_loss)
 
@@ -1751,8 +1753,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                               ema,
                               gradnorm_balancer, do_gradnorm,
                               args, do_unsplit_loss, do_loss, do_penalty, device, param_groups_2_pind)
-
-        mask_sparsity_activation = net.module.mask_fun.activation().sum().item() # before parameter's update!
 
         """
         Don't multiply individual task's loss by scaler, since it's misleading
