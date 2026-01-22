@@ -45,14 +45,21 @@ class Mask():
             raise ValueError(f"Unknown mask type: {self.mask_type}")
 
 class MaskModule(nn.Module):
-    def __init__(self, activation_method, input_dim, trainable=True):
+    def __init__(self, activation_method, input_dim, trainable=True, K=None):
         super().__init__()
         # Initialize the mask as a trainable parameter
         if trainable:
             if activation_method.mask_type != 'gumbel':
                 init_val = torch.ones(input_dim)
             else:
-                init_val = torch.randn(input_dim) * 0.01 
+                if K:
+                    target_p = K / input_dim  # e.g., 256 / 2048
+                    init_logit = torch.log(torch.tensor(target_p / (1 - target_p)))
+                else:
+                    init_logit = 0.
+
+                # Initialize with a small variance around the target logit
+                init_val = init_logit + (torch.randn(input_dim) * 0.01)
             self.mask = nn.Parameter(init_val)
         else:
             self.mask = torch.ones(input_dim)
