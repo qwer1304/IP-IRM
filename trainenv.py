@@ -1210,9 +1210,6 @@ def calculate_mask_sparsity_and_grads(mask, net, args, do_mask_sparsity, param_g
 
     grads_vector = torch.cat([g for g in grads_flat]) 
     ng = grads_vector.norm()
-    ng1 = grads_flat[param_groups_2_pind['mask'][0]].norm()
-    print()
-    print(ng, ng1, len(param_groups_2_pind['mask']))
     return loss.detach(), grads_flat, ng
         
 # ssl training with IP-IRM
@@ -1761,12 +1758,14 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         loss_weighted      *= loss_grad_scaler
         penalty_weighted   *= penalty_grad_scaler 
         """
+        print()
         for pind, (name, p) in enumerate(net.named_parameters()):
             total_grad_flat_weighted = (   loss_unsplit_grads_final[pind] * loss_unsplit_weight  * args.Lscaler * loss_unsplit_grad_scaler
                                          + loss_grads_final[pind]         * loss_weight          * args.Lscaler * loss_grad_scaler     
                                          + penalty_grads_final[pind]      * penalty_weight       * args.Lscaler * penalty_grad_scaler  
                                          + loss_mask_sparsity_grads[pind] * mask_sparsity_weight * args.Lscaler * 1.0
                                        )
+            print(pind, loss_mask_sparsity_grads[pind].norm())
             if p.grad is None:
                 p.grad  = total_grad_flat_weighted.view(p.shape)
             else:
