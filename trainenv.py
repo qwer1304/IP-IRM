@@ -1186,7 +1186,7 @@ def print_grads(grads, net, prefix=""):
             continue
         print(f"{prefix} pind {pind} name {name} norm {grads[pind].norm():.2e}")
 
-def calculate_mask_sparsity_and_grads(mask, net, args, do_mask_sparsity):
+def calculate_mask_sparsity_and_grads(mask, net, args, do_mask_sparsity, param_groups_2_pind):
     if do_mask_sparsity:
         active_count = mask.sum()
         loss = F.relu(active_count - args.mask_sparsity)  
@@ -1210,6 +1210,9 @@ def calculate_mask_sparsity_and_grads(mask, net, args, do_mask_sparsity):
 
     grads_vector = torch.cat([g for g in grads_flat]) 
     ng = grads_vector.norm()
+    ng1 = grads_flat[param_groups_2_pind['mask']].norm()
+    print()
+    print(ng, ng1)
     return loss.detach(), grads_flat, ng
         
 # ssl training with IP-IRM
@@ -1263,10 +1266,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         penalty_weight = args.penalty_weight if epoch >= args.penalty_iters else 0.
     else:
         penalty_weight = args.penalty_weight
-    
-    print()
-    print(args.penalty_weight, penalty_weight)
-    exit(1)
     
     loss_weight          = args.penalty_cont             * (1 if penalty_weight <= 1 else 1 / penalty_weight)
     loss_unsplit_weight  = max(args.penalty_unsplit_cont * (1 if penalty_weight <= 1 else (1 / penalty_weight)), int(args.baseline))
@@ -1738,7 +1737,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
             penalty_env  = torch.tensor(0, dtype=torch.float, device=device)
 
         loss_mask_sparsity, loss_mask_sparsity_grads, loss_mask_sparsity_norm = \
-            calculate_mask_sparsity_and_grads(net.module.mask_fun.mask, net, args, do_mask_sparsity)
+            calculate_mask_sparsity_and_grads(net.module.mask_fun.mask, net, args, do_mask_sparsity, param_groups_2_pind)
 
         # Environments gradients
         loss_grads_final = calculate_loss_grads_final(loss_grads, loss_env, loss_weight_env, halves_sz, loss_module, reduction, device, do_loss)
