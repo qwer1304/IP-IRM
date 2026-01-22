@@ -72,7 +72,7 @@ class MaskModule(nn.Module):
     def activation(self, u=None):
         return self.activation_method(self.mask, u=u)
         
-    def sample(self)
+    def sample(self):
         return torch.rand_like(self.mask)
 
 
