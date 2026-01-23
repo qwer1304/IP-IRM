@@ -182,7 +182,6 @@ class MultiArmModel(nn.Module):
         
         # 2. Mask layer
         if mask_blueprint:
-            print('after if')
             self.mask_fun = mask_blueprint(self.feature_dim)
         else:    
             self.mask_fun = MaskModule(Mask('ident'), self.feature_dim, trainable=False)
