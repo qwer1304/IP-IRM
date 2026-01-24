@@ -82,7 +82,10 @@ def test(net, test_data_loader, args, num_classes, progress=False, prefix="Test:
                 target = target_transform(target_raw).cuda(non_blocking=True)
 
             features = net.module.backbone(data)
+            features = F.normalize(features, dim=-1)
             masked_features = net.module.mask(features)
+            masked_features = F.normalize(masked_features, dim=-1)
+            
             out = net.module.fc(masked_features)
 
             total_num += data.size(0)

@@ -331,29 +331,38 @@ class MoCoSupConLossModule(LossModule):
         """
         Calculating SupCon w/ LogSumExp:
         Step 1 - Write the positive term:
-            For a fixed anchor 'i' the positive part of SupCon is:
-               1/|P(i)| \sum_{p \in P(i)} logexp(s_{ip})
-               logexp(s_{ip}) = s_{ip}
+            For a fixed anchor 'i' the positive part of SupCon loss is:
+               1/|P(i)| \sum_{p \in P(i)} log(exp(s_{ip}))
+               log(exp(s_{ip})) = s_{ip}
                Hence, 1/|P(i)| \sum_{p \in P(i)} s_{ip}
         Step 2 - Rewrite the same quantity in the form used by the code
             Now apply a pure algebraic identity (no approximations):
                 1/|P(i)| sum_{p \in P(i)} s_{ip} = A = B - [B - A] =
-                log(1/|P(i)| \sum_{p \in P(i)|} exp(s_{ip})) - [log(1/|P(i)| \sum_{p \in P(i)| exp(s_ip)) - 1/|P(i)| sum_{p \in P(i)} s_{ip}]
+                                         B                   - [                    B                       -             A                   ]
+                log(1/|P(i)| \sum_{p \in P(i)|} exp(s_{ip})) - [log(1/|P(i)| \sum_{p \in P(i)| exp(s_{ip})) - 1/|P(i)| sum_{p \in P(i)} s_{ip}]
             Now regroup:
-                log(\sum_{p \in P(i)|} exp(s_{ip})) - log(|P(i)|) - C_i
+                Since log(1/|P(i)| \sum_{p \in P(i)|} exp(s_{ip})) = log(\sum_{p \in P(i)|} exp(s_{ip}))) - log(|P(i)|)
+                1/|P(i)| sum_{p \in P(i)} s_{ip} = log(\sum_{p \in P(i)|} exp(s_{ip})) - log(|P(i)|) - C_i
             where:
+                                         B                        -                  A
                 C_i = log(1/|P(i)| \sum_{p \in P(i)| exp(s_{ip})) - 1/|P(i)| \sum_{p \in P(i)} s_{ip}
             and C_i depends only on the positives of anchor i.
-        Step 3 - Plug Step 2 into the full SupCon loss:
+        Step 3 - Plug Step 2 into the full SupCon loss for anchor i:
             Full SupCon loss for anchor i:
-                l_i = -1/|P(i)| \sum_{p \in P(i)} s_{ip} + log(\sum_{a \in A} exp(s_ia}))
+                l_i = -1/|P(i)| \sum_{p \in P(i)} log(exp(s_{ip}) / \sum_{a \in A} exp(s_ia}))
+                    = -1/|P(i)| \sum_{p \in P(i)} (s_{ip}         - log(\sum_{a \in A} exp(s_ia})))
+                    = -1/|P(i)| \sum_{p \in P(i)} s_{ip}          + 1/|P(i)| \sum_{p \in P(i)} log(\sum_{a \in A} exp(s_ia}))
+                But, log(\sum_{a \in A} exp(s_ia})) does not depend on p. Hence:
+                    = -1/|P(i)| \sum_{p \in P(i)} s_{ip}          + 1/|P(i)||P(i)|log(\sum_{a \in A} exp(s_ia}))
+                    = -1/|P(i)| \sum_{p \in P(i)} s_{ip}          + log(\sum_{a \in A} exp(s_ia}))
             Substitute the expression from Step 2:
-                1/|P(i)| sum_{p \in P(i)} s_{ip} = log(\sum_{p \in P(i)|} exp(s_ip)) - log(|P(i)|) - C_i
+                1/|P(i)| sum_{p \in P(i)} s_{ip} =  log(\sum_{p \in P(i)|} exp(s_ip)) - log(|P(i)|) - C_i, or
+               -1/|P(i)| sum_{p \in P(i)} s_{ip} = -log(\sum_{p \in P(i)|} exp(s_ip)) + log(|P(i)|) + C_i,
             So:
-                l_i = -log(\sum_{p \in P(i)|} exp(s_ip)) + log(\sum_{a \in A} exp(s_ia})) + log(|P(i)|) + C_i
+                l_i = -log(\sum_{p \in P(i)|} exp(s_ip)) + log(|P(i)|) + C_i + log(\sum_{a \in A} exp(s_ia})) 
         Step 4 - The code drops C_i
             The implementation uses:
-                -logsum_pos + logsum_all - log(|P(i)|)
+                -logsum_pos + logsum_all + log(|P(i)|)
            During training the gradients of this method and standard SupCon differ.
             * The implementation is not algebraically identical to the definition
             * It is a surrogate objective
@@ -422,6 +431,9 @@ class MoCoSupConLossModule(LossModule):
         # Replace non-positives with -inf
         pos_logits = logits.masked_fill(~pos_mask, -1e9)
         # One logit per anchor = logsumexp over positives
+        # For a single positive i w/ a logit pos_logits, l_pos_i = log(exp(pos_logit_i)).
+        # For several logits pos_logits, their probability is \sum_i exp(pos_logit_i),
+        # which logit is log(\sum_i exp(pos_logit_i))
         l_pos = torch.logsumexp(pos_logits, dim=1, keepdim=True) #- num_pos.log() # (B,1)
         
         l_neg = logits.masked_fill(pos_mask, -1e9) # (B,N)
