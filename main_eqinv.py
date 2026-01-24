@@ -562,7 +562,7 @@ if __name__ == '__main__':
 
     # Mask
     # FIX ME!!!! Add mask sparsity loss
-    mask_fun = Mask(args.mask_nonlinearity, tau=args.gumbel_tau, soft=args.gumbel_soft, K=args.mask_sparsity, hard_limit=args.mask_hard_sparsity_limit)
+    mask_fun = Mask(args.mask_nonlinearity, tau=args.gumbel_tau, soft=args.gumbel_soft, K=args.mask_sparsity, hard_K=args.mask_hard_sparsity_limit)
     mask_blueprint = partial(MaskModule, mask_fun, trainable=args.opt_mask)
 
     model = MultiArmModel(backbone_name='resnet50', mask_blueprint=mask_blueprint, arms_blueprints=arms_blueprints, in_transform=None, out_transforms=None, 
