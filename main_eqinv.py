@@ -429,6 +429,7 @@ if __name__ == '__main__':
     parser.add_argument('--gumbel_soft', action="store_true", help='soft gumbel')
     parser.add_argument('--mask_sparsity', type=int, default=None, help='sparsity K s.t. # of hot masks <= K')
     parser.add_argument('--mask_sparsity_weight', type=float, default=0.0, help='weight of sparsity loss')
+    parser.add_argument('--mask_hard_sparsity_limit', action="store_true", help='if true, # masks always <= K')    
     parser.add_argument('--mask_save_freq', type=int, default=None, help='save mask frequency')
 
     # clustering
@@ -561,8 +562,8 @@ if __name__ == '__main__':
 
     # Mask
     # FIX ME!!!! Add mask sparsity loss
-    mask_fun = Mask(args.mask_nonlinearity, tau=args.gumbel_tau, soft=args.gumbel_soft)
-    mask_blueprint = partial(MaskModule, mask_fun, trainable=args.opt_mask, K=args.mask_sparsity)
+    mask_fun = Mask(args.mask_nonlinearity, tau=args.gumbel_tau, soft=args.gumbel_soft, K=args.mask_sparsity, hard_limit=args.mask_hard_sparsity_limit)
+    mask_blueprint = partial(MaskModule, mask_fun, trainable=args.opt_mask)
 
     model = MultiArmModel(backbone_name='resnet50', mask_blueprint=mask_blueprint, arms_blueprints=arms_blueprints, in_transform=None, out_transforms=None, 
              shortcuts=shortcuts, image_class=image_class, state_dict=state_dict).cuda()

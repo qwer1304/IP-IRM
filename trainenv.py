@@ -329,71 +329,85 @@ class MoCoSupConLossModule(LossModule):
     def pre_micro_batch(self, pos_q, pos_k, indexs=None, normalize=True, dataset=None, **kwargs):
         # 'indexs' are batch samples indices in the dataset
         """
-        Calculating SupCon w/ LogSumExp:
-        Step 1 - Write the positive term:
-            For a fixed anchor 'i' the positive part of SupCon loss is:
-               1/|P(i)| \sum_{p \in P(i)} log(exp(s_{ip}))
+        Calculating SupCon w/ CE:
+        Step 1 - Write the SupCon loss for anchor i:
+               l_i = -1/|P(i)| \sum_{p \in P(i)} log(exp(s_{ip}) / \sum_{a \in A(i)} exp(s_{ia}))
                log(exp(s_{ip})) = s_{ip}
-               Hence, 1/|P(i)| \sum_{p \in P(i)} s_{ip}
-        Step 2 - Rewrite the same quantity in the form used by the code
-            Now apply a pure algebraic identity (no approximations):
+               Expand the log():
+               l_i = -1/|P(i)| [\sum_{p \in P(i)} (s_{ip} - log(\sum_{a \in A(i)} exp(s_{ia})))] 
+                   = -1/|P(i)|\sum_{p \in P(i)} s_{ip}    + 1/|P(i)|\sum_{p \in P(i)} log(\sum_{a \in A(i)} exp(s_{ia}))
+               But log(\sum_{a \in A(i)} exp(s_{ia})) does not depend on i. Hence:
+                   = -1/|P(i)|\sum_{p \in P(i)} s_{ip}    + 1/|P(i)||P(i)|log(\sum_{a \in A(i)} exp(s_{ia}))
+                   = -1/|P(i)|\sum_{p \in P(i)} s_{ip}    + log(\sum_{a \in A(i)} exp(s_{ia}))
+        Step 2 - Write CE with label=0:
+            For logits (z_0, z_1, ..., z_K),
+                CE(z, 0) = -z_0 + log(\sum_{k} exp(z_k))
+        Step 3 - Match terms in Step 1 with Step 2:
+            To have CE(z, 0) = l_i, we need:
+                Denomonator match:
+                    log(\sum_{k} exp(z_k)) = log(\sum_{a \in A(i)} exp(s_{ia}))
+                    So:
+                        logits must contain all s_{ia} (positives + negatives)
+                        except the anchor itself
+                Numerator match:
+                    We need z0 = 1/|P(i)|\sum_{p \in P(i)} s_{ip}
+                    But CE expects one logit, not an average.
+                    Rewrite the average:
+                        1/|P(i)|\sum_{p \in P(i)} s_{ip} = log(1/|P(i)|\sum_{p \in P(i)} exp(s_{ip})) - C_i (*)
+                    Dropping the anchor-only constant C_i and expanding the log(), we use:
+                        z_0 = log(\sum_{p \in P(i)} exp(s_{ip}))) - log(|P(i)|)
+
+        Step 3a - Derivation of (*):
+            Apply a pure algebraic identity (no approximations):
                 1/|P(i)| sum_{p \in P(i)} s_{ip} = A = B - [B - A] =
                                          B                   - [                    B                       -             A                   ]
                 log(1/|P(i)| \sum_{p \in P(i)|} exp(s_{ip})) - [log(1/|P(i)| \sum_{p \in P(i)| exp(s_{ip})) - 1/|P(i)| sum_{p \in P(i)} s_{ip}]
-            Now regroup:
-                Since log(1/|P(i)| \sum_{p \in P(i)|} exp(s_{ip})) = log(\sum_{p \in P(i)|} exp(s_{ip}))) - log(|P(i)|)
-                1/|P(i)| sum_{p \in P(i)} s_{ip} = log(\sum_{p \in P(i)|} exp(s_{ip})) - log(|P(i)|) - C_i
+            Regroup:
+                1/|P(i)| sum_{p \in P(i)} s_{ip} = B - C_i = log(1/|P(i)|\sum_{p \in P(i)|} exp(s_{ip})) - C_i
             where:
                                          B                        -                  A
                 C_i = log(1/|P(i)| \sum_{p \in P(i)| exp(s_{ip})) - 1/|P(i)| \sum_{p \in P(i)} s_{ip}
             and C_i depends only on the positives of anchor i.
-        Step 3 - Plug Step 2 into the full SupCon loss for anchor i:
-            Full SupCon loss for anchor i:
-                l_i = -1/|P(i)| \sum_{p \in P(i)} log(exp(s_{ip}) / \sum_{a \in A} exp(s_ia}))
-                    = -1/|P(i)| \sum_{p \in P(i)} (s_{ip}         - log(\sum_{a \in A} exp(s_ia})))
-                    = -1/|P(i)| \sum_{p \in P(i)} s_{ip}          + 1/|P(i)| \sum_{p \in P(i)} log(\sum_{a \in A} exp(s_ia}))
-                But, log(\sum_{a \in A} exp(s_ia})) does not depend on p. Hence:
-                    = -1/|P(i)| \sum_{p \in P(i)} s_{ip}          + 1/|P(i)||P(i)|log(\sum_{a \in A} exp(s_ia}))
-                    = -1/|P(i)| \sum_{p \in P(i)} s_{ip}          + log(\sum_{a \in A} exp(s_ia}))
-            Substitute the expression from Step 2:
-                1/|P(i)| sum_{p \in P(i)} s_{ip} =  log(\sum_{p \in P(i)|} exp(s_ip)) - log(|P(i)|) - C_i, or
-               -1/|P(i)| sum_{p \in P(i)} s_{ip} = -log(\sum_{p \in P(i)|} exp(s_ip)) + log(|P(i)|) + C_i,
-            So:
-                l_i = -log(\sum_{p \in P(i)|} exp(s_ip)) + log(|P(i)|) + C_i + log(\sum_{a \in A} exp(s_ia})) 
-        Step 4 - The code drops C_i
-            The implementation uses:
-                -logsum_pos + logsum_all + log(|P(i)|)
-           During training the gradients of this method and standard SupCon differ.
-            * The implementation is not algebraically identical to the definition
-            * It is a surrogate objective
-            * The surrogate has the same global minimizers as the original 
-            * It does not produce the same optimization path            
-        Step 5 - Why this helps TerraInc specifically
-            TerraInc has:
-                * strong domain shortcuts (background, color, texture)
-                * same-class / different-domain positives are hard
-                * many positives per anchor
-            Under LSE SupCon:
-                * same-domain positives stop contributing early
-                * hardest (cross-domain) positives dominate gradients
-                * embedding becomes domain-invariant
-            This is exactly why:
-                * kNN with large k improves
-                * class clusters become tighter
-                * domain leakage decreases
-        Step 6 - In the LSE SupCon surrogate, the gradient does not explicitly depend on |P(i)|.
-            As |P(i)| increases:
-                True SupCon:
-                    * each positive gets weaker pull
-                        dl / ds_{ip} = -1/|P(i)| + softmax_A(s_{ip})
-                        -> As |P(i)| grows, each positive is weakened, including the hard cross-domain ones.
-            LSE SupCon:
-                    * hardest positives still dominate
-                    * total pull does not dilute
-                    dl / ds_{ip} = -softmax_{P(i)}(s_{ip}) + softmax_A(s_{ip})                    
-                    -> Hard positives dominate regardless of how many easy (same-domain) positives exist.
-            LSE SupCon prevents easy same-domain positives from diluting the gradient, forcing alignment 
-            to the hardest cross-domain positives - exactly what TerraInc needs to break domain clustering.
+        Step 3b - Justification for dropping C_i:
+            x' denotes gradient of x w.r.t. model's parametrs theta
+            l_i' = (SupCon via CE)' + C_i'
+            C_i' = \sim_{p \in P(i)} alpha_{ip} s_{ip}' with alpha_{ip} = softamx_p - 1/|P(i)| (just take the gradient)
+            \sum_{p \in P(i)} alpha_{ip} = \sum_{p \in P(i)} softmax_p - \sum_{p \in P(i)} 1/|P(i)| = 1 - 1 = 0
+            
+            What does \sum_{p \in P(i)} alpha_{ip} = 0 contributes?
+                Let g_{ip} = s_{ip}'
+                Decompose the positive gradients into:
+                    g_ip = g_i + (g_{ip} - g_i, with g_i = 1/|P(i)| \sum_{p \in P(i)| g_{ip}
+                Then:
+                    \sum_{p \in P(i)} alpha_{ip} g_{ip} = (\sum_{p \in P(i)} alpha_{ip})g_i + \sum_{p \in P(i)} alpha_{ip}(g_{ip} - g_i) 
+                                                                      0
+                So, C_i' = \sum_{p \in P(i)} alpha_{ip}(g_{ip} - g_i) 
+                
+                Consider any scalar step size eta. The parameter update due to C_i is:
+                    delta theta_{C_i} = eta \sum_{p \in P(i)} alpha_{ip}(g_{ip} - g_i)
+                Now take the projection of this update onto the mean positive gradient direction g_i:
+                    <delta theta_{C_i}, g_i> = -eta sum_{p \in P(i)} alpha_{ip} <(g_{ip} - g_i), g_i> = -eta sum_{p \in P(i)} alpha_{ip} (<g_ip, g_i> - ||g_i||^2)
+                But, sum_{p \in P(i)} alpha_{ip} <g_ip, g_i> = <sum_{p \in P(i)} alpha_{ip} g_ip, g_i>
+                and sum_{p \in P(i)} alpha_{ip} ||g_i||^2 = ||g_i||^2 sum_{p \in P(i)} alpha_{ip} = ||g_i||^2 * 0 = 0
+                So,
+                    <delta theta_{C_i}, g_i> = -eta <sum_{p \in P(i)} alpha_{ip} <g_ip, g_i>
+                    
+                        
+        Note:
+            If the log(|P(i)| term is dropped, we get the union-of-positives InfoNCE (multi-positive InfoNCE).
+            It:
+                is a standard, valid contrastive objective
+                has stable gradients
+                often performs as well as or better than SupCon when classes have many positives
+            For MoCo + SupCon on TerraInc it is arguably the better choice:
+                TerraInc = many positives per class, environmental shift
+                MoCo queue = large, noisy positive sets
+                Union-of-positives InfoNCE:
+                    robust to noisy / heterogeneous positives
+                    avoids over-penalizing anchors with many positives
+                    commonly used (quietly) in MoCo-SupCon hybrids
+                True averaged SupCon:
+                    sharper, but more sensitive to class imbalance + queue effects            
         """
         assert indexs is not None, 'indexs cannot be None'
         assert len(pos_q) == len(indexs), f"len(pos_q) {len(pos_q)} != len(indexs) {len(indexs)}"
@@ -426,15 +440,17 @@ class MoCoSupConLossModule(LossModule):
         # for each sample in the batch (row) give the samples in the batch and queue w/ the same label
         pos_mask = (y_batch[:, None] == y_all[None, :])   # (B,N)
         pos_mask[:, :len(y_batch)].fill_diagonal_(False)  # remove self-keys
-        num_pos = pos_mask.sum(dim=1, keepdim=True).clamp(min=1)
 
         # Replace non-positives with -inf
         pos_logits = logits.masked_fill(~pos_mask, -1e9)
         # One logit per anchor = logsumexp over positives
-        # For a single positive i w/ a logit pos_logits, l_pos_i = log(exp(pos_logit_i)).
-        # For several logits pos_logits, their probability is \sum_i exp(pos_logit_i),
-        # which logit is log(\sum_i exp(pos_logit_i))
-        l_pos = torch.logsumexp(pos_logits, dim=1, keepdim=True) #- num_pos.log() # (B,1)
+        if False:
+            num_pos = pos_mask.sum(dim=1, keepdim=True).clamp(min=1)
+            supcon_correction = -num_pos.log()
+        else:
+            supcon_correction = 0.
+            
+        l_pos = torch.logsumexp(pos_logits, dim=1, keepdim=True) + supcon_correction # (B,1)
         
         l_neg = logits.masked_fill(pos_mask, -1e9) # (B,N)
         

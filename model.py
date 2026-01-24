@@ -17,10 +17,12 @@ from typing import Union, List
 from functools import partial
 
 class Mask():
-    def __init__(self, mask_type, tau=1.0, soft=False):
+    def __init__(self, mask_type, tau=1.0, soft=False, K=None, hard_K=False):
         self.mask_type = mask_type
         self.tau = tau
         self.soft = soft
+        self.K = K
+        self.hard_K = hard_K
 
     def __call__(self, x, u=None):
         # x: (num_features,) tensor
@@ -38,22 +40,31 @@ class Mask():
                 x_ret = x_soft
             else:
                 # Hard straight-through: forward 0/1, backward gradient through soft
-                x_hard = (x_soft > 0.5).float()
+
+                # Calculate threshold for the Top-K slots
+                if self.hard_K:
+                    threshold = torch.topk(x_soft, self.K).values[-1] # last Kth largest
+                else:
+                    threshold = 0.5
+
+                # 1. We never exceed K (because of threshold)
+                # 2. We don't force 'on' channels that are naturally 'off' (because of 0.5)
+                x_hard = ((x_soft > 0.5) & (x_soft > threshold)).float()
                 x_ret = x_hard + x_soft - x_soft.detach()
             return x_ret
         else:
             raise ValueError(f"Unknown mask type: {self.mask_type}")
 
 class MaskModule(nn.Module):
-    def __init__(self, activation_method, input_dim, trainable=True, K=None):
+    def __init__(self, activation_method, input_dim, trainable=True):
         super().__init__()
         # Initialize the mask as a trainable parameter
         if trainable:
             if activation_method.mask_type != 'gumbel':
                 init_val = torch.ones(input_dim)
             else:
-                if K:
-                    target_p = K / input_dim  # e.g., 256 / 2048
+                if activation_method.K:
+                    target_p = activation_method.K / input_dim  # e.g., 256 / 2048
                     init_logit = torch.log(torch.tensor(target_p / (1 - target_p)))
                 else:
                     init_logit = 0.
