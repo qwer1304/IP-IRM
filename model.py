@@ -17,7 +17,7 @@ from typing import Union, List
 from functools import partial
 
 class Mask():
-    def __init__(self, mask_type, tau=1.0, soft=False, K=None, hard_K=False):
+    def __init__(self, mask_type, tau=1.0, soft=False, K=None, hard_limit=False):
         self.mask_type = mask_type
         self.tau = tau
         self.soft = soft
