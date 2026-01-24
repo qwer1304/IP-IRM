@@ -134,7 +134,12 @@ def test(net, test_data_loader, args, num_classes, progress=False, prefix="Test:
             pred_scores = torch.cat(pred_scores_list, dim=0)
 
             # Save to file
-            prefix = "test" if "Test" in prefix else "val"
+            if "Test" in prefix:
+                prefix = "test"
+            elif "Val" in prefix:
+                prefix = "val"
+            elif "Train" in prefix:
+                prefix = "train"
             directory = f'results-eqinv/{args.dataset}/{args.name}'
             fp = os.path.join(directory, f"{prefix}_features_dump.pt")       
             os.makedirs(os.path.dirname(fp), exist_ok=True)
@@ -374,7 +379,7 @@ if __name__ == '__main__':
     parser.add_argument('--test_freq', default=5*5, type=int, metavar='N',
                     help='test epoch freqeuncy')
 
-    parser.add_argument('--evaluate', type=str, default=None, nargs="*", choices=['val', 'test'], help='only evaluate')
+    parser.add_argument('--evaluate', type=str, default=None, nargs="*", choices=['train', 'val', 'test'], help='only evaluate')
     parser.add_argument('--extract_features', action="store_true", help="extract features for post processing during evaluate")
 
     parser.add_argument('--opt', choices=['Adam', 'SGD'], default='Adam', help='Optimizer to use')
@@ -654,7 +659,15 @@ if __name__ == '__main__':
     if args.evaluate is not None:
         print(f"Starting evaluation name: {args.name}")
         if len(args.evaluate) == 0:
-            args.evaluate = ['val', 'test']
+            args.evaluate = ['train', 'val', 'test']
+        
+        if 'train' in args.evaluate:
+            print('eval on train data')
+            transform = train_transform if 'train' in args.train_transform else test_transform
+            train_data  = utils.Imagenet(root=args.data + '/train', transform=transform, target_transform=target_transform, class_to_idx=class_to_idx)
+            train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, pin_memory=True, 
+                drop_last=False, persistent_workers=tr_pw, **kwargs)
+            train_acc_1, train_acc_5, train_macro_acc = test(model, train_loader, args, num_classes=c, progress=True, prefix="Train:")
         if 'val' in args.evaluate:
             print('eval on val data')
             val_loader = DataLoader(val_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=True, 
