@@ -49,7 +49,7 @@ class Mask():
 
                 # 1. We never exceed K (because of threshold)
                 # 2. We don't force 'on' channels that are naturally 'off' (because of 0.5)
-                x_hard = ((x_soft > 0.5) & (x_soft > threshold)).float()
+                x_hard = ((x_soft > 0.5) & (x_soft >= threshold)).float()
                 x_ret = x_hard + x_soft - x_soft.detach()
             return x_ret
         else:
