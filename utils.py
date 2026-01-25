@@ -1526,7 +1526,7 @@ def reset_optimizer(optimizer):
                 optimizer.state[p] = {
                     'step': torch.tensor(0.0, dtype=torch.float32),
                     'exp_avg': torch.zeros_like(p.data),
-                    'exp_avg_sq': torch.zeros_like(p.data)
+                    #'exp_avg_sq': torch.zeros_like(p.data) # don't reset this, since it causes a spike
                 }
             else:
                 # Generic fallback: just clear whatever state exists
