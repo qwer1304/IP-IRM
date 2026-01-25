@@ -1808,7 +1808,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         # -----------------------
         # Step 3: optimizer step
         # -----------------------
-        if (args.penalty_iters > 0) and (epoch == args.penalty_iters) and do_penalty and (not args.increasing_weight):
+        if False and (args.penalty_iters > 0) and (epoch == args.penalty_iters) and do_penalty and (not args.increasing_weight):
             # Reset Adam, because it doesn't like the sharp jump in gradient
             # magnitudes that happens at this step.
             utils.reset_optimizer(train_optimizer)
