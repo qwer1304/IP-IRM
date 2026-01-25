@@ -1522,15 +1522,20 @@ def reset_optimizer(optimizer):
                 # SGD with momentum keeps a momentum_buffer
                 if group.get('momentum', 0) != 0:
                     optimizer.state[p] = {'momentum_buffer': torch.zeros_like(p.data)}
-            elif isinstance(optimizer, torch.optim.Adam) or isinstance(optimizer, torch.optim.AdamW):
-                optimizer.state[p] = {
-                    'step': torch.tensor(0.0, dtype=torch.float32),
-                    'exp_avg': torch.zeros_like(p.data),
-                    #'exp_avg_sq': torch.zeros_like(p.data) # don't reset this, since it causes a spike
-                }
-            else:
-                # Generic fallback: just clear whatever state exists
-                optimizer.state[p] = {}
+                elif isinstance(optimizer, (torch.optim.Adam, torch.optim.AdamW)):
+                    state = optimizer.state.get(p, None)
+                    if state is not None:
+                        # 1. Reset step count
+                        state['step'] = torch.tensor(0.0, dtype=torch.float32)
+
+                        # 2. Zero out the first moment (momentum)
+                        state['exp_avg'].zero_()
+
+                        # 3. LEAVE 'exp_avg_sq' AS IS
+                        # This preserves the "scale" of the gradients and prevents the 1e18 spike.    
+                else:
+                    # Generic fallback: just clear whatever state exists
+                    optimizer.state[p] = {}
 
 class FeatureQueue:
     def __init__(self, queue_size, dim, device=None, dtype=torch.float32, indices=False):
