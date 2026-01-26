@@ -158,8 +158,10 @@ def test(net, test_data_loader, args, num_classes, progress=False, prefix="Test:
                 'labels':          target,
                 'labels_raw':      target_raw,
                 'pred_labels':     pred_labels,
-                'pred_scores':     out,
+                'pred_scores':     pred_scores,
                 'model_epoch':     epoch,
+                'head_weights':    net.module.fc.weight,  # shape: (num_classes, embed_dim)
+                'head_bias':       net.module.fc.bias,    # shape: (num_classes,)
                 'n_classes':       args.class_num,
             }
 
