@@ -303,7 +303,7 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
                     disentangled_dims = [9, 100, 147, 172, 369, 455, 506, 525, 561, 565, 646, 665, 678, 849, 1011, 1119, 1263, 1283, 1405, 
                                          1449, 1484, 1590, 1615, 1668, 1673, 1707, 1712, 1730, 1772, 1816, 1828, 1830, 1848, 1980, 2002, 2023
                     ]
-                    mask = torch.zeros(feature).to(feature.device)
+                    mask = torch.zeros_like(feature)
                     mask[disentangled_dims] = 1.0
 
                     feature = F.normalize(feature * mask, dim=-1)
