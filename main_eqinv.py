@@ -61,6 +61,8 @@ def test(net, test_data_loader, args, num_classes, progress=False, prefix="Test:
             dataset.target_transform = None
 
         feature_list = []
+        masked_feature_list = []
+        mask_list = []
         pred_labels_list = []
         pred_scores_list = []
         target_list = []
@@ -83,7 +85,8 @@ def test(net, test_data_loader, args, num_classes, progress=False, prefix="Test:
 
             features = net.module.backbone(data)
             features = F.normalize(features, dim=-1)
-            masked_features = net.module.mask(features)
+            mask = net.module.mask_fun.activation()
+            masked_features = features * mask 
             masked_features = F.normalize(masked_features, dim=-1)
             
             out = net.module.fc(masked_features)
@@ -114,7 +117,9 @@ def test(net, test_data_loader, args, num_classes, progress=False, prefix="Test:
 
             # compute output
             if args.extract_features:
-                feature_list.append(feature)
+                feature_list.append(features)
+                masked_feature_list.append(masked_features)
+                mask_list.append(mask)
                 target_list.append(target)
                 target_raw_list.append(target_raw)
                 pred_labels_list.append(pred_labels)
@@ -127,7 +132,9 @@ def test(net, test_data_loader, args, num_classes, progress=False, prefix="Test:
         macro_acc = (per_class_correct[valid].float() / per_class_total[valid].float()).mean().item()
 
         if feature_list:
-            feature = torch.cat(feature_list, dim=0)
+            features = torch.cat(feature_list, dim=0)
+            masked_features = torch.cat(masked_feature_list, dim=0)
+            masks = torch.cat(mask_list, dim=0)
             target = torch.cat(target_list, dim=0)
             target_raw = torch.cat(target_raw_list, dim=0)
             pred_labels = torch.cat(pred_labels_list, dim=0)
@@ -145,13 +152,15 @@ def test(net, test_data_loader, args, num_classes, progress=False, prefix="Test:
             os.makedirs(os.path.dirname(fp), exist_ok=True)
 
             state = {
-                'features':     feature,
-                'labels':       target,
-                'labels_raw':   target_raw,
-                'pred_labels':  pred_labels,
-                'pred_scores':  out,
-                'model_epoch':  epoch,
-                'n_classes':    args.class_num,
+                'features':        features,
+                'masked_features': masked_features,
+                'masks':           masks,
+                'labels':          target,
+                'labels_raw':      target_raw,
+                'pred_labels':     pred_labels,
+                'pred_scores':     out,
+                'model_epoch':     epoch,
+                'n_classes':       args.class_num,
             }
 
             utils.atomic_save(state, False, filename=fp)
