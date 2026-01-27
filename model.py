@@ -24,7 +24,7 @@ class Mask():
         self.K = K
         self.hard_K = hard_K
 
-    def __call__(self, x, u=None):
+    def __call__(self, x, u=None, deterministic=False):
         # x: (num_features,) tensor
         if self.mask_type == 'sigmoid':
             return torch.sigmoid(x)
@@ -33,7 +33,10 @@ class Mask():
         elif self.mask_type == 'gumbel':
             # Sample Gumbel noise
             if u is None: u = torch.rand_like(x)
-            g = -torch.log(-torch.log(u + 1e-20) + 1e-20)
+            if deterministic:
+                g = 0.
+            else:
+                g = -torch.log(-torch.log(u + 1e-20) + 1e-20)
             x_soft = torch.sigmoid((x + g) / self.tau)  # (N,)
 
             if self.soft:
@@ -76,12 +79,12 @@ class MaskModule(nn.Module):
             self.mask = torch.ones(input_dim)
         self.activation_method = activation_method
 
-    def forward(self, x):
+    def forward(self, x, **kwargs):
         # Simply multiply the features by the mask
-        return self.activation().to(x.device) * x
+        return self.activation(**kwargs).to(x.device) * x
 
-    def activation(self, u=None):
-        return self.activation_method(self.mask, u=u)
+    def activation(self, **kwargs):
+        return self.activation_method(self.mask, **kwargs)
         
     def sample(self):
         return torch.rand_like(self.mask)
