@@ -86,7 +86,8 @@ def test(net, test_data_loader, args, num_classes, progress=False, prefix="Test:
 
             features = net.module.backbone(data)
             features = F.normalize(features, dim=-1)
-            masked_features = net.module.mask_fun(features, u=mask_activation_noise)
+            mask_activation = net.module.mask_fun.activation(u=mask_activation_noise)
+            masked_features = features * mask_activation
             masked_features = F.normalize(masked_features, dim=-1)
             
             out = net.module.fc(masked_features)
@@ -152,6 +153,7 @@ def test(net, test_data_loader, args, num_classes, progress=False, prefix="Test:
             state = {
                 'features':        features,
                 'masked_features': masked_features,
+                'mask':            mask_activation,
                 'labels':          target,
                 'labels_raw':      target_raw,
                 'pred_labels':     pred_labels,
