@@ -132,7 +132,6 @@ def test(net, test_data_loader, args, num_classes, progress=False, prefix="Test:
         if feature_list:
             features = torch.cat(feature_list, dim=0)
             masked_features = torch.cat(masked_feature_list, dim=0)
-            masks = torch.cat(mask_list, dim=0)
             target = torch.cat(target_list, dim=0)
             target_raw = torch.cat(target_raw_list, dim=0)
             pred_labels = torch.cat(pred_labels_list, dim=0)
