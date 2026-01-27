@@ -84,7 +84,12 @@ def test(net, test_data_loader, args, num_classes, progress=False, prefix="Test:
 
             features = net.module.backbone(data)
             features = F.normalize(features, dim=-1)
-            mask_feature = net.module.mask_fun.activation()
+
+            # Deterministic Gumbel mask
+            mask = net.module.mask_fun.mask            
+            threshold = torch.topk(mask, args.mask_sparsity).values[-1]
+            mask_feature = ((torch.sigmoid(mask) > 0.5) & (mask >= threshold)).float()
+            
             masked_features = features * mask_feature 
             masked_features = F.normalize(masked_features, dim=-1)
             
