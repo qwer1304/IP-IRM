@@ -34,7 +34,7 @@ import utils_cluster
 sys.modules['__main__'].FeatureQueue = utils.FeatureQueue
 
 # test for one epoch
-def test(net, test_data_loader, args, num_classes, progress=False, prefix="Test:"):
+def test(net, test_data_loader, args, num_classes, progress=False, prefix="Test:", mask_u=None):
     net.eval()
        
     total_top1, total_top5, total_num = 0.0, 0.0, 0
@@ -72,7 +72,8 @@ def test(net, test_data_loader, args, num_classes, progress=False, prefix="Test:
         per_class_correct = torch.zeros(num_classes, dtype=torch.long, device=device)
         per_class_total   = torch.zeros(num_classes, dtype=torch.long, device=device)
 
-        mask_activation_noise = net.module.mask_fun.sample().detach()
+        if mask_u is None
+            mask_u = net.module.mask_fun.sample().detach()
 
         for data, target in test_bar:
             data, target = data.cuda(non_blocking=True), target.cuda(non_blocking=True)
@@ -86,7 +87,7 @@ def test(net, test_data_loader, args, num_classes, progress=False, prefix="Test:
 
             features = net.module.backbone(data)
             features = F.normalize(features, dim=-1)
-            mask_activation = net.module.mask_fun.activation(u=mask_activation_noise)
+            mask_activation = net.module.mask_fun.activation(u=mask_u)
             masked_features = features * mask_activation
             masked_features = F.normalize(masked_features, dim=-1)
             
@@ -671,24 +672,26 @@ if __name__ == '__main__':
         print(f"Starting evaluation name: {args.name}")
         if len(args.evaluate) == 0:
             args.evaluate = ['train', 'val', 'test']
-        
+     
+         mask_activation_noise = model.module.mask_fun.sample().detach()
+
         if 'train' in args.evaluate:
             print('eval on train data')
             transform = train_transform if 'train' in args.train_transform else test_transform
             train_data  = utils.Imagenet(root=args.data + '/train', transform=transform, target_transform=target_transform, class_to_idx=class_to_idx)
             train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, shuffle=True, 
                pin_memory=True, persistent_workers=tr_pw)
-            train_acc_1, train_acc_5, train_macro_acc = test(model, train_loader, args, num_classes=c, progress=True, prefix="Train:")
+            train_acc_1, train_acc_5, train_macro_acc = test(model, train_loader, args, num_classes=c, progress=True, prefix="Train:", mask_u=mask_activation_noise)
         if 'val' in args.evaluate:
             print('eval on val data')
             val_loader = DataLoader(val_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=True, 
                 pin_memory=True, persistent_workers=te_pw)
-            val_acc_1, val_acc_5, val_macro_acc = test(model, val_loader, args, num_classes=c, progress=True, prefix="Val:")
+            val_acc_1, val_acc_5, val_macro_acc = test(model, val_loader, args, num_classes=c, progress=True, prefix="Val:", mask_u=mask_activation_noise)
         if 'test' in args.evaluate:
             print('eval on test data')
             test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=True, 
                 pin_memory=True, persistent_workers=te_pw)
-            test_acc_1, test_acc_5, test_macro_acc = test(model, test_loader, args, num_classes=c, progress=True, prefix="Test:")
+            test_acc_1, test_acc_5, test_macro_acc = test(model, test_loader, args, num_classes=c, progress=True, prefix="Test:", mask_u=mask_activation_noise)
         exit()
 
     if not args.resume and os.path.exists(log_file):
