@@ -24,7 +24,7 @@ class Mask():
         self.K = K
         self.hard_K = hard_K
 
-    def __call__(self, x, u=None, deterministic=False):
+    def __call__(self, x, u=None):
         # x: (num_features,) tensor
         if self.mask_type == 'sigmoid':
             return torch.sigmoid(x)
@@ -42,19 +42,14 @@ class Mask():
                 # Hard straight-through: forward 0/1, backward gradient through soft
 
                 # Calculate threshold for the Top-K slots
-                if not deterministic:
-                    if self.hard_K:
-                        threshold = torch.topk(x_soft, self.K).values[-1] # last Kth largest
-                    else:
-                        threshold = 0.5
-
-                    # 1. We never exceed K (because of threshold)
-                    # 2. We don't force 'on' channels that are naturally 'off' (because of 0.5)
-                    x_hard = ((x_soft > 0.5) & (x_soft >= threshold)).float()
+                if self.hard_K:
+                    threshold = torch.topk(x_soft, self.K).values[-1] # last Kth largest
                 else:
-                    _, indices = torch.topk(x_soft, self.K)
-                    x_hard = torch.zeros_like(x_soft)
-                    x_hard[indices] = 1.0
+                    threshold = 0.5
+
+                # 1. We never exceed K (because of threshold)
+                # 2. We don't force 'on' channels that are naturally 'off' (because of 0.5)
+                x_hard = ((x_soft > 0.5) & (x_soft >= threshold)).float()
                 x_ret = x_hard + x_soft - x_soft.detach()
             return x_ret
         else:

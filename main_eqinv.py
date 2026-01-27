@@ -72,6 +72,8 @@ def test(net, test_data_loader, args, num_classes, progress=False, prefix="Test:
         per_class_correct = torch.zeros(num_classes, dtype=torch.long, device=device)
         per_class_total   = torch.zeros(num_classes, dtype=torch.long, device=device)
 
+        mask_activation_noise = net.module.mask_fun.sample().detach()
+
         for data, target in test_bar:
             data, target = data.cuda(non_blocking=True), target.cuda(non_blocking=True)
             
@@ -84,7 +86,7 @@ def test(net, test_data_loader, args, num_classes, progress=False, prefix="Test:
 
             features = net.module.backbone(data)
             features = F.normalize(features, dim=-1)
-            masked_features = net.module.mask_fun(features, deterministic=True)
+            masked_features = net.module.mask_fun(features, u=mask_activation_noise)
             masked_features = F.normalize(masked_features, dim=-1)
             
             out = net.module.fc(masked_features)
