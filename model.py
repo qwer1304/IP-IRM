@@ -33,10 +33,7 @@ class Mask():
         elif self.mask_type == 'gumbel':
             # Sample Gumbel noise
             if u is None: u = torch.rand_like(x)
-            if deterministic:
-                g = 0.
-            else:
-                g = -torch.log(-torch.log(u + 1e-20) + 1e-20)
+            g = -torch.log(-torch.log(u + 1e-20) + 1e-20)
             x_soft = torch.sigmoid((x + g) / self.tau)  # (N,)
 
             if self.soft:
@@ -45,14 +42,19 @@ class Mask():
                 # Hard straight-through: forward 0/1, backward gradient through soft
 
                 # Calculate threshold for the Top-K slots
-                if self.hard_K:
-                    threshold = torch.topk(x_soft, self.K).values[-1] # last Kth largest
-                else:
-                    threshold = 0.5
+                if not deterministic:
+                    if self.hard_K:
+                        threshold = torch.topk(x_soft, self.K).values[-1] # last Kth largest
+                    else:
+                        threshold = 0.5
 
-                # 1. We never exceed K (because of threshold)
-                # 2. We don't force 'on' channels that are naturally 'off' (because of 0.5)
-                x_hard = ((x_soft > 0.5) & (x_soft >= threshold)).float()
+                    # 1. We never exceed K (because of threshold)
+                    # 2. We don't force 'on' channels that are naturally 'off' (because of 0.5)
+                    x_hard = ((x_soft > 0.5) & (x_soft >= threshold)).float()
+                else:
+                    _, indices = torch.topk(x_soft, self.K)
+                    x_hard = torch.zeros_like(x_soft)
+                    x_hard[indices] = 1.0
                 x_ret = x_hard + x_soft - x_soft.detach()
             return x_ret
         else:

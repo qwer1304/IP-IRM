@@ -84,7 +84,7 @@ def test(net, test_data_loader, args, num_classes, progress=False, prefix="Test:
 
             features = net.module.backbone(data)
             features = F.normalize(features, dim=-1)
-            masked_features = net.module.mask_fun(features, deterministic=False)
+            masked_features = net.module.mask_fun(features, deterministic=True)
             masked_features = F.normalize(masked_features, dim=-1)
             
             out = net.module.fc(masked_features)
