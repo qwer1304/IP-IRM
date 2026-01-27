@@ -672,8 +672,8 @@ if __name__ == '__main__':
         print(f"Starting evaluation name: {args.name}")
         if len(args.evaluate) == 0:
             args.evaluate = ['train', 'val', 'test']
-     
-         mask_activation_noise = model.module.mask_fun.sample().detach()
+
+        mask_activation_noise = model.module.mask_fun.sample().detach()
 
         if 'train' in args.evaluate:
             print('eval on train data')
