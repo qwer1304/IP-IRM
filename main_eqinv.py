@@ -150,7 +150,6 @@ def test(net, test_data_loader, args, num_classes, progress=False, prefix="Test:
             state = {
                 'features':        features,
                 'masked_features': masked_features,
-                'masks':           mask_feature,
                 'labels':          target,
                 'labels_raw':      target_raw,
                 'pred_labels':     pred_labels,
