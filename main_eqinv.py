@@ -131,6 +131,7 @@ def test(net, test_data_loader, args, num_classes, progress=False, prefix="Test:
 
         # end for data, _, target in test_bar
         
+        assert per_class_total.sum() == len(test_data_loader.dataset), f"{per_class_total.sum()}, {len(test_data_loader.dataset)}"
         print()
         print(per_class_total, per_class_total.sum())
         print(per_class_correct)
