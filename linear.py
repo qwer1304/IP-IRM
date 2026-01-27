@@ -401,7 +401,6 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
             pred_scores = torch.cat(pred_scores_list, dim=0)
 
             # Save to file
-            prefix = "test"
             directory = f'downstream/{args.name}'
             fp = os.path.join(directory, f"{dataset}_features_dump.pt")       
             os.makedirs(os.path.dirname(fp), exist_ok=True)

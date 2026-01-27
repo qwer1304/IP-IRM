@@ -104,7 +104,7 @@ def test(net, test_data_loader, args, num_classes, progress=False, prefix="Test:
 
             # Loop-free update of per-class counts
             # For each class c: count how many predictions & targets match
-            for cls in range(c):
+            for cls in range(num_classes):
                 mask = (target == cls)
                 if mask.any():
                     per_class_total[cls] += mask.sum()
@@ -127,6 +127,10 @@ def test(net, test_data_loader, args, num_classes, progress=False, prefix="Test:
                 pred_scores_list.append(out)
 
         # end for data, _, target in test_bar
+        
+        print()
+        print(per_class_total)
+        print(per_class_correct)
 
         # Avoid division by zero in rare cases
         valid = per_class_total > 0
