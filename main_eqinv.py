@@ -131,6 +131,7 @@ def test(net, test_data_loader, args, num_classes, progress=False, prefix="Test:
         print()
         print(per_class_total)
         print(per_class_correct)
+        exit(1)
 
         # Avoid division by zero in rare cases
         valid = per_class_total > 0
