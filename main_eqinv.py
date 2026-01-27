@@ -104,14 +104,11 @@ def test(net, test_data_loader, args, num_classes, progress=False, prefix="Test:
 
             # Loop-free update of per-class counts
             # For each class c: count how many predictions & targets match
-            print()
             for cls in range(num_classes):
                 mask = (target == cls)
-                #if mask.any():
-                per_class_total[cls] = per_class_total[cls] + mask.sum()
-                per_class_correct[cls] = per_class_correct[cls] + (pred[mask] == cls).sum()
-                
-            print(per_class_total.sum())
+                if mask.any():
+                    per_class_total[cls] = per_class_total[cls] + mask.sum()
+                    per_class_correct[cls] = per_class_correct[cls] + (pred[mask] == cls).sum()
 
             if progress:
                 # Avoid division by zero in rare cases
@@ -131,12 +128,6 @@ def test(net, test_data_loader, args, num_classes, progress=False, prefix="Test:
 
         # end for data, _, target in test_bar
         
-        assert per_class_total.sum() == len(test_data_loader.dataset), f"{per_class_total.sum()}, {len(test_data_loader.dataset)}"
-        print()
-        print(per_class_total, per_class_total.sum())
-        print(per_class_correct)
-        exit(1)
-
         # Avoid division by zero in rare cases
         valid = per_class_total > 0
         macro_acc = (per_class_correct[valid].float() / per_class_total[valid].float()).mean().item()
