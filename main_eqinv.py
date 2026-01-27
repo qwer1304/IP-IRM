@@ -72,7 +72,7 @@ def test(net, test_data_loader, args, num_classes, progress=False, prefix="Test:
         per_class_correct = torch.zeros(num_classes, dtype=torch.long, device=device)
         per_class_total   = torch.zeros(num_classes, dtype=torch.long, device=device)
 
-        if mask_u is None
+        if mask_u is None:
             mask_u = net.module.mask_fun.sample().detach()
 
         for data, target in test_bar:
