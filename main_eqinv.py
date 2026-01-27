@@ -91,9 +91,6 @@ def test(net, test_data_loader, args, num_classes, progress=False, prefix="Test:
             masked_features = features * mask_activation
             masked_features = F.normalize(masked_features, dim=-1)
             
-            print(f"features {features.size()} mask_u {mask_u.size()} mask_activation {mask_activation.size()} masked_features {masked_features.size()}")
-            exit(1)
-            
             out = net.module.fc(masked_features)
 
             total_num += data.size(0)
