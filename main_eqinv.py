@@ -62,7 +62,6 @@ def test(net, test_data_loader, args, num_classes, progress=False, prefix="Test:
 
         feature_list = []
         masked_feature_list = []
-        mask_list = []
         pred_labels_list = []
         pred_scores_list = []
         target_list = []
@@ -85,8 +84,8 @@ def test(net, test_data_loader, args, num_classes, progress=False, prefix="Test:
 
             features = net.module.backbone(data)
             features = F.normalize(features, dim=-1)
-            mask = net.module.mask_fun.activation()
-            masked_features = features * mask 
+            mask_feature = net.module.mask_fun.activation()
+            masked_features = features * mask_feature 
             masked_features = F.normalize(masked_features, dim=-1)
             
             out = net.module.fc(masked_features)
@@ -119,7 +118,6 @@ def test(net, test_data_loader, args, num_classes, progress=False, prefix="Test:
             if args.extract_features:
                 feature_list.append(features)
                 masked_feature_list.append(masked_features)
-                mask_list.append(mask)
                 target_list.append(target)
                 target_raw_list.append(target_raw)
                 pred_labels_list.append(pred_labels)
@@ -154,7 +152,7 @@ def test(net, test_data_loader, args, num_classes, progress=False, prefix="Test:
             state = {
                 'features':        features,
                 'masked_features': masked_features,
-                'masks':           masks,
+                'masks':           mask_feature,
                 'labels':          target,
                 'labels_raw':      target_raw,
                 'pred_labels':     pred_labels,
