@@ -111,6 +111,8 @@ def test(net, test_data_loader, args, num_classes, progress=False, prefix="Test:
                 print(cls, mask.sum())
                 per_class_total[cls] = per_class_total[cls] + mask.sum()
                 per_class_correct[cls] = per_class_correct[cls] + (pred[mask] == cls).sum()
+                
+            assert per_class_total.sum() == len(target)
 
             if progress:
                 # Avoid division by zero in rare cases
