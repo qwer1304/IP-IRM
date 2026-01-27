@@ -157,8 +157,8 @@ def test(net, test_data_loader, args, num_classes, progress=False, prefix="Test:
                 'pred_labels':     pred_labels,
                 'pred_scores':     pred_scores,
                 'model_epoch':     epoch,
-                'head_weights':    net.module.arms["classifier"].weight,  # shape: (num_classes, embed_dim)
-                'head_bias':       net.module.arms["classifier"].bias,    # shape: (num_classes,)
+                'head_weights':    net.module.arms["classifier"][0].weight,  # shape: (num_classes, embed_dim)
+                'head_bias':       net.module.arms["classifier"][0].bias,    # shape: (num_classes,)
                 'n_classes':       args.class_num,
             }
 
