@@ -1345,51 +1345,14 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
             bar_format=bar_format,          # request bar width
             )
 
-    # instantiate LossModule and IRMCalculator based on args (pluggable)
-    # default to MoCo if args.loss_type not provided
-    loss_type         = getattr(args, 'ssl_type', 'moco').lower()
-    penalty_type      = getattr(args, 'penalty_type', 'irm').lower()
-    loss_CE_type      = getattr(args, 'loss_CE_type', None)
-    loss_CE_type      = loss_CE_type.lower() if loss_CE_type is not None else None
+    loss_CE_module = kwargs['loss_CE_module']
+    
+    loss_unsplit_module = kwargs['loss_unsplit_module']
 
-    if loss_CE_type == 'ce' or loss_CE_type == 'ceweighted':
-        LossCEModule = CELossModule
-    elif loss_CE_type is None:
-        LossCEModule = None
-    else:
-        raise ValueError(f"Unknown loss_CE_type: {loss_CE_type}")
+    loss_module = kwargs['loss_module'] 
+    is_per_env  = loss_module.is_per_env()
 
-    if loss_type == 'moco':
-        LossModule = MoCoLossModule
-    elif loss_type == 'mocosupcon':
-        LossModule = MoCoSupConLossModule
-    elif loss_type == 'simsiam':
-        LossModule = SimSiamLossModule
-    else:
-        raise ValueError(f"Unknown loss_type: {loss_type}")
-
-    if LossCEModule is not None:
-        loss_CE_module = LossCEModule(net, debug=args.debug, **kwargs) 
-    else:
-        loss_CE_module =  None
-
-    is_per_env  = LossModule.is_per_env()
-    loss_module = LossModule(net, debug=args.debug, **kwargs) 
-
-    # IRM calculator selection
-    if penalty_type == 'irm':
-        if loss_type   == 'moco' or loss_type == 'mocosupcon':
-            PenaltyCalculator = CE_IRMCalculator
-        elif loss_type == 'simsiam':
-            PenaltyCalculator = SimSiamIRMCalculator
-        else:
-            raise ValueError(f"Unknown loss_type: {loss_type}")
-    elif penalty_type == 'vrex':
-        PenaltyCalculator = VRExCalculator
-    else:
-        raise ValueError(f"Unknown penalty_type: {penalty_type}")
-
-    penalty_calculator   = PenaltyCalculator(loss_module, irm_temp=args.irm_temp, debug=args.debug, **kwargs)
+    penalty_calculator   = kwargs['penalty_calculator']
     """
     We made an attempt to get rid of halving the micro-batches of the whole batch into two subsets. 
     Turns out this cannot be done because losses and gradients are aggregated over micro-batches, 
