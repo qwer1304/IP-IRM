@@ -530,7 +530,7 @@ if __name__ == '__main__':
     parser.add_argument('--gradnorm', action="store_true", help="use gradnorm")
     parser.add_argument('--gradnorm_epoch', default=0, type=int, help='gradnorm start epoch')
     parser.add_argument('--gradnorm_alpha', default=1.0, type=float, help='gradnorm alpha')
-    parser.add_argument('--gradnorm_tau', default=None, nargs=2*3, type=str,
+    parser.add_argument('--gradnorm_tau', default=None, nargs=2*4, type=str,
                         action=utils.ParseMixed, types=[str, float, str, float, str, float, str, float],
                         metavar='tau dictionary k-v pairs',    
                         help='loss divisors')
