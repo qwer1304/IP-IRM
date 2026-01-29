@@ -71,13 +71,13 @@ def build_losses_and_penalty_dict(args, net, class_weights=None, moco_dict=None)
         loss_CE_module = LossCEModule(net, debug=args.debug, detached_backbone=False, **kwargs) 
     else:
         loss_CE_module =  None
-    loss_and_penalties_dict = ['loss_CE_module'] = loss_CE_module
+    loss_and_penalties_dict['loss_CE_module'] = loss_CE_module
 
     loss_module = LossModule(net, debug=args.debug, detached_backbone=True, projector=False, **kwargs) 
-    loss_and_penalties_dict = ['loss_module'] = loss_module
+    loss_and_penalties_dict['loss_module'] = loss_module
 
     loss_unsplit_module = LossModule(net, debug=args.debug, detached_backbone=False, projector=True, **kwargs) 
-    loss_and_penalties_dict = ['loss_unsplit_module'] = loss_unsplit_module
+    loss_and_penalties_dict['loss_unsplit_module'] = loss_unsplit_module
 
     # IRM calculator selection
     if penalty_type == 'irm':
