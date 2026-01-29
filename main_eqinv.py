@@ -26,12 +26,136 @@ import time
 import warnings
 from collections import defaultdict
 from typing import Union, List, Dict
-from trainenv import train_env
+from trainenv import train_env, CELossModule, MoCoLossModule, MoCoSupConLossModule, SimSiamLossModule, CE_IRMCalculator, SimSiamIRMCalculator, VRExCalculator  
+
 from functools import partial
 
 import utils_cluster
 
 sys.modules['__main__'].FeatureQueue = utils.FeatureQueue
+
+def build_losses_and_penalty_dict(args, net, class_weights=None, moco_dict=None):
+    loss_type         = getattr(args, 'ssl_type', 'moco').lower()
+    penalty_type      = getattr(args, 'penalty_type', 'irm').lower()
+    loss_CE_type      = getattr(args, 'loss_CE_type', None)
+    loss_CE_type      = loss_CE_type.lower() if loss_CE_type is not None else None
+
+    kwargs = {}
+    kwargs['moco_dict'] = moco_dict
+    kwargs['CEweights'] = class_weights
+    if loss_type == 'mocosupcon':
+        def filter_indices(idxs, labels, partition, **kwargs):
+            idxs = idxs[labels==partition]
+            return idxs
+        kwargs.update({'filter_indices': filter_indices})
+
+    if loss_CE_type == 'ce' or loss_CE_type == 'ceweighted':
+        LossCEModule = CELossModule
+    elif loss_CE_type is None:
+        LossCEModule = None
+    else:
+        raise ValueError(f"Unknown loss_CE_type: {loss_CE_type}")
+
+    if loss_type == 'moco':
+        LossModule = MoCoLossModule
+    elif loss_type == 'mocosupcon':
+        LossModule = MoCoSupConLossModule
+    elif loss_type == 'simsiam':
+        LossModule = SimSiamLossModule
+    else:
+        raise ValueError(f"Unknown loss_type: {loss_type}")
+
+    loss_and_penalties_dict = {}
+
+    if LossCEModule is not None:
+        loss_CE_module = LossCEModule(net, debug=args.debug, detached_backbone=False, **kwargs) 
+    else:
+        loss_CE_module =  None
+    loss_and_penalties_dict = ['loss_CE_module'] = loss_CE_module
+
+    loss_module = LossModule(net, debug=args.debug, detached_backbone=True, projector=False, **kwargs) 
+    loss_and_penalties_dict = ['loss_module'] = loss_module
+
+    loss_unsplit_module = LossModule(net, debug=args.debug, detached_backbone=False, projector=True, **kwargs) 
+    loss_and_penalties_dict = ['loss_unsplit_module'] = loss_unsplit_module
+
+    # IRM calculator selection
+    if penalty_type == 'irm':
+        if loss_type   == 'moco' or loss_type == 'mocosupcon':
+            PenaltyCalculator = CE_IRMCalculator
+        elif loss_type == 'simsiam':
+            PenaltyCalculator = SimSiamIRMCalculator
+        else:
+            raise ValueError(f"Unknown loss_type: {loss_type}")
+    elif penalty_type == 'vrex':
+        PenaltyCalculator = VRExCalculator
+    else:
+        raise ValueError(f"Unknown penalty_type: {penalty_type}")
+
+    penalty_calculator = PenaltyCalculator(loss_module, irm_temp=args.irm_temp, debug=args.debug, **kwargs)
+    loss_and_penalties_dict['penalty_calculator'] = penalty_calculator
+    
+    return loss_and_penalties_dict
+
+def setup_moco(model, args):
+    ssl_type = args.ssl_type.lower()
+    device = next(model.parameters()).device
+    if ssl_type == 'moco' or ssl_type == 'mocosupcon':
+        model_momentum = copy.deepcopy(model)
+        for p in model_momentum.parameters():
+            p.requires_grad = False
+        momentum = args.momentum              # momentum for model_momentum
+        queue_size = args.queue_size
+        queue = utils.FeatureQueue(queue_size, args.feature_dim, device=device, dtype=torch.float32, indices=True)
+    elif ssl_type == 'simsiam':
+        model_momentum = None
+        queue = None
+    else:
+        raise ValueError(f"Unknown ssl_type: {ssl_type}")
+        
+    return model_momentum, queue
+
+def build_arms_blueprints(args, num_classes):
+    ssl_type = args.ssl_type.lower()
+    classifier_dim = num_classes
+    if ssl_type == 'moco' or ssl_type == 'mocosupcon':       
+        arms_blueprints = {"projector": partial(create_mlp, output_dim=args.feature_dim, hidden_dims=[512], norm_layer=nn.BatchNorm1d, bias=[False, True],
+                                                       last_layer_norm=False, last_layer_act=False)
+        }
+        shortcuts = {'g': 'projector'}
+        
+    elif ssl_type == 'simsiam':
+        arms_blueprints = {"projector": partial(create_mlp, output_dim=args.feature_dim, hidden_dims=[512, 512], norm_layer=nn.BatchNorm1d, bias=[False, False, False],
+                                                            last_layer_norm=True, last_layer_act=False, 
+                                                            norm_kwargs=[{"affine": True}, {"affine": True}, {"affine": False}]),  
+                           "predictor": partial(create_mlp, input_dim=args.feature_dim, output_dim=args.feature_dim, hidden_dims=[int(args.feature_dim/2)], 
+                                                            norm_layer=nn.BatchNorm1d, bias=[False, True],
+                                                            last_layer_norm=False, last_layer_act=False)
+        }
+        shortcuts = {'g': 'projector', 'h': 'predictor'}
+
+    else:
+        raise ValueError(f"Unknown ssl_type: {ssl_type}")
+
+    arms_blueprints.update({"classifier": partial(create_mlp, output_dim=classifier_dim, bias=True)})
+    shortcuts.update({'fc': 'classifier'})
+    
+    return arms_blueprints, shortcuts
+
+def setup_gradnorm_balancer(args, device):
+    initial_weights = {'penalty': torch.tensor(1.0, dtype=torch.float, device=device)}
+    if args.penalty_cont > 0:
+        initial_weights['loss'] = torch.tensor(1.0, dtype=torch.float, device=device)
+    if args.unsplit_cont and (args.penalty_unsplit_cont > 0):
+        initial_weights['loss_unsplit'] = torch.tensor(1.0, dtype=torch.float, device=device)
+    if args.penalty_CE > 0:
+        initial_weights['loss_CE'] = torch.tensor(1.0, dtype=torch.float, device=device)
+    gradnorm_balancer = gn.GradNormLossBalancer(initial_weights, alpha=args.gradnorm_alpha, device=device, smoothing=False, 
+                            tau=args.gradnorm_tau, eps=1e-8, debug=args.gradnorm_debug, beta=args.gradnorm_beta, 
+                            avgG_detach_frac=args.gradnorm_avgG_detach_frac, Gscaler=args.gradnorm_Gscaler, 
+                            gradnorm_loss_type=args.gradnorm_loss_type, 
+                            gradnorm_loss_lambda=args.gradnorm_loss_lambda, huber_delta=args.gradnorm_huber_delta)
+    return gradnorm_balancer
 
 # test for one epoch
 def test(net, test_data_loader, args, num_classes, progress=False, prefix="Test:", mask_u=None):
@@ -354,6 +478,9 @@ if __name__ == '__main__':
     parser.add_argument('--penalty_cont', default=1.0, type=float, help='cont loss weight')
     parser.add_argument('--unsplit_cont', action="store_true", default=False, help='unsplit original contrastive?')
     parser.add_argument('--penalty_unsplit_cont', default=1.0, type=float, help='unsplit loss weight')
+    parser.add_argument('--CE_loss', action="store_true", default=False, help='do CE loss')
+    parser.add_argument('--penalty_CE', default=1.0, type=float, help='CE loss weight')
+
     parser.add_argument('--retain_group', action="store_true", default=False, help='dummy')
     parser.add_argument('--Lscaler', default=1.0, type=float, help='Global scaler for losses gards')
     parser.add_argument('--penalty_iters', default=0, type=int, help='penalty weight start iteration')
@@ -546,36 +673,13 @@ if __name__ == '__main__':
     print('# Classes: {}'.format(c))
 
     # model setup and optimizer config
-    ssl_type = args.ssl_type.lower()
-    classifier_dim = c if args.loss_unsplit_type else None
-    if ssl_type == 'moco' or ssl_type == 'mocosupcon':       
-        arms_blueprints = {"projection": partial(create_mlp, output_dim=feature_dim, hidden_dims=[512], norm_layer=nn.BatchNorm1d, bias=[False, True],
-                                                       last_layer_norm=False, last_layer_act=False)
-        }
-        shortcuts = {'g': 'projection'}
-        
-    elif ssl_type == 'simsiam':
-        arms_blueprints = {"projector": partial(create_mlp, output_dim=feature_dim, hidden_dims=[512, 512], norm_layer=nn.BatchNorm1d, bias=[False, False, False],
-                                                            last_layer_norm=True, last_layer_act=False, 
-                                                            norm_kwargs=[{"affine": True}, {"affine": True}, {"affine": False}]),  
-                           "predictor": partial(create_mlp, input_dim=feature_dim, output_dim=feature_dim, hidden_dims=[int(feature_dim/2)], 
-                                                            norm_layer=nn.BatchNorm1d, bias=[False, True],
-                                                            last_layer_norm=False, last_layer_act=False)
-        }
-        shortcuts = {'g': 'projector', 'h': 'predictor'}
-
-    else:
-        raise NotImplemented
-
-    if classifier_dim:
-        arms_blueprints.update({"classifier": partial(create_mlp, output_dim=classifier_dim, bias=True)})
-        shortcuts.update({'fc': 'classifier'})
+    arms_blueprints, shortcuts = build_arms_blueprints(args, num_classes=c)
 
     # Mask
-    # FIX ME!!!! Add mask sparsity loss
     mask_fun = Mask(args.mask_nonlinearity, tau=args.gumbel_tau, soft=args.gumbel_soft, K=args.mask_sparsity, hard_K=args.mask_hard_sparsity_limit)
     mask_blueprint = partial(MaskModule, mask_fun, trainable=args.opt_mask)
 
+    # Model
     model = MultiArmModel(backbone_name='resnet50', mask_blueprint=mask_blueprint, arms_blueprints=arms_blueprints, in_transform=None, out_transforms=None, 
              shortcuts=shortcuts, image_class=image_class, state_dict=state_dict).cuda()
 
@@ -584,48 +688,32 @@ if __name__ == '__main__':
 
     model = nn.DataParallel(model)
 
-    if ssl_type == 'moco' or ssl_type == 'mocosupcon':
-        model_momentum = copy.deepcopy(model)
-        for p in model_momentum.parameters():
-            p.requires_grad = False
-        momentum = args.momentum              # momentum for model_momentum
-        queue_size = args.queue_size
-        queue = utils.FeatureQueue(queue_size, feature_dim, device=device, dtype=torch.float32, indices=True)
-    elif ssl_type == 'simsiam':
-        model_momentum = None
-        queue = None
-        momentum = None
+    # MoCo momentum encoder
+    model_momentum, queue = setup_moco(model, args)
 
+    # EMA
     ema = utils.MovingAverage(0.95, oneminusema_correction=False, active=args.ema)
     
-    initial_weights = {'penalty': torch.tensor(1.0, dtype=torch.float, device=device)}
-    if args.penalty_cont > 0:
-        initial_weights['loss'] = torch.tensor(1.0, dtype=torch.float, device=device)
-    if args.unsplit_cont and (args.penalty_unsplit_cont > 0):
-        initial_weights['loss_unsplit'] = torch.tensor(1.0, dtype=torch.float, device=device)
-    gradnorm_balancer = gn.GradNormLossBalancer(initial_weights, alpha=args.gradnorm_alpha, device=device, smoothing=False, 
-                            tau=args.gradnorm_tau, eps=1e-8, debug=args.gradnorm_debug, beta=args.gradnorm_beta, 
-                            avgG_detach_frac=args.gradnorm_avgG_detach_frac, Gscaler=args.gradnorm_Gscaler, 
-                            gradnorm_loss_type=args.gradnorm_loss_type, 
-                            gradnorm_loss_lambda=args.gradnorm_loss_lambda, huber_delta=args.gradnorm_huber_delta)
+    # GradNorm
+    gradnorm_balancer = setup_gradnorm_balancer(args, device)
 
-    def get_optimizer_params(model, ssl_type):
+    # Optimizers
+    def get_optimizer_params(model, args):
+        ssl_type = args.ssl_type.lower()
         params = []
-        if ssl_type == "simsiam":
-            params.append({'params': model.module.f.parameters(), 'lr': args.featurizer_lr if args.featurizer_lr > 0 else args.lr})
+        params.append({'params': model.module.f.parameters(), 'lr': args.featurizer_lr if args.featurizer_lr > 0 else args.lr})
+        params.append({'params': model.module.arms['classifier'].parameters(), 'lr': args.classifier_lr if args.classifier_lr > 0 else args.lr})
+        if args.opt_mask:
             params.append({'params': model.module.mask_fun.parameters(), 'lr': args.mask_lr if args.mask_lr > 0 else args.lr})
+        if ssl_type == "simsiam":
             params.append({'params': model.module.arms['projector'].parameters(), 'lr': args.projector_lr if args.projector_lr > 0 else args.lr})
             params.append({'params': model.module.arms['predictor'].parameters(), 'lr': args.predictor_lr if args.predictor_lr > 0 else args.lr})
-            params.append({'params': model.module.arms['classifier'].parameters(), 'lr': args.classifier_lr if args.classifier_lr > 0 else args.lr})
         else:
-            params.append({'params': model.module.f.parameters(), 'lr': args.featurizer_lr if args.featurizer_lr > 0 else args.lr})
-            params.append({'params': model.module.mask_fun.parameters(), 'lr': args.mask_lr if args.mask_lr > 0 else args.lr})
             params.append({'params': model.module.arms['projection'].parameters(), 'lr': args.projector_lr if args.projector_lr > 0 else args.lr})
-            params.append({'params': model.module.arms['classifier'].parameters(), 'lr': args.classifier_lr if args.classifier_lr > 0 else args.lr})
         return params
 
     if args.opt == "Adam":
-        params = get_optimizer_params(model, ssl_type)
+        params = get_optimizer_params(model, args)
         optimizer = optim.Adam(params, weight_decay=args.weight_decay, betas=args.betas)
         gradnorm_optimizer = optim.Adam(gradnorm_balancer.parameters(), lr=args.gradnorm_lr, weight_decay=args.gradnorm_weight_decay, betas=args.gradnorm_betas)        
     elif args.opt == 'SGD':
@@ -642,7 +730,7 @@ if __name__ == '__main__':
             (model, model_momentum, optimizer, queue,
              start_epoch, best_acc1, best_epoch,
              updated_split, updated_split_all, ema_, gradnorm_balancer, gradnorm_optimizer) = \
-                load_checkpoint(args.resume, model, model_momentum, optimizer, gradnorm_balancer, gradnorm_optimizer, classifier_not_needed=classifier_dim is None)
+                load_checkpoint(args.resume, model, model_momentum, optimizer, gradnorm_balancer, gradnorm_optimizer, classifier_not_needed=False)
  
             if not args.baseline:
                 if (ema_ is not None) and (args.ema == 'retain'): # exists in checkpoint
@@ -661,7 +749,10 @@ if __name__ == '__main__':
             resumed = True
         else:
             print("=> no checkpoint found at '{}'".format(args.resume))
-                    
+
+    moco_dict = {'net_momentum': model_momentum, 'queue': queue, 'net_momentum': args.net_momentum}
+    losses_and_penalty_dict = build_losses_and_penalty_dict(args, model, class_weights=None, moco_dict=None)
+
     # training loop
     # start epoch is what the user provided, if provided, or from checkpoint, if exists, or 1 (default)
     start_epoch = args.start_epoch if args.start_epoch else start_epoch
