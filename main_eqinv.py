@@ -40,9 +40,8 @@ def build_losses_and_penalty_dict(args, net, class_weights=None, moco_dict=None)
     loss_CE_type      = getattr(args, 'loss_CE_type', None)
     loss_CE_type      = loss_CE_type.lower() if loss_CE_type is not None else None
 
-    kwargs = {}
-    kwargs['moco_dict'] = moco_dict
-    kwargs['CEweights'] = class_weights
+    kwargs = moco_dict
+    kwargs.update({'CEweights': class_weights})
     if loss_type == 'mocosupcon':
         def filter_indices(idxs, labels, partition, **kwargs):
             idxs = idxs[labels==partition]
