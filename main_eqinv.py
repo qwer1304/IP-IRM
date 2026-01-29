@@ -432,7 +432,7 @@ if __name__ == '__main__':
     parser.add_argument('--penalty_type', default='IRM', type=str, choices=['IRM', 'VREx'], help='Penalty type')        
     parser.add_argument('--penalty_sigma', default=None, type=float, help='Noise level to inject into penalty')        
     parser.add_argument('--grad_rotate', default=None, type=float, nargs=2, help='rotate gradients')      
-    parser.add_argument('--loss_unsplit_type', required=True, type=str, choices=['CE', 'CEweighted'], help='Loss unsplit type')    
+    parser.add_argument('--loss_CE_type', required=True, type=str, choices=['CE', 'CEweighted'], help='Loss unsplit type')    
     parser.add_argument('--irm_temp', default=0.5, type=float, help='irm loss temperature')
 
     parser.add_argument('--feature_dim', default=128, type=int, help='Feature dim for latent vector')
@@ -803,7 +803,7 @@ if __name__ == '__main__':
     elif ssl_type == 'simsiam':
         pass
         
-    if args.loss_unsplit_type == 'CEweighted': # weight per-class loss w/ its inverse frequency
+    if args.loss_CE_type == 'CEweighted': # weight per-class loss w/ its inverse frequency
         labels = train_data.targets if isinstance(train_data.targets, torch.Tensor) else torch.tensor(train_data.targets)
         labels = target_transform(labels) if target_transform else labels
         counts = torch.bincount(labels)
