@@ -791,7 +791,7 @@ if __name__ == '__main__':
         gradnorm_balancer.rescale_weights()
     
     kwargs = {'ema': ema, 'gradnorm_balancer': gradnorm_balancer, 'gradnorm_optimizer': gradnorm_optimizer, 'log_file': log_file}
-    kwargs.update(loss_and_penalties_dict)
+    kwargs.update(losses_and_penalty_dict)
     if ssl_type == 'moco' or ssl_type == 'mocosupcon':
         kwargs.update({'temperature': temperature})
         if ssl_type == 'mocosupcon':
