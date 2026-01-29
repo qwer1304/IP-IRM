@@ -1359,7 +1359,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
     but aggregations over halves are needed for IRM and it's impossible to recover back the halves 
     from full aggregators.
     """
-    num_halves  = PenaltyCalculator.num_halves()
+    num_halves  = penalty_calculator.num_halves()
 
     loss_aggregator         = torch.zeros((num_halves, num_partitions, args.env_num), dtype=torch.float, device=device) 
     penalty_aggregator      = torch.zeros((num_halves, num_partitions, args.env_num), dtype=torch.float, device=device) 
