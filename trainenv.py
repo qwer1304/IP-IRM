@@ -726,7 +726,7 @@ class CELossModule(LossModule):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    def pre_micro_batch(self, x1, x2, normalize=True, labels=None, weights=None, **kwargs):
+    def pre_micro_batch(self, x1, x2, normalize=False, labels=None, weights=None, **kwargs):
         x = torch.cat([x1, x2], dim=0)
         out = self.net.module.fc(x)
         if normalize:
@@ -735,7 +735,7 @@ class CELossModule(LossModule):
         self.labels = torch.cat([labels, labels], dim=0)
         self.weights = weights
 
-    def compute_loss_micro(self, normalize=True, **kwargs):
+    def compute_loss_micro(self, normalize=False, **kwargs):
         """
         Computes unnormalized loss of a micro-batch
         """
@@ -1503,8 +1503,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
 
                 if do_unsplit_loss and not use_batched_unsplit :
                     # if want unsplit loss and it must be computed separately from env losses
-                    loss_module.pre_micro_batch(features_1_nondetached, features_2_nondetached, indexs=indexs, 
-                        normalize=(loss_type != 'supcon'), dataset=train_loader.dataset)
+                    loss_module.pre_micro_batch(features_1_nondetached, features_2_nondetached, indexs=indexs, dataset=train_loader.dataset)
                     losses_samples_all = loss_module.compute_loss_micro(reduction='sum')
                     loss = losses_samples_all / 1 / this_batch_size / gradients_accumulation_steps
                     grads_all[len(grads_all) - int(do_CE_loss)] = calculate_grads(loss, net, retain_graph=True) # last or penultimate
@@ -1515,7 +1514,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 else:
                     features_1, features_2 = features_1_detached, features_2_detached
 
-                loss_module.pre_micro_batch(features_1, features_2, indexs=indexs, normalize=(loss_type != 'supcon'), dataset=train_loader.dataset)
+                loss_module.pre_micro_batch(features_1, features_2, indexs=indexs, dataset=train_loader.dataset)
                 
                 # Even if 'do_loss'==False 'reduction' reflects the correct reduction
                 # If any of unsplit and cont losses has been requested and this is a non-per-env loss and backbone-propagated
