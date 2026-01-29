@@ -750,8 +750,8 @@ if __name__ == '__main__':
         else:
             print("=> no checkpoint found at '{}'".format(args.resume))
 
-    moco_dict = {'net_momentum': model_momentum, 'queue': queue, 'net_momentum': args.net_momentum}
-    losses_and_penalty_dict = build_losses_and_penalty_dict(args, model, class_weights=None, moco_dict=None)
+    moco_dict = {'net_momentum': model_momentum, 'queue': queue, 'momentum': args.momentum}
+    losses_and_penalty_dict = build_losses_and_penalty_dict(args, model, class_weights=None, moco_dict=moco_dict)
 
     # training loop
     # start epoch is what the user provided, if provided, or from checkpoint, if exists, or 1 (default)
@@ -792,8 +792,9 @@ if __name__ == '__main__':
         gradnorm_balancer.rescale_weights()
     
     kwargs = {'ema': ema, 'gradnorm_balancer': gradnorm_balancer, 'gradnorm_optimizer': gradnorm_optimizer, 'log_file': log_file}
+    kwargs.update(loss_and_penalties_dict)
     if ssl_type == 'moco' or ssl_type == 'mocosupcon':
-        kwargs.update({'net_momentum': model_momentum, 'queue': queue, 'temperature': temperature, 'momentum': momentum})
+        kwargs.update({'temperature': temperature})
         if ssl_type == 'mocosupcon':
             def filter_indices(idxs, labels, partition, **kwargs):
                 idxs = idxs[labels==partition]
