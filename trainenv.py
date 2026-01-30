@@ -1592,7 +1592,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                             env_idxs = utils.assign_idxs_multi(indexs, partition, env)
                             print(f"par {partition_num} env {env} number env_idxs {len(env_idxs)}")
                             idxs = loss_module.filter_indices(env_idxs, labels=labels[env_idxs], partition=active_partition_idx[partition_num], env=env)
-                            print(f"par {partition_num{ env {env} number filtered idxs {len(idxs)}")
+                            print(f"par {partition_num} env {env} number filtered idxs {len(idxs)}")
 
                             if (N := len(idxs)) == 0:
                                 continue
