@@ -1112,9 +1112,10 @@ def calculate_scalers(loss_CE_grads_final, loss_unsplit_grads_final, loss_grads_
         # this can CHANGE the relative rank of the weights!!!
         normalized_scales = {k: w[v] for k,v in task_names_2_klp.items()} 
 
+    loss_CE_grad_scaler      = normalized_scales['loss_CE']      if do_CE_loss      else torch.tensor(1.0, dtype=torch.float, device=device)
     loss_unsplit_grad_scaler = normalized_scales['loss_unsplit'] if do_unsplit_loss else torch.tensor(1.0, dtype=torch.float, device=device)
-    loss_grad_scaler      = normalized_scales['loss']      if do_loss      else torch.tensor(1.0, dtype=torch.float, device=device)
-    penalty_grad_scaler   = normalized_scales['penalty']   if do_penalty   else torch.tensor(1.0, dtype=torch.float, device=device)
+    loss_grad_scaler         = normalized_scales['loss']         if do_loss         else torch.tensor(1.0, dtype=torch.float, device=device)
+    penalty_grad_scaler      = normalized_scales['penalty']      if do_penalty      else torch.tensor(1.0, dtype=torch.float, device=device)
 
     gn_pm = 0
     for pind, p in enumerate(gradnorm_balancer.parameters()):
