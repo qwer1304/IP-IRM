@@ -1438,7 +1438,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
 
     train_optimizer.zero_grad(set_to_none=True) # clear gradients at the beginning 
 
-    print() # debug
     for batch_index, data_env in enumerate(train_bar):
 
         if args.decimate_partitions:
@@ -1450,7 +1449,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         reduction = 'sum' if is_per_env else 'none' # make sure it's the correct one
 
         data_batch, labels_batch, indexs_batch = data_env # 'data_batch' is an batch of images, 'indexs_batch' is their corresponding indices 
-        print(f"batch {batch_index} labels batch {labels_batch}")
         this_batch_size = len(indexs_batch) # for the case drop_last=False
         
         loss_module.pre_batch(data_batch, indexs_batch, partitions)
