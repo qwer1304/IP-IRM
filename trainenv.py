@@ -1853,7 +1853,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         loss_weighted      *= loss_grad_scaler
         penalty_weighted   *= penalty_grad_scaler 
         """
-        print()
+        #print()
         for pind, (name, p) in enumerate(net.named_parameters()):
             total_grad_flat_weighted = (   loss_unsplit_grads_final[pind] * loss_unsplit_weight  * args.Lscaler * loss_unsplit_grad_scaler
                                          + loss_CE_grads_final[pind]      * loss_CE_weight       * args.Lscaler * loss_CE_grad_scaler
@@ -1866,7 +1866,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
             else:
                 p.grad += total_grad_flat_weighted.view(p.shape)
                 
-            print(f"pind {pind} name {name} norm {total_grad_flat_weighted.norm():.2e}")
+            #print(f"pind {pind} name {name} norm {total_grad_flat_weighted.norm():.2e}")
                 
         
         # -----------------------
@@ -1930,7 +1930,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                    f" kkc2 {info_dict['ngkkc']**2:.2e} ckc2 {info_dict['ngckc']**2:.2e} kc {info_dict['shared_dot_kc']:.2e}" + \
                    f" shared_cos: lk {info_dict['shared_cos_lk']:.3e} lp {info_dict['shared_cos_lp']:.3e} kp {info_dict['shared_cos_kp']:.2e}" + \
                    f" Lp: shared cos {info_dict['shared_cos_Lp']:.3e} shared dot {info_dict['shared_dot_Lp']:.3e}" + \
-                   f" sparsity: ngs2 {loss_mask_sparsity_norm**2:.2e} sum(activation) {mask_activation:.3e}" + \
+                   f" sparsity: ngs2 {loss_mask_sparsity_norm**2:.2e} sum(activation) {mask_activation:.3e} sum(mask) {net.module.mask_fun.mask.sum().item()}" + \
                    f" gn_prgrs {info_dict['gradnorm_progress']:.6g}"
         desc_str += loss_module.get_debug_info_str()
         train_bar.set_description(desc_str)
