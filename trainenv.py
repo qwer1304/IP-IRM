@@ -504,6 +504,10 @@ class MoCoSupConLossModule(LossModule):
             self.total_maxneg += l_neg.max().item()  * l_pos.size(0)
             self.count        += l_pos.size(0)
 
+        # save in state for queue update at end of batch
+        self.out_k        = out_k 
+        self.out_k_indexs = indexs
+
         # sum over batch, per env handled by driver
         # get the samples that have POSITIVES (column 0)
         l_pos = self._logits[pos_idxs][:, 0]
