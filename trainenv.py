@@ -1758,7 +1758,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                         print(f"grads {ii} is None")
                         continue
 
-                    print_grads(current_grads, net, prefix="")
+                    print_grads(current_grads, net, prefix=f"grads {ii}")
 
                     for param_idx, g in enumerate(current_grads):
                         if g is None:
