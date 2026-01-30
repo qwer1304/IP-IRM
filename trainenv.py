@@ -1841,6 +1841,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         """
         for pind, (name, p) in enumerate(net.named_parameters()):
             total_grad_flat_weighted = (   loss_unsplit_grads_final[pind] * loss_unsplit_weight  * args.Lscaler * loss_unsplit_grad_scaler
+                                         + loss_CE_grads_final[pind]      * loss_CE_weight       * args.Lscaler * loss_CE_grad_scaler
                                          + loss_grads_final[pind]         * loss_weight          * args.Lscaler * loss_grad_scaler     
                                          + penalty_grads_final[pind]      * penalty_weight       * args.Lscaler * penalty_grad_scaler  
                                          + loss_mask_sparsity_grads[pind] * mask_sparsity_weight * args.Lscaler * 1.0
@@ -1866,10 +1867,12 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         # True loss reflecting progress does NOT include balancing scalers
         loss_weighted               = loss_weight          * loss_env.mean()
         loss_unsplit_weighted       = loss_unsplit_weight  * loss_unsplit_aggregator.mean()
+        loss_CE_weighted            = loss_CE_weight       * loss_CE_aggregator.mean()
         penalty_weighted            = penalty_weight       * penalty_env.mean()
         loss_mask_sparsity_weighted = mask_sparsity_weight * loss_mask_sparsity.mean()
 
         loss_batch_weighted = (loss_unsplit_weighted + # loss_unsplit_aggregator is a scalar normalized over macro-batch
+                               loss_CE_weighted      + # loss_CE_aggregator is a scalar normalized over macro-batch
                                penalty_weighted      + # mean over envs normalized over macro-batch
                                loss_weighted         + # mean over envs normalized over macro-batch
                                loss_mask_sparsity_weighted
@@ -1877,18 +1880,19 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
 
         # total loss is sum of losses so far over entire batch aggregation period.
         total_unsplit_loss_weighted += (loss_unsplit_weight * loss_unsplit_aggregator).item() * this_batch_size * gradients_accumulation_steps
+        total_CE_loss_weighted      += (loss_CE_weight      * loss_CE_aggregator).item()      * this_batch_size * gradients_accumulation_steps
         total_pen_loss_weighted     += (penalty_weight      * penalty_env.mean()).item()      * this_batch_size * gradients_accumulation_steps
         total_env_loss_weighted     += (loss_weight         * loss_env.mean()).item()         * this_batch_size * gradients_accumulation_steps
         total_loss_weighted         += loss_batch_weighted.item()                             * this_batch_size * gradients_accumulation_steps
         
         if args.print_batch:
             print() # this causes each tqdm update to be printed on a separare line
-        unsplit_str = f'Unsplit/{loss_unsplit_type}' if loss_unsplit_type is not None else 'Unsplit'
 
         desc_str = f"Epoch [{epoch}/{args.epochs}] [{trained_samples}/{total_samples}]" + \
                    f" {args.ssl_type}" + \
                    f" Total {total_loss_weighted/trained_samples:.3e}" + \
-                   f" {unsplit_str} {total_unsplit_loss_weighted/trained_samples:.3e}" + \
+                   f" Unsplit {total_unsplit_loss_weighted/trained_samples:.3e}" + \
+                   f" CE {total_CE_loss_weighted/trained_samples:.3e}" + \
                    f" Env {total_env_loss_weighted/trained_samples:.3e}" + \
                    f" {args.penalty_type} {total_pen_loss_weighted/trained_samples:.3e}" + \
                    f" Sparsity {loss_mask_sparsity_weighted.item():.3e}" + \
@@ -1912,10 +1916,11 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         train_bar.set_description(desc_str)
 
         if (batch_index % 10 - gradients_accumulation_steps + 1) == 0:
-           utils.write_log('Train Epoch: [{:d}/{:d}] [{:d}/{:d}] {}: Total: {:.4f} First: {:.4f} Env: {:.4f}'
+           utils.write_log('Train Epoch: [{:d}/{:d}] [{:d}/{:d}] {}: Total: {:.4f} Unsplit: {:.4f} CE: {:.4f} Env: {:.4f}'
                             .format(epoch, args.epochs, trained_samples, total_samples, args.ssl_type, 
                                     total_loss_weighted/trained_samples, 
                                     total_unsplit_loss_weighted/trained_samples, 
+                                    total_CE_loss_weighted/trained_samples, 
                                     total_env_loss_weighted/trained_samples) + 
                             ' {}: {:.4g} LR: {:.4f} PW {:.4f} GN {:.4f}'
                             .format(args.penalty_type, total_pen_loss_weighted/trained_samples, train_optimizer.param_groups[0]['lr'], 
@@ -1933,6 +1938,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         gradients_accumulation_step = 0
         penalty_aggregator.zero_()
         loss_unsplit_aggregator.zero_()
+        loss_CE_aggregator.zero_()
         loss_aggregator.zero_()
         halves_sz.zero_()
         for par in loss_grads: # over list
@@ -1941,13 +1947,15 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
             par.zero_()
         for par in loss_unsplit_grads_final: # over list
             par.zero_()
+        for par in loss_CE_grads_final: # over list
+            par.zero_()
         del penalty_env, loss_env, loss_batch_weighted
         del info_dict
         torch.cuda.empty_cache()
 
         loss_module.post_batch()
-        if loss_unsplit_module is not None:
-            loss_unsplit_module.post_batch()
+        loss_unsplit_module.post_batch()
+        loss_CE_module.post_batch()
     # end for batch_index, data_env in enumerate(train_bar):
     return total_loss_weighted / trained_samples
 
