@@ -538,8 +538,8 @@ if __name__ == '__main__':
                         action=utils.ParseMixed, types=[str, float, str, float, str, float, str, float],
                         metavar='tau dictionary k-v pairs',    
                         help='loss divisors')
-    parser.add_argument('--gradnorm_scalers', default=['loss_unsplit', 1.0, 'loss', 1.0, 'penalty', 1.0], nargs=2*3, type=str,
-                        action=utils.ParseMixed, types=[str, float, str, float, str, float],
+    parser.add_argument('--gradnorm_scalers', default=['loss_unsplit', 1.0, 'loss', 1.0, 'penalty', 1.0], nargs=2*4, type=str,
+                        action=utils.ParseMixed, types=[str, float, str, float, str, float, str, float],
                         metavar='scalers dictionary k-v pairs',    
                         help='loss scalers when gradnorm inactive')
     parser.add_argument('--gradnorm_debug', type=str, default=None, choices=['gn', 'opt'], nargs='*', help="debug gradnorm", metavar='gn, optimize')
