@@ -1746,9 +1746,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 view_shape = (num_partitions, args.env_num, -1)
                 CE_ind = num_grads - 1 if do_CE_loss else -1
                 unsplit_ind = num_grads - int(do_CE_loss) - 1 if do_unsplit_loss else -1
-                print()
-                print(CE_ind, unsplit_ind)
-                exit(1)
 
                 # 2. Consume the list of gradients sample-by-sample
                 # This is better for memory because we can clear each sample after processing
@@ -1771,6 +1768,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
 
                         elif ii == unsplit_ind:
                             loss_unsplit_grads_final[param_idx] += g_flat
+                            print()
+                            print("unsplit grads", ii, param_idx, g_flat.norm())
 
                         # 2. Loss Tasks (Original indices 1 to num_env_tasks)
                         elif 0 <= ii < num_env_tasks and do_loss:
