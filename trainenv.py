@@ -1438,6 +1438,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
 
     train_optimizer.zero_grad(set_to_none=True) # clear gradients at the beginning 
 
+    print() # debug
     for batch_index, data_env in enumerate(train_bar):
 
         if args.decimate_partitions:
@@ -1472,6 +1473,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 
                 # per micro-batch pipeline
                 batch_micro, labels, indexs = mb_list[i]
+                print(f"batch index {batch_index}, half {j}, micro_batch {i}, labels {labels.tolist()}")
                 if (loss_CE_module is not None) and ('CEweights' in kwargs) and (kwargs['CEweights'] is not None):
                     weights         = kwargs['CEweights'] # weights are PER class weights
                 else:
@@ -1590,10 +1592,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                             # Need to filter the samples s.t. the samples in micro-batch are ONLY those which class==partition
                             # Use 'assign_idxs_multi' to break ties correctly
                             env_idxs = utils.assign_idxs_multi(indexs, partition, env)
-                            print(f"par {partition_num} env {env} number env_idxs {len(env_idxs)}")
-                            print(f"par {partition_num} env {env} labels[env_idxs] {labels[env_idxs].tolist()}")
                             idxs = loss_module.filter_indices(env_idxs, labels=labels[env_idxs], partition=active_partition_idx[partition_num], env=env)
-                            print(f"par {partition_num} env {env} number filtered idxs {len(idxs)}")
 
                             if (N := len(idxs)) == 0:
                                 continue
@@ -1754,16 +1753,12 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
 
                 # 2. Consume the list of gradients sample-by-sample
                 # This is better for memory because we can clear each sample after processing
-                print()
                 for ii in range(num_grads):
                     # current_grads is the tuple of all parameter grads for sample 'i'
                     current_grads = grads_all[ii]
                     
                     if current_grads is None: # no grads for this row, e.g. - no valid samples in this micro-batch
-                        print(f"grads {ii} is None")
                         continue
-
-                    print_grads(current_grads, net, prefix=f"grads {ii}")
 
                     for param_idx, g in enumerate(current_grads):
                         if g is None:
