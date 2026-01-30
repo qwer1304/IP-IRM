@@ -1555,7 +1555,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                     loss_unsplit_module.pre_micro_batch(features_1_nondetached, features_2_nondetached, indexs=indexs, dataset=train_loader.dataset)
                     losses_samples_all = loss_unsplit_module.compute_loss_micro(reduction='sum')
                     loss = losses_samples_all / 1 / this_batch_size / gradients_accumulation_steps
-                    grads_all[len(grads_all) - int(do_CE_loss)] = calculate_grads(loss, net, retain_graph=True) # last or penultimate
+                    grads_all[len(grads_all) - 1 - int(do_CE_loss)] = calculate_grads(loss, net, retain_graph=True) # last or penultimate
                     loss_unsplit_aggregator += loss.detach() # before scaler
 
                 if args.backbone_propagate:
