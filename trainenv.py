@@ -1454,7 +1454,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
 
         for j in range(num_halves): # over halves of micro-batches
             for i in [i_ for i_ in range(len(mb_list)) if i_ % num_halves == j]: # loop over micro-batches
-                losses_samples_all, losses_samples, penalties_samples, penalty = None, None, None, None
+                losses_samples_all, losses_samples, penalties_samples, penalty, differentiate_this = None, None, None, None, None
                 
                 # per micro-batch pipeline
                 batch_micro, labels, indexs = mb_list[i]
@@ -1781,7 +1781,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 
                 # free memory of micro-batch
                 del features_1, features_2, features_1_nondetached, features_2_nondetached, features_1_detached, features_2_detached 
-                del indexs, g_flat, g, grads_all, differentiate_this
+                del indexs, g_flat, g, grads_all
+                if differentiate_this is not None: del differentiate_this
                 if loss is not None: del loss
                 if losses_samples_all is not None: del losses_samples_all
                 if losses_samples is not None: del losses_samples
