@@ -1750,17 +1750,17 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 # 2. Consume the list of gradients sample-by-sample
                 # This is better for memory because we can clear each sample after processing
                 print()
-                print("loop over grads",num_grads)
                 for ii in range(num_grads):
                     # current_grads is the tuple of all parameter grads for sample 'i'
                     current_grads = grads_all[ii]
+                    
+                    print_grads(current_grads, net, prefix="")
+
                     if current_grads is None: # no grads for this row, e.g. - no valid samples in this micro-batch
-                        print(f"grads {ii} is None")
                         continue
 
                     for param_idx, g in enumerate(current_grads):
                         if g is None:
-                            print(f"grads {ii} for par {param_idx} is None")
                             continue
 
                         # Flatten the parameter gradient: (*Param_Dims) -> (Flattened_Dim)
