@@ -1591,6 +1591,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                             # Use 'assign_idxs_multi' to break ties correctly
                             env_idxs = utils.assign_idxs_multi(indexs, partition, env)
                             print(f"par {partition_num} env {env} number env_idxs {len(env_idxs)}")
+                            print(f"par {partition_num} env {env} labels[env_idxs] {labels[env_idxs].tolist()}")
                             idxs = loss_module.filter_indices(env_idxs, labels=labels[env_idxs], partition=active_partition_idx[partition_num], env=env)
                             print(f"par {partition_num} env {env} number filtered idxs {len(idxs)}")
 
