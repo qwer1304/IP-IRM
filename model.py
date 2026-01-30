@@ -61,7 +61,7 @@ class MaskModule(nn.Module):
         # Initialize the mask as a trainable parameter
         if trainable:
             if activation_method.mask_type != 'gumbel':
-                init_val = torch.ones(input_dim)
+                init_val = (torch.rand(input_dim) * 2.) - 1.0 # [-1, 1)
             else:
                 if activation_method.K:
                     target_p = activation_method.K / input_dim  # e.g., 256 / 2048
