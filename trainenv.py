@@ -300,7 +300,7 @@ class MoCoSupConLossModule(LossModule):
         self.net_momentum = net_momentum
         self.momentum = kwargs['momentum']
         self.net_momentum.train()
-        self.queue = queue
+        self.queue = kwargs['queue_proj'] if self.projector else kwargs['queue_noproj']
         self.temperature = temperature or 1.0
         self.this_batch_size = 0
         self.debug = debug
@@ -552,7 +552,7 @@ class MoCoLossModule(LossModule):
         self.net_momentum = net_momentum
         self.momentum = kwargs['momentum']
         self.net_momentum.train()
-        self.queue = queue
+        self.queue = kwargs['queue_proj'] if self.projector else kwargs['queue_noproj']
         self.temperature = temperature or 1.0
         self.this_batch_size = 0
         self.debug = debug
@@ -681,12 +681,17 @@ class SimSiamLossModule(LossModule):
         super().__init__(*args, **kwargs)
 
     def pre_micro_batch(self, x1, x2, **kwargs):
-        # FIX ME! When 'projector' isn't used, 'predictor' dimensions MUST change!!!!!!!!!!!!!!!
         # Unnormalized!
-        z1 = self.net.module.g(x1)
-        z2 = self.net.module.g(x2)
-        p1 = self.net.module.h(z1)
-        p2 = self.net.module.h(z2)
+        if self.projector:
+            z1 = self.net.module.g(x1)
+            z2 = self.net.module.g(x2)
+            p1 = self.net.module.h_proj(z1)
+            p2 = self.net.module.h_proj(z2)
+        else:
+            z1 = x1
+            z2 = x2
+            p1 = self.net.module.h_noproj(z1)
+            p2 = self.net.module.h_noproj(z2)
         self._representations = (z1, z2, p1, p2)
 
     def compute_loss_micro(self, idxs=None, scale=1.0, reduction='sum', normalize=True):
@@ -903,22 +908,40 @@ def calculate_penalty_grads_final(penalty_grads, penalty_aggregator, penalty_wei
     return penalty_grads_final
 
 def get_shared_ind(param_groups_2_pind, args):
-    if 'ce' in param_groups_2_pind: # separate CE head
-        if not args.backbone_propagate: # w/o backbone propagation
+    if 'ce' in param_groups_2_pind: # separate CE head, EqInv
+        if not args.backbone_propagate: # w/o backbone propagation from Env
             if 'mask' in param_groups_2_pind and args.opt_mask:
-                shared_ind = {"lk": param_groups_2_pind['mask'], "lp": param_groups_2_pind['mask+cont'], "kp": param_groups_2_pind['mask']}
+                shared_ind = {"lk": param_groups_2_pind['mask'], "lp": param_groups_2_pind['mask'], "lc": param_groups_2_pind['mask'],          
+                              "kp": param_groups_2_pind['mask'], "kc": param_groups_2_pind['mask+backbone'],
+                              "pc": param_groups_2_pind['mask'],
+                }
             else:
-                shared_ind = {"lk": [], "lp": param_groups_2_pind['cont'], "kp": []}
+                shared_ind = {"lk": [], "lp": [], "lc": [],          
+                              "kp": [], "kc": param_groups_2_pind['backbone'],
+                              "pc": [],
+                }
+        else: # w/ backbone propagation
+            if 'mask' in param_groups_2_pind and args.opt_mask:
+                shared_ind = {"lk": param_groups_2_pind['mask+backbone'], "lp": param_groups_2_pind['mask+backbone'], "lc": param_groups_2_pind['mask+backbone'],          
+                              "kp": param_groups_2_pind['mask+backbone'], "kc": param_groups_2_pind['mask+backbone'],
+                              "pc": param_groups_2_pind['mask+backbone'],
+                }
+            else: # w/o mask
+                shared_ind = {"lk": param_groups_2_pind['backbone'], "lp": param_groups_2_pind['backbone'], "lc": param_groups_2_pind['backbone'],          
+                              "kp": param_groups_2_pind['backbone'], "kc": param_groups_2_pind['backbone'],
+                              "pc": param_groups_2_pind['backbone'],
+                }
+    else: # no CE head
+        if not args.backbone_propagate: # w/o backbone propagation from Env
+            if 'mask' in param_groups_2_pind and args.opt_mask:
+                shared_ind = {"lk": param_groups_2_pind['mask'], "lp": param_groups_2_pind['mask'], "kp": param_groups_2_pind['mask']}
+            else:
+                shared_ind = {"lk": [], "lp": param_groups_2_pind[], "kp": []}
         else: # w/ backbone propagation
             if 'mask' in param_groups_2_pind: # w/ mask
-                shared_ind = {"lk": param_groups_2_pind['backbone+mask'], "lp": param_groups_2_pind['backbone+mask+cont'], "kp": param_groups_2_pind['backbone+mask']}
+                shared_ind = {"lk": param_groups_2_pind['backbone+mask'], "lp": param_groups_2_pind['backbone+mask'], "kp": param_groups_2_pind['backbone+mask']}
             else: # w/o mask
-                shared_ind = {"lk": param_groups_2_pind['backbone'], "lp": param_groups_2_pind['backbone+cont'], "kp": param_groups_2_pind['backbone']}
-    else: # shared CE & cont head
-        if 'mask' in param_groups_2_pind: # w/ mask
-            shared_ind = {"lk": param_groups_2_pind['backbone+mask+cont'], "lp": param_groups_2_pind['backbone+mask+cont'], "kp": param_groups_2_pind['backbone+mask+cont']}
-        else: # w/o mask
-            shared_ind = {"lk": param_groups_2_pind['backbone+cont'], "lp": param_groups_2_pind['backbone+cont'], "kp": param_groups_2_pind['backbone+cont']}
+                shared_ind = {"lk": param_groups_2_pind['backbone'], "lp": param_groups_2_pind['backbone'], "kp": param_groups_2_pind['backbone']}
     
     return shared_ind
 
@@ -1267,7 +1290,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
     # Assumes net.parameters() order matches your aggregator's pind
     param_map = {name: pind for pind, (name, p) in enumerate(net.named_parameters())}
     # Group indices by their component names
-    cont_names = ['projector', 'predictor', 'projection']
+    cont_names = ['projector', 'predictor']
     param_groups_2_pind = {'mask': [idx for name, idx in param_map.items() if 'mask' in name],
                            'backbone': [idx for name, idx in param_map.items() if 'f.' in name],
                            'heads': [idx for name, idx in param_map.items() if 'arm.' in name],    

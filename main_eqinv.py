@@ -96,7 +96,7 @@ def build_losses_and_penalty_dict(args, net, class_weights=None, moco_dict=None)
     
     return loss_and_penalties_dict
 
-def setup_moco(model, args):
+def setup_moco_model(model, args):
     ssl_type = args.ssl_type.lower()
     device = next(model.parameters()).device
     if ssl_type == 'moco' or ssl_type == 'mocosupcon':
@@ -104,15 +104,12 @@ def setup_moco(model, args):
         for p in model_momentum.parameters():
             p.requires_grad = False
         momentum = args.momentum              # momentum for model_momentum
-        queue_size = args.queue_size
-        queue = utils.FeatureQueue(queue_size, args.feature_dim, device=device, dtype=torch.float32, indices=True)
     elif ssl_type == 'simsiam':
         model_momentum = None
-        queue = None
     else:
         raise ValueError(f"Unknown ssl_type: {ssl_type}")
         
-    return model_momentum, queue
+    return model_momentum
 
 def build_arms_blueprints(args, num_classes):
     ssl_type = args.ssl_type.lower()
@@ -127,11 +124,11 @@ def build_arms_blueprints(args, num_classes):
         arms_blueprints = {"projector": partial(create_mlp, output_dim=args.feature_dim, hidden_dims=[512, 512], norm_layer=nn.BatchNorm1d, bias=[False, False, False],
                                                             last_layer_norm=True, last_layer_act=False, 
                                                             norm_kwargs=[{"affine": True}, {"affine": True}, {"affine": False}]),  
-                           "predictor": partial(create_mlp, input_dim=args.feature_dim, output_dim=args.feature_dim, hidden_dims=[int(args.feature_dim/2)], 
+                           "predictor_proj": partial(create_mlp, input_dim=args.feature_dim, output_dim=args.feature_dim, hidden_dims=[int(args.feature_dim/2)], 
                                                             norm_layer=nn.BatchNorm1d, bias=[False, True],
                                                             last_layer_norm=False, last_layer_act=False)
         }
-        shortcuts = {'g': 'projector', 'h': 'predictor'}
+        shortcuts = {'g': 'projector', 'h_proj': 'predictor_proj'}
 
     else:
         raise ValueError(f"Unknown ssl_type: {ssl_type}")
@@ -314,7 +311,8 @@ def load_checkpoint(path, model, model_momentum, optimizer, gradnorm_balancer, g
         msg_model['unexpected_keys'] = [k for k in msg_model['unexpected_keys'] if not k.startswith('module.arms.classifier')]
 
     # Restore momentum model if applicable
-    queue = None
+    queue_proj = None
+    queue_noproj = None
     if model_momentum is not None:
         if "state_dict_momentum" in checkpoint and checkpoint["state_dict_momentum"] is not None:
             msg_momentum = model_momentum.load_state_dict(
@@ -327,13 +325,18 @@ def load_checkpoint(path, model, model_momentum, optimizer, gradnorm_balancer, g
         else:
             msg_momentum = "no momentum encoder in checkpoint"
 
-        if "queue" in checkpoint and checkpoint["queue"] is not None:
-            queue = checkpoint["queue"]
+        if "queue_proj" in checkpoint and checkpoint["queue_proj"] is not None:
+            queue_proj = checkpoint["queue_proj"]
         else:
-            queue = None
+            queue_proj = None
+        if "queue_noproj" in checkpoint and checkpoint["queue_noproj"] is not None:
+            queue_noproj = checkpoint["queue_noproj"]
+        else:
+            queue_noproj = None
     else:
         msg_momentum = "momentum encoder not used"
-        queue = None
+        queue_proj = None
+        queue_noproj = None
         
     if (gradnorm_balancer is not None):
         if ("state_dict_gradnorm" in checkpoint) and (checkpoint["state_dict_gradnorm"] is not None):
@@ -416,14 +419,16 @@ def load_checkpoint(path, model, model_momentum, optimizer, gradnorm_balancer, g
     print("\tmodel load: {}".format(msg_model))
     if model_momentum is not None:
         print("\tmomentum load: {}".format(msg_momentum))
-    if queue is not None:
-        print("\tqueue restored")
+    if queue_proj is not None:
+        print("\tqueue_proj restored")
+    if queue_noproj is not None:
+        print("\tqueue_noproj restored")
     if gradnorm_balancer is not None:
         print("\tgradnorm load: {}".format(msg_gradnorm))
 
     print("<= loaded checkpoint '{}' (epoch {})".format(path, checkpoint.get("epoch", -1)))
 
-    return model, model_momentum, optimizer, queue, start_epoch, best_acc1, best_epoch, updated_split, updated_split_all, ema, gradnorm_balancer, gradnorm_optimizer
+    return model, model_momentum, optimizer, queue_proj, queue_noproj, start_epoch, best_acc1, best_epoch, updated_split, updated_split_all, ema, gradnorm_balancer, gradnorm_optimizer
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train EqInv')
@@ -681,14 +686,23 @@ if __name__ == '__main__':
     # Model
     model = MultiArmModel(backbone_name='resnet50', mask_blueprint=mask_blueprint, arms_blueprints=arms_blueprints, in_transform=None, out_transforms=None, 
              shortcuts=shortcuts, image_class=image_class, state_dict=state_dict).cuda()
-
+    if args.ssl_type.lower() == 'simsiam':
+        arms_blueprints = {"predictor_noproj": partial(create_mlp, input_dim=model.feature_dim, output_dim=model.feature_dim, hidden_dims=[int(model.feature_dim/2)], 
+                                                            norm_layer=nn.BatchNorm1d, bias=[False, True],
+                                                            last_layer_norm=False, last_layer_act=False)
+        }
+        shortcuts = {'h_noproj': 'predictor_noproj'}
+    model.add_arms(arms_blueprints=arms_blueprints, out_transforms=None, shortcuts=shortcuts)
     if state_dict is not None:
         print("<= loaded pretrained checkpoint '{}'".format(args.pretrain_path))
 
     model = nn.DataParallel(model)
 
     # MoCo momentum encoder
-    model_momentum, queue = setup_moco(model, args)
+    model_momentum = setup_moco_model(model, args)
+    queue_size = args.queue_size
+    queue_proj = utils.FeatureQueue(queue_size, args.feature_dim,     device=device, dtype=torch.float32, indices=True)
+    queue_noproj = utils.FeatureQueue(queue_size, model.module.feature_dim, device=device, dtype=torch.float32, indices=True)
 
     # EMA
     ema = utils.MovingAverage(0.95, oneminusema_correction=False, active=args.ema)
@@ -726,11 +740,13 @@ if __name__ == '__main__':
     start_epoch = 1
     if args.resume:
         if os.path.isfile(args.resume):
-            (model, model_momentum, optimizer, queue,
+            (model, model_momentum, optimizer, queue_proj_, queue_noproj_,
              start_epoch, best_acc1, best_epoch,
              updated_split, updated_split_all, ema_, gradnorm_balancer, gradnorm_optimizer) = \
                 load_checkpoint(args.resume, model, model_momentum, optimizer, gradnorm_balancer, gradnorm_optimizer, classifier_not_needed=False)
  
+            queue_proj = queue_proj_ or queue_proj
+            queue_noproj     = queue_noproj_     or queue_noproj
             if not args.baseline:
                 if (ema_ is not None) and (args.ema == 'retain'): # exists in checkpoint
                     ema = ema_
@@ -749,7 +765,7 @@ if __name__ == '__main__':
         else:
             print("=> no checkpoint found at '{}'".format(args.resume))
 
-    moco_dict = {'net_momentum': model_momentum, 'queue': queue, 'momentum': args.momentum}
+    moco_dict = {'net_momentum': model_momentum, 'queue_proj': queue_proj, 'queue_noproj': queue_noproj, 'momentum': args.momentum}
     losses_and_penalty_dict = build_losses_and_penalty_dict(args, model, class_weights=None, moco_dict=moco_dict)
 
     # training loop
@@ -952,7 +968,8 @@ if __name__ == '__main__':
                 'best_epoch':           best_epoch,
                 'optimizer':            optimizer.state_dict(),
                 'state_dict_momentum':  model_momentum.state_dict() if model_momentum else None,
-                'queue':                queue,
+                'queue_proj':        queue_proj,
+                'queue_noproj':            queue_noproj,
                 'state_dict_gradnorm':  gradnorm_balancer.state_dict(),
                 'gradnorm_optimizer':   gradnorm_optimizer.state_dict(),
                 "rng_dict": {
