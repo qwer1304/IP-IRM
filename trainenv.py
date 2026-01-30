@@ -1608,8 +1608,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                                     losses_samples = loss_module.compute_loss_micro(p=partition_num, env=env, reduction=reduction, idxs=(env_idxs, idxs))
                                     idx = partition_num*args.env_num + env
                                     grads_all[idx] = calculate_grads(losses_samples, net, retain_graph=(not is_last) or do_penalty)
-                                    if grads_all[idx] is None:
-                                        print(f"loss grad par {partition_num} env {env} idx {idx} is None")
+                                    print(f"loss grad par {partition_num} env {env} idx {idx}")
                                     loss = losses_samples.detach()
                                 else:
                                     # For 'is_per_env'==False, convert per-sample losses to a sum
@@ -1621,8 +1620,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                                     penalties_samples = penalty_calculator.penalty(losses_samples, reduction=reduction)
                                     idx = num_partitions*args.env_num*int(do_loss) + partition_num*args.env_num + env
                                     grads_all[idx] = calculate_grads(penalties_samples, net, retain_graph=not is_last)
-                                    if grads_all[idx] is None:
-                                        print(f"penalties grad par {partition_num} env {env} idx {idx} is None")
+                                    print(f"penalties grad par {partition_num} env {env} idx {idx}")
                                     penalty = penalties_samples.detach()
                                 else:
                                     penalty = penalties_samples[idxs].sum(dim=0).detach()
