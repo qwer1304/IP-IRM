@@ -633,7 +633,7 @@ class MoCoLossModule(LossModule):
         l_pos = self.l_pos # (B,1)
         l_neg = self.l_neg # (B,N)
         if p is not None:
-            l_neg = l_neg[:, torch.cat([env_idxs, B + self.neg_idxs[p][env]], dim=0)] # scope negative logits to (p,env)-samples, (B,N'=B+Ke)
+            l_neg = l_neg[:, self.neg_idxs[p][env]] # scope negative logits to (p,env)-samples, (B,N'=Ke)
         self._logits = torch.cat([l_pos, l_neg], dim=1) # (B,1+N')
         self.labels = torch.zeros(self._logits.size(0), dtype=torch.long, device=self._logits.device) # (B,)
         if self.debug:
