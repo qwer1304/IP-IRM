@@ -298,6 +298,7 @@ class MoCoSupConLossModule(LossModule):
         assert net_momentum is not None
         assert queue is not None
         self.net_momentum = net_momentum
+        self.queue = queue
         self.momentum = kwargs['momentum']
         self.net_momentum.train()
         self.temperature = temperature or 1.0
@@ -551,6 +552,7 @@ class MoCoLossModule(LossModule):
         self.net_momentum = net_momentum
         self.momentum = kwargs['momentum']
         self.net_momentum.train()
+        self.queue = queue
         self.temperature = temperature or 1.0
         self.this_batch_size = 0
         self.debug = debug
