@@ -692,7 +692,7 @@ if __name__ == '__main__':
                                                             last_layer_norm=False, last_layer_act=False)
         }
         shortcuts = {'h_noproj': 'predictor_noproj'}
-    model.add_arms(arms_blueprints=arms_blueprints, out_transforms=None, shortcuts=shortcuts)
+        model.add_arms(arms_blueprints=arms_blueprints, out_transforms=None, shortcuts=shortcuts)
     if state_dict is not None:
         print("<= loaded pretrained checkpoint '{}'".format(args.pretrain_path))
 
