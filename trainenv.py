@@ -1031,6 +1031,8 @@ def calculate_scalers(loss_CE_grads_final, loss_unsplit_grads_final, loss_grads_
 
     shared_delta_kc, shared_cos_kc, shared_ngkkc, shared_ngckc = \
         calc_delta_and_cos(loss_unsplit_grads_final_weighted, loss_CE_grads_final_weighted, shared_pind['kc'], do_unsplit_loss, do_CE_loss)
+    shared_delta_lc, shared_cos_lc, shared_ngllc, shared_ngclc = \
+        calc_delta_and_cos(loss_grads_final_weighted, loss_CE_grads_final_weighted, shared_pind['lc'], do_loss, do_CE_loss)
     shared_delta_lk, shared_cos_lk, shared_ngllk, shared_ngklk = \
         calc_delta_and_cos(loss_grads_final_weighted, loss_unsplit_grads_final_weighted, shared_pind['lk'], do_loss, do_unsplit_loss)
     shared_delta_lp, shared_cos_lp, shared_ngllp, shared_ngplp = \
@@ -1130,6 +1132,8 @@ def calculate_scalers(loss_CE_grads_final, loss_unsplit_grads_final, loss_grads_
         'ngp':               ngp.item(),
         'ngkkc':             shared_ngkkc.item(),
         'ngckc':             shared_ngckc.item(),
+        'ngllc':             shared_ngllc.item(),
+        'ngclc':             shared_ngclc.item(),
         'ngklk':             shared_ngklk.item(),
         'ngkkp':             shared_ngkkp.item(), 
         'ngllk':             shared_ngllk.item(),
@@ -1148,7 +1152,9 @@ def calculate_scalers(loss_CE_grads_final, loss_unsplit_grads_final, loss_grads_
         'cos_Lp':            cos_Lp.item(),
         'shared_dot_lk':     shared_delta_lk.item(), 
         'shared_dot_lp':     shared_delta_lp.item(), 
+        'shared_dot_lc':     shared_delta_lc.item(), 
         'shared_dot_kp':     shared_delta_kp.item(), 
+        'shared_dot_kc':     shared_delta_kc.item(), 
         'shared_dot_Lp':     shared_dot_Lp.item(), 
         'shared_cos_lk':     shared_cos_lk.item(),
         'shared_cos_lp':     shared_cos_lp.item(),
@@ -1905,9 +1911,11 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                    f" decr: l {info_dict['loss_decrease_cond']:.2e} k {info_dict['loss_unsplit_decrease_cond']:.2e} p {info_dict['penalty_decrease_cond']:.2e}" + \
                    f" gn_loss {info_dict['gradnorm_loss']:.4e} rates: {info_dict['gradnorm_rates_str']} gn_gpm: {info_dict['gn_pm']}" + \
                    f" Lp: cos {info_dict['cos_Lp']:.3e} dot {info_dict['dot_Lp']:.3e} gn_prgrs {info_dict['gradnorm_progress']:.6g}" + \
-                   f" shared_dot: llk2 {info_dict['ngllk']**2:.2e} llp2 {info_dict['ngllp']**2:.2e} lk {info_dict['shared_dot_lk']:.2e}" + \
-                   f" lp {info_dict['shared_dot_lp']:.2e} klk2 {info_dict['ngklk']**2:.2e} kkp2 {info_dict['ngkkp']**2:.2e}" + \
-                   f" kp {info_dict['shared_dot_kp']:.2e} plp2 {info_dict['ngplp']**2:.2e} pkp2 {info_dict['ngpkp']**2:.2e}" + \
+                   f" shared_dot: llk2 {info_dict['ngllk']**2:.2e} klk2 {info_dict['ngklk']**2:.2e} lk {info_dict['shared_dot_lk']:.2e}" + \
+                   f" llp2 {info_dict['ngllp']**2:.2e} plp2 {info_dict['ngplp']**2:.2e} lp {info_dict['shared_dot_lp']:.2e}" + \
+                   f" kkp2 {info_dict['ngkkp']**2:.2e} pkp2 {info_dict['ngpkp']**2:.2e} kp {info_dict['shared_dot_kp']:.2e}" + \
+                   f" llc2 {info_dict['ngllc']**2:.2e} clc2 {info_dict['ngclc']**2:.2e} lc {info_dict['shared_dot_lc']:.2e}" + \
+                   f" kkc2 {info_dict['ngkkc']**2:.2e} ckc2 {info_dict['ngckc']**2:.2e} kc {info_dict['shared_dot_kc']:.2e}" + \
                    f" shared_cos: lk {info_dict['shared_cos_lk']:.3e} lp {info_dict['shared_cos_lp']:.3e} kp {info_dict['shared_cos_kp']:.2e}" + \
                    f" Lp: shared cos {info_dict['shared_cos_Lp']:.3e} shared dot {info_dict['shared_dot_Lp']:.3e}" + \
                    f" sparsity: ngs2 {loss_mask_sparsity_norm**2:.2e} sum(activation) {mask_activation:.3e}" + \
