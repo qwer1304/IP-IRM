@@ -300,7 +300,6 @@ class MoCoSupConLossModule(LossModule):
         self.net_momentum = net_momentum
         self.momentum = kwargs['momentum']
         self.net_momentum.train()
-        self.queue = kwargs['queue_proj'] if self.projector else kwargs['queue_noproj']
         self.temperature = temperature or 1.0
         self.this_batch_size = 0
         self.debug = debug
@@ -552,7 +551,6 @@ class MoCoLossModule(LossModule):
         self.net_momentum = net_momentum
         self.momentum = kwargs['momentum']
         self.net_momentum.train()
-        self.queue = kwargs['queue_proj'] if self.projector else kwargs['queue_noproj']
         self.temperature = temperature or 1.0
         self.this_batch_size = 0
         self.debug = debug
