@@ -912,7 +912,7 @@ def get_shared_ind(param_groups_2_pind, args):
         if not args.backbone_propagate: # w/o backbone propagation from Env
             if 'mask' in param_groups_2_pind and args.opt_mask:
                 shared_ind = {"lk": param_groups_2_pind['mask'], "lp": param_groups_2_pind['mask'], "lc": param_groups_2_pind['mask'],          
-                              "kp": param_groups_2_pind['mask'], "kc": param_groups_2_pind['mask+backbone'],
+                              "kp": param_groups_2_pind['mask'], "kc": param_groups_2_pind['backbone+mask'],
                               "pc": param_groups_2_pind['mask'],
                 }
             else:
@@ -922,9 +922,9 @@ def get_shared_ind(param_groups_2_pind, args):
                 }
         else: # w/ backbone propagation
             if 'mask' in param_groups_2_pind and args.opt_mask:
-                shared_ind = {"lk": param_groups_2_pind['mask+backbone'], "lp": param_groups_2_pind['mask+backbone'], "lc": param_groups_2_pind['mask+backbone'],          
-                              "kp": param_groups_2_pind['mask+backbone'], "kc": param_groups_2_pind['mask+backbone'],
-                              "pc": param_groups_2_pind['mask+backbone'],
+                shared_ind = {"lk": param_groups_2_pind['backbone+mask'], "lp": param_groups_2_pind['backbone+mask'], "lc": param_groups_2_pind['backbone+mask'],          
+                              "kp": param_groups_2_pind['backbone+mask'], "kc": param_groups_2_pind['backbone+mask'],
+                              "pc": param_groups_2_pind['backbone+mask'],
                 }
             else: # w/o mask
                 shared_ind = {"lk": param_groups_2_pind['backbone'], "lp": param_groups_2_pind['backbone'], "lc": param_groups_2_pind['backbone'],          
@@ -945,8 +945,8 @@ def get_shared_ind(param_groups_2_pind, args):
                 }
         else: # w/ backbone propagation
             if 'mask' in param_groups_2_pind and args.opt_mask:
-                shared_ind = {"lk": param_groups_2_pind['mask+backbone'], "lp": param_groups_2_pind['mask+backbone'], "lc": [],          
-                              "kp": param_groups_2_pind['mask+backbone'], "kc": [],
+                shared_ind = {"lk": param_groups_2_pind['backbone+mask'], "lp": param_groups_2_pind['backbone+mask'], "lc": [],          
+                              "kp": param_groups_2_pind['backbone+mask'], "kc": [],
                               "pc": [],
                 }
             else: # w/o mask
