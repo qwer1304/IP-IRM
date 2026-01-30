@@ -1271,27 +1271,28 @@ def print_grads(grads, net, prefix=""):
             continue
         print(f"{prefix} pind {pind} name {name} norm {grads[pind].norm():.2e}")
 
-def calculate_mask_sparsity_and_grads(mask, net, weight, do_flag, args, param_groups_2_pind):
+def calculate_mask_sparsity_and_grads(mask, net, weight, do_flag, args, param_groups_2_pind, default_grads_flat):
     if do_flag:
         active_count = mask.sum()
         loss = F.relu(active_count - args.mask_sparsity)  
+        grads = calculate_grads(loss, net)
+        grads_flat = [  # dLoss / dTheta
+            torch.zeros(p.numel(), dtype=p.dtype, device=p.device)
+            for p in net.parameters()
+        ]
+
+        for param_idx, g in enumerate(grads):
+            if g is None:
+                continue
+
+            # Flatten the parameter gradient: (*Param_Dims) -> (Flattened_Dim)
+            g_flat = g.detach().reshape(-1)
+
+            grads_flat[param_idx] = g_flat
+
     else:
         loss = torch.Tensor([0.]).to(mask.device)
-    
-    grads = calculate_grads(loss, net)
-    grads_flat = [  # dLoss / dTheta
-        torch.zeros(p.numel(), dtype=p.dtype, device=p.device)
-        for p in net.parameters()
-    ]
-
-    for param_idx, g in enumerate(grads):
-        if g is None:
-            continue
-
-        # Flatten the parameter gradient: (*Param_Dims) -> (Flattened_Dim)
-        g_flat = g.detach().reshape(-1)
-
-        grads_flat[param_idx] = g_flat
+        g_flat = default_grads_flat
 
     _, _, grads_norm_weighted =  \
         setup_grads_and_norms(grads_flat, weight, args.Lscaler, mask.device, do_flag, default_grads_weighted_vector=grads_flat)
@@ -1425,6 +1426,12 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
 
     # loss CE doesn't require finalization
     loss_CE_grads_final = [  # dLoss / dTheta
+        torch.zeros(p.numel(), dtype=p.dtype, device=p.device)
+        for p in net.parameters()
+    ]
+
+    # loss Sparsity doesn't require finalization
+    loss_mask_sparsity_grads = [  # dLoss / dTheta
         torch.zeros(p.numel(), dtype=p.dtype, device=p.device)
         for p in net.parameters()
     ]
@@ -1820,7 +1827,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
 
         mask_activation = net.module.mask_fun.activation(u=mask_activation_noise) # recompute since its graph was released
         loss_mask_sparsity, loss_mask_sparsity_grads, loss_mask_sparsity_norm = \
-            calculate_mask_sparsity_and_grads(mask_activation, net, mask_sparsity_weight, do_mask_sparsity, args, param_groups_2_pind)
+            calculate_mask_sparsity_and_grads(mask_activation, net, mask_sparsity_weight, do_mask_sparsity, args, param_groups_2_pind, loss_mask_sparsity_grads)
         mask_activation = mask_activation.sum().item() 
         
         # Environments gradients
