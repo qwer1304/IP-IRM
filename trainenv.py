@@ -1754,10 +1754,11 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                     # current_grads is the tuple of all parameter grads for sample 'i'
                     current_grads = grads_all[ii]
                     
-                    print_grads(current_grads, net, prefix="")
-
                     if current_grads is None: # no grads for this row, e.g. - no valid samples in this micro-batch
+                        print(f"grads {ii} is None")
                         continue
+
+                    print_grads(current_grads, net, prefix="")
 
                     for param_idx, g in enumerate(current_grads):
                         if g is None:
