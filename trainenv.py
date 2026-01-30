@@ -1292,7 +1292,7 @@ def calculate_mask_sparsity_and_grads(mask, net, weight, do_flag, args, param_gr
 
     else:
         loss = torch.Tensor([0.]).to(mask.device)
-        g_flat = default_grads_flat
+        grads_flat = default_grads_flat
 
     _, _, grads_norm_weighted =  \
         setup_grads_and_norms(grads_flat, weight, args.Lscaler, mask.device, do_flag, default_grads_weighted_vector=grads_flat)
