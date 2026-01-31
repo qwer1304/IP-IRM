@@ -1039,6 +1039,8 @@ def calculate_scalers(loss_CE_grads_final, loss_unsplit_grads_final, loss_grads_
         calc_delta_and_cos(loss_grads_final_weighted, penalty_grads_final_weighted, shared_pind['lp'], do_loss, do_penalty)
     shared_delta_kp, shared_cos_kp, shared_ngkkp, shared_ngpkp = \
         calc_delta_and_cos(loss_unsplit_grads_final_weighted, penalty_grads_final_weighted, shared_pind['kp'], do_unsplit_loss, do_penalty)     
+    shared_delta_pc, shared_cos_pc, shared_ngppc, shared_ngcpc = \
+        calc_delta_and_cos(penalty_grads_final_weighted, loss_CE_grads_final_weighted, shared_pind['pc'], do_penalty, do_CE_loss)
     shared_dot_Lp,   shared_cos_Lp, shared_ngLLp, shared_ngpLp = \
         calc_delta_and_cos(Loss_grads_flat_weighted, penalty_grads_final_weighted, shared_pind['kp'], do_unsplit_loss or do_loss, do_penalty) # 'l' and 'p' share same pars
 
@@ -1135,11 +1137,13 @@ def calculate_scalers(loss_CE_grads_final, loss_unsplit_grads_final, loss_grads_
         'ngllc':             shared_ngllc.item(),
         'ngclc':             shared_ngclc.item(),
         'ngklk':             shared_ngklk.item(),
-        'ngkkp':             shared_ngkkp.item(), 
         'ngllk':             shared_ngllk.item(),
+        'ngkkp':             shared_ngkkp.item(), 
+        'ngpkp':             shared_ngpkp.item(),
         'ngllp':             shared_ngllp.item(), 
         'ngplp':             shared_ngplp.item(),
-        'ngpkp':             shared_ngpkp.item(),
+        'ngcpc':             shared_ngcpc.item(), 
+        'ngppc':             shared_ngppc.item(),
         'ngLLp':             shared_ngLLp.item(), 
         'ngpLp':             shared_ngpLp.item(),
         'dot_lk':            dot_lk.item(),               
@@ -1930,6 +1934,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                    f" kkp2 {info_dict['ngkkp']**2:.2e} pkp2 {info_dict['ngpkp']**2:.2e} kp {info_dict['shared_dot_kp']:.2e}" + \
                    f" llc2 {info_dict['ngllc']**2:.2e} clc2 {info_dict['ngclc']**2:.2e} lc {info_dict['shared_dot_lc']:.2e}" + \
                    f" kkc2 {info_dict['ngkkc']**2:.2e} ckc2 {info_dict['ngckc']**2:.2e} kc {info_dict['shared_dot_kc']:.2e}" + \
+                   f" ppc2 {info_dict['ngppc']**2:.2e} cpc2 {info_dict['ngcpc']**2:.2e} pc {info_dict['shared_dot_pc']:.2e}" + \
                    f" shared_cos: lk {info_dict['shared_cos_lk']:.3e} lp {info_dict['shared_cos_lp']:.3e} kp {info_dict['shared_cos_kp']:.2e}" + \
                    f" Lp: shared cos {info_dict['shared_cos_Lp']:.3e} shared dot {info_dict['shared_dot_Lp']:.3e}" + \
                    f" sparsity: ngs2 {loss_mask_sparsity_norm**2:.2e} sum(activation) {mask_activation:.3e} sum(mask) {net.module.mask_fun.mask.sum().item()}" + \
