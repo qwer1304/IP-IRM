@@ -1598,6 +1598,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                             halves_sz[j,partition_num,env] += N # update number of elements in environment
                             
                             # losses - losses are ALWAYS a scalar
+                            if is_per_env and (do_loss or do_penalty):
+                                # Compute the losses per-env loss when penalty is even if loss is not required s.t. penalty would have what to work off
+                                losses_samples = loss_module.compute_loss_micro(p=partition_num, env=env, reduction=reduction, idxs=(env_idxs, idxs))
                             if do_loss:
                                 # compute unnormalized micro-batch loss
                                 if is_per_env:
@@ -1605,7 +1608,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                                     # 'idxs' select the samples from this micro-batch
                                     # 'loss_samples' are either the per-sample losses or thie sum depending on 'reduction'
                                     # for 'is_per_env'==True, it's always 'sum'
-                                    losses_samples = loss_module.compute_loss_micro(p=partition_num, env=env, reduction=reduction, idxs=(env_idxs, idxs))
                                     idx = partition_num*args.env_num + env
                                     grads_all[idx] = calculate_grads(losses_samples, net, retain_graph=(not is_last) or do_penalty)
                                     loss = losses_samples.detach()
