@@ -1159,6 +1159,7 @@ def calculate_scalers(loss_CE_grads_final, loss_unsplit_grads_final, loss_grads_
         'shared_dot_lc':     shared_delta_lc.item(), 
         'shared_dot_kp':     shared_delta_kp.item(), 
         'shared_dot_kc':     shared_delta_kc.item(), 
+        'shared_dot_pc':     shared_delta_pc.item(), 
         'shared_dot_Lp':     shared_dot_Lp.item(), 
         'shared_cos_lk':     shared_cos_lk.item(),
         'shared_cos_lp':     shared_cos_lp.item(),
