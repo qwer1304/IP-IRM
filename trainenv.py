@@ -94,7 +94,7 @@ class VRExCalculator(BaseCalculator):
             print(grads.max())
             print(grads)
             print(szs)
-            exit(1)
+            assert False
         return total_grad_flat
 
     @staticmethod
@@ -900,14 +900,19 @@ def calculate_penalty_grads_final(penalty_grads, penalty_aggregator, penalty_wei
         for pind in range(len(penalty_grads)):
             dPenalty_dTheta_env = penalty_grads[pind] * penalty_weight_env[..., None] # per env sum of dPenalty/dTheta over macro-batch per parameter, unweighted, shape (I,J,K,param_numel)
             reduction = 'sum'
-            total_grad_flat     = \
-                penalty_calculator.penalty_grads_finalize(
-                    dPenalty_dTheta_env, 
-                    pen, 
-                    halves_sz,
-                    sigma=penalty_sigma,
-                    reduction=reduction
-                )                                                                     
+            try:
+                total_grad_flat     = \
+                    penalty_calculator.penalty_grads_finalize(
+                        dPenalty_dTheta_env, 
+                        pen, 
+                        halves_sz,
+                        sigma=penalty_sigma,
+                        reduction=reduction
+                    )     
+            except:
+                print()
+                print(f"pind={pind}")
+                exit(1)
             penalty_grads_final.append(total_grad_flat.detach())
     else:
         penalty_grads_final = [torch.tensor(0., dtype=torch.float, device=device)] * len(penalty_grads)
