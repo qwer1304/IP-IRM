@@ -89,6 +89,11 @@ class VRExCalculator(BaseCalculator):
             x = x.squeeze(0) # remove halves dim
         
         total_grad_flat = x
+        if x.any(x.abs() > 1e8):
+            print()
+            print(grads)
+            print(szs)
+            exit(1)
         return total_grad_flat
 
     @staticmethod
@@ -1759,7 +1764,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
 
                 # 2. Consume the list of gradients sample-by-sample
                 # This is better for memory because we can clear each sample after processing
-                print()
                 for ii in range(num_grads):
                     # current_grads is the tuple of all parameter grads for sample 'i'
                     current_grads = grads_all[ii]
@@ -1795,8 +1799,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                             p = k // args.env_num
                             e = k % args.env_num
                             penalty_grads[param_idx][j][p, e] += g_flat
-                            if param_idx == 159:
-                                print(f"mask grad ii={ii} p={p} e={e} grad = {g_flat.tolist()}") 
 
                 # end if not args.baseline:
 
