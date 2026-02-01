@@ -460,7 +460,7 @@ class MoCoSupConLossModule(LossModule):
         pos_mask[:, :len(y_batch)].fill_diagonal_(False)  # remove self-keys
 
         # Replace non-positives with -inf
-        pos_logits = logits.masked_fill(~pos_mask, -1e8)
+        pos_logits = logits.masked_fill(~pos_mask, -1e9)
         # One logit per anchor = logsumexp over positives
         if False:
             num_pos = pos_mask.sum(dim=1, keepdim=True).clamp(min=1)
@@ -470,7 +470,7 @@ class MoCoSupConLossModule(LossModule):
             
         l_pos = torch.logsumexp(pos_logits, dim=1, keepdim=True) + supcon_correction # (B,1)
         
-        l_neg = logits.masked_fill(pos_mask, -1e8) # (B,N)
+        l_neg = logits.masked_fill(pos_mask, -1e9) # (B,N)
         
         self._logits = torch.cat([l_pos, l_neg], dim=1) # (B,1+N), positive logit is in column 0
         self.labels = torch.zeros(self._logits.size(0), dtype=torch.long, device=self._logits.device)
@@ -523,7 +523,7 @@ class MoCoSupConLossModule(LossModule):
         # sum over batch, per env handled by driver
         # get the samples that have POSITIVES (column 0)
         l_pos = self._logits[pos_idxs][:, 0]
-        valid = l_pos > -1e8
+        valid = l_pos > -1e9
 
         loss = F.cross_entropy(scale * self._logits[pos_idxs][valid], self.labels[pos_idxs][valid], reduction=reduction)
         return loss
@@ -924,7 +924,7 @@ def calculate_penalty_grads_final(penalty_grads, penalty_aggregator, penalty_wei
                 print(f"pind={pind}, gmax={gmax}, gmax_ind={gmax_ind}, mask[gmax_ind]={net.module.mask_fun.mask[gmax_ind]}")
                 print(f"pind={pind}, total_grad_flat[gmax_ind+1]={total_grad_flat[gmax_ind+1]}, mask[gmax_ind+1]={net.module.mask_fun.mask[gmax_ind+1]}")
                 print(f"mask_activation_noise[gmax_ind]={mask_activation_noise[gmax_ind]}")
-                exit(1)
+                total_grad_flat = total_grad_flat.clamp(min=-1e8, max=1e8)
             penalty_grads_final.append(total_grad_flat.detach())
     else:
         penalty_grads_final = [torch.tensor(0., dtype=torch.float, device=device)] * len(penalty_grads)
