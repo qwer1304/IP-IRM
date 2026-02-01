@@ -982,8 +982,8 @@ def calculate_scalers(loss_CE_grads_final, loss_unsplit_grads_final, loss_grads_
                       loss_CE_aggregator,  loss_unsplit_aggregator,  loss_env,         penalty_env,
                       loss_CE_weight,      loss_unsplit_weight,      loss_weight,      penalty_weight,
                       do_CE_loss,          do_unsplit_loss,          do_loss,          do_penalty, 
-                      gradnorm_balancer, do_gradnorm, 
-                      device, ema, args,  param_groups_2_pind):
+                      gradnorm_balancer,   do_gradnorm, 
+                      device, ema, args,  param_groups_2_pind, net):
 
     loss_unsplit_grads_final_weighted, l_unsplit_grads_flat_weighted, loss_unsplit_grad_norm_weighted = \
         setup_grads_and_norms(loss_unsplit_grads_final, loss_unsplit_weight, args.Lscaler, device, True)
@@ -1854,7 +1854,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                               loss_CE_weight,      loss_unsplit_weight,      loss_weight,      penalty_weight,
                               do_CE_loss,          do_unsplit_loss,          do_loss,          do_penalty, 
                               gradnorm_balancer, do_gradnorm, 
-                              device, ema, args,  param_groups_2_pind) 
+                              device, ema, args,  param_groups_2_pind, net) 
 
         """
         Don't multiply individual task's loss by scaler, since it's misleading
