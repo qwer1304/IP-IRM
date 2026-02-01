@@ -91,10 +91,8 @@ class VRExCalculator(BaseCalculator):
         total_grad_flat = x
         if torch.any(x.abs() > 1e8):
             print()
-            gmax, gmax_ind = grads.max(dim=0)
-            print(gmax, gmax_ind)
-            print(grads)
-            print(szs)
+            gmax, gmax_ind = x.max(dim=0)
+            print(gmax, gmax_ind, x.size())
         else:
             gmax, gmax_ind = None, None
         return total_grad_flat, gmax, gmax_ind
