@@ -912,6 +912,7 @@ def calculate_penalty_grads_final(penalty_grads, penalty_aggregator, penalty_wei
             except:
                 print()
                 print(f"pind={pind}")
+                print(net.module.mask_fun.mask.tolist())
                 exit(1)
             penalty_grads_final.append(total_grad_flat.detach())
     else:
