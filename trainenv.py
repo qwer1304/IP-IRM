@@ -91,6 +91,7 @@ class VRExCalculator(BaseCalculator):
         total_grad_flat = x
         if torch.any(x.abs() > 1e8):
             print()
+            print(grads.max())
             print(grads)
             print(szs)
             exit(1)
