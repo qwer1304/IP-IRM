@@ -91,11 +91,13 @@ class VRExCalculator(BaseCalculator):
         total_grad_flat = x
         if torch.any(x.abs() > 1e8):
             print()
-            print(grads.max())
+            gmax, gmax_ind = grads.max(dim=0)
+            print(gmax, gmax_ind)
             print(grads)
             print(szs)
-            assert False
-        return total_grad_flat
+        else:
+            gmax, gmax_ind = None, None
+        return total_grad_flat, gmax, gmax_ind
 
     @staticmethod
     def num_halves():
@@ -900,19 +902,17 @@ def calculate_penalty_grads_final(penalty_grads, penalty_aggregator, penalty_wei
         for pind in range(len(penalty_grads)):
             dPenalty_dTheta_env = penalty_grads[pind] * penalty_weight_env[..., None] # per env sum of dPenalty/dTheta over macro-batch per parameter, unweighted, shape (I,J,K,param_numel)
             reduction = 'sum'
-            try:
-                total_grad_flat     = \
-                    penalty_calculator.penalty_grads_finalize(
-                        dPenalty_dTheta_env, 
-                        pen, 
-                        halves_sz,
-                        sigma=penalty_sigma,
-                        reduction=reduction
-                    )     
-            except:
+            total_grad_flat, gmax, gmax_ind     = \
+                penalty_calculator.penalty_grads_finalize(
+                    dPenalty_dTheta_env, 
+                    pen, 
+                    halves_sz,
+                    sigma=penalty_sigma,
+                    reduction=reduction
+                )     
+            if gmax_ind is not None:
                 print()
-                print(f"pind={pind}")
-                print(net.module.mask_fun.mask.tolist())
+                print(f"pind={pind}, gmax={gmax}, gmax_ind={gmax_ind}, mask[gmax_ind]={net.module.mask_fun.mask[gmax_ind]}")
                 exit(1)
             penalty_grads_final.append(total_grad_flat.detach())
     else:
