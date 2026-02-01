@@ -460,7 +460,7 @@ class MoCoSupConLossModule(LossModule):
         pos_mask[:, :len(y_batch)].fill_diagonal_(False)  # remove self-keys
 
         # Replace non-positives with -inf
-        pos_logits = logits.masked_fill(~pos_mask, float('-inf'))
+        pos_logits = logits.masked_fill(~pos_mask, -1e8)
         # One logit per anchor = logsumexp over positives
         if False:
             num_pos = pos_mask.sum(dim=1, keepdim=True).clamp(min=1)
@@ -470,7 +470,7 @@ class MoCoSupConLossModule(LossModule):
             
         l_pos = torch.logsumexp(pos_logits, dim=1, keepdim=True) + supcon_correction # (B,1)
         
-        l_neg = logits.masked_fill(pos_mask, float('-inf')) # (B,N)
+        l_neg = logits.masked_fill(pos_mask, -1e8) # (B,N)
         
         self._logits = torch.cat([l_pos, l_neg], dim=1) # (B,1+N), positive logit is in column 0
         self.labels = torch.zeros(self._logits.size(0), dtype=torch.long, device=self._logits.device)
@@ -523,7 +523,7 @@ class MoCoSupConLossModule(LossModule):
         # sum over batch, per env handled by driver
         # get the samples that have POSITIVES (column 0)
         l_pos = self._logits[pos_idxs][:, 0]
-        valid = torch.isfinite(l_pos)
+        valid = l_pos > -1e8
 
         loss = F.cross_entropy(scale * self._logits[pos_idxs][valid], self.labels[pos_idxs][valid], reduction=reduction)
         return loss
