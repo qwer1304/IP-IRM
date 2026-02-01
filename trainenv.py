@@ -913,6 +913,7 @@ def calculate_penalty_grads_final(penalty_grads, penalty_aggregator, penalty_wei
                 print(f"pind={pind}, total_grad_flat[gmax_ind-1]={total_grad_flat[gmax_ind-1]}, mask[gmax_ind-1]={net.module.mask_fun.mask[gmax_ind-1]}")
                 print(f"pind={pind}, gmax={gmax}, gmax_ind={gmax_ind}, mask[gmax_ind]={net.module.mask_fun.mask[gmax_ind]}")
                 print(f"pind={pind}, total_grad_flat[gmax_ind+1]={total_grad_flat[gmax_ind+1]}, mask[gmax_ind+1]={net.module.mask_fun.mask[gmax_ind+1]}")
+                print(f"mask_activation_noise[gmax_ind]={mask_activation_noise[gmax_ind]}")
                 exit(1)
             penalty_grads_final.append(total_grad_flat.detach())
     else:
