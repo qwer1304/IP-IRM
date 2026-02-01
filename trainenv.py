@@ -89,7 +89,7 @@ class VRExCalculator(BaseCalculator):
             x = x.squeeze(0) # remove halves dim
         
         total_grad_flat = x
-        if x.any(x.abs() > 1e8):
+        if torch.any(x.abs() > 1e8):
             print()
             print(grads)
             print(szs)
