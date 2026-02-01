@@ -994,6 +994,9 @@ def calculate_scalers(loss_CE_grads_final, loss_unsplit_grads_final, loss_grads_
         setup_grads_and_norms(loss_grads_final, loss_weight, args.Lscaler, device, do_loss, default_grads_weighted_vector=default_grads_weighted_vector)
     penalty_grads_final_weighted, p_grads_flat_weighted, penalty_grad_norm_weighted = \
         setup_grads_and_norms(penalty_grads_final, penalty_weight, args.Lscaler, device, do_penalty, default_grads_weighted_vector=default_grads_weighted_vector)
+    if penalty_grad_norm_weighted == float('inf'):
+        print()
+        print(penalty_grads_final)
 
     # Compute dot products & cosines
     delta_lk = l_grads_flat_weighted.dot(l_unsplit_grads_flat_weighted)       
