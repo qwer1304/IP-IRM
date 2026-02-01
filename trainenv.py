@@ -898,7 +898,7 @@ def calculate_penalty_grads_final(penalty_grads, penalty_aggregator, penalty_wei
         penalty_grads_final = []
         pen = penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz, for_grads=True) # normalized per env for macro-batch, unweighted
         for pind in range(len(penalty_grads)):
-            dPenalty_dTheta_env = penalty_grads[pind] * penalty_weight_env[..., None] # per env sum of dPenalty/dTheta over macro-batch per parameter, unweighted, shape (I,J,K,param_numel)
+            dPenalty_dTheta_env = penalty_grads[pind] # DEBUG! * penalty_weight_env[..., None] # per env sum of dPenalty/dTheta over macro-batch per parameter, unweighted, shape (I,J,K,param_numel)
             reduction = 'sum'
             total_grad_flat, gmax, gmax_ind     = \
                 penalty_calculator.penalty_grads_finalize(
