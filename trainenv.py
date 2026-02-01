@@ -1938,7 +1938,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                    f" ppc2 {info_dict['ngppc']**2:.2e} cpc2 {info_dict['ngcpc']**2:.2e} pc {info_dict['shared_dot_pc']:.2e}" + \
                    f" shared_cos: lk {info_dict['shared_cos_lk']:.3e} lp {info_dict['shared_cos_lp']:.3e} kp {info_dict['shared_cos_kp']:.2e}" + \
                    f" Lp: shared cos {info_dict['shared_cos_Lp']:.3e} shared dot {info_dict['shared_dot_Lp']:.3e}" + \
-                   f" sparsity: ngs2 {loss_mask_sparsity_norm**2:.2e} sum(activation) {mask_activation:.3e} sum(mask) {net.module.mask_fun.mask.sum().item()}" + \
+                   f" sparsity {args.mask_nonlinearity}: ngs2 {loss_mask_sparsity_norm**2:.2e} sum(activation) {mask_activation:.3e}" + \
+                   f" {'sum(mask)' net.module.mask_fun.mask.sum().item() if args.mask_nonlinearity != 'gumbel' else ''}" + \
                    f" gn_prgrs {info_dict['gradnorm_progress']:.6g}"
         desc_str += loss_module.get_debug_info_str()
         train_bar.set_description(desc_str)
