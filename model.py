@@ -34,7 +34,11 @@ class Mask():
             # Sample Gumbel noise
             if u is None: u = torch.rand_like(x)
             g = -torch.log(-torch.log(u + 1e-20) + 1e-20)
-            x_soft = torch.sigmoid((x + g) / self.tau)  # (N,)
+            mask_logits = x + g
+            L = 10
+            mask_logits_clamped = mask_logits.clamp(-L, L)   # L ~ 10 or 15
+            x_soft = torch.sigmoid(mask_logits_clamped / self.tau)  # (N,)
+            #x_soft = torch.sigmoid((x + g) / self.tau)  # (N,)
 
             if self.soft:
                 x_ret = x_soft
