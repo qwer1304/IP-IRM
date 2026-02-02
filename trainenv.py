@@ -1282,9 +1282,7 @@ def print_grads(grads, net, prefix=""):
 def calculate_mask_sparsity_and_grads(mask, net, weight, do_flag, args, param_groups_2_pind, default_grads_flat):
     if do_flag:
         active_count = mask.sum()
-        beta = 5
-        loss = F.softplus(active_count - args.mask_sparsity, beta=beta) / beta
-        #loss = F.relu(active_count - args.mask_sparsity)  
+        loss = F.relu(active_count - args.mask_sparsity)  
         grads = calculate_grads(loss, net)
         grads_flat = [  # dLoss / dTheta
             torch.zeros(p.numel(), dtype=p.dtype, device=p.device)
