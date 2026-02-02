@@ -89,23 +89,7 @@ class VRExCalculator(BaseCalculator):
             x = x.squeeze(0) # remove halves dim
         
         total_grad_flat = x
-        if torch.any(x.abs() > 1e8):
-            print()
-            print("grads max:", grads.abs().max())
-            print("grads argmax:", grads.abs().view(-1).argmax())
-            gmax, gmax_ind = grads.max(dim=-1)
-            print("=======================")
-            print(f"gmax {gmax}")
-            print(f"gmax_ind {gmax_ind}")
-            print(f"x.size() {x.size()}")
-            print(f"grads.size() {grads.size()}")
-            print(f"szs {szs}")
-            print(f"mu {mu}")
-            print()
-            print("=============================")
-        else:
-            gmax, gmax_ind = None, None
-        return total_grad_flat, gmax, gmax_ind
+        return total_grad_flat
 
     @staticmethod
     def num_halves():
@@ -910,7 +894,7 @@ def calculate_penalty_grads_final(penalty_grads, penalty_aggregator, penalty_wei
         for pind in range(len(penalty_grads)):
             dPenalty_dTheta_env = penalty_grads[pind] * penalty_weight_env[..., None] # per env sum of dPenalty/dTheta over macro-batch per parameter, unweighted, shape (I,J,K,param_numel)
             reduction = 'sum'
-            total_grad_flat, gmax, gmax_ind     = \
+            total_grad_flat     = \
                 penalty_calculator.penalty_grads_finalize(
                     dPenalty_dTheta_env, 
                     pen, 
@@ -918,13 +902,6 @@ def calculate_penalty_grads_final(penalty_grads, penalty_aggregator, penalty_wei
                     sigma=penalty_sigma,
                     reduction=reduction
                 )     
-            if gmax_ind is not None:
-                print()
-                print(f"pind={pind}, total_grad_flat[gmax_ind-1]={total_grad_flat[gmax_ind-1]}, mask[gmax_ind-1]={net.module.mask_fun.mask[gmax_ind-1]}")
-                print(f"pind={pind}, gmax={gmax}, gmax_ind={gmax_ind}, mask[gmax_ind]={net.module.mask_fun.mask[gmax_ind]}")
-                print(f"pind={pind}, total_grad_flat[gmax_ind+1]={total_grad_flat[gmax_ind+1]}, mask[gmax_ind+1]={net.module.mask_fun.mask[gmax_ind+1]}")
-                print(f"mask_activation_noise[gmax_ind]={mask_activation_noise[gmax_ind]}")
-                total_grad_flat = total_grad_flat.clamp(min=-1e8, max=1e8)
             penalty_grads_final.append(total_grad_flat.detach())
     else:
         penalty_grads_final = [torch.tensor(0., dtype=torch.float, device=device)] * len(penalty_grads)
@@ -1870,7 +1847,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         loss_grads_final = calculate_loss_grads_final(loss_grads, loss_env, loss_weight_env, halves_sz, loss_module, reduction, device, do_loss)
 
         penalty_grads_final = calculate_penalty_grads_final(penalty_grads, penalty_aggregator, penalty_weight_env, halves_sz, penalty_calculator, 
-                                args.penalty_sigma, reduction, device, do_penalty, net, mask_activation_noise)
+                                args.penalty_sigma, reduction, device, do_penalty)
         penalty_grads_final = rotate_penalty_grads(penalty_grads_final, loss_grads_final, args.grad_rotate, do_penalty)
 
         loss_CE_grad_scaler, loss_unsplit_grad_scaler, loss_grad_scaler, penalty_grad_scaler, gradnorm_loss, info_dict = \
