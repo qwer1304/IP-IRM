@@ -454,7 +454,6 @@ class MoCoSupConLossModule(LossModule):
         y_all = torch.cat([y_batch, y_queue], dim=0) # (N,)
 
         logits = (out_q @ k_all.T) / self.temperature # (B,N)
-        logits = logits.clamp(min=-50, max=50)
         
         # for each sample in the batch (row) give the samples in the batch and queue w/ the same label
         pos_mask = (y_batch[:, None] == y_all[None, :])   # (B,N)
@@ -1626,7 +1625,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                             env_idxs = utils.assign_idxs_multi(indexs, partition, env)
                             idxs = loss_module.filter_indices(env_idxs, labels=labels[env_idxs], partition=active_partition_idx[partition_num], env=env)
 
-                            if (N := len(idxs)) == 0:
+                            if (N := len(idxs)) <= 2:
                                 continue
                             
                             halves_sz[j,partition_num,env] += N # update number of elements in environment
