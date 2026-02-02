@@ -454,6 +454,7 @@ class MoCoSupConLossModule(LossModule):
         y_all = torch.cat([y_batch, y_queue], dim=0) # (N,)
 
         logits = (out_q @ k_all.T) / self.temperature # (B,N)
+        logits = logits.clamp(min=-50, max=50)
         
         # for each sample in the batch (row) give the samples in the batch and queue w/ the same label
         pos_mask = (y_batch[:, None] == y_all[None, :])   # (B,N)
