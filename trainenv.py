@@ -887,7 +887,7 @@ def calculate_loss_grads_final(loss_grads, loss_env, loss_weight_env, halves_sz,
         loss_grads_final = [torch.tensor(0., dtype=torch.float, device=device)] * len(loss_grads)
     return loss_grads_final
 
-def calculate_penalty_grads_final(penalty_grads, penalty_aggregator, penalty_weight_env, halves_sz, penalty_calculator, penalty_sigma, reduction, device, do_penalty, net, mask_activation_noise):
+def calculate_penalty_grads_final(penalty_grads, penalty_aggregator, penalty_weight_env, halves_sz, penalty_calculator, penalty_sigma, reduction, device, do_penalty):
     if do_penalty:
         penalty_grads_final = []
         pen = penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz, for_grads=True) # normalized per env for macro-batch, unweighted
