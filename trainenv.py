@@ -1901,8 +1901,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         loss_CE_weighted            = loss_CE_weight       * loss_CE_aggregator.mean()
         penalty_weighted            = penalty_weight       * penalty_env.mean()
         print()
-        print(f"penalty_weighted.size()={penalty_weighted.size()}")
-        for cc, risk in enumerate(penalty_weighted):
+        print(f"penalty_env.size()={penalty_env.size()}")
+        for cc, risk in enumerate(penalty_env):
             print(f"class={cc} delta risk={(risk[0] - risk[1]).abs().item()}")
             
         loss_mask_sparsity_weighted = mask_sparsity_weight * loss_mask_sparsity.mean()
