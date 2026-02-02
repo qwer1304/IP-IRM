@@ -47,6 +47,10 @@ class VRExCalculator(BaseCalculator):
         """
             risks:      risk per half, per env, unnormalized (1,num_partitions,num_envs)
             szs:        sizes of halves of environments
+        Note that VREx doesn't have a "per-env" penalty, since it's defined as a variance
+        of losses of constituent envs. This returns:
+            (risk/Ne - mu)**2 when for_grads == False
+            risks/Ne          when for_grads == True
         """
         if not for_grads:
             # 'mu' is per-partition, NOT for ALL partitions
@@ -58,7 +62,8 @@ class VRExCalculator(BaseCalculator):
     def penalty_grads_finalize(self, grads, penalties, szs, reduction='sum', **kwargs):
         """
         Given dLoss/dTheta, Loss per half, per env and their sizes calculate the combined gradient.
-        dV/dTheta = d/dTheta(1/E*(Loss_e - 1/E*sum_j(Loss_j))^2) = 
+        dV/dTheta = d/dTheta(1/E*sum_e(Loss_e - 1/E*sum_j(Loss_j))^2) = 
+                    sum_e(d/dTheta(1/E*(Loss_e - 1/E*sum_j(Loss_j))^2))
                     2/E*sum_e((Loss_e - mu) * (grad_e - mu_grad) =
                     2/E*sum_e((Loss_e - mu) * grad_e
                     because:
@@ -83,10 +88,11 @@ class VRExCalculator(BaseCalculator):
                 / num_env
              ) / num_partitions            # (parnums,)
             
+        # x = 2/E * (Loss_e - mu)*grad_e
         if reduction == 'sum':
-            x = x.sum(dim=(0,1,2))
+            x = x.sum(dim=(0,1,2)) # average over all partitions and envs (parnums,1)
         elif reduction == 'none':
-            x = x.squeeze(0) # remove halves dim
+            x = x.squeeze(0) # remove halves dim (num_partitions, num_env, parnums)
         
         total_grad_flat = x
         return total_grad_flat
@@ -994,9 +1000,6 @@ def calculate_scalers(loss_CE_grads_final, loss_unsplit_grads_final, loss_grads_
         setup_grads_and_norms(loss_grads_final, loss_weight, args.Lscaler, device, do_loss, default_grads_weighted_vector=default_grads_weighted_vector)
     penalty_grads_final_weighted, p_grads_flat_weighted, penalty_grad_norm_weighted = \
         setup_grads_and_norms(penalty_grads_final, penalty_weight, args.Lscaler, device, do_penalty, default_grads_weighted_vector=default_grads_weighted_vector)
-    if penalty_grad_norm_weighted == float('inf'):
-        print()
-        print_grads(penalty_grads_final, net, prefix="")
 
     # Compute dot products & cosines
     delta_lk = l_grads_flat_weighted.dot(l_unsplit_grads_flat_weighted)       
@@ -1897,6 +1900,11 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         loss_unsplit_weighted       = loss_unsplit_weight  * loss_unsplit_aggregator.mean()
         loss_CE_weighted            = loss_CE_weight       * loss_CE_aggregator.mean()
         penalty_weighted            = penalty_weight       * penalty_env.mean()
+        print()
+        print(f"penalty_weighted.size()={penalty_weighted.size()}")
+        for cc, risk in enumerate(penalty_weighted):
+            print(f"class={cc} delta risk={(risk[0] - risk[1]).abs().item()}")
+            
         loss_mask_sparsity_weighted = mask_sparsity_weight * loss_mask_sparsity.mean()
 
         loss_batch_weighted = (loss_unsplit_weighted + # loss_unsplit_aggregator is a scalar normalized over macro-batch
