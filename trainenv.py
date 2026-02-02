@@ -1631,9 +1631,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                                 if is_per_env:
                                     penalties_samples = penalty_calculator.penalty(losses_samples, reduction=reduction)
                                     idx = num_partitions*args.env_num*int(do_loss) + partition_num*args.env_num + env
-                                    # Returns True if at least one parameter is being tracked for gradients
-                                    any_require_grad = any(p.requires_grad for p in net.parameters())
-                                    if any_require_grad:
+                                    if penalties_samples.requires_grad:
                                         # in EqInv when mask isn't optimized, penalty has no gradients
                                         grads_all[idx] = calculate_grads(penalties_samples, net, retain_graph=not is_last)
                                     penalty = penalties_samples.detach()
