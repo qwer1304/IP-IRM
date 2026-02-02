@@ -56,7 +56,7 @@ class Mask():
             raise ValueError(f"Unknown mask type: {self.mask_type}")
 
 class MaskModule(nn.Module):
-    def __init__(self, activation_method, input_dim, trainable=True):
+    def __init__(self, activation_method, input_dim, trainable=True, device='cuda'):
         super().__init__()
         # Initialize the mask as a trainable parameter
         if trainable:
@@ -73,7 +73,7 @@ class MaskModule(nn.Module):
                 init_val = init_logit + (torch.randn(input_dim) * 0.01)
             self.mask = nn.Parameter(init_val)
         else:
-            self.mask = torch.ones(input_dim)
+            self.mask = torch.ones(input_dim, device=device)
         self.activation_method = activation_method
 
     def forward(self, x, **kwargs):
