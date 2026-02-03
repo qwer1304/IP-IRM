@@ -1906,16 +1906,21 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         penalty_weighted            = penalty_weight       * penalty_env.mean()
         
         print()
-        print(f"loss_env.size()={loss_env.size()}")
-        for p in range(loss_env.size(1)):
-            risk_p = loss_env[:,p].squeeze()
-            print(f"class={p} delta risk={(risk_p[0] - risk_p[1]).abs().item()}")
-        print(f"penalty_env.size()={penalty_env.size()}")
-        for p in range(penalty_env.size(1)):
-            risk_p = penalty_env[:,p].squeeze()
-            print(f"class={p} pen[0]={risk_p[0].item()} pen[1]={risk_p[1].item()}")
+        if do_loss:
+            print(f"loss_env.size()={loss_env.size()}")
+            for p in range(loss_env.size(1)):
+                risk_p = loss_env[:,p].squeeze()
+                print(f"class={p} delta risk={(risk_p[0] - risk_p[1]).abs().item()}")
+        else:
+            print("loss not computed")
+        if do_penalty:
+            print(f"penalty_env.size()={penalty_env.size()}")
+            for p in range(penalty_env.size(1)):
+                risk_p = penalty_env[:,p].squeeze()
+                print(f"class={p} pen[0]={risk_p[0].item()} pen[1]={risk_p[1].item()}")
+        else:
+            print("penalty not computed")
         
-            
         loss_mask_sparsity_weighted = mask_sparsity_weight * loss_mask_sparsity.mean()
 
         loss_batch_weighted = (loss_unsplit_weighted + # loss_unsplit_aggregator is a scalar normalized over macro-batch
