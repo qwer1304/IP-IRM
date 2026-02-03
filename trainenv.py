@@ -1620,6 +1620,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                                     # 'loss_samples' are either the per-sample losses or thie sum depending on 'reduction'
                                     # for 'is_per_env'==True, it's always 'sum'
                                     idx = partition_num*args.env_num + env
+                                    if losses_samples.requires_grad:
+                                        # in EqInv when mask isn't optimized, penalty has no gradients
                                     grads_all[idx] = calculate_grads(losses_samples, net, retain_graph=(not is_last) or do_penalty)
                                     loss = losses_samples.detach()
                                 else:
