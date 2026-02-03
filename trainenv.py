@@ -1389,6 +1389,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
     total_CE_loss_weighted      = 0.0
     total_env_loss_weighted     = 0.0
     total_pen_loss_weighted     = 0.0
+    total_env_loss_weighted     = 0.0
     total_loss_weighted         = 0.0
 
     bar_format = '{l_bar}{bar:' + str(args.bar) + '}{r_bar}' #{bar:-' + str(args.bar) + 'b}'
