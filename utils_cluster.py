@@ -57,6 +57,9 @@ def cal_cosine_distance(net, memory_data_loader, c, temperature, transform=None,
             sim_batch = sim_matrix.mean(dim=-1) # (bNc,)
             sim_all.append(sim_batch)
         sim_all = torch.cat(sim_all, dim=0).contiguous() # (Nc,)
+        print()
+        print(anchor_feature.t().size(), candidate_feature.size(), sim_all.size())
+        exit(1)
 
         if class_debias_logits: # calculate a class-wise debias logits to remove the digits similarity effect
             class_debias_logits_weight = torch.zeros(c).to(sim_all.device)
