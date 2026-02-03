@@ -494,6 +494,7 @@ if __name__ == '__main__':
     parser.add_argument('--weight_env_eps', default=0., type=float, help='eps for per-env grad noise')
 
     parser.add_argument('--debug', action="store_true", default=False, help='debug?')
+    parser.add_argument('--debug_dont_update_loss', action="store_true", default=False, help='debug?')
     parser.add_argument('--print_batch', action="store_true", default=False, help='print every batch')
 
     # image

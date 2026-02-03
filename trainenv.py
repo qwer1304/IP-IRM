@@ -1620,7 +1620,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                                     # 'loss_samples' are either the per-sample losses or thie sum depending on 'reduction'
                                     # for 'is_per_env'==True, it's always 'sum'
                                     idx = partition_num*args.env_num + env
-                                    if losses_samples.requires_grad:
+                                    if losses_samples.requires_grad and not args.debug_dont_update_loss:
                                         # in EqInv when mask isn't optimized, penalty has no gradients
                                         grads_all[idx] = calculate_grads(losses_samples, net, retain_graph=(not is_last) or do_penalty)
                                     loss = losses_samples.detach()
@@ -1849,7 +1849,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         mask_activation = mask_activation.sum().item() 
         
         # Environments gradients
-        loss_grads_final = calculate_loss_grads_final(loss_grads, loss_env, loss_weight_env, halves_sz, loss_module, reduction, device, do_loss)
+        loss_grads_final = calculate_loss_grads_final(loss_grads, loss_env, loss_weight_env, halves_sz, loss_module, reduction, device, 
+            do_loss and not args.debug_dont_update_loss)
 
         penalty_grads_final = calculate_penalty_grads_final(penalty_grads, penalty_aggregator, penalty_weight_env, halves_sz, penalty_calculator, 
                                 args.penalty_sigma, reduction, device, do_penalty)
@@ -1923,19 +1924,21 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         
         loss_mask_sparsity_weighted = mask_sparsity_weight * loss_mask_sparsity.mean()
 
-        loss_batch_weighted = (loss_unsplit_weighted + # loss_unsplit_aggregator is a scalar normalized over macro-batch
-                               loss_CE_weighted      + # loss_CE_aggregator is a scalar normalized over macro-batch
-                               penalty_weighted      + # mean over envs normalized over macro-batch
-                               loss_weighted         + # mean over envs normalized over macro-batch
+        loss_batch_weighted = (loss_unsplit_weighted        + # loss_unsplit_aggregator is a scalar normalized over macro-batch
+                               loss_CE_weighted             + # loss_CE_aggregator is a scalar normalized over macro-batch
+                               penalty_weighted             + # mean over envs normalized over macro-batch
+                               loss_weighted * int(do_loss) + # mean over envs normalized over macro-batch
                                loss_mask_sparsity_weighted
                               )
 
         # total loss is sum of losses so far over entire batch aggregation period.
-        total_unsplit_loss_weighted += (loss_unsplit_weight * loss_unsplit_aggregator).item() * this_batch_size * gradients_accumulation_steps
-        total_CE_loss_weighted      += (loss_CE_weight      * loss_CE_aggregator).item()      * this_batch_size * gradients_accumulation_steps
-        total_pen_loss_weighted     += (penalty_weight      * penalty_env.mean()).item()      * this_batch_size * gradients_accumulation_steps
-        total_env_loss_weighted     += (loss_weight         * loss_env.mean()).item()         * this_batch_size * gradients_accumulation_steps
-        total_loss_weighted         += loss_batch_weighted.item()                             * this_batch_size * gradients_accumulation_steps
+        # loss_cont is sometimes non-zero even when do_loss==False. This happens in EqInv where loss_cont is NOT included in the total loss.
+        total_unsplit_loss_weighted  += (loss_unsplit_weight        * loss_unsplit_aggregator).item()   * this_batch_size * gradients_accumulation_steps
+        total_CE_loss_weighted       += (loss_CE_weight             * loss_CE_aggregator).item()        * this_batch_size * gradients_accumulation_steps
+        total_pen_loss_weighted      += (penalty_weight             * penalty_env.mean()).item()        * this_batch_size * gradients_accumulation_steps
+        total_env_loss_weighted      += (loss_weight * int(do_loss) * loss_env.mean()).item()           * this_batch_size * gradients_accumulation_steps
+        total_mask_sparsity_weighted += (mask_sparsity_weight       * loss_mask_sparsity.mean()).item() * this_batch_size * gradients_accumulation_steps
+        total_loss_weighted          += loss_batch_weighted.item()                                      * this_batch_size * gradients_accumulation_steps
         
         if args.print_batch:
             print() # this causes each tqdm update to be printed on a separare line
