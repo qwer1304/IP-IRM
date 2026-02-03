@@ -1913,7 +1913,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 print(f"loss_env.size()={loss_env.size()}")
                 for p in range(loss_env.size(1)):
                     risk_p = loss_env[:,p].squeeze()
-                    print(f"class={p} risk_p[0]={risk_p[0}.item()} risk_p[1]={risk_p[1].item()} delta risk={(risk_p[0] - risk_p[1]).abs().item()}")
+                    print(f"class={p} risk_p[0]={risk_p[0].item()} risk_p[1]={risk_p[1].item()} delta risk={(risk_p[0] - risk_p[1]).abs().item()}")
             else:
                 print("loss not computed")
             if do_penalty:
