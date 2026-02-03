@@ -1907,11 +1907,11 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         
         print()
         print(f"loss_env.size()={loss_env.size()}")
-        for p in loss_env.size(1):
+        for p in range(loss_env.size(1)):
             risk_p = loss_env[:,p].squeeze()
             print(f"class={p} delta risk={(risk_p[0] - risk_p[1]).abs().item()}")
         print(f"penalty_env.size()={penalty_env.size()}")
-        for p in penalty_env.size(1):
+        for p in range(penalty_env.size(1)):
             risk_p = penalty_env[:,p].squeeze()
             print(f"class={p} pen[0]={risk_p[0].item()} pen[1]={risk_p[1].item()}")
         
