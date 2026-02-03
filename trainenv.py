@@ -996,8 +996,6 @@ def calculate_scalers(loss_CE_grads_final, loss_unsplit_grads_final, loss_grads_
     default_grads_weighted_vector = torch.zeros_like(l_unsplit_grads_flat_weighted)
     loss_CE_grads_final_weighted, l_CE_grads_flat_weighted, loss_CE_grad_norm_weighted = \
         setup_grads_and_norms(loss_CE_grads_final, loss_CE_weight, args.Lscaler, device, do_CE_loss, default_grads_weighted_vector=default_grads_weighted_vector)
-    print()
-    print(loss_grads_final)
     loss_grads_final_weighted, l_grads_flat_weighted, loss_grad_norm_weighted = \
         setup_grads_and_norms(loss_grads_final, loss_weight, args.Lscaler, device, do_loss, default_grads_weighted_vector=default_grads_weighted_vector)
     penalty_grads_final_weighted, p_grads_flat_weighted, penalty_grad_norm_weighted = \
@@ -1622,7 +1620,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                                     # 'loss_samples' are either the per-sample losses or thie sum depending on 'reduction'
                                     # for 'is_per_env'==True, it's always 'sum'
                                     idx = partition_num*args.env_num + env
-                                    if losses_samples.requires_grad and not args.debug_dont_update_loss:
+                                    if losses_samples.requires_grad:
                                         # in EqInv when mask isn't optimized, penalty has no gradients
                                         grads_all[idx] = calculate_grads(losses_samples, net, retain_graph=(not is_last) or do_penalty)
                                     loss = losses_samples.detach()
@@ -1851,8 +1849,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         mask_activation = mask_activation.sum().item() 
         
         # Environments gradients
-        loss_grads_final = calculate_loss_grads_final(loss_grads, loss_env, loss_weight_env, halves_sz, loss_module, reduction, device, 
-            do_loss and not args.debug_dont_update_loss)
+        loss_grads_final = calculate_loss_grads_final(loss_grads, loss_env, loss_weight_env, halves_sz, loss_module, reduction, device, do_loss)
 
         penalty_grads_final = calculate_penalty_grads_final(penalty_grads, penalty_aggregator, penalty_weight_env, halves_sz, penalty_calculator, 
                                 args.penalty_sigma, reduction, device, do_penalty)
@@ -1877,7 +1874,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         for pind, (name, p) in enumerate(net.named_parameters()):
             total_grad_flat_weighted = (   loss_unsplit_grads_final[pind] * loss_unsplit_weight  * args.Lscaler * loss_unsplit_grad_scaler
                                          + loss_CE_grads_final[pind]      * loss_CE_weight       * args.Lscaler * loss_CE_grad_scaler
-                                         + loss_grads_final[pind]         * loss_weight          * args.Lscaler * loss_grad_scaler     
+                                         + loss_grads_final[pind]         * loss_weight          * args.Lscaler * loss_grad_scaler * int(args.debug_dont_update_loss)     
                                          + penalty_grads_final[pind]      * penalty_weight       * args.Lscaler * penalty_grad_scaler  
                                          + loss_mask_sparsity_grads[pind] * mask_sparsity_weight * args.Lscaler * 1.0
                                        )
