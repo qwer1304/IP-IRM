@@ -1913,7 +1913,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         print(f"penalty_env.size()={penalty_env.size()}")
         for p in penalty_env.size(1):
             risk_p = penalty_env[:,p].squeeze()
-            print(f"class={p} pen[0]={risk_p[0].item()} pen[1]={risk_p[1]).item()}")
+            print(f"class={p} pen[0]={risk_p[0].item()} pen[1]={risk_p[1].item()}")
         
             
         loss_mask_sparsity_weighted = mask_sparsity_weight * loss_mask_sparsity.mean()
