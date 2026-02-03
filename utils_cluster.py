@@ -54,12 +54,9 @@ def cal_cosine_distance(net, memory_data_loader, c, temperature, transform=None,
             if temperature > 0:
                 sim_matrix = (sim_matrix / temperature).exp()
             assert torch.isfinite(sim_matrix).all().item(), 'sim matrix is not finite' 
-            sim_batch = sim_matrix.mean(dim=-1) # (bNc,)
+            sim_batch = sim_matrix.mean(dim=-1) # (bNc,) mean over all anchors
             sim_all.append(sim_batch)
         sim_all = torch.cat(sim_all, dim=0).contiguous() # (Nc,)
-        print()
-        print(anchor_feature.t().size(), candidate_feature.size(), sim_all.size())
-        exit(1)
 
         if class_debias_logits: # calculate a class-wise debias logits to remove the digits similarity effect
             class_debias_logits_weight = torch.zeros(c).to(sim_all.device)
