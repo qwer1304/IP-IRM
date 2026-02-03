@@ -996,6 +996,8 @@ def calculate_scalers(loss_CE_grads_final, loss_unsplit_grads_final, loss_grads_
     default_grads_weighted_vector = torch.zeros_like(l_unsplit_grads_flat_weighted)
     loss_CE_grads_final_weighted, l_CE_grads_flat_weighted, loss_CE_grad_norm_weighted = \
         setup_grads_and_norms(loss_CE_grads_final, loss_CE_weight, args.Lscaler, device, do_CE_loss, default_grads_weighted_vector=default_grads_weighted_vector)
+    print()
+    print(loss_grads_final)
     loss_grads_final_weighted, l_grads_flat_weighted, loss_grad_norm_weighted = \
         setup_grads_and_norms(loss_grads_final, loss_weight, args.Lscaler, device, do_loss, default_grads_weighted_vector=default_grads_weighted_vector)
     penalty_grads_final_weighted, p_grads_flat_weighted, penalty_grad_norm_weighted = \
