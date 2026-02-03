@@ -1875,7 +1875,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         for pind, (name, p) in enumerate(net.named_parameters()):
             total_grad_flat_weighted = (   loss_unsplit_grads_final[pind] * loss_unsplit_weight  * args.Lscaler * loss_unsplit_grad_scaler
                                          + loss_CE_grads_final[pind]      * loss_CE_weight       * args.Lscaler * loss_CE_grad_scaler
-                                         + loss_grads_final[pind]         * loss_weight          * args.Lscaler * loss_grad_scaler * int(args.debug_dont_update_loss)     
+                                         + loss_grads_final[pind]         * loss_weight          * args.Lscaler * loss_grad_scaler * int(not args.debug_dont_update_loss)     
                                          + penalty_grads_final[pind]      * penalty_weight       * args.Lscaler * penalty_grad_scaler  
                                          + loss_mask_sparsity_grads[pind] * mask_sparsity_weight * args.Lscaler * 1.0
                                        )
