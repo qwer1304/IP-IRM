@@ -1449,6 +1449,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
     ]
 
     train_optimizer.zero_grad(set_to_none=True) # clear gradients at the beginning 
+    mask_activation_noise = net.module.mask_fun.sample().detach()
 
     for batch_index, data_env in enumerate(train_bar):
 
@@ -1476,8 +1477,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         mask: assume user sets mask and args.backbone_propagate properly:
             when it's not needed it's set to 'ident' and args.backbone_propagate==True
         """
-        mask_activation_noise = net.module.mask_fun.sample().detach()
-
         for j in range(num_halves): # over halves of micro-batches
             for i in [i_ for i_ in range(len(mb_list)) if i_ % num_halves == j]: # loop over micro-batches
                 losses_samples_all, losses_samples, penalties_samples, penalty, differentiate_this = None, None, None, None, None
@@ -2017,6 +2016,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         loss_module.post_batch()
         loss_unsplit_module.post_batch()
         loss_CE_module.post_batch()
+        mask_activation_noise = net.module.mask_fun.sample().detach()
+
     # end for batch_index, data_env in enumerate(train_bar):
     return total_loss_weighted / trained_samples
 
