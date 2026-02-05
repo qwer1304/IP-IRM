@@ -1549,8 +1549,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 features_1_nondetached, features_2_nondetached = mask_activation * features_1, mask_activation * features_2 
                 features_1_detached, features_2_detached = mask_activation * features_1.detach(), mask_activation * features_2.detach() 
                 
-                features_1_nondetached, features_2_nondetached = F.normalize(features_1_nondetached, dim=-1), F.normalize(features_2_nondetached, dim=-1)
-                features_1_detached, features_2_detached = F.normalize(features_1_detached, dim=-1), F.normalize(features_2_detached, dim=-1)
+                #features_1_nondetached, features_2_nondetached = F.normalize(features_1_nondetached, dim=-1), F.normalize(features_2_nondetached, dim=-1)
+                #features_1_detached, features_2_detached = F.normalize(features_1_detached, dim=-1), F.normalize(features_2_detached, dim=-1)
 
                 # if want CE loss
                 if do_CE_loss:
