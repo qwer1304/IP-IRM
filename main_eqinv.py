@@ -36,17 +36,10 @@ sys.modules['__main__'].FeatureQueue = utils.FeatureQueue
 
 def build_losses_and_penalty_dict(args, net, class_weights=None, moco_dict=None):
     loss_type         = getattr(args, 'ssl_type', 'moco').lower()
+    loss_type_unsplit = getattr(args, 'ssl_type_unsplit', 'moco').lower()
     penalty_type      = getattr(args, 'penalty_type', 'irm').lower()
     loss_CE_type      = getattr(args, 'loss_CE_type', None)
     loss_CE_type      = loss_CE_type.lower() if loss_CE_type is not None else None
-
-    kwargs = moco_dict
-    kwargs.update({'CEweights': class_weights})
-    if loss_type == 'mocosupcon':
-        def filter_indices(idxs, labels, partition, **kwargs):
-            idxs = idxs[labels==partition]
-            return idxs
-        kwargs.update({'filter_indices': filter_indices})
 
     if loss_CE_type == 'ce' or loss_CE_type == 'ceweighted':
         LossCEModule = CELossModule
@@ -64,6 +57,23 @@ def build_losses_and_penalty_dict(args, net, class_weights=None, moco_dict=None)
     else:
         raise ValueError(f"Unknown loss_type: {loss_type}")
 
+    if loss_type_unsplit == 'moco':
+        LossUnsplitModule = MoCoLossModule
+    elif loss_type_unsplit == 'mocosupcon':
+        LossUnsplitModule = MoCoSupConLossModule
+    elif loss_type_unsplit == 'simsiam':
+        LossUnsplitModule = SimSiamLossModule
+    else:
+        raise ValueError(f"Unknown loss_type: {loss_type_unsplit}")
+
+    kwargs = moco_dict
+    kwargs.update({'CEweights': class_weights})
+    if loss_type == 'mocosupcon' or loss_type_unsplit == 'mocosupcon':
+        def filter_indices(idxs, labels, partition, **kwargs):
+            idxs = idxs[labels==partition]
+            return idxs
+        kwargs.update({'filter_indices': filter_indices})
+
     loss_and_penalties_dict = {}
 
     if LossCEModule is not None:
@@ -75,7 +85,7 @@ def build_losses_and_penalty_dict(args, net, class_weights=None, moco_dict=None)
     loss_module = LossModule(net, debug=args.debug, detached_backbone=True, projector=False, queue=kwargs['queue_noproj'], **kwargs) 
     loss_and_penalties_dict['loss_module'] = loss_module
 
-    loss_unsplit_module = LossModule(net, debug=args.debug, detached_backbone=False, projector=True, queue=kwargs['queue_proj'], **kwargs) 
+    loss_unsplit_module = LossUnsplitModule(net, debug=args.debug, detached_backbone=False, projector=True, queue=kwargs['queue_proj'], **kwargs) 
     loss_and_penalties_dict['loss_unsplit_module'] = loss_unsplit_module
 
     # IRM calculator selection
@@ -433,6 +443,7 @@ def load_checkpoint(path, model, model_momentum, optimizer, gradnorm_balancer, g
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train EqInv')
     parser.add_argument('--ssl_type', default='MoCo', type=str, choices=['MoCo', 'SimSiam', 'MoCoSupCon'], help='SSL type')    
+    parser.add_argument('--ssl_type_unsplit', default='MoCo', type=str, choices=['MoCo', 'SimSiam', 'MoCoSupCon'], help='SSL type')    
     parser.add_argument('--ssl_type_partition', default='MoCoSupCon', type=str, choices=['MoCo', 'SimSiam', 'MoCoSupCon', 'SimCLR'], help='SSL type for partition')    
     parser.add_argument('--penalty_type', default='IRM', type=str, choices=['IRM', 'VREx'], help='Penalty type')        
     parser.add_argument('--penalty_sigma', default=None, type=float, help='Noise level to inject into penalty')        
