@@ -1379,7 +1379,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
     do_CE_loss       = (args.baseline)     or ((args.CE_loss)       and (loss_CE_weight > 0))
     do_penalty       = (not args.baseline) and (penalty_weight > 0)
     do_gradnorm      = (not args.baseline) and args.gradnorm        and (epoch >= args.gradnorm_epoch)
-    do_mask_sparsity = (not args.baseline) and (args.mask_nonlinearity == "gumbel") and (args.mask_sparsity is not None) and (not args.gumbel_soft)
+    do_mask_sparsity = (not args.baseline) and args.opt_mask        and (args.mask_sparsity is not None)
 
     loader_batch_size            = batch_size
     gradients_accumulation_steps = args.gradients_accumulation_batch_size // loader_batch_size 
