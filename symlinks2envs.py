@@ -27,6 +27,7 @@ def main(args):
         envs[index][domain] = 1.
         
     torch.save(envs, args.data + "/" + "envs_terrainc_train")
+    print(f"envs saved in {args.data + '/' + 'envs_terrainc_train'}")
 
 if __name__ == "__main__":
     # create the top-level parser
