@@ -1380,6 +1380,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
     do_penalty       = (not args.baseline) and (penalty_weight > 0)
     do_gradnorm      = (not args.baseline) and args.gradnorm        and (epoch >= args.gradnorm_epoch)
     do_mask_sparsity = (not args.baseline) and args.opt_mask        and (args.mask_sparsity is not None)
+    print()
+    print(do_mask_sparsity, not args.baseline, args.opt_mask, args.mask_sparsity is not None)
 
     loader_batch_size            = batch_size
     gradients_accumulation_steps = args.gradients_accumulation_batch_size // loader_batch_size 
