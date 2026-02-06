@@ -1284,7 +1284,7 @@ def print_grads(grads, net, prefix=""):
 
 def calculate_mask_sparsity_and_grads(mask, net, weight, do_flag, args, param_groups_2_pind, default_grads_flat):
     if do_flag:
-        if args.mask_nonlinearity == 'gumbel' and not args.gumbel_soft):
+        if args.mask_nonlinearity == 'gumbel' and not args.gumbel_soft:
             active_count = mask.sum()
             loss = F.relu(active_count - args.mask_sparsity)  
         elif args.mask_nonlinearity == 'sigmoid':
