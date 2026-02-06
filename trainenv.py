@@ -1379,9 +1379,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
     do_CE_loss       = (args.baseline)     or ((args.CE_loss)       and (loss_CE_weight > 0))
     do_penalty       = (not args.baseline) and (penalty_weight > 0)
     do_gradnorm      = (not args.baseline) and args.gradnorm        and (epoch >= args.gradnorm_epoch)
-    do_mask_sparsity = (not args.baseline) and args.opt_mask        and (args.mask_sparsity is not None)
-    print()
-    print(do_mask_sparsity, not args.baseline, args.opt_mask, args.mask_sparsity is not None)
+    do_mask_sparsity = (not args.baseline) and args.opt_mask
 
     loader_batch_size            = batch_size
     gradients_accumulation_steps = args.gradients_accumulation_batch_size // loader_batch_size 
@@ -1952,8 +1950,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
             
         # mask sparsity measures
         mask_energy = mask_activation.sum().item() 
-        print()
-        print(do_mask_sparsity, args.mask_nonlinearity, args.gumbel_soft) # soft mask
         if do_mask_sparsity and (args.mask_nonlinearity != 'gumbel' or args.gumbel_soft): # soft mask
             mask_effective_number = (mask_activation.sum()**2 / ((mask_activation**2).sum() + 1e-9)).item()
             mask_entropy = -(mask_activation * torch.log(mask_activation + 1e-8) + (1 - mask_activation) * torch.log(1 - mask_activation + 1e-8)).mean().item()
