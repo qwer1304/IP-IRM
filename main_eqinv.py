@@ -68,7 +68,7 @@ def build_losses_and_penalty_dict(args, net, class_weights=None, moco_dict=None)
 
     kwargs = moco_dict
     kwargs.update({'CEweights': class_weights})
-    if loss_type == 'mocosupcon' or loss_type_unsplit == 'mocosupcon':
+    if (not args.domained_clusters) and (loss_type == 'mocosupcon' or loss_type_unsplit == 'mocosupcon'):
         def filter_indices(idxs, labels, partition, **kwargs):
             idxs = idxs[labels==partition]
             return idxs
@@ -595,6 +595,8 @@ if __name__ == '__main__':
     parser.add_argument('--cluster_save_dist', action="store_true", help='save cluster distances in ./misc/<name>/env_ref_dist')
     parser.add_argument('--num_clusters', type=int, default=2, help='number of custer K') 
     parser.add_argument('--clusters_to_use', type=int, nargs='+', default=None, help='clusters to use out of K clusters') 
+    parser.add_argument('--domained_clusters', action="store_true", help='clusters represent domains')
+    
 
     parser.add_argument('--backbone_propagate', action="store_true", default=False, help='whether to propagate inv loss to backbone')
     parser.add_argument('--decimate_partitions', type=int, default=None, help='whether to decimate partitions')
