@@ -1284,8 +1284,13 @@ def print_grads(grads, net, prefix=""):
 
 def calculate_mask_sparsity_and_grads(mask, net, weight, do_flag, args, param_groups_2_pind, default_grads_flat):
     if do_flag:
-        active_count = mask.sum()
-        loss = F.relu(active_count - args.mask_sparsity)  
+        if args.mask_nonlinearity == 'gumbel' and not args.gumbel_soft):
+            active_count = mask.sum()
+            loss = F.relu(active_count - args.mask_sparsity)  
+        elif args.mask_nonlinearity == 'sigmoid':
+            loss = torch.mean(mask * (1 - mask))
+        else: # indentity. WHAT TO DO?
+            active_count = mask.abs().sum() # drive to 0
         grads = calculate_grads(loss, net)
         grads_flat = [  # dLoss / dTheta
             torch.zeros(p.numel(), dtype=p.dtype, device=p.device)
@@ -1944,7 +1949,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
             print() # this causes each tqdm update to be printed on a separare line
             
         # mask sparsity measures
-        if args.mask_nonlinearity != 'gumbel':
+        if do_mask and (args.mask_nonlinearity != 'gumbel' or args.gumbel_soft): # soft mask
             mask_energy = mask_activation.sum().item() 
             mask_effective_number = (mask_activation.sum()**2 / ((mask_activation**2).sum() + 1e-9)).item()
             mask_entropy = -(mask_activation * torch.log(mask_activation + 1e-8) + (1 - mask_activation) * torch.log(1 - mask_activation + 1e-8)).mean().item()
