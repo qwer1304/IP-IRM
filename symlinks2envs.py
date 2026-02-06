@@ -18,8 +18,12 @@ def main(args):
         p = Path(target)
         parts = p.parts
         domain_name = parts[9]
-        domain = args.domains.find(domain_name)
-        assert domain != -1, f"domain {domain_name} not in domains {args.domains}"
+        try:
+            domain = args.domains.index(domain_name)
+        except ValueError:
+            print(f"domain {domain_name} not in domains {args.domains}")
+            raise 
+
         envs[index][domain] = 1.
         
     torch.save(envs, args.data + "/" + "envs_terrainc_train")
