@@ -1949,8 +1949,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
             print() # this causes each tqdm update to be printed on a separare line
             
         # mask sparsity measures
+        mask_energy = mask_activation.sum().item() 
         if do_mask_sparsity and (args.mask_nonlinearity != 'gumbel' or args.gumbel_soft): # soft mask
-            mask_energy = mask_activation.sum().item() 
             mask_effective_number = (mask_activation.sum()**2 / ((mask_activation**2).sum() + 1e-9)).item()
             mask_entropy = -(mask_activation * torch.log(mask_activation + 1e-8) + (1 - mask_activation) * torch.log(1 - mask_activation + 1e-8)).mean().item()
             mask_sparsity = (mask_activation.norm(1) / (mask_activation.norm(2) + 1e-9)).item()
