@@ -13,7 +13,7 @@ def main(args):
     with open(args.data + '/' + args.map_file) as f:
         symlinks = json.load(f)
 
-    for index, (path, _) in enumerate(train_data.imgs]:
+    for index, (path, _) in enumerate(train_data.imgs):
         target = symlinks[path]
         p = Path(target)
         parts = p.parts
