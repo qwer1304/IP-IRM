@@ -1954,7 +1954,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
             mask_effective_number = (mask_activation.sum()**2 / ((mask_activation**2).sum() + 1e-9)).item()
             mask_entropy = -(mask_activation * torch.log(mask_activation + 1e-8) + (1 - mask_activation) * torch.log(1 - mask_activation + 1e-8)).mean().item()
             mask_sparsity = (mask_activation.norm(1) / (mask_activation.norm(2) + 1e-9)).item()
-            mask_sparsity_str = f"Neff {mask_effective_number} Entropy {mask_entropy} Sparsity {mask_sparsity}"
+            mask_sparsity_str = f"Neff {mask_effective_number:.2f} Entropy {mask_entropy:.2f} Sparsity {mask_sparsity:.2f}"
         else:
             mask_sparsity_str = ""
 
