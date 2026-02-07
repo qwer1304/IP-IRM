@@ -1287,7 +1287,7 @@ def calculate_mask_sparsity_and_grads(mask, net, weight, do_flag, args, param_gr
         if args.mask_nonlinearity == 'gumbel' and not args.gumbel_soft:
             active_count = mask.sum()
             loss = F.relu(active_count - args.mask_sparsity)  
-        elif args.mask_nonlinearity == 'sigmoid':
+        elif args.mask_nonlinearity == 'sigmoid' or args.mask_nonlinearity == 'gumbel':
             loss = torch.mean(mask * (1 - mask))
         else: # indentity. WHAT TO DO?
             active_count = mask.abs().sum() # drive to 0

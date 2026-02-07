@@ -60,20 +60,52 @@ class MaskModule(nn.Module):
         super().__init__()
         # Initialize the mask as a trainable parameter
         if trainable:
-            if activation_method.mask_type != 'gumbel':
-                init_val = (torch.rand(input_dim) * 2.) - 1.0 # [-1, 1)
-            else:
-                if activation_method.K:
-                    target_p = activation_method.K / input_dim  # e.g., 256 / 2048
-                    init_logit = torch.log(torch.tensor(target_p / (1 - target_p)))
-                else:
-                    init_logit = 0.
+            init_logit = torch.rand(input_dim) # default value
+            if activation_method.K:
+                if activation_method.mask_type == 'gumbel' and not activation_method.gumbel_soft:
+                        target_p = activation_method.K / input_dim  # e.g., 256 / 2048
+                        init_logit = torch.log(torch.tensor(target_p / (1 - target_p)))
+                elif activation_method.mask_type == 'sigmoid' or activation_method.mask_type == 'gumbel':
+                    def get_bounds(K, N=2048, W=2):
+                        # The Logit of the probability
+                        b = torch.log(K / (N - K))
+                        L = b - (W / 2)
+                        H = b + (W / 2)
+                        return L, H
 
-                # Initialize with a small variance around the target logit
-                init_val = init_logit + (torch.randn(input_dim) * 0.01)
-            self.mask = nn.Parameter(init_val)
+                    def init_mask_to_neff(n=2048, target_k=100):
+                        # 1. Start with random noise in [-1, 1]
+                        r = (torch.rand(n) * 2) - 1
+
+                        # 2. We need to find the bias 'b' that shifts the distribution 
+                        # so that the Sigmoid output hits the target Neff
+                        def get_neff(bias):
+                            mask = torch.sigmoid(r + bias)
+                            return (mask.sum()**2 / torch.sum(mask**2))
+
+                        # Binary search for the correct bias
+                        low, high = get_bounds(K=target_k, N=n)
+                        for _ in range(20):  # 20 iterations is enough for high precision
+                            mid = (low + high) / 2
+                            if get_neff(mid) < target_k:
+                                high = mid # Inversely related: higher bias = higher Neff
+                            else:
+                                low = mid
+
+                        # 3. Apply the found bias
+                        final_bias = (low + high) / 2
+                        return r + final_bias
+
+                    init_logit = init_mask_to_neff(n=init_dims, target_k=activation_method.K)
+                #end if activation_method.mask_type == 'gumbel' and not activation_method.gumbel_soft:
+            # end if activation_method.K:
+
+            # Initialize with a small variance around the target logit
+            init_val = init_logit + (torch.randn(input_dim) * 0.01)
+            self.mask = nn.Parameter(init_val) # no need to set device, since it will be placed at the correct device with the rest of the
         else:
             self.mask = torch.ones(input_dim, device=device)
+        # end if trainable:
         self.activation_method = activation_method
 
     def forward(self, x, **kwargs):
