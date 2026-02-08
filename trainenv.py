@@ -2043,7 +2043,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                    f" dot: {ll_str} {lk_str} {lp_str} {kk_str} {kp_str} {pp_str}" + \
                    f" cos: {lk_cos_str} {lp_cos_str} {kp_cos_str}" + \
                    f" w/v:" + \
-                   f" k {info_dict['w_k']:.4f}/{info_dict['v_k']:.4f} l {info_dict['w_l']:.4f}/{info_dict['v_l']:.4f}" + \ 
+                   f" k {info_dict['w_k']:.4f}/{info_dict['v_k']:.4f} l {info_dict['w_l']:.4f}/{info_dict['v_l']:.4f}" + \
                    f" p {info_dict['w_p']:.4f}/{info_dict['v_p']:.4f}" + \
                    f" decr: l {info_dict['loss_decrease_cond']:.2e} k {info_dict['loss_unsplit_decrease_cond']:.2e} p {info_dict['penalty_decrease_cond']:.2e}" + \
                    f" gn_loss {info_dict['gradnorm_loss']:.4e} rates: {info_dict['gradnorm_rates_str']} gn_gpm: {info_dict['gn_pm']}" + \
