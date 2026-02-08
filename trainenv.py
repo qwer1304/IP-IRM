@@ -1170,6 +1170,9 @@ def calculate_scalers(loss_CE_grads_final, loss_unsplit_grads_final, loss_grads_
         'shared_cos_lk':     shared_cos_lk.item(),
         'shared_cos_lp':     shared_cos_lp.item(),
         'shared_cos_kp':     shared_cos_kp.item(),
+        'shared_cos_kc':     shared_cos_kc.item(),
+        'shared_cos_pc':     shared_cos_pc.item(),
+        'shared_cos_lc':     shared_cos_lc.item(),
         'shared_cos_Lp':     shared_cos_Lp.item(),
         'ngc2':              ngc2.item(),
         'ngk2':              ngk2.item(),
@@ -1959,6 +1962,75 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         else:
             mask_sparsity_str = ""
 
+        if do_loss:
+            ll_str = f"ll {info_dict['ngl2']:.2e}"
+        else:
+            ll_str = ""
+            
+        if do_unsplit_loss:
+            kk_str = f"kk {info_dict['ngk2']:.2e}"
+        else:
+            kk_str = ""
+            
+        if do_penalty:
+            pp_str = f"pp {info_dict['ngp2']:.2e}"
+        else:
+            pp_str = ""
+
+        if do_loss and do_unsplit_loss:
+            lk_str = f"lk {info_dict['dot_lk']:.2e}"
+            lk_cos_str = f"lk {info_dict['cos_lk']:.3e}"
+            slk_str = f"llk2 {info_dict['ngllk']**2:.2e} klk2 {info_dict['ngklk']**2:.2e} lk {info_dict['shared_dot_lk']:.2e}"
+            slk_cos_str = f"lk {info_dict['shared_cos_lk']:.3e}"
+        else:
+            lk_str = ""
+            lk_cos_str = ""
+            slk_str = ""
+            slk_cos_str = ""
+        
+        if do_loss and do_penalty:
+            lp_str = f"lp {info_dict['dot_lp']:.2e}"
+            lp_cos_str = f"lp {info_dict['cos_lp']:.3e}"
+            slp_str = f"llp2 {info_dict['ngllp']**2:.2e} plp2 {info_dict['ngplp']**2:.2e} lp {info_dict['shared_dot_lp']:.2e}"
+            slp_cos_str = f"lp {info_dict['shared_cos_lp']:.3e}"
+        else:
+            lp_str = ""
+            lp_cos_str = ""
+            slp_str = ""
+            slp_cos_str = ""
+          
+        if do_unsplit_loss and penalty_loss:
+            kp_str = f"kp {info_dict['dot_kp']:.2e}"
+            kp_cos_str = f"kp {info_dict['cos_kp']:.2e}"
+            skp_str = f"kkp2 {info_dict['ngkkp']**2:.2e} pkp2 {info_dict['ngpkp']**2:.2e} kp {info_dict['shared_dot_kp']:.2e}"
+            skp_cos_str = f"kp {info_dict['shared_cos_kp']:.2e}"
+        else:
+            kp_str = ""
+            kp_cos_str = ""
+            skp_str = ""
+            skp_cos_str = ""
+            
+        if do_loss and do_CE_loss:
+            slc_str = f"llc2 {info_dict['ngllc']**2:.2e} clc2 {info_dict['ngclc']**2:.2e} lc {info_dict['shared_dot_lc']:.2e}"
+            slc_cos_str = f"lc {info_dict['shared_cos_lc']:.2e}"
+        else:
+            slc_str = ""
+            slc_cos_str = ""
+            
+        if do_unsplit_loss and do_CE_loss:
+            skc_str = f"kkc2 {info_dict['ngkkc']**2:.2e} ckc2 {info_dict['ngckc']**2:.2e} kc {info_dict['shared_dot_kc']:.2e}"
+            skc_cos_str = f"kc {info_dict['shared_cos_kc']:.2e}"
+        else:
+            skc_str = ""
+            skc_cos_str = ""
+            
+        if do_penalty and do_CE_loss:    
+            spc_str = f"ppc2 {info_dict['ngppc']**2:.2e} cpc2 {info_dict['ngcpc']**2:.2e} pc {info_dict['shared_dot_pc']:.2e}"
+            spc_cos_str = f"pc {info_dict['shared_cos_pc']:.2e}"
+        else:
+            spc_str = ""
+            spc_cos_str = ""
+        
         desc_str = f"Epoch [{epoch}/{args.epochs}] [{trained_samples}/{total_samples}]" + \
                    f" {args.ssl_type}" + \
                    f" Total {total_loss_weighted/trained_samples:.3e}" + \
@@ -1968,25 +2040,19 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                    f" {args.penalty_type} {total_pen_loss_weighted/trained_samples:.3e}" + \
                    f" Sparsity {loss_mask_sparsity_weighted.item():.3e}" + \
                    f" LR {train_optimizer.param_groups[0]['lr']:.4f} PW {penalty_weight_orig:.6g}" + \
-                   f" dot: ll {info_dict['ngl2']:.2e} lk {info_dict['dot_lk']:.2e} lp {info_dict['dot_lp']:.2e} kk {info_dict['ngk2']:.2e}" + \
-                   f" kp {info_dict['dot_kp']:.2e} pp {info_dict['ngp2']:.2e}" + \
-                   f" cos: lk {info_dict['cos_lk']:.3e} lp {info_dict['cos_lp']:.3e} kp {info_dict['cos_kp']:.2e}" + \
-                   f" w/v: k {info_dict['w_k']:.4f}/{info_dict['v_k']:.4f} l {info_dict['w_l']:.4f}/{info_dict['v_l']:.4f}" + \
+                   f" dot: {ll_str} {lk_str} {lp_str} {kk_str} {kp_str} {pp_str}" + \
+                   f" cos: {lk_cos_str} {lp_cos_str} {kp_cos_str}" + \
+                   f" w/v:" + \
+                   f" k {info_dict['w_k']:.4f}/{info_dict['v_k']:.4f} l {info_dict['w_l']:.4f}/{info_dict['v_l']:.4f}" + \ 
                    f" p {info_dict['w_p']:.4f}/{info_dict['v_p']:.4f}" + \
                    f" decr: l {info_dict['loss_decrease_cond']:.2e} k {info_dict['loss_unsplit_decrease_cond']:.2e} p {info_dict['penalty_decrease_cond']:.2e}" + \
                    f" gn_loss {info_dict['gradnorm_loss']:.4e} rates: {info_dict['gradnorm_rates_str']} gn_gpm: {info_dict['gn_pm']}" + \
                    f" Lp: cos {info_dict['cos_Lp']:.3e} dot {info_dict['dot_Lp']:.3e} gn_prgrs {info_dict['gradnorm_progress']:.6g}" + \
-                   f" shared_dot: llk2 {info_dict['ngllk']**2:.2e} klk2 {info_dict['ngklk']**2:.2e} lk {info_dict['shared_dot_lk']:.2e}" + \
-                   f" llp2 {info_dict['ngllp']**2:.2e} plp2 {info_dict['ngplp']**2:.2e} lp {info_dict['shared_dot_lp']:.2e}" + \
-                   f" kkp2 {info_dict['ngkkp']**2:.2e} pkp2 {info_dict['ngpkp']**2:.2e} kp {info_dict['shared_dot_kp']:.2e}" + \
-                   f" llc2 {info_dict['ngllc']**2:.2e} clc2 {info_dict['ngclc']**2:.2e} lc {info_dict['shared_dot_lc']:.2e}" + \
-                   f" kkc2 {info_dict['ngkkc']**2:.2e} ckc2 {info_dict['ngckc']**2:.2e} kc {info_dict['shared_dot_kc']:.2e}" + \
-                   f" ppc2 {info_dict['ngppc']**2:.2e} cpc2 {info_dict['ngcpc']**2:.2e} pc {info_dict['shared_dot_pc']:.2e}" + \
-                   f" shared_cos: lk {info_dict['shared_cos_lk']:.3e} lp {info_dict['shared_cos_lp']:.3e} kp {info_dict['shared_cos_kp']:.2e}" + \
+                   f" shared_dot: {slk_str} {slp_str} {skp_str} {slc_str} {skc_str} {spc_str}" + \
+                   f" shared_cos: {slk_cos_str} {slp_cos_str} {skp_cos_str} {slc_cos_str} {skc_cos_str} {spc_cos_str}" + \
                    f" Lp: shared cos {info_dict['shared_cos_Lp']:.3e} shared dot {info_dict['shared_dot_Lp']:.3e}" + \
                    f" sparsity {args.mask_nonlinearity}: ngs2 {loss_mask_sparsity_norm**2:.2e} sum(activation) {mask_energy:.3e}" + \
-                   f" {mask_sparsity_str}" + \
-                   f" gn_prgrs {info_dict['gradnorm_progress']:.6g}"
+                   f" {mask_sparsity_str}"
 
         desc_str += loss_module.get_debug_info_str()
         train_bar.set_description(desc_str)
