@@ -68,7 +68,7 @@ def build_losses_and_penalty_dict(args, net, class_weights=None, moco_dict=None)
 
     kwargs = moco_dict
     kwargs.update({'CEweights': class_weights})
-    if (not args.domained_clusters) and (loss_type == 'mocosupcon' or loss_type_unsplit == 'mocosupcon'):
+    if (not args.domained_clusters) and (loss_type == 'mocosupcon'):
         def filter_indices(idxs, labels, partition, **kwargs):
             idxs = idxs[labels==partition]
             return idxs
