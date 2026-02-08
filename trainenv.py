@@ -1999,7 +1999,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
             slp_str = ""
             slp_cos_str = ""
           
-        if do_unsplit_loss and penalty_loss:
+        if do_unsplit_loss and do_penalty:
             kp_str = f"kp {info_dict['dot_kp']:.2e}"
             kp_cos_str = f"kp {info_dict['cos_kp']:.2e}"
             skp_str = f"kkp2 {info_dict['ngkkp']**2:.2e} pkp2 {info_dict['ngpkp']**2:.2e} kp {info_dict['shared_dot_kp']:.2e}"
