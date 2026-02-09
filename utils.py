@@ -1247,7 +1247,7 @@ class GaussianBlur(object):
 
 # just follow the previous work -- DCL, NeurIPS2020
 
-def make_train_transform(image_size=64, randgray=True, normalize='CIFAR', gpu=True, mixed=False):
+def make_train_transform(image_size=64, randgray=True, normalize='CIFAR', gpu=True, mixed=False, hard=False):
     kernel_size = int(0.1 * image_size)
     if (kernel_size % 2) == 0:
         kernel_size += 1
@@ -1265,6 +1265,7 @@ def make_train_transform(image_size=64, randgray=True, normalize='CIFAR', gpu=Tr
             transforms.ToDtype(torch.float32, scale=True),
             transforms.RandomResizedCrop(image_size, scale=(0.7, 1.0)), # ratio=(0.75, 1.3333333333333333)
             transforms.RandomHorizontalFlip(p=0.5),
+            transforms.RandAugment() if hard else transforms.Lambda(lambda x: x),
             transforms.ColorJitter(0.4, 0.4, 0.4, 0.1),
             transforms.RandomGrayscale(p=0.2) if randgray else transforms.Lambda(lambda x: x),
             transforms.GaussianBlur(kernel_size=kernel_size),
@@ -1279,6 +1280,17 @@ def make_train_transform(image_size=64, randgray=True, normalize='CIFAR', gpu=Tr
         geometry = [K.AugmentationSequential(*geometry, random_apply=(1,))]
     gpu_transform = K.AugmentationSequential(
         *geometry,
+        """
+        Applies random 'n'=2 augmentations with amplitude 'm'=9 from a default set of augmentations.
+        The set of augmentations to choose from can be changed through the parameter 'policy'.
+        The default set of augmentations is:
+            transforms = [
+            ’Identity’, ’AutoContrast’, ’Equalize’,
+            ’Rotate’, ’Solarize’, ’Color’, ’Posterize’,
+            ’Contrast’, ’Brightness’, ’Sharpness’,
+            ’ShearX’, ’ShearY’, ’TranslateX’, ’TranslateY’]
+        """
+        K.RandAugment(n=2, m=9) if hard else nn.Identity(),
         K.ColorJitter(0.4,0.4,0.4,0.1),
         K.RandomGrayscale(p=0.2) if randgray else nn.Identity(),
         K.RandomGaussianBlur((kernel_size,kernel_size), sigma=(0.1,2.0)),
