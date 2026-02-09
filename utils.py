@@ -3,6 +3,7 @@ from PIL import Image
 from torchvision.transforms import v2 as transforms
 from torchvision.datasets import STL10, CIFAR10, CIFAR100, ImageFolder
 import kornia.augmentation as K
+from kornia.augmentation.auto import RandAugment
 #import cv2
 import numpy as np
 import torch
