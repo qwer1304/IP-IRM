@@ -1280,16 +1280,14 @@ def make_train_transform(image_size=64, randgray=True, normalize='CIFAR', gpu=Tr
         geometry = [K.AugmentationSequential(*geometry, random_apply=(1,))]
     gpu_transform = K.AugmentationSequential(
         *geometry,
-        """
-        Applies random 'n'=2 augmentations with amplitude 'm'=9 from a default set of augmentations.
-        The set of augmentations to choose from can be changed through the parameter 'policy'.
-        The default set of augmentations is:
-            transforms = [
-            'Identity', 'AutoContrast', 'Equalize',
-            'Rotate', 'Solarize', 'Color', 'Posterize',
-            'Contrast', 'Brightness', 'Sharpness',
-            'ShearX', 'ShearY', 'TranslateX', 'TranslateY']
-        """
+        #Applies random 'n'=2 augmentations with amplitude 'm'=9 from a default set of augmentations.
+        #The set of augmentations to choose from can be changed through the parameter 'policy'.
+        #The default set of augmentations is:
+        #    transforms = [
+        #    'Identity', 'AutoContrast', 'Equalize',
+        #    'Rotate', 'Solarize', 'Color', 'Posterize',
+        #    'Contrast', 'Brightness', 'Sharpness',
+        #    'ShearX', 'ShearY', 'TranslateX', 'TranslateY']
         K.RandAugment(n=2, m=9) if hard else nn.Identity(),
         K.ColorJitter(0.4,0.4,0.4,0.1),
         K.RandomGrayscale(p=0.2) if randgray else nn.Identity(),
