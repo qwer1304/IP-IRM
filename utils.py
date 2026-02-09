@@ -1289,7 +1289,7 @@ def make_train_transform(image_size=64, randgray=True, normalize='CIFAR', gpu=Tr
         #    'Rotate', 'Solarize', 'Color', 'Posterize',
         #    'Contrast', 'Brightness', 'Sharpness',
         #    'ShearX', 'ShearY', 'TranslateX', 'TranslateY']
-        K.RandAugment(n=2, m=9) if hard else nn.Identity(),
+        RandAugment(n=2, m=9) if hard else nn.Identity(),
         K.ColorJitter(0.4,0.4,0.4,0.1),
         K.RandomGrayscale(p=0.2) if randgray else nn.Identity(),
         K.RandomGaussianBlur((kernel_size,kernel_size), sigma=(0.1,2.0)),
