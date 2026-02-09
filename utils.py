@@ -1285,10 +1285,10 @@ def make_train_transform(image_size=64, randgray=True, normalize='CIFAR', gpu=Tr
         The set of augmentations to choose from can be changed through the parameter 'policy'.
         The default set of augmentations is:
             transforms = [
-            ’Identity’, ’AutoContrast’, ’Equalize’,
-            ’Rotate’, ’Solarize’, ’Color’, ’Posterize’,
-            ’Contrast’, ’Brightness’, ’Sharpness’,
-            ’ShearX’, ’ShearY’, ’TranslateX’, ’TranslateY’]
+            'Identity', 'AutoContrast', 'Equalize',
+            'Rotate', 'Solarize', 'Color', 'Posterize',
+            'Contrast', 'Brightness', 'Sharpness',
+            'ShearX', 'ShearY', 'TranslateX', 'TranslateY']
         """
         K.RandAugment(n=2, m=9) if hard else nn.Identity(),
         K.ColorJitter(0.4,0.4,0.4,0.1),
