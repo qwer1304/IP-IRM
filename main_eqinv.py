@@ -454,6 +454,7 @@ if __name__ == '__main__':
     parser.add_argument('--feature_dim', default=128, type=int, help='Feature dim for latent vector')
     parser.add_argument('--temperature', default=0.5, type=float, help='Temperature in SSL softmax')
     parser.add_argument('--norandgray', action="store_true", default=False, help='skip rand gray transform')
+    parser.add_argument('--random_aug', action="store_true", default=False, help='random_aug')
 
     # Loaders parameters
     parser.add_argument('--dl_tr', default=[256, 4, 2, True, True], nargs=5, type=str,
@@ -661,7 +662,8 @@ if __name__ == '__main__':
         memory_data = utils.CIFAR100(root=args.data, train=True, transform=train_transform, target_transform=target_transform)
         test_data = utils.CIFAR100(root=args.data, train=False, transform=test_transform, target_transform=target_transform)
     elif args.dataset == 'ImageNet':
-        train_transform = utils.make_train_transform(image_size, randgray=not args.norandgray, normalize=args.image_class, mixed=args.train_transform=='train_mixed')
+        train_transform = utils.make_train_transform(image_size, randgray=not args.norandgray, normalize=args.image_class, 
+                            mixed=args.train_transform=='train_mixed', hard=args.random_aug)
         test_transform = utils.make_test_transform(normalize=args.image_class)
         
         transform   = train_transform if 'train' in args.train_transform else test_transform

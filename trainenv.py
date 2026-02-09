@@ -2030,23 +2030,26 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         else:
             spc_str = ""
             spc_cos_str = ""
+            
+        if do_gradnorm:
+            gradnorm_str = f"w/v: k {info_dict['w_k']:.4f}/{info_dict['v_k']:.4f} l {info_dict['w_l']:.4f}/{info_dict['v_l']:.4f}" + \
+                           f" p {info_dict['w_p']:.4f}/{info_dict['v_p']:.4f}" + \
+                           f" gn_loss {info_dict['gradnorm_loss']:.4e} rates: {info_dict['gradnorm_rates_str']} gn_gpm: {info_dict['gn_pm']}"
+        else:
+            gradnorm_str = ""
         
         desc_str = f"Epoch [{epoch}/{args.epochs}] [{trained_samples}/{total_samples}]" + \
-                   f" {args.ssl_type}" + \
                    f" Total {total_loss_weighted/trained_samples:.3e}" + \
-                   f" Unsplit {total_unsplit_loss_weighted/trained_samples:.3e}" + \
+                   f" Unsplit/{args.ssl_type_unsplit} {total_unsplit_loss_weighted/trained_samples:.3e}" + \
                    f" CE {total_CE_loss_weighted/trained_samples:.3e}" + \
-                   f" Env {total_env_loss_weighted/trained_samples:.3e}" + \
+                   f" Env/{args.ssl_type} {total_env_loss_weighted/trained_samples:.3e}" + \
                    f" {args.penalty_type} {total_pen_loss_weighted/trained_samples:.3e}" + \
                    f" Sparsity {loss_mask_sparsity_weighted.item():.3e}" + \
                    f" LR {train_optimizer.param_groups[0]['lr']:.4f} PW {penalty_weight_orig:.6g}" + \
                    f" dot:{ll_str}{lk_str}{lp_str}{kk_str}{kp_str}{pp_str}" + \
                    f" cos:{lk_cos_str}{lp_cos_str}{kp_cos_str}" + \
-                   f" w/v:" + \
-                   f" k {info_dict['w_k']:.4f}/{info_dict['v_k']:.4f} l {info_dict['w_l']:.4f}/{info_dict['v_l']:.4f}" + \
-                   f" p {info_dict['w_p']:.4f}/{info_dict['v_p']:.4f}" + \
+                   f" {gradnorm_str}" + \
                    f" decr: l {info_dict['loss_decrease_cond']:.2e} k {info_dict['loss_unsplit_decrease_cond']:.2e} p {info_dict['penalty_decrease_cond']:.2e}" + \
-                   f" gn_loss {info_dict['gradnorm_loss']:.4e} rates: {info_dict['gradnorm_rates_str']} gn_gpm: {info_dict['gn_pm']}" + \
                    f" Lp: cos {info_dict['cos_Lp']:.3e} dot {info_dict['dot_Lp']:.3e} gn_prgrs {info_dict['gradnorm_progress']:.6g}" + \
                    f" shared_dot:{slk_str}{slp_str}{skp_str}{slc_str}{skc_str}{spc_str}" + \
                    f" shared_cos:{slk_cos_str}{slp_cos_str}{skp_cos_str}{slc_cos_str}{skc_cos_str}{spc_cos_str}" + \
