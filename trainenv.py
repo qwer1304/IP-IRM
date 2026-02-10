@@ -1030,7 +1030,7 @@ def calculate_scalers(loss_CE_grads_final, loss_unsplit_grads_final, loss_grads_
             delta_xy = shared_x_grads_vector.dot(shared_y_grads_vector)
             shared_ngx = shared_x_grads_vector.norm()
             shared_ngy = shared_y_grads_vector.norm()
-            cos_xy = delta_xy / (shared_ngx + shared_ngy + 1e-12)
+            cos_xy = delta_xy / (shared_ngx * shared_ngy + 1e-12)
             return delta_xy, cos_xy, shared_ngx, shared_ngy
         else:
             return torch.tensor(0, dtype=torch.float), torch.tensor(0, dtype=torch.float), torch.tensor(0, dtype=torch.float), torch.tensor(0, dtype=torch.float) 
