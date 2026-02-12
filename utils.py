@@ -1278,7 +1278,7 @@ def make_train_transform(image_size=64, randgray=True, normalize='CIFAR', gpu=Tr
         H, W = image_size, image_size
         
         aug_geom_safe = K.AugmentationSequential(
-            K.PadTo((H + 32, W + 32), padding_mode="reflect"),
+            K.PadTo((H + 32, W + 32), pad_mode="reflect"),
             K.RandomCrop((H, W)),
             K.RandomAffine(
                 degrees=5.0,
