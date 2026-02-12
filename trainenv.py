@@ -299,7 +299,7 @@ class LossModule:
 # MoCo+SupCon Loss Module
 # ---------------------------
 class MoCoSupConLossModule(LossModule):
-    def __init__(self, *args, net_momentum=None, queue=None, temperature=None, debug=False, filter_indices=None, **kwargs):
+    def __init__(self, *args, net_momentum=None, queue=None, temperature=None, debug=False, filter_indices=None, master=True, **kwargs):
         super().__init__(*args, **kwargs)
         assert net_momentum is not None
         assert queue is not None
@@ -312,6 +312,7 @@ class MoCoSupConLossModule(LossModule):
         self.debug = debug
         self.neg_idxs = []
         self.filter_indices_hook = filter_indices
+        self.master = master
         if self.debug:
             self.total_pos = 0.0
             self.total_neg = 0.0
@@ -320,7 +321,8 @@ class MoCoSupConLossModule(LossModule):
 
     def pre_batch(self, batch_data, index_data, partitions, device='cuda'):
         self.this_batch_size = len(batch_data)
-        self.queue.get(self.this_batch_size) # advance read pointer
+        if self.master:
+            self.queue.get(self.this_batch_size) # advance read pointer
         
         if partitions is None or (len(partitions) == 0) or (partitions[0] is None):
             return
@@ -522,12 +524,14 @@ class MoCoSupConLossModule(LossModule):
         return self.filter_indices_hook(indices, **kwargs) if self.filter_indices_hook is not None else super().filter_indices(indices, **kwargs)
         
     def post_micro_batch(self):
-        self.queue.update(self.out_k.detach(), idx=self.out_k_indexs)
+        if self.master:
+            self.queue.update(self.out_k.detach(), idx=self.out_k_indexs)
 
     def post_batch(self):
-        with torch.no_grad():
-            for param_q, param_k in zip(self.net.parameters(), self.net_momentum.parameters()):
-                param_k.mul_(self.momentum).add_(param_q, alpha=1.0 - self.momentum)
+        if self.master:
+            with torch.no_grad():
+                for param_q, param_k in zip(self.net.parameters(), self.net_momentum.parameters()):
+                    param_k.mul_(self.momentum).add_(param_q, alpha=1.0 - self.momentum)
         if self.debug:
             self.total_pos = 0.0
             self.total_neg = 0.0
@@ -551,7 +555,7 @@ class MoCoSupConLossModule(LossModule):
 # MoCo Loss Module
 # ---------------------------
 class MoCoLossModule(LossModule):
-    def __init__(self, *args, net_momentum=None, queue=None, temperature=None, debug=False, **kwargs):
+    def __init__(self, *args, net_momentum=None, queue=None, temperature=None, debug=False, master=True, **kwargs):
         super().__init__(*args, **kwargs)
         assert net_momentum is not None
         assert queue is not None
@@ -563,6 +567,7 @@ class MoCoLossModule(LossModule):
         self.this_batch_size = 0
         self.debug = debug
         self.neg_idxs = []
+        self.master = master
         if self.debug:
             self.total_pos = 0.0
             self.total_neg = 0.0
@@ -571,7 +576,8 @@ class MoCoLossModule(LossModule):
 
     def pre_batch(self, batch_data, index_data, partitions, device='cuda'):
         self.this_batch_size = len(batch_data)
-        self.queue.get(self.this_batch_size) # advance read pointer
+        if self.master:
+            self.queue.get(self.this_batch_size) # advance read pointer
         
         if partitions is None or (len(partitions) == 0) or (partitions[0] is None):
             return
@@ -654,12 +660,14 @@ class MoCoLossModule(LossModule):
         return loss
 
     def post_micro_batch(self):
-        self.queue.update(self.out_k.detach(), idx=self.out_k_indexs)
+        if self.master:
+            self.queue.update(self.out_k.detach(), idx=self.out_k_indexs)
 
     def post_batch(self):
-        with torch.no_grad():
-            for param_q, param_k in zip(self.net.parameters(), self.net_momentum.parameters()):
-                param_k.mul_(self.momentum).add_(param_q, alpha=1.0 - self.momentum)
+        if self.master:
+            with torch.no_grad():
+                for param_q, param_k in zip(self.net.parameters(), self.net_momentum.parameters()):
+                    param_k.mul_(self.momentum).add_(param_q, alpha=1.0 - self.momentum)
         if self.debug:
             self.total_pos = 0.0
             self.total_neg = 0.0
@@ -1474,6 +1482,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         this_batch_size = len(indexs_batch) # for the case drop_last=False
         
         loss_module.pre_batch(data_batch, indexs_batch, partitions)
+        loss_unsplit_module.pre_batch(data_batch, indexs_batch, partitions)
         if loss_CE_module is not None:
             loss_CE_module.pre_batch(data_batch) # weights handled below
 
