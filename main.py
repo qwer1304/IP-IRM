@@ -618,6 +618,9 @@ if __name__ == '__main__':
 
     parser.add_argument('--debug', action="store_true", default=False, help='debug?')
     parser.add_argument('--print_batch', action="store_true", default=False, help='print every batch')
+    parser.add_argument('--debug_dont_update_loss', action="store_true", default=False, help='debug?')
+    parser.add_argument('--debug_print_loss', action="store_true", default=False, help='debug?')
+
     parser.add_argument('--groupnorm', action="store_true", default=False, help='use group contrastive loss?')
     parser.add_argument('--unsplit_cont', action="store_true", default=False, help='unsplit original contrastive?')
     parser.add_argument('--pretrain_path', type=str, default=None, help='the path of pretrain model')
