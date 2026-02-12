@@ -693,6 +693,7 @@ if __name__ == '__main__':
     parser.add_argument('--val_transform', default='test', type=str, choices=['train', 'test'])
     
     parser.add_argument('--mask_sparsity_weight', type=float, default=0.0, help='weight of sparsity loss')
+    parser.add_argument('--opt_mask', action="store_true", default=False, help='optimize the mask')
     parser.add_argument('--CE_loss', action="store_true", default=False, help='do CE loss')
     
     # args parse
