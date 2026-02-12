@@ -1248,7 +1248,7 @@ class GaussianBlur(object):
 
 # just follow the previous work -- DCL, NeurIPS2020
 
-def make_train_transform(image_size=64, randgray=True, normalize='CIFAR', gpu=True, mixed=False, hard=False):
+def make_train_transform(image_size=64, randgray=True, normalize='CIFAR', gpu=True, mixed=False, hard=False, terrainc=True):
     kernel_size = int(0.1 * image_size)
     if (kernel_size % 2) == 0:
         kernel_size += 1
@@ -1260,6 +1260,7 @@ def make_train_transform(image_size=64, randgray=True, normalize='CIFAR', gpu=Tr
         norm_mean=[0.485, 0.456, 0.406]
         norm_std=[0.229, 0.224, 0.225]
 
+    # FIX ME!!! ADD TERRAINC
     cpu_transform = transforms.Compose([
             #transforms.ToTensor(),  # <-- important: switch to tensor here
             transforms.ToImage(),
@@ -1273,28 +1274,55 @@ def make_train_transform(image_size=64, randgray=True, normalize='CIFAR', gpu=Tr
             transforms.Normalize(mean=norm_mean, std=norm_std),
         ])
 
-    geometry = [K.RandomResizedCrop((image_size, image_size), scale=(0.7,1.0)),
-                K.RandomHorizontalFlip(p=0.5),
-                nn.Identity()                      # hack, 'random_apply' cannot be 0
-               ]
-    if mixed: 
-        geometry = [K.AugmentationSequential(*geometry, random_apply=(1,))]
-    gpu_transform = K.AugmentationSequential(
-        *geometry,
-        #Applies random 'n'=2 augmentations with amplitude 'm'=9 from a default set of augmentations.
-        #The set of augmentations to choose from can be changed through the parameter 'policy'.
-        #The default set of augmentations is:
-        #    transforms = [
-        #    'Identity', 'AutoContrast', 'Equalize',
-        #    'Rotate', 'Solarize', 'Color', 'Posterize',
-        #    'Contrast', 'Brightness', 'Sharpness',
-        #    'ShearX', 'ShearY', 'TranslateX', 'TranslateY']
-        RandAugment(n=2, m=9) if hard else nn.Identity(),
-        K.ColorJitter(0.4,0.4,0.4,0.1),
-        K.RandomGrayscale(p=0.2) if randgray else nn.Identity(),
-        K.RandomGaussianBlur((kernel_size,kernel_size), sigma=(0.1,2.0)),
-        K.Normalize(mean=norm_mean, std=norm_std)
-    )
+    if terrainc:        
+        H, W = image_size, image_size
+        
+        aug_geom_safe = K.AugmentationSequential(
+            K.PadTo((H + 32, W + 32), padding_mode="reflect"),
+            K.RandomCrop((H, W)),
+            K.RandomAffine(
+                degrees=5.0,
+                translate=(0.05, 0.05),
+                scale=(0.95, 1.05),
+                p=1.0
+            ),
+            K.RandomHorizontalFlip(p=0.2),  # optional, or remove
+            data_keys=["input"],
+        )
+        aug_color = K.AugmentationSequential(
+            K.ColorJitter(0.2, 0.2, 0.2, 0.1, p=0.8),
+            K.RandomGrayscale(p=0.1) if randgray else nn.Identity(),
+            data_keys=["input"],
+        )
+        gpu_transform = K.AugmentationSequential(
+            aug_geom_safe,
+            aug_color,
+            K.Normalize(mean=norm_mean, std=norm_std)
+            data_keys=["input"],
+        )
+    else:
+        geometry = [K.RandomResizedCrop((image_size, image_size), scale=(0.7,1.0)),
+                    K.RandomHorizontalFlip(p=0.5),
+                    nn.Identity()                      # hack, 'random_apply' cannot be 0
+                   ]
+        if mixed: 
+            geometry = [K.AugmentationSequential(*geometry, random_apply=(1,))]
+        gpu_transform = K.AugmentationSequential(
+            *geometry,
+            #Applies random 'n'=2 augmentations with amplitude 'm'=9 from a default set of augmentations.
+            #The set of augmentations to choose from can be changed through the parameter 'policy'.
+            #The default set of augmentations is:
+            #    transforms = [
+            #    'Identity', 'AutoContrast', 'Equalize',
+            #    'Rotate', 'Solarize', 'Color', 'Posterize',
+            #    'Contrast', 'Brightness', 'Sharpness',
+            #    'ShearX', 'ShearY', 'TranslateX', 'TranslateY']
+            RandAugment(n=2, m=9) if hard else nn.Identity(),
+            K.ColorJitter(0.4,0.4,0.4,0.1),
+            K.RandomGrayscale(p=0.2) if randgray else nn.Identity(),
+            K.RandomGaussianBlur((kernel_size,kernel_size), sigma=(0.1,2.0)),
+            K.Normalize(mean=norm_mean, std=norm_std)
+        )
 
     if gpu:
         return gpu_transform
