@@ -62,7 +62,7 @@ def build_losses_and_penalty_dict(args, net, class_weights=None, moco_dict=None)
     loss_module = LossModule(net, debug=args.debug, detached_backbone=False, projector=True, queue=kwargs['queue_proj'], **kwargs) 
     loss_and_penalties_dict['loss_module'] = loss_module
 
-    loss_unsplit_module = LossUnsplitModule(net, debug=args.debug, detached_backbone=False, projector=True, queue=kwargs['queue_proj'], master=False, **kwargs) 
+    loss_unsplit_module = LossUnsplitModule(net, debug=args.debug, detached_backbone=False, projector=True, queue=kwargs['queue_proj'], **kwargs) 
     loss_and_penalties_dict['loss_unsplit_module'] = loss_unsplit_module
 
     # IRM calculator selection
@@ -136,7 +136,7 @@ def setup_gradnorm_balancer(args, device):
                             gradnorm_loss_lambda=args.gradnorm_loss_lambda, huber_delta=args.gradnorm_huber_delta)
     return gradnorm_balancer
 
-def train_partition(net, update_loader, soft_split, random_init=False, args=None, net_momentum=None, queue=None, **kwargs):
+def train_partition(net, update_loader, soft_split, random_init=False, args=None, net_momentum=None, queue_proj=None, **kwargs):
 
     utils.write_log('Start Maximizing ...', log_file, print_=True)
     
@@ -206,7 +206,7 @@ def train_partition(net, update_loader, soft_split, random_init=False, args=None
         updated_split = utils.auto_split_offline(feature1, feature2, soft_split, temperature, args.irm_temp, loss_mode='v2', irm_mode=args.irm_mode,
                                          irm_weight=args.irm_weight_maxim, constrain=args.constrain, cons_relax=args.constrain_relax, nonorm=args.nonorm, 
                                          log_file=log_file, batch_size=uo_bs, num_workers=uo_nw, prefetch_factor=uo_pf, persistent_workers=uo_pw,
-                                         ssl_type=args.ssl_type_partition.lower(), queue=queue, dataset=update_loader.dataset)
+                                         ssl_type=args.ssl_type_partition.lower(), queue=queue_proj, dataset=update_loader.dataset)
     else:
         updated_split = utils.auto_split(net, update_loader, soft_split, temperature, args.irm_temp, loss_mode='v2', irm_mode=args.irm_mode,
                                      irm_weight=args.irm_weight_maxim, constrain=args.constrain, cons_relax=args.constrain_relax, 
