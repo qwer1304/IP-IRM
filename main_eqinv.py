@@ -690,7 +690,7 @@ if __name__ == '__main__':
     parser.add_argument('--test_freq', default=5*5, type=int, metavar='N',
                     help='test epoch freqeuncy')
 
-    parser.add_argument('--evaluate', type=str, default=None, nargs="*", choices=['train', 'val', 'test'], help='only evaluate')
+    parser.add_argument('--evaluate', type=str, default=None, nargs="*", choices=['train', 'val', 'test', 'knn', 'masked'], help='only evaluate')
     parser.add_argument('--extract_features', action="store_true", help="extract features for post processing during evaluate")
 
     parser.add_argument('--opt', choices=['Adam', 'SGD'], default='Adam', help='Optimizer to use')
