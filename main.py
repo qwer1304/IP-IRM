@@ -1072,7 +1072,7 @@ if __name__ == '__main__':
                 'updated_split':        updated_split,
                 'updated_split_all':    updated_split_all,
                 'state_dict_momentum':  model_momentum.state_dict() if model_momentum else None,
-                'queue':                queue,
+                'queue_proj':           queue_proj,
                 'state_dict_gradnorm':  gradnorm_balancer.state_dict(),
                 'gradnorm_optimizer':   gradnorm_optimizer.state_dict(),
                 "rng_dict": {
