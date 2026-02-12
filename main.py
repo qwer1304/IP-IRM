@@ -121,6 +121,21 @@ def build_arms_blueprints(args, num_classes):
 
     return arms_blueprints, shortcuts
 
+def setup_gradnorm_balancer(args, device):
+    initial_weights = {'penalty': torch.tensor(1.0, dtype=torch.float, device=device)}
+    if args.penalty_cont > 0:
+        initial_weights['loss'] = torch.tensor(1.0, dtype=torch.float, device=device)
+    if args.unsplit_cont and (args.penalty_unsplit_cont > 0):
+        initial_weights['loss_unsplit'] = torch.tensor(1.0, dtype=torch.float, device=device)
+    if args.penalty_CE > 0:
+        initial_weights['loss_CE'] = torch.tensor(1.0, dtype=torch.float, device=device)
+    gradnorm_balancer = gn.GradNormLossBalancer(initial_weights, alpha=args.gradnorm_alpha, device=device, smoothing=False, 
+                            tau=args.gradnorm_tau, eps=1e-8, debug=args.gradnorm_debug, beta=args.gradnorm_beta, 
+                            avgG_detach_frac=args.gradnorm_avgG_detach_frac, Gscaler=args.gradnorm_Gscaler, 
+                            gradnorm_loss_type=args.gradnorm_loss_type, 
+                            gradnorm_loss_lambda=args.gradnorm_loss_lambda, huber_delta=args.gradnorm_huber_delta)
+    return gradnorm_balancer
+
 def train_partition(net, update_loader, soft_split, random_init=False, args=None, net_momentum=None, queue=None, **kwargs):
 
     utils.write_log('Start Maximizing ...', log_file, print_=True)
@@ -781,39 +796,32 @@ if __name__ == '__main__':
 
     ema = utils.MovingAverage(0.95, oneminusema_correction=False, active=args.ema)
     
-    initial_weights = {'penalty': torch.tensor(1.0, dtype=torch.float, device=device)}
-    if args.penalty_cont > 0:
-        initial_weights['loss'] = torch.tensor(1.0, dtype=torch.float, device=device)
-    if args.unsplit_cont and (args.penalty_unsplit_cont > 0):
-        initial_weights['loss_unsplit'] = torch.tensor(1.0, dtype=torch.float, device=device)
-    gradnorm_balancer = gn.GradNormLossBalancer(initial_weights, alpha=args.gradnorm_alpha, device=device, smoothing=False, 
-                            tau=args.gradnorm_tau, eps=1e-8, debug=args.gradnorm_debug, beta=args.gradnorm_beta, 
-                            avgG_detach_frac=args.gradnorm_avgG_detach_frac, Gscaler=args.gradnorm_Gscaler, 
-                            gradnorm_loss_type=args.gradnorm_loss_type, 
-                            gradnorm_loss_lambda=args.gradnorm_loss_lambda, huber_delta=args.gradnorm_huber_delta)
+    # GradNorm
+    gradnorm_balancer = setup_gradnorm_balancer(args, device)
+
+    # Optimizers
+    def get_optimizer_params(model, args):
+        ssl_type = args.ssl_type.lower()
+        params = []
+        params.append({'params': model.module.f.parameters(), 'lr': args.featurizer_lr if args.featurizer_lr > 0 else args.lr})
+        params.append({'params': model.module.arms['classifier'].parameters(), 'lr': args.classifier_lr if args.classifier_lr > 0 else args.lr})
+        if args.opt_mask:
+            params.append({'params': model.module.mask_fun.parameters(), 'lr': args.mask_lr if args.mask_lr > 0 else args.lr})
+        if ssl_type == "simsiam":
+            params.append({'params': model.module.arms['projector'].parameters(), 'lr': args.projector_lr if args.projector_lr > 0 else args.lr})
+            params.append({'params': model.module.arms['predictor'].parameters(), 'lr': args.predictor_lr if args.predictor_lr > 0 else args.lr})
+        else:
+            params.append({'params': model.module.arms['projector'].parameters(), 'lr': args.projector_lr if args.projector_lr > 0 else args.lr})
+        return params
 
     if args.opt == "Adam":
-        #FIX ME!!!!!!!!!
-        #optimizer          = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay, betas=args.betas)
-        params = []
-        if ssl_type == "simsiam":
-            if args.featurizer_lr > 0:
-                params.append({'params': model.module.f.parameters(), 'lr': args.featurizer_lr})
-            if args.projector_lr > 0:
-                params.append({'params': model.module.arms['projector'].parameters(), 'lr': args.projector_lr})
-            if args.predictor_lr > 0:
-                params.append({'params': model.module.arms['predictor'].parameters(), 'lr': args.predictor_lr})
-        else:
-            if args.featurizer_lr > 0:
-                params.append({'params': model.module.f.parameters(), 'lr': args.featurizer_lr})
-            if args.projector_lr > 0:
-                params.append({'params': model.module.arms['projection'].parameters(), 'lr': args.projector_lr})
+        params = get_optimizer_params(model, args)
         optimizer = optim.Adam(params, weight_decay=args.weight_decay, betas=args.betas)
-
         gradnorm_optimizer = optim.Adam(gradnorm_balancer.parameters(), lr=args.gradnorm_lr, weight_decay=args.gradnorm_weight_decay, betas=args.gradnorm_betas)        
     elif args.opt == 'SGD':
         optimizer          = optim.SGD(model.parameters(),             lr=args.lr, weight_decay=args.weight_decay, momentum=args.SGD_momentum)
         gradnorm_optimizer = optim.SGD(gradnorm_balancer.parameters(), lr=args.gradnorm_lr, weight_decay=args.weight_decay, momentum=args.SGD_momentum)
+
 
     # optionally resume from a checkpoint
     best_acc1 = 0
