@@ -907,7 +907,7 @@ if __name__ == '__main__':
     
     kwargs = {'ema': ema, 'gradnorm_balancer': gradnorm_balancer, 'gradnorm_optimizer': gradnorm_optimizer, 'log_file': log_file}
     kwargs.update(losses_and_penalty_dict)
-
+    ssl_type = args.ssl_type.lower()
     if ssl_type == 'moco' or ssl_type == 'mocosupcon':
         kwargs.update({'net_momentum': model_momentum, 'queue': queue, 'temperature': temperature, 'momentum': momentum})
     elif ssl_type == 'simsiam':
