@@ -29,6 +29,98 @@ from functools import partial
 
 sys.modules['__main__'].FeatureQueue = utils.FeatureQueue
 
+def build_losses_and_penalty_dict(args, net, class_weights=None, moco_dict=None):
+    loss_type         = getattr(args, 'ssl_type', 'moco').lower()
+    loss_type_unsplit = getattr(args, 'ssl_type_unsplit', 'moco').lower()
+    penalty_type      = getattr(args, 'penalty_type', 'irm').lower()
+
+    if loss_type == 'moco':
+        LossModule = MoCoLossModule
+    elif loss_type == 'mocosupcon':
+        LossModule = MoCoSupConLossModule
+    elif loss_type == 'simsiam':
+        LossModule = SimSiamLossModule
+    else:
+        raise ValueError(f"Unknown loss_type: {loss_type}")
+
+    if loss_type_unsplit == 'moco':
+        LossUnsplitModule = MoCoLossModule
+    elif loss_type_unsplit == 'mocosupcon':
+        LossUnsplitModule = MoCoSupConLossModule
+    elif loss_type_unsplit == 'simsiam':
+        LossUnsplitModule = SimSiamLossModule
+    else:
+        raise ValueError(f"Unknown loss_type: {loss_type_unsplit}")
+
+    kwargs = moco_dict
+
+    loss_and_penalties_dict = {}
+
+    loss_CE_module =  None
+    loss_and_penalties_dict['loss_CE_module'] = loss_CE_module
+
+    loss_module = LossModule(net, debug=args.debug, detached_backbone=True, projector=False, queue=kwargs['queue_noproj'], **kwargs) 
+    loss_and_penalties_dict['loss_module'] = loss_module
+
+    loss_unsplit_module = LossUnsplitModule(net, debug=args.debug, detached_backbone=False, projector=True, queue=kwargs['queue_proj'], **kwargs) 
+    loss_and_penalties_dict['loss_unsplit_module'] = loss_unsplit_module
+
+    # IRM calculator selection
+    if penalty_type == 'irm':
+        if loss_type   == 'moco' or loss_type == 'mocosupcon':
+            PenaltyCalculator = CE_IRMCalculator
+        elif loss_type == 'simsiam':
+            PenaltyCalculator = SimSiamIRMCalculator
+        else:
+            raise ValueError(f"Unknown loss_type: {loss_type}")
+    elif penalty_type == 'vrex':
+        PenaltyCalculator = VRExCalculator
+    else:
+        raise ValueError(f"Unknown penalty_type: {penalty_type}")
+
+    penalty_calculator = PenaltyCalculator(loss_module, irm_temp=args.irm_temp, debug=args.debug, **kwargs)
+    loss_and_penalties_dict['penalty_calculator'] = penalty_calculator
+    
+    return loss_and_penalties_dict
+
+def setup_moco_model(model, args):
+    ssl_type = args.ssl_type.lower()
+    device = next(model.parameters()).device
+    if ssl_type == 'moco' or ssl_type == 'mocosupcon':
+        model_momentum = copy.deepcopy(model)
+        for p in model_momentum.parameters():
+            p.requires_grad = False
+        momentum = args.momentum              # momentum for model_momentum
+    elif ssl_type == 'simsiam':
+        model_momentum = None
+    else:
+        raise ValueError(f"Unknown ssl_type: {ssl_type}")
+        
+    return model_momentum
+
+def build_arms_blueprints(args, num_classes):
+    ssl_type = args.ssl_type.lower()
+    if ssl_type == 'moco' or ssl_type == 'mocosupcon':       
+        arms_blueprints = {"projector": partial(create_mlp, output_dim=args.feature_dim, hidden_dims=[512], norm_layer=nn.BatchNorm1d, bias=[False, True],
+                                                       last_layer_norm=False, last_layer_act=False)
+        }
+        shortcuts = {'g': 'projector'}
+        
+    elif ssl_type == 'simsiam':
+        arms_blueprints = {"projector": partial(create_mlp, output_dim=args.feature_dim, hidden_dims=[512, 512], norm_layer=nn.BatchNorm1d, bias=[False, False, False],
+                                                            last_layer_norm=True, last_layer_act=False, 
+                                                            norm_kwargs=[{"affine": True}, {"affine": True}, {"affine": False}]),  
+                           "predictor_proj": partial(create_mlp, input_dim=args.feature_dim, output_dim=args.feature_dim, hidden_dims=[int(args.feature_dim/2)], 
+                                                            norm_layer=nn.BatchNorm1d, bias=[False, True],
+                                                            last_layer_norm=False, last_layer_act=False)
+        }
+        shortcuts = {'g': 'projector', 'h_proj': 'predictor_proj'}
+
+    else:
+        raise ValueError(f"Unknown ssl_type: {ssl_type}")
+
+    return arms_blueprints, shortcuts
+
 def train_partition(net, update_loader, soft_split, random_init=False, args=None, net_momentum=None, queue=None, **kwargs):
 
     utils.write_log('Start Maximizing ...', log_file, print_=True)
@@ -158,7 +250,7 @@ def get_feature_bank(net, memory_data_loader, args, progress=False, prefix="Test
     return feature_bank, feature_labels
 
 # test for one epoch, use weighted knn to find the most similar images' label to assign the test image
-def test(net, feature_bank, feature_labels, test_data_loader, num_classes, args, progress=False, prefix="Test:"):
+def test(net, feature_bank, feature_labels, test_data_loader, num_classes, args, progress=False, prefix="Test:", , mask_u=None, masked_features=False):
     net.eval()
        
     total_top1, total_top5, total_num = 0.0, 0.0, 0
@@ -207,7 +299,8 @@ def test(net, feature_bank, feature_labels, test_data_loader, num_classes, args,
             if args.extract_features and target_transform is not None:
                 target = target_transform(target_raw).cuda(non_blocking=True)
 
-            feature, out = net(data)
+            feature = net.module.backbone(data)
+            feature = F.normalize(feature, dim=-1)
 
             total_num += data.size(0)
             # compute cos similarity between each feature vector and feature bank ---> [B, N]
@@ -317,7 +410,8 @@ def load_checkpoint(path, model, model_momentum, optimizer, gradnorm_balancer, g
         msg_model['unexpected_keys'] = [k for k in msg_model['unexpected_keys'] if not k.startswith('module.arms.classifier')]
 
     # Restore momentum model if applicable
-    queue = None
+    queue_proj = None
+    queue_noproj = None
     if model_momentum is not None:
         if "state_dict_momentum" in checkpoint and checkpoint["state_dict_momentum"] is not None:
             msg_momentum = model_momentum.load_state_dict(
@@ -330,13 +424,18 @@ def load_checkpoint(path, model, model_momentum, optimizer, gradnorm_balancer, g
         else:
             msg_momentum = "no momentum encoder in checkpoint"
 
-        if "queue" in checkpoint and checkpoint["queue"] is not None:
-            queue = checkpoint["queue"]
+        if "queue_proj" in checkpoint and checkpoint["queue_proj"] is not None:
+            queue_proj = checkpoint["queue_proj"]
         else:
-            queue = None
+            queue_proj = None
+        if "queue_noproj" in checkpoint and checkpoint["queue_noproj"] is not None:
+            queue_noproj = checkpoint["queue_noproj"]
+        else:
+            queue_noproj = None
     else:
         msg_momentum = "momentum encoder not used"
-        queue = None
+        queue_proj = None
+        queue_noproj = None
         
     if (gradnorm_balancer is not None):
         if ("state_dict_gradnorm" in checkpoint) and (checkpoint["state_dict_gradnorm"] is not None):
@@ -353,24 +452,44 @@ def load_checkpoint(path, model, model_momentum, optimizer, gradnorm_balancer, g
         msg_gradnorm = "gradnorm not used"
 
     # Restore optimizer (if available)
+
+    def restore_optimizer(optimizer, opt_state_dict, device, opt_string):
+        print(f"Restoring optimizer {opt_string}")
+        # 1. Capture the current params (the ones you want to keep)
+        # This ensures your new mask is known to the system
+        current_param_groups = optimizer.param_groups 
+
+        # 2. Load the old state dict strictly
+        # If the number of groups changed, this might throw an error. 
+        # If it does, load ONLY the 'state' part.
+        try:
+            optimizer.load_state_dict(opt_state_dict)
+        except ValueError:
+            print(f"Optimizer {opt_string} group mismatch. Loading state values manually...")
+            # Fallback: Load state buffers but keep current group structure
+            optimizer.state.update(opt_state_dict["state"])
+
+        # 3. Ensure every parameter in your current groups has a state entry
+        # This is your "Initialization" logic, but safer:
+        for group in optimizer.param_groups:
+            for p in group['params']:
+                if p not in optimizer.state:
+                    optimizer.state[p] = {
+                        'step': torch.tensor(0.0).to(device), 
+                        'exp_avg': torch.zeros_like(p),
+                        'exp_avg_sq': torch.zeros_like(p)
+                    }
+                else:
+                    # Move existing state to correct device
+                    for k, v in optimizer.state[p].items():
+                        if torch.is_tensor(v):
+                            optimizer.state[p][k] = v.to(device)
+
     if "optimizer" in checkpoint and checkpoint["optimizer"] is not None:
-
-        checkpoint["optimizer"]["param_groups"] = optimizer.param_groups  # keep current hparams
-        optimizer.load_state_dict(checkpoint["optimizer"])
-        # Move optimizer tensors to the correct device
-        for state in optimizer.state.values():
-            for k, v in state.items():
-                if torch.is_tensor(v):
-                    state[k] = v.to(device)
-
+        restore_optimizer(optimizer, checkpoint["optimizer"], device, "main")
+                        
     if ("gradnorm_optimizer" in checkpoint) and (checkpoint["gradnorm_optimizer"] is not None):
-        checkpoint["gradnorm_optimizer"]["param_groups"] = gradnorm_optimizer.param_groups  # keep current hparams
-        gradnorm_optimizer.load_state_dict(checkpoint["gradnorm_optimizer"])
-        # Move optimizer tensors to the correct device
-        for state in gradnorm_optimizer.state.values():
-            for k, v in state.items():
-                if torch.is_tensor(v):
-                    state[k] = v.to(device)
+        restore_optimizer(gradnorm_optimizer, checkpoint["gradnorm_optimizer"], device, "gradnorm")
 
     # Restore RNG states (if present)
     rng_dict = checkpoint.get("rng_dict", None)
@@ -399,18 +518,21 @@ def load_checkpoint(path, model, model_momentum, optimizer, gradnorm_balancer, g
     print("\tmodel load: {}".format(msg_model))
     if model_momentum is not None:
         print("\tmomentum load: {}".format(msg_momentum))
-    if queue is not None:
-        print("\tqueue restored")
+    if queue_proj is not None:
+        print("\tqueue_proj restored")
+    if queue_noproj is not None:
+        print("\tqueue_noproj restored")
     if gradnorm_balancer is not None:
         print("\tgradnorm load: {}".format(msg_gradnorm))
 
     print("<= loaded checkpoint '{}' (epoch {})".format(path, checkpoint.get("epoch", -1)))
 
-    return model, model_momentum, optimizer, queue, start_epoch, best_acc1, best_epoch, updated_split, updated_split_all, ema, gradnorm_balancer, gradnorm_optimizer
+    return model, model_momentum, optimizer, queue_proj, queue_noproj, start_epoch, best_acc1, best_epoch, updated_split, updated_split_all, ema, gradnorm_balancer, gradnorm_optimizer
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train IP-IRM')
     parser.add_argument('--ssl_type', default='MoCo', type=str, choices=['MoCo', 'SimSiam', 'MoCoSupCon'], help='SSL type')    
+    parser.add_argument('--ssl_type_unsplit', default='MoCo', type=str, choices=['MoCo', 'SimSiam', 'MoCoSupCon'], help='SSL type')    
     parser.add_argument('--ssl_type_partition', default='MoCoSupCon', type=str, choices=['MoCo', 'SimSiam', 'MoCoSupCon', 'SimCLR'], help='SSL type for partition')    
     parser.add_argument('--penalty_type', default='IRM', type=str, choices=['IRM', 'VREx'], help='Penalty type')        
     parser.add_argument('--penalty_sigma', default=None, type=float, help='Noise level to inject into penalty')        
@@ -634,49 +756,28 @@ if __name__ == '__main__':
     print('# Classes: {}'.format(c))
 
     # model setup and optimizer config
-    ssl_type = args.ssl_type.lower()
-    classifier_dim = c if args.loss_unsplit_type else None
-    if ssl_type == 'moco' or ssl_type == 'mocosupcon':       
-        arms_blueprints = {"projection": partial(create_mlp, output_dim=feature_dim, hidden_dims=[512], norm_layer=nn.BatchNorm1d, bias=[False, True],
-                                                       last_layer_norm=False, last_layer_act=False)
-        }
-        shortcuts = {'g': 'projection'}
-        
-    elif ssl_type == 'simsiam':
-        arms_blueprints = {"projector": partial(create_mlp, output_dim=feature_dim, hidden_dims=[512], norm_layer=nn.BatchNorm1d, bias=[False, False, False],
-                                                            last_layer_norm=True, last_layer_act=False, 
-                                                            norm_params=[{"affine": True}, {"affine": True}, {"affine": False}]),  
-                           "predictor": partial(create_mlp, output_dim=feature_dim, hidden_dims=[feature_dim/2], norm_layer=nn.BatchNorm1d, bias=[False, True],
-                                                            last_layer_norm=False, last_layer_act=False)
-        }
-        shortcuts = {'g': 'projector', 'h': 'predictor'}
+    arms_blueprints, shortcuts = build_arms_blueprints(args, num_classes=c)
 
-    else:
-        raise NotImplemented
-
-    if classifier_dim:
-        arms_blueprints.update({"classifier": partial(create_mlp, output_dim=classifier_dim, bias=True)})
-        shortcuts.update({'fc': 'classifier'})
-
+    # Model
     model = MultiArmModel(backbone_name='resnet50', mask_blueprint=None, arms_blueprints=arms_blueprints, in_transform=None, out_transforms=None, 
              shortcuts=shortcuts, image_class=image_class, state_dict=state_dict).cuda()
+    if args.ssl_type.lower() == 'simsiam':
+        arms_blueprints = {"predictor_noproj": partial(create_mlp, input_dim=model.feature_dim, output_dim=model.feature_dim, hidden_dims=[int(model.feature_dim/2)], 
+                                                            norm_layer=nn.BatchNorm1d, bias=[False, True],
+                                                            last_layer_norm=False, last_layer_act=False)
+        }
+        shortcuts = {'h_noproj': 'predictor_noproj'}
+        model.add_arms(arms_blueprints=arms_blueprints, out_transforms=None, shortcuts=shortcuts)
 
     if state_dict is not None:
         print("<= loaded pretrained checkpoint '{}'".format(args.pretrain_path))
 
     model = nn.DataParallel(model)
 
-    if ssl_type == 'moco' or ssl_type == 'mocosupcon':
-        model_momentum = copy.deepcopy(model)
-        for p in model_momentum.parameters():
-            p.requires_grad = False
-        momentum = args.momentum              # momentum for model_momentum
-        queue_size = args.queue_size
-        queue = utils.FeatureQueue(queue_size, feature_dim, device=device, dtype=torch.float32, indices=True)
-    elif ssl_type == 'simsiam':
-        model_momentum = None
-        queue = None
-        momentum = None
+    # MoCo momentum encoder
+    model_momentum = setup_moco_model(model, args)
+    queue_size = args.queue_size
+    queue_proj = utils.FeatureQueue(queue_size, args.feature_dim,     device=device, dtype=torch.float32, indices=True)
 
     ema = utils.MovingAverage(0.95, oneminusema_correction=False, active=args.ema)
     
@@ -721,10 +822,12 @@ if __name__ == '__main__':
     start_epoch = 1
     if args.resume:
         if os.path.isfile(args.resume):
-            (model, model_momentum, optimizer, queue,
+            (model, model_momentum, optimizer, queue_proj_, _,
              start_epoch, best_acc1, best_epoch,
              updated_split, updated_split_all, ema_, gradnorm_balancer, gradnorm_optimizer) = \
-                load_checkpoint(args.resume, model, model_momentum, optimizer, gradnorm_balancer, gradnorm_optimizer, classifier_not_needed=classifier_dim is None)
+                load_checkpoint(args.resume, model, model_momentum, optimizer, gradnorm_balancer, gradnorm_optimizer, classifier_not_needed=False)
+ 
+            queue_proj = queue_proj_ or queue_proj
  
             # dummy for debug multiple partitions
             # updated_split_all.append(torch.randn((len(update_data), args.env_num), requires_grad=True, device=device))
@@ -752,6 +855,9 @@ if __name__ == '__main__':
             resumed = True
         else:
             print("=> no checkpoint found at '{}'".format(args.resume))
+
+    moco_dict = {'net_momentum': model_momentum, 'queue_proj': queue_proj, 'queue_noproj': None, 'momentum': args.momentum}
+    losses_and_penalty_dict = build_losses_and_penalty_dict(args, model, class_weights=None, moco_dict=moco_dict)
                     
     # training loop
     # start epoch is what the user provided, if provided, or from checkpoint, if exists, or 1 (default)
@@ -793,18 +899,13 @@ if __name__ == '__main__':
         gradnorm_balancer.rescale_weights()
     
     kwargs = {'ema': ema, 'gradnorm_balancer': gradnorm_balancer, 'gradnorm_optimizer': gradnorm_optimizer, 'log_file': log_file}
+    kwargs.update(losses_and_penalty_dict)
+
     if ssl_type == 'moco' or ssl_type == 'mocosupcon':
         kwargs.update({'net_momentum': model_momentum, 'queue': queue, 'temperature': temperature, 'momentum': momentum})
     elif ssl_type == 'simsiam':
         pass
         
-    if args.loss_unsplit_type == 'CEweighted': # weight per-class loss w/ its inverse frequency
-        labels = train_data.targets if isinstance(train_data.targets, torch.Tensor) else torch.tensor(train_data.targets)
-        labels = target_transform(labels) if target_transform else labels
-        counts = torch.bincount(labels)
-        class_weights = counts.sum() / counts.float() / args.class_num  # use inverse frequency
-        kwargs['CEweights'] = class_weights
-
     # update partition for the first time, if we need one
     if not args.baseline:
         if (not resumed) or args.partition_reinit or (resumed and (updated_split is None) and ((args.penalty_cont > 0) or (args.penalty_weight > 0))):  
