@@ -909,7 +909,7 @@ if __name__ == '__main__':
     kwargs.update(losses_and_penalty_dict)
     ssl_type = args.ssl_type.lower()
     if ssl_type == 'moco' or ssl_type == 'mocosupcon':
-        kwargs.update({'net_momentum': model_momentum, 'queue': queue, 'temperature': temperature, 'momentum': momentum})
+        kwargs.update({'temperature': temperature})
     elif ssl_type == 'simsiam':
         pass
         
