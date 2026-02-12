@@ -24,7 +24,7 @@ import time
 import warnings
 from collections import defaultdict
 from typing import Union, List, Dict
-from trainenv import train_env
+from trainenv import train_env, CELossModule, MoCoLossModule, MoCoSupConLossModule, SimSiamLossModule, CE_IRMCalculator, SimSiamIRMCalculator, VRExCalculator  
 from functools import partial
 
 sys.modules['__main__'].FeatureQueue = utils.FeatureQueue
