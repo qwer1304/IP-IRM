@@ -1297,7 +1297,7 @@ def make_train_transform(image_size=64, randgray=True, normalize='CIFAR', gpu=Tr
         gpu_transform = K.AugmentationSequential(
             aug_geom_safe,
             aug_color,
-            K.Normalize(mean=norm_mean, std=norm_std)
+            K.Normalize(mean=norm_mean, std=norm_std),
             data_keys=["input"],
         )
     else:
