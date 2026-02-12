@@ -1380,7 +1380,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
     
     do_loss          = (not args.baseline) and (loss_weight > 0)
     do_unsplit_loss  = (args.baseline)     or ((args.unsplit_cont)  and (loss_unsplit_weight > 0))
-    do_CE_loss       = ((args.baseline)    or ((args.CE_loss)       and (loss_CE_weight > 0))) and (loss_CE_module is not None)
+    do_CE_loss       = ((args.baseline)    or ((args.CE_loss)       and (loss_CE_weight > 0))) and (kwargs['loss_CE_module'] is not None)
     do_penalty       = (not args.baseline) and (penalty_weight > 0)
     do_gradnorm      = (not args.baseline) and args.gradnorm        and (epoch >= args.gradnorm_epoch)
     do_mask_sparsity = (not args.baseline) and args.opt_mask
