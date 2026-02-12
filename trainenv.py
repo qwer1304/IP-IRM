@@ -1954,14 +1954,15 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
             print() # this causes each tqdm update to be printed on a separare line
             
         # mask sparsity measures
-        mask_energy = mask_activation.sum().item() 
-        if do_mask_sparsity and (args.mask_nonlinearity != 'gumbel' or args.gumbel_soft): # soft mask
-            mask_effective_number = (mask_activation.sum()**2 / ((mask_activation**2).sum() + 1e-9)).item()
-            mask_entropy = -(mask_activation * torch.log(mask_activation + 1e-8) + (1 - mask_activation) * torch.log(1 - mask_activation + 1e-8)).mean().item()
-            mask_sparsity = (mask_activation.norm(1) / (mask_activation.norm(2) + 1e-9)).item()
-            mask_sparsity_str = f"Neff {mask_effective_number:.2f} Entropy {mask_entropy:.2f} Sparsity {mask_sparsity:.2f}"
-        else:
-            mask_sparsity_str = ""
+        mask_sparsity_str = ""
+        if do_mask_sparsity:
+            mask_energy = mask_activation.sum().item() 
+            mask_sparsity_str = f" sparsity {args.mask_nonlinearity}: ngs2 {loss_mask_sparsity_norm**2:.2e} sum(activation) {mask_energy:.3e}"
+            if args.mask_nonlinearity != 'gumbel' or args.gumbel_soft: # soft mask
+                mask_effective_number = (mask_activation.sum()**2 / ((mask_activation**2).sum() + 1e-9)).item()
+                mask_entropy = -(mask_activation * torch.log(mask_activation + 1e-8) + (1 - mask_activation) * torch.log(1 - mask_activation + 1e-8)).mean().item()
+                mask_sparsity = (mask_activation.norm(1) / (mask_activation.norm(2) + 1e-9)).item()
+                mask_sparsity_str += f" Neff {mask_effective_number:.2f} Entropy {mask_entropy:.2f} Sparsity {mask_sparsity:.2f}"
 
         if do_loss:
             ll_str = f" ll {info_dict['ngl2']:.2e}"
@@ -2055,7 +2056,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                    f" shared_dot:{slk_str}{slp_str}{skp_str}{slc_str}{skc_str}{spc_str}" + \
                    f" shared_cos:{slk_cos_str}{slp_cos_str}{skp_cos_str}{slc_cos_str}{skc_cos_str}{spc_cos_str}" + \
                    f" Lp: shared cos {info_dict['shared_cos_Lp']:.3e} shared dot {info_dict['shared_dot_Lp']:.3e}" + \
-                   f" sparsity {args.mask_nonlinearity}: ngs2 {loss_mask_sparsity_norm**2:.2e} sum(activation) {mask_energy:.3e}" + \
                    f" {mask_sparsity_str}"
 
         desc_str += loss_module.get_debug_info_str()
