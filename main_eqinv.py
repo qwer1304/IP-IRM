@@ -611,6 +611,9 @@ if __name__ == '__main__':
     parser.add_argument('--norandgray', action="store_true", default=False, help='skip rand gray transform')
     parser.add_argument('--random_aug', action="store_true", default=False, help='random_aug')
 
+    parser.add_argument('--k', default=200, type=int, help='Top k most similar images used to predict the label')
+    parser.add_argument('--knn_temp', default=0.5, type=float, help='Temperature used in KNN softmax')
+
     # Loaders parameters
     parser.add_argument('--dl_tr', default=[256, 4, 2, True, True], nargs=5, type=str,
                         action=utils.ParseMixed, types=[int, int, int, bool, bool],
