@@ -690,7 +690,9 @@ if __name__ == '__main__':
 
     parser.add_argument('--train_transform', default='test', type=str, choices=['train', 'test', 'train_mixed']) # in LP train transfrom = test transfrom
     parser.add_argument('--test_transform', default='test', type=str, choices=['train', 'test'])
-    parser.add_argument('--val_transform', default='test', type=str, choices=['train', 'test'])    
+    parser.add_argument('--val_transform', default='test', type=str, choices=['train', 'test'])
+    
+    parser.add_argument('--mask_sparsity_weight', type=float, default=0.0, help='weight of sparsity loss')
     
     # args parse
     args = parser.parse_args()
