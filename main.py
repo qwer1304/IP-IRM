@@ -686,6 +686,12 @@ if __name__ == '__main__':
     parser.add_argument('--predictor_lr', type=float, default=0.0, help="predictor LR")
     parser.add_argument('--bn_momentum', type=float, default=0.1, help="BN momentum")
     
+    parser.add_argument('--decimate_partitions', type=int, default=None, help='whether to decimate partitions')
+
+    parser.add_argument('--train_transform', default='test', type=str, choices=['train', 'test', 'train_mixed']) # in LP train transfrom = test transfrom
+    parser.add_argument('--test_transform', default='test', type=str, choices=['train', 'test'])
+    parser.add_argument('--val_transform', default='test', type=str, choices=['train', 'test'])    
+    
     # args parse
     args = parser.parse_args()
     args.gradnorm_tau = {args.gradnorm_tau[i]: args.gradnorm_tau[i+1] for i in range(0,len(args.gradnorm_tau),2)} if args.gradnorm_tau is not None else None
