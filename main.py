@@ -595,6 +595,8 @@ if __name__ == '__main__':
     parser.add_argument('--penalty_weight', default=1.0, type=float, help='penalty weight')
     parser.add_argument('--penalty_cont', default=1.0, type=float, help='cont penalty weight')
     parser.add_argument('--penalty_unsplit_cont', default=1.0, type=float, help='cont unsplit penalty weight')
+    parser.add_argument('--penalty_CE', default=0.0, type=float, help='CE loss weight')
+
     parser.add_argument('--Lscaler', default=1.0, type=float, help='Global scaler for losses gards')
     parser.add_argument('--penalty_iters', default=0, type=int, help='penalty weight start iteration')
     parser.add_argument('--increasing_weight', nargs=5, type=float, default=None, help='increasing penalty weight', 
