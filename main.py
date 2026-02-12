@@ -806,7 +806,6 @@ if __name__ == '__main__':
         ssl_type = args.ssl_type.lower()
         params = []
         params.append({'params': model.module.f.parameters(), 'lr': args.featurizer_lr if args.featurizer_lr > 0 else args.lr})
-        params.append({'params': model.module.arms['classifier'].parameters(), 'lr': args.classifier_lr if args.classifier_lr > 0 else args.lr})
         if args.opt_mask:
             params.append({'params': model.module.mask_fun.parameters(), 'lr': args.mask_lr if args.mask_lr > 0 else args.lr})
         if ssl_type == "simsiam":
