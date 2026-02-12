@@ -163,6 +163,161 @@ def setup_gradnorm_balancer(args, device):
                             gradnorm_loss_lambda=args.gradnorm_loss_lambda, huber_delta=args.gradnorm_huber_delta)
     return gradnorm_balancer
 
+def get_feature_bank(net, memory_data_loader, args, progress=False, prefix="Test:", mask_u=None, masked_features=True):
+    net.eval()
+    
+    if isinstance(memory_data_loader.dataset, Subset):
+        dataset = memory_data_loader.dataset.dataset
+        idcs    = memory_data_loader.dataset.indices
+    else:
+        dataset = memory_data_loader.dataset
+        idcs    = list(range(len(dataset)))
+    transform = dataset.transform
+    feature_bank = []
+    
+    with torch.no_grad():
+        # generate feature bank
+        bar_format = '{l_bar}{bar:' + str(args.bar) + '}{r_bar}' #{bar:-' + str(args.bar) + 'b}'
+        if progress:
+            feature_bar = tqdm(memory_data_loader,
+                total=len(memory_data_loader),
+                ncols=args.ncols,               # total width available
+                dynamic_ncols=False,            # disable autosizing
+                bar_format=bar_format,          # request bar width
+                desc='get_feature_bank(), memory: Feature extracting'
+            )
+        else:
+            feature_bar = memory_data_loader
+        for data, _, _ in feature_bar:
+            data = data.cuda(non_blocking=True)
+
+            if transform is not None:
+                data = transform(data)
+                
+            feature = net.module.backbone(data)
+            feature = F.normalize(feature, dim=-1)
+            if masked_features:
+                mask_activation = net.module.mask_fun.activation(u=mask_u)
+                feature = feature * mask_activation
+                #feature = F.normalize(feature, dim=-1)
+            feature_bank.append(feature)
+        #end for data, _, _ in feature_bar:
+
+        # [D, N]
+        feature_bank = torch.cat(feature_bank, dim=0).t().contiguous() # places feature_bank on cuda
+        # [N]
+        if hasattr(dataset, "labels"):
+            labels = [dataset.labels[i] for i in indcs]
+        else:
+            targets = [dataset.targets[i] for i in idcs]
+            if dataset.target_transform is not None:
+                labels = [dataset.target_transform(t) for t in targets]
+            else:
+                labels = targets       
+        feature_labels = torch.tensor(labels, device=feature_bank.device)
+
+    return feature_bank, feature_labels
+
+def test_knn(net, feature_bank, feature_labels, test_data_loader, num_classes, args, progress=False, prefix="Test:", mask_u=None, masked_features=True):
+    net.eval()
+       
+    total_top1, total_top5, total_num = 0.0, 0.0, 0
+    with torch.no_grad():
+        # loop test data to predict the label by weighted knn search
+        bar_format = '{l_bar}{bar:' + str(args.bar) + '}{r_bar}' #{bar:-' + str(args.bar) + 'b}'
+        
+        if progress:
+            test_bar = tqdm(test_data_loader,
+                total=len(test_data_loader),
+                ncols=args.ncols,               # total width available
+                dynamic_ncols=False,            # disable autosizing
+                bar_format=bar_format           # request bar width
+            )
+        else:
+           test_bar = test_data_loader
+    
+        if isinstance(test_data_loader.dataset, Subset):
+            dataset = test_data_loader.dataset.dataset
+            idcs    = test_data_loader.dataset.indices
+        else:
+            dataset = test_data_loader.dataset
+            idcs    = list(range(len(dataset)))
+        transform = dataset.transform
+        target_transform = dataset.target_transform
+    
+        # For macro-accuracy computation
+        per_class_correct = torch.zeros(num_classes, dtype=torch.long, device=feature_bank[0].device)
+        per_class_total   = torch.zeros(num_classes, dtype=torch.long, device=feature_bank[0].device)
+
+        if mask_u is None:
+            mask_u = net.module.mask_fun.sample().detach()
+
+        for data, target in test_bar:
+            data, target = data.cuda(non_blocking=True), target.cuda(non_blocking=True)
+            
+            if transform is not None:
+                data = transform(data)
+
+            feature = net.module.backbone(data)
+            feature = F.normalize(feature, dim=-1)
+            if masked_features:
+                mask_activation = net.module.mask_fun.activation(u=mask_u)
+                features = feature * mask_activation
+                #features = F.normalize(feature, dim=-1)
+            
+            total_num += data.size(0)
+            # compute cos similarity between each feature vector and feature bank ---> [B, N]
+            # feature & feature_bank are normalized
+            sim_matrix = torch.mm(feature, feature_bank) # places sim_matrix on cuda
+            # [B, K]
+            # A namedtuple of (values, indices) is returned with the values and indices 
+            # of the largest k elements of each row of the input tensor in the given dimension dim.
+            sim_weight, sim_indices = sim_matrix.topk(k=args.k, dim=-1)
+            # [B, K]
+            # The "original size" refers to the size of that dimension in the input tensor, after any necessary 
+            # prepending of 1s on the left to match number of requested dimensions.    
+            # For each sample, picks the top-k labels that correspond to the similarity matrix of that sample and the feature bank 
+            #                                                 (B,N)
+            sim_labels = torch.gather(feature_labels.expand(data.size(0), -1), dim=-1, index=sim_indices)
+            sim_weight = (sim_weight / args.knn_temp).exp()
+
+            # counts for each class
+            one_hot_label = torch.zeros(data.size(0) * args.k, c, device=sim_labels.device)
+            # [B*K, C]
+            one_hot_label = one_hot_label.scatter(dim=-1, index=sim_labels.view(-1, 1).long(), value=1.0)
+            # weighted score ---> [B, C]
+            pred_scores = torch.sum(one_hot_label.view(data.size(0), -1, c) * sim_weight.unsqueeze(dim=-1), dim=1)
+
+            pred_labels = pred_scores.argsort(dim=-1, descending=True)
+            total_top1 += torch.sum((pred_labels[:, :1] == target.unsqueeze(dim=-1)).any(dim=-1).float()).item()
+            total_top5 += torch.sum((pred_labels[:, :5] == target.unsqueeze(dim=-1)).any(dim=-1).float()).item()
+
+            # predicted class is the top-1 label
+            pred = pred_labels[:, 0]   # [B]
+
+            # Loop-free update of per-class counts
+            # For each class c: count how many predictions & targets match
+            for cls in range(c):
+                mask = (target == cls)
+                if mask.any():
+                    per_class_total[cls] += mask.sum()
+                    per_class_correct[cls] += (pred[mask] == cls).sum()
+
+            if progress:
+                # Avoid division by zero in rare cases
+                valid = per_class_total > 0
+                macro_acc = (per_class_correct[valid].float() / per_class_total[valid].float()).mean().item()
+                test_bar.set_description('KNN {} Epoch: [{}/{}] Acc@1:{:.2f}% Acc@5:{:.2f}% Macro-Acc:{:.2f}%'
+                                         .format(prefix, epoch, epochs, total_top1 / total_num * 100, total_top5 / total_num * 100, macro_acc * 100))
+
+        # end for data, _, target in test_bar
+
+        # Avoid division by zero in rare cases
+        valid = per_class_total > 0
+        macro_acc = (per_class_correct[valid].float() / per_class_total[valid].float()).mean().item()
+
+    return total_top1 / total_num * 100, total_top5 / total_num * 100, macro_acc * 100
+
 # test for one epoch
 def test(net, test_data_loader, args, num_classes, progress=False, prefix="Test:", mask_u=None):
     net.eval()
@@ -219,7 +374,7 @@ def test(net, test_data_loader, args, num_classes, progress=False, prefix="Test:
             features = F.normalize(features, dim=-1)
             mask_activation = net.module.mask_fun.activation(u=mask_u)
             masked_features = features * mask_activation
-            masked_features = F.normalize(masked_features, dim=-1)
+            #masked_features = F.normalize(masked_features, dim=-1)
             
             out = net.module.fc(masked_features)
 
@@ -790,6 +945,39 @@ if __name__ == '__main__':
     start_epoch = args.start_epoch if args.start_epoch else start_epoch
     epoch = start_epoch # used from train_partition()
     print(f"start epoch {start_epoch}")
+
+    if args.evaluate is not None and 'knn' in args.evaluate:
+        print(f"Starting KNN evaluation name: {args.name}")
+        
+        mask_activation_noise = model.module.mask_fun.sample().detach()
+
+        if args.split_train_for_test:
+            mem_data = random_split(memory_data, args.split_train_for_test)
+            memory_data = mem_data[0]
+        memory_loader = DataLoader(memory_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
+            pin_memory=True, persistent_workers=te_pw)
+        feauture_bank, feature_labels = get_feature_bank(model, memory_loader, args, progress=True, prefix="Evaluate:", mask_u=mask_activation_noise,
+                                            masked_features='masked' in args.evaluate)
+        
+        if args.split_train_for_test:
+            print('eval on train data')
+            train_loader = DataLoader(mem_data[1], batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
+                pin_memory=True, persistent_workers=te_pw)
+            train_acc_1, train_acc_5, train_macro_acc = test_knn(model, feauture_bank, feature_labels, train_loader, c, args, progress=True, prefix="Train:",
+                    mask_u=mask_activation_noise, masked_features='masked' in args.evaluate)
+        if 'val' in args.evaluate:
+            print('eval on val data')
+            val_loader = DataLoader(val_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=True, 
+                pin_memory=True, persistent_workers=te_pw)
+            val_acc_1, val_acc_5, val_macro_acc = test_knn(model, feauture_bank, feature_labels, val_loader, c, args, progress=True, prefix="Val:",
+                    mask_u=mask_activation_noise, masked_features='masked' in args.evaluate)
+        if 'test' in args.evaluate:
+            print('eval on test data')
+            test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=True, 
+                pin_memory=True, persistent_workers=te_pw)
+            test_acc_1, test_acc_5, test_macro_acc = test_knn(model, feauture_bank, feature_labels, test_loader, c, args, progress=True, prefix="Test:",
+                    mask_u=mask_activation_noise, masked_features='masked' in args.evaluate)
+        exit()
 
     if args.evaluate is not None:
         print(f"Starting evaluation name: {args.name}")
