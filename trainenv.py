@@ -1061,7 +1061,7 @@ def calculate_scalers(loss_CE_grads_final, loss_unsplit_grads_final, loss_grads_
         # make sure the order is explicit and not some implicit one
         emas_k = ['ngk', 'ngl', 'ngp', 'cos_lk', 'cos_lp', 'cos_kp']
         ngk, ngl, ngp, cos_lk, cos_lp, cos_kp = [emas[k] for k in emas_k]
-        ngc = torch_zeros_like(ngk)
+        ngc = torch.zeros_like(ngk)
         dot_lk = ngk * ngl * cos_lk
         dot_lp = ngl * ngp * cos_lp
         dot_kp = ngk * ngp * cos_kp
