@@ -250,7 +250,7 @@ def get_feature_bank(net, memory_data_loader, args, progress=False, prefix="Test
     return feature_bank, feature_labels
 
 # test for one epoch, use weighted knn to find the most similar images' label to assign the test image
-def test(net, feature_bank, feature_labels, test_data_loader, num_classes, args, progress=False, prefix="Test:", , mask_u=None, masked_features=False):
+def test(net, feature_bank, feature_labels, test_data_loader, num_classes, args, progress=False, prefix="Test:", mask_u=None, masked_features=False):
     net.eval()
        
     total_top1, total_top5, total_num = 0.0, 0.0, 0
