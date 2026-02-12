@@ -1817,8 +1817,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 loss_module.prepare_for_free()
                 loss_unsplit_module.post_micro_batch()
                 loss_unsplit_module.prepare_for_free()
-                loss_CE_module.post_micro_batch()
-                loss_CE_module.prepare_for_free()
+                if loss_CE_module is not None:
+                    loss_CE_module.post_micro_batch()
+                    loss_CE_module.prepare_for_free()
                 
                 # free memory of micro-batch
                 del features_1, features_2, features_1_nondetached, features_2_nondetached, features_1_detached, features_2_detached 
@@ -2100,7 +2101,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
 
         loss_module.post_batch()
         loss_unsplit_module.post_batch()
-        loss_CE_module.post_batch()
+        if loss_CE_module is not None:
+            loss_CE_module.post_batch()
         mask_activation_noise = net.module.mask_fun.sample().detach()
 
     # end for batch_index, data_env in enumerate(train_bar):
