@@ -44,12 +44,26 @@ def main(args):
             resized_img = resized_t.squeeze(0).permute(1, 2, 0).byte().cpu().numpy()
 
             # 5. Save (CPU)
-            dest = output_path / f.relative_to(input_path)
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            cv2.imwrite(str(dest), resized_img, [cv2.IMWRITE_JPEG_QUALITY, 95])
-            
+            if args.out_enc == 'JPEG':
+                dest = output_path / f.relative_to(input_path)
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                quality = 95
+                cv2.imwrite(str(dest), resized_img, [cv2.IMWRITE_JPEG_QUALITY, quality])
+            elif  args.out_enc == 'WEBP':
+                dest = output_path / f.relative_to(input_path).with_suffix('.webp')            
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                # WebP Quality: 80 is usually equivalent to JPEG 95 but much smaller
+                quality = 80
+                """
+                The standard WebP compression (which uses method 4 by default) will be slow. 
+                Method 0 tells the encoder: "Do the absolute minimum amount of work to get this into a WebP container." 
+                This significantly reduces the CPU load of the imwrite command while still giving the benefit of the WebP format.
+                """
+                cv2.imwrite(str(dest), resized_img, [cv2.IMWRITE_WEBP_QUALITY, quality, cv2.IMWRITE_WEBP_METHOD, 0])            
+
             pbar.update(1)
         #end for f in input_path.rglob("*.jpg"):
+        print()
         print("Done!")  
 
 if __name__ == '__main__':
@@ -60,6 +74,7 @@ if __name__ == '__main__':
     parser.add_argument('--out_dir', type=str, default="./data/DataSets/")
     parser.add_argument('--target_image_size', type=int, default=224)
     parser.add_argument('--skip_existing', action='store_true')
+    parser.add_argument('--out_enc', type=str, default="JPEG", choices=["WEBP", "JPEG"])
     
     args = parser.parse_args()
     
