@@ -245,7 +245,8 @@ def get_feature_bank(net, memory_data_loader, args, progress=False, prefix="Test
             if transform is not None:
                 data = transform(data)
                 
-            feature, out = net(data)
+            feature = net.module.backbone(data)
+            feature = F.normalize(feature, dim=-1)
             feature_bank.append(feature)
         #end for data, _, _ in feature_bar:
 
