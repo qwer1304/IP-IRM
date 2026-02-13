@@ -1901,7 +1901,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
             else:
                 p.grad += total_grad_flat_weighted.view(p.shape)
                 
-            #print(f"pind {pind} name {name} norm {total_grad_flat_weighted.norm():.2e}")
+            print(f"pind {pind} name {name} norm {total_grad_flat_weighted.norm():.2e}")
                 
         
         # -----------------------
