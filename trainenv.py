@@ -427,11 +427,11 @@ class MoCoSupConLossModule(LossModule):
 
         out_q = self.net.module.g(pos_q) if self.projector else pos_q
         if normalize:
-            out_q = F.normalize(out_q, dim=1, eps=1e-4)
+            out_q = F.normalize(out_q, dim=1)
         with torch.no_grad():
             out_k = self.net_momentum.module.g(pos_k) if self.projector else pos_k
             if normalize:
-                out_k = F.normalize(out_k, dim=1, eps=1e-4)
+                out_k = F.normalize(out_k, dim=1)
         
         k_queue, idx_queue = self.queue.get((self.queue.queue_size - self.this_batch_size), advance=False, idx=True)
         k_all = torch.cat([out_k, k_queue], dim=0) # (N,D), N=B+K 
@@ -603,11 +603,11 @@ class MoCoLossModule(LossModule):
 
         out_q = self.net.module.g(pos_q) if self.projector else pos_q
         if normalize:
-            out_q = F.normalize(out_q, dim=1, eps=1e-4)
+            out_q = F.normalize(out_q, dim=1)
         with torch.no_grad():
             out_k = self.net_momentum.module.g(pos_k) if self.projector else pos_k
             if normalize:
-                out_k = F.normalize(out_k, dim=1, eps=1e-4)
+                out_k = F.normalize(out_k, dim=1)
         
         l_pos = torch.sum(out_q * out_k, dim=1, keepdim=True)
         l_neg = torch.matmul(out_q, self.queue.get((self.queue.queue_size - self.this_batch_size), advance=False).t())
