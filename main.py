@@ -768,7 +768,7 @@ if __name__ == '__main__':
         transform   = train_transform if 'train' in args.train_transform else test_transform
         train_data  = utils.Imagenet_idx(root=args.data + '/train', transform=transform, target_transform=target_transform, class_to_idx=class_to_idx)
         update_data = utils.Imagenet_idx(root=args.data + '/train', transform=transform, target_transform=target_transform, class_to_idx=class_to_idx)
-        memory_data = utils.Imagenet_idx(root=args.data + '/train', transform=transform,  target_transform=target_transform, class_to_idx=class_to_idx)
+        memory_data = utils.Imagenet(root=args.data + '/train', transform=transform,  target_transform=target_transform, class_to_idx=class_to_idx)
         transform   = train_transform if args.test_transform == 'train' else test_transform
         test_data   = utils.Imagenet(root=args.data     + '/test',  transform=transform,  target_transform=target_transform, class_to_idx=class_to_idx)
         transform   = train_transform if args.val_transform == 'train' else test_transform
