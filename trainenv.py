@@ -1573,11 +1573,12 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 del batch_micro, x_1, x_2
                 torch.cuda.empty_cache()
                 
-                def normalize_detached(x, dim=1, eps=1e-6):
-                    norm = torch.linalg.norm(x, dim=dim, keepdim=True).clamp_min(eps).detach()
+                def safe_normalize(x, dim=1, eps=1e-6):
+                    norm = torch.linalg.norm(x, dim=dim, keepdim=True)
+                    norm = norm.clamp_min(eps)
                     return x / norm
 
-                features_1, features_2 = normalize_detached(features_1, dim=-1), normalize_detached(features_2, dim=-1)
+                features_1, features_2 = safe_normalize(features_1, dim=-1), safe_normalize(features_2, dim=-1)
                 #features_1, features_2 = F.normalize(features_1, dim=-1), F.normalize(features_2, dim=-1)
                 
                 features_1_nondetached, features_2_nondetached = mask_activation * features_1, mask_activation * features_2 
