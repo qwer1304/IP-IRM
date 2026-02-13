@@ -1566,12 +1566,11 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                     MoCo:    given two views, get their embeddings from respective encoders, normalize them, etc
                     SimSiam: given two views, get their projections and predictions, etc
                 """
-                features_1 = net.module.f(transform(batch_micro)) # UNNORMALIZED!!!!
-                x_2 = transform(batch_micro)
-                features_2 = loss_module.get_k_view(x_2)
+                x_1, x_2 = transform(batch_micro), transform(batch_micro)
+                features_1, features_2 = net.module.f(x_1), loss_module.get_k_view(x_2) # UNNORMALIZED!!!!
                 if features_2 is None:
                     features_2 = net.module.f(x_2)
-                del batch_micro, x_2
+                del batch_micro, x_1, x_2
                 torch.cuda.empty_cache()
                 
                 features_1, features_2 = F.normalize(features_1, dim=-1), F.normalize(features_2, dim=-1)
