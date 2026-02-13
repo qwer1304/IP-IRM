@@ -1178,8 +1178,8 @@ if __name__ == '__main__':
                 'best_epoch':           best_epoch,
                 'optimizer':            optimizer.state_dict(),
                 'state_dict_momentum':  model_momentum.state_dict() if model_momentum else None,
-                'queue_proj':        queue_proj,
-                'queue_noproj':            queue_noproj,
+                'queue_proj':           queue_proj,
+                'queue_noproj':         queue_noproj,
                 'state_dict_gradnorm':  gradnorm_balancer.state_dict(),
                 'gradnorm_optimizer':   gradnorm_optimizer.state_dict(),
                 "rng_dict": {
