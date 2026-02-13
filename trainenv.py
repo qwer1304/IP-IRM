@@ -1711,12 +1711,12 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                     grad_outputs[-1][:num_samples]  = 1.0 / this_batch_size / gradients_accumulation_steps # unweighted
 
                 if is_per_env:
-                    """
+                    #"""
                     print()
                     print(f"num_samples {num_samples}, num_grads_per_env {num_grads_per_env}, num_baseline_grads {num_baseline_grads}, " +                                  
                           f"num_grads_per_sample {num_grads_per_sample}, num_grads {num_grads}, number_of_columns {number_of_columns}, " + 
                           f"grads_all {len(grads_all)} 'is None' = {sum([g is None for g in grads_all])}")
-                    """
+                    #"""
                     pass
                 else:
                     differentiate_this = [t.reshape(-1) for t in differentiate_this] # ensure common shape of 1D tensors
@@ -1901,7 +1901,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
             else:
                 p.grad += total_grad_flat_weighted.view(p.shape)
                 
-            print(f"pind {pind} name {name} norm {total_grad_flat_weighted.norm():.2e}")
+            #print(f"pind {pind} name {name} norm {total_grad_flat_weighted.norm():.2e}")
                 
         
         # -----------------------
