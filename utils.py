@@ -1248,7 +1248,7 @@ class GaussianBlur(object):
 
 # just follow the previous work -- DCL, NeurIPS2020
 
-def make_train_transform(image_size=64, randgray=True, normalize='CIFAR', gpu=True, mixed=False, hard=False, terrainc=True):
+def make_train_transform(image_size=64, randgray=True, normalize='CIFAR', gpu=True, mixed=False, hard=False, terrainc=False):
     kernel_size = int(0.1 * image_size)
     if (kernel_size % 2) == 0:
         kernel_size += 1
