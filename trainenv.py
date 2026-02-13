@@ -1578,7 +1578,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                     norm = norm.clamp_min(eps)
                     return x / norm
 
-                features_1, features_2 = safe_normalize(features_1, dim=-1), safe_normalize(features_2, dim=-1)
+                features_1, features_2 = safe_normalize(features_1, dim=-1, eps=1e-4), safe_normalize(features_2, dim=-1, eps=1e-4)
                 #features_1, features_2 = F.normalize(features_1, dim=-1), F.normalize(features_2, dim=-1)
                 
                 features_1_nondetached, features_2_nondetached = mask_activation * features_1, mask_activation * features_2 
