@@ -1573,7 +1573,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 del batch_micro, x_1, x_2
                 torch.cuda.empty_cache()
                 
-                features_1, features_2 = F.normalize(features_1, dim=-1, eps=1e-6), F.normalize(features_2, dim=-1, eps=1e-6)
+                features_1, features_2 = F.normalize(features_1, dim=-1), F.normalize(features_2, dim=-1)
                 
                 features_1_nondetached, features_2_nondetached = mask_activation * features_1, mask_activation * features_2 
                 features_1_detached, features_2_detached = mask_activation * features_1.detach(), mask_activation * features_2.detach() 
