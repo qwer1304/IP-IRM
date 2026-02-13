@@ -295,6 +295,8 @@ class LossModule:
     def filter_indices(self, indices, **kwargs):
         return indices
 
+    def get_k_view(self, x):
+        return None
 # ---------------------------
 # MoCo+SupCon Loss Module
 # ---------------------------
@@ -551,6 +553,9 @@ class MoCoSupConLossModule(LossModule):
     def is_per_env():
         return True
 
+    def get_k_view(self, x):
+        return self.net_momentum.module.f(x)
+
 # ---------------------------
 # MoCo Loss Module
 # ---------------------------
@@ -686,6 +691,9 @@ class MoCoLossModule(LossModule):
     @staticmethod
     def is_per_env():
         return True
+
+    def get_k_view(self, x):
+        return self.net_momentum.module.f(x)
 
 # ---------------------------
 # SimSiam Loss Module
@@ -1558,8 +1566,12 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                     MoCo:    given two views, get their embeddings from respective encoders, normalize them, etc
                     SimSiam: given two views, get their projections and predictions, etc
                 """
-                features_1, features_2 = net.module.f(transform(batch_micro)), net.module.f(transform(batch_micro)) # UNNORMALIZED!!!!
-                del batch_micro
+                features_1 = net.module.f(transform(batch_micro)) # UNNORMALIZED!!!!
+                x_2 = transform(batch_micro)
+                features_2 = loss_module.get_k_view(x_2)
+                if features_2 is None:
+                    features_2 = net.module.f(x_2)
+                del batch_micro, x_2
                 torch.cuda.empty_cache()
                 
                 features_1, features_2 = F.normalize(features_1, dim=-1), F.normalize(features_2, dim=-1)
