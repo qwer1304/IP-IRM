@@ -648,6 +648,7 @@ if __name__ == '__main__':
     parser.add_argument('--test_freq', default=5*5, type=int, metavar='N',
                     help='test epoch freqeuncy')
     parser.add_argument('--norandgray', action="store_true", default=False, help='skip rand gray transform')
+    parser.add_argument('--random_aug', action="store_true", default=False, help='random_aug')
     parser.add_argument('--evaluate', type=str, default=None, nargs="*", choices=['val', 'test'], help='only evaluate')
     parser.add_argument('--extract_features', action="store_true", help="extract features for post processiin during evaluate")
     parser.add_argument('--split_train_for_test', type=float, default=None, nargs=2, help="fractions to split training data into train/val for evaluation")
