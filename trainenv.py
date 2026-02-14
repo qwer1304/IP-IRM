@@ -932,6 +932,8 @@ def calculate_penalty_grads_final(penalty_grads, penalty_aggregator, penalty_wei
     return penalty_grads_final
 
 def get_shared_ind(param_groups_2_pind, args):
+    print()
+    print(param_groups_2_pind.keys())
     if 'ce' in param_groups_2_pind: # separate CE head, EqInv
         if not args.backbone_propagate: # w/o backbone propagation from Env
             if 'mask' in param_groups_2_pind and args.opt_mask:
@@ -1347,8 +1349,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
     # Create mapping of net parameters to their layer names
     # Assumes net.parameters() order matches your aggregator's pind
     param_map = {name: pind for pind, (name, p) in enumerate(net.named_parameters())}
-    print()
-    print(param_map)
     # Group indices by their component names
     cont_names = ['projector', 'predictor']
     param_groups_2_pind = {'mask': [idx for name, idx in param_map.items() if 'mask' in name],
