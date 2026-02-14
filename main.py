@@ -956,9 +956,7 @@ if __name__ == '__main__':
                 else:
                     upd_loader = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, prefetch_factor=u_pf, shuffle=True,
                         drop_last=True, pin_memory=True, persistent_workers=u_pw)
-            print()
-            print(kwargs)
-            updated_split = train_partition(model, upd_loader, updated_split, random_init=args.random_init, args=args, **kwargs)
+            updated_split = train_partition(model, upd_loader, updated_split, random_init=args.random_init, args=args, **moco_dict)
             updated_split_all = [updated_split.clone().detach()]
             assert all([len(s) == len(update_data) for s in updated_split_all]), "Parititon different length from dataset" 
             upd_loader = None
@@ -1025,7 +1023,7 @@ if __name__ == '__main__':
             else:
                 upd_loader = DataLoader(update_data, batch_size=u_bs, num_workers=u_nw, prefetch_factor=u_pf, shuffle=True, pin_memory=True, 
                     drop_last=True, persistent_workers=u_pw)
-            updated_split = train_partition(model, upd_loader, updated_split, random_init=args.random_init, args=args, **kwargs)
+            updated_split = train_partition(model, upd_loader, updated_split, random_init=args.random_init, args=args, **moco_dict)
             upd_loader = shutdown_loader(upd_loader)
             gc.collect()              # run Python's garbage collector
             updated_split_all.append(updated_split)
