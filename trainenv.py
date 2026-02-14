@@ -932,63 +932,48 @@ def calculate_penalty_grads_final(penalty_grads, penalty_aggregator, penalty_wei
     return penalty_grads_final
 
 def get_shared_ind(param_groups_2_pind, args):
-    print()
     if 'ce' in param_groups_2_pind and len(param_groups_2_pind['ce']) > 0: # separate CE head, EqInv
-        print(1)
         if not args.backbone_propagate: # w/o backbone propagation from Env
-            print(2)
             if 'mask' in param_groups_2_pind and len(param_groups_2_pind['mask']) > 0 and args.opt_mask:
-                print(3)
                 shared_ind = {"lk": param_groups_2_pind['mask'], "lp": param_groups_2_pind['mask'], "lc": param_groups_2_pind['mask'],          
                               "kp": param_groups_2_pind['mask'], "kc": param_groups_2_pind['backbone+mask'],
                               "pc": param_groups_2_pind['mask'],
                 }
             else:
-                print(4)
                 shared_ind = {"lk": [], "lp": [], "lc": [],          
                               "kp": [], "kc": param_groups_2_pind['backbone'],
                               "pc": [],
                 }
         else: # w/ backbone propagation
-            print(5)
             if 'mask' in param_groups_2_pind and len( param_groups_2_pind['mask']) > 0 and args.opt_mask:
-                print(6)
                 shared_ind = {"lk": param_groups_2_pind['backbone+mask'], "lp": param_groups_2_pind['backbone+mask'], "lc": param_groups_2_pind['backbone+mask'],          
                               "kp": param_groups_2_pind['backbone+mask'], "kc": param_groups_2_pind['backbone+mask'],
                               "pc": param_groups_2_pind['backbone+mask'],
                 }
             else: # w/o mask
-                print(7)
                 shared_ind = {"lk": param_groups_2_pind['backbone'], "lp": param_groups_2_pind['backbone'], "lc": param_groups_2_pind['backbone'],          
                               "kp": param_groups_2_pind['backbone'], "kc": param_groups_2_pind['backbone'],
                               "pc": param_groups_2_pind['backbone'],
                 }
     else: # no CE head
-        print(8)
         if not args.backbone_propagate: # w/o backbone propagation from Env
-            print(9)
             if 'mask' in param_groups_2_pind and len( param_groups_2_pind['mask']) > 0 and args.opt_mask:
-                print(10)
                 shared_ind = {"lk": param_groups_2_pind['mask'], "lp": param_groups_2_pind['mask'], "lc": [],          
                               "kp": param_groups_2_pind['mask'], "kc": [],
                               "pc": [],
                 }
             else:
-                print(11)
                 shared_ind = {"lk": [], "lp": [], "lc": [],          
                               "kp": [], "kc": [],
                               "pc": [],
                 }
         else: # w/ backbone propagation
-            print(12)
             if 'mask' in param_groups_2_pind and len(param_groups_2_pind['mask']) > 0 and args.opt_mask:
-                print(13)
                 shared_ind = {"lk": param_groups_2_pind['backbone+mask'], "lp": param_groups_2_pind['backbone+mask'], "lc": [],          
                               "kp": param_groups_2_pind['backbone+mask'], "kc": [],
                               "pc": [],
                 }
             else: # w/o mask
-                print(14)
                 shared_ind = {"lk": param_groups_2_pind['backbone'], "lp": param_groups_2_pind['backbone'], "lc": [],          
                               "kp": param_groups_2_pind['backbone'], "kc": [],
                               "pc": [],
@@ -1054,9 +1039,6 @@ def calculate_scalers(loss_CE_grads_final, loss_unsplit_grads_final, loss_grads_
 
     # Compute SHARED dot products & cosines
     shared_pind = get_shared_ind(param_groups_2_pind, args)
-    print()
-    print(param_groups_2_pind.keys())
-    print(shared_pind)
     def calc_delta_and_cos(x_grads, y_grads, shared_ind, do_x, do_y):
         if do_x and do_y and len(shared_ind) > 0:
             xx_grads = [x_grads[i] for i in shared_ind]
