@@ -932,7 +932,7 @@ def calculate_penalty_grads_final(penalty_grads, penalty_aggregator, penalty_wei
     return penalty_grads_final
 
 def get_shared_ind(param_groups_2_pind, args):
-    orint()
+    print()
     if 'ce' in param_groups_2_pind and len(param_groups_2_pind['ce']) > 0: # separate CE head, EqInv
         print(1)
         if not args.backbone_propagate: # w/o backbone propagation from Env
