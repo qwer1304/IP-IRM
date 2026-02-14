@@ -932,11 +932,9 @@ def calculate_penalty_grads_final(penalty_grads, penalty_aggregator, penalty_wei
     return penalty_grads_final
 
 def get_shared_ind(param_groups_2_pind, args):
-    print()
-    print(param_groups_2_pind.keys())
-    if 'ce' in param_groups_2_pind: # separate CE head, EqInv
+    if 'ce' in param_groups_2_pind and len(param_groups_2_pind['ce']) > 0: # separate CE head, EqInv
         if not args.backbone_propagate: # w/o backbone propagation from Env
-            if 'mask' in param_groups_2_pind and args.opt_mask:
+            if 'mask' in param_groups_2_pind and len(param_groups_2_pind['mask']) > 0 and args.opt_mask:
                 shared_ind = {"lk": param_groups_2_pind['mask'], "lp": param_groups_2_pind['mask'], "lc": param_groups_2_pind['mask'],          
                               "kp": param_groups_2_pind['mask'], "kc": param_groups_2_pind['backbone+mask'],
                               "pc": param_groups_2_pind['mask'],
@@ -947,7 +945,7 @@ def get_shared_ind(param_groups_2_pind, args):
                               "pc": [],
                 }
         else: # w/ backbone propagation
-            if 'mask' in param_groups_2_pind and args.opt_mask:
+            if 'mask' in param_groups_2_pind and len( param_groups_2_pind['mask']) > 0 and args.opt_mask:
                 shared_ind = {"lk": param_groups_2_pind['backbone+mask'], "lp": param_groups_2_pind['backbone+mask'], "lc": param_groups_2_pind['backbone+mask'],          
                               "kp": param_groups_2_pind['backbone+mask'], "kc": param_groups_2_pind['backbone+mask'],
                               "pc": param_groups_2_pind['backbone+mask'],
@@ -959,7 +957,7 @@ def get_shared_ind(param_groups_2_pind, args):
                 }
     else: # no CE head
         if not args.backbone_propagate: # w/o backbone propagation from Env
-            if 'mask' in param_groups_2_pind and args.opt_mask:
+            if 'mask' in param_groups_2_pind and len( param_groups_2_pind['mask']) > 0 and args.opt_mask:
                 shared_ind = {"lk": param_groups_2_pind['mask'], "lp": param_groups_2_pind['mask'], "lc": [],          
                               "kp": param_groups_2_pind['mask'], "kc": [],
                               "pc": [],
@@ -970,7 +968,7 @@ def get_shared_ind(param_groups_2_pind, args):
                               "pc": [],
                 }
         else: # w/ backbone propagation
-            if 'mask' in param_groups_2_pind and args.opt_mask:
+            if 'mask' in param_groups_2_pind and len(param_groups_2_pind['mask']) > 0 and args.opt_mask:
                 shared_ind = {"lk": param_groups_2_pind['backbone+mask'], "lp": param_groups_2_pind['backbone+mask'], "lc": [],          
                               "kp": param_groups_2_pind['backbone+mask'], "kc": [],
                               "pc": [],
