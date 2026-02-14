@@ -554,7 +554,8 @@ class MoCoSupConLossModule(LossModule):
         return True
 
     def get_k_view(self, x):
-        return self.net_momentum.module.f(x)
+        with torch.no_grad():
+            return self.net_momentum.module.f(x)
 
 # ---------------------------
 # MoCo Loss Module
@@ -693,7 +694,8 @@ class MoCoLossModule(LossModule):
         return True
 
     def get_k_view(self, x):
-        return self.net_momentum.module.f(x)
+        with torch.no_grad():
+            return self.net_momentum.module.f(x)
 
 # ---------------------------
 # SimSiam Loss Module
