@@ -1394,7 +1394,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
     loss_CE_weight       = args.penalty_CE           * (1 if penalty_weight <= 1 else (1 / penalty_weight)) * int(kwargs['loss_CE_module'] is not None)
     
     assert (args.baseline and loss_unsplit_weight > 0) or (not args.baseline), "unsplit weight is 0 and baseline requested"
-    assert (args.baseline and kwargs['loss_CE_module'] is not None and loss_CE_weight > 0) or (not args.baseline), "CE weight is 0 and baseline and CE requested"
+    assert (args.baseline and kwargs['loss_CE_module'] is not None and loss_CE_weight > 0) or (not args.baseline) or \
+           (args.baseline and kwargs['loss_CE_module'] is None, "CE weight is 0 and baseline and CE requested"
     
     mask_sparsity_weight = args.mask_sparsity_weight * (1 if penalty_weight <= 1 else (1 / penalty_weight))
     penalty_weight_orig  = penalty_weight
