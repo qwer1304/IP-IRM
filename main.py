@@ -189,9 +189,15 @@ def train_partition(net, update_loader, soft_split, random_init=False, args=None
                         target = target_transform(target)
 
                     if args.ssl_type.lower() == 'moco' or args.ssl_type.lower() == 'mocosupcon':
-                        feature_1, out_1 = net(pos_1)
+                        feature_1 = net.module.f(pos_1) # UNNORMALIZED!!!!
+                        feature_1 = utils.safe_normalize(feature_1, dim=-1)
+                        out_1 = net.module.g(feature_1)
+                        out_1 = utils.safe_normalize(out_1, dim=1)
                         with torch.no_grad():
-                            feature_2, out_2 = model_momentum(pos_2)
+                            feature_2 = net_momentum.module.f(pos_2) # UNNORMALIZED!!!!
+                            feature_2 = utils.safe_normalize(feature_2, dim=-1)
+                            out_2 = net_momentum.module.g(feature_1)
+                            out_2 = utils.safe_normalize(out_2, dim=1)
                     else:        
                         feature_1, out_1 = net(pos_1)
                         feature_2, out_2 = net(pos_2)
