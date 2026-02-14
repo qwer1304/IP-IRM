@@ -427,11 +427,11 @@ class MoCoSupConLossModule(LossModule):
 
         out_q = self.net.module.g(pos_q) if self.projector else pos_q
         if normalize:
-            out_q = F.normalize(out_q, dim=1)
+            out_q = utils.safe_normalize(out_q, dim=1)
         with torch.no_grad():
             out_k = self.net_momentum.module.g(pos_k) if self.projector else pos_k
             if normalize:
-                out_k = F.normalize(out_k, dim=1)
+                out_k = utils.safe_normalize(out_k, dim=1)
         
         k_queue, idx_queue = self.queue.get((self.queue.queue_size - self.this_batch_size), advance=False, idx=True)
         k_all = torch.cat([out_k, k_queue], dim=0) # (N,D), N=B+K 
@@ -604,11 +604,11 @@ class MoCoLossModule(LossModule):
 
         out_q = self.net.module.g(pos_q) if self.projector else pos_q
         if normalize:
-            out_q = F.normalize(out_q, dim=1)
+            out_q = utils.safe_normalize(out_q, dim=1)
         with torch.no_grad():
             out_k = self.net_momentum.module.g(pos_k) if self.projector else pos_k
             if normalize:
-                out_k = F.normalize(out_k, dim=1)
+                out_k = utils.safe_normalize(out_k, dim=1)
         
         l_pos = torch.sum(out_q * out_k, dim=1, keepdim=True)
         l_neg = torch.matmul(out_q, self.queue.get((self.queue.queue_size - self.this_batch_size), advance=False).t())
@@ -759,7 +759,7 @@ class CELossModule(LossModule):
         x = torch.cat([x1, x2], dim=0)
         out = self.net.module.fc(x)
         if normalize:
-            out = F.normalize(out, dim=1)
+            out = utils.safe_normalize(out, dim=1)
         self._logits = out
         self.labels = torch.cat([labels, labels], dim=0)
         self.weights = weights
@@ -1389,10 +1389,14 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
     else:
         penalty_weight = args.penalty_weight
     
-    loss_weight          = args.penalty_cont             * (1 if penalty_weight <= 1 else 1 / penalty_weight)
-    loss_unsplit_weight  = max(args.penalty_unsplit_cont * (1 if penalty_weight <= 1 else (1 / penalty_weight)), int(args.baseline))
-    loss_CE_weight       = max(args.penalty_CE           * (1 if penalty_weight <= 1 else (1 / penalty_weight)), int(args.baseline)) * int(kwargs['loss_CE_module'] is not None)
-    mask_sparsity_weight = args.mask_sparsity_weight     * (1 if penalty_weight <= 1 else (1 / penalty_weight))
+    loss_weight          = args.penalty_cont         * (1 if penalty_weight <= 1 else 1 / penalty_weight)
+    loss_unsplit_weight  = args.penalty_unsplit_cont * (1 if penalty_weight <= 1 else (1 / penalty_weight))
+    loss_CE_weight       = args.penalty_CE           * (1 if penalty_weight <= 1 else (1 / penalty_weight)) * int(kwargs['loss_CE_module'] is not None)
+    
+    assert (args.baseline and loss_unsplit_weight > 0) or (not args.baseline), "unsplit weight is 0 and baseline requested"
+    assert (args.baseline and kwargs['loss_CE_module'] is not None and loss_CE_weight > 0) or (not args.baseline), "CE weight is 0 and baseline and CE requested"
+    
+    mask_sparsity_weight = args.mask_sparsity_weight * (1 if penalty_weight <= 1 else (1 / penalty_weight))
     penalty_weight_orig  = penalty_weight
     penalty_weight       = 1 if penalty_weight > 1 else penalty_weight
     
@@ -1572,13 +1576,13 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 del batch_micro
                 torch.cuda.empty_cache()
                 
-                features_1, features_2 = F.normalize(features_1, dim=-1), F.normalize(features_2, dim=-1)
+                features_1, features_2 = utils.safe_normalize(features_1, dim=-1), utils.safe_normalize(features_2, dim=-1)
                 
                 features_1_nondetached, features_2_nondetached = mask_activation * features_1, mask_activation * features_2 
                 features_1_detached, features_2_detached = mask_activation * features_1.detach(), mask_activation * features_2.detach() 
                 
-                #features_1_nondetached, features_2_nondetached = F.normalize(features_1_nondetached, dim=-1), F.normalize(features_2_nondetached, dim=-1)
-                #features_1_detached, features_2_detached = F.normalize(features_1_detached, dim=-1), F.normalize(features_2_detached, dim=-1)
+                #features_1_nondetached, features_2_nondetached = utils.safe_normalize(features_1_nondetached, dim=-1), utils.safe_normalize(features_2_nondetached, dim=-1)
+                #features_1_detached, features_2_detached = utils.safe_normalize(features_1_detached, dim=-1), utils.safe_normalize(features_2_detached, dim=-1)
 
                 # if want CE loss
                 if do_CE_loss:
