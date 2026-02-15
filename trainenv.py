@@ -1567,6 +1567,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 grads_all             = [None] * num_grads 
                 
                 mask_activation = net.module.mask_fun.activation(u=mask_activation_noise)
+                print()
+                print(f"sum(mask_activation)={mask_activation.sum().item()")
 
                 """
                 prepare for micro-batch in loss-sepcific way:
@@ -1797,8 +1799,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 CE_ind = num_grads - 1 if do_CE_loss else -1
                 unsplit_ind = num_grads - int(do_CE_loss) - 1 if do_unsplit_loss else -1
                 
-                print()
-
                 # 2. Consume the list of gradients sample-by-sample
                 # This is better for memory because we can clear each sample after processing
                 for ii in range(num_grads):
@@ -1815,8 +1815,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                         # Flatten the parameter gradient: (*Param_Dims) -> (Flattened_Dim)
                         g_flat = g.detach().reshape(-1)
                         
-                        print(f"ii={ii}, param_idx={param_idx}, g_flat.norm()={g_flat.norm().item()}")
-
                         # 1. Unsplit Loss (Original index 0)
                         if ii == CE_ind:
                             loss_CE_grads_final[param_idx] += g_flat
