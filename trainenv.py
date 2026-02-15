@@ -296,6 +296,7 @@ class LossModule:
         return indices
 
     def get_k_view(self, x):
+        print("LossModule get_k_view")
         return self.net.module.f(x)
 # ---------------------------
 # MoCo+SupCon Loss Module
@@ -323,7 +324,9 @@ class MoCoSupConLossModule(LossModule):
 
     def pre_batch(self, batch_data, index_data, partitions, device='cuda'):
         self.this_batch_size = len(batch_data)
+        print("MoCoSupConLossModule pre_batch before if master")
         if self.master:
+            print("MoCoSupConLossModule pre_batch after if master")            
             self.queue.get(self.this_batch_size) # advance read pointer
         
         if partitions is None or (len(partitions) == 0) or (partitions[0] is None):
@@ -530,7 +533,9 @@ class MoCoSupConLossModule(LossModule):
             self.queue.update(self.out_k.detach(), idx=self.out_k_indexs)
 
     def post_batch(self):
+        print("MoCoSupConLossModule post_batch before if master")
         if self.master:
+            print("MoCoSupConLossModule post_batch after if master")
             with torch.no_grad():
                 for param_q, param_k in zip(self.net.parameters(), self.net_momentum.parameters()):
                     param_k.mul_(self.momentum).add_(param_q, alpha=1.0 - self.momentum)
@@ -554,6 +559,7 @@ class MoCoSupConLossModule(LossModule):
         return True
 
     def get_k_view(self, x):
+        print("MoCoSupConLossModule get_k_view")
         with torch.no_grad():
             return self.net_momentum.module.f(x)
 
@@ -1903,7 +1909,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         loss_weighted      *= loss_grad_scaler
         penalty_weighted   *= penalty_grad_scaler 
         """
-        print()
+        #print()
         for pind, (name, p) in enumerate(net.named_parameters()):
             total_grad_flat_weighted = (   loss_unsplit_grads_final[pind] * loss_unsplit_weight  * args.Lscaler * loss_unsplit_grad_scaler
                                          + loss_CE_grads_final[pind]      * loss_CE_weight       * args.Lscaler * loss_CE_grad_scaler
@@ -1923,14 +1929,14 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                   "grad norm=", None if p.grad is None else p.grad.norm().item())
             """
 
+            """
             print(f"pind {pind} name {name} norm {total_grad_flat_weighted.norm():.2e}")
-            #"""
             print(f"{loss_unsplit_grads_final[pind].norm().item()}, {loss_unsplit_weight}")
             print(f"{loss_CE_grads_final[pind].norm().item()}, {loss_CE_weight}")
             print(f"{loss_grads_final[pind].norm().item()}, {loss_weight}")
             print(f"{penalty_grads_final[pind].norm().item()}, {penalty_weight}")
             print(f"{loss_mask_sparsity_grads[pind].norm().item()}, {mask_sparsity_weight}")
-            #"""
+            """
         
         # -----------------------
         # Step 3: optimizer step
