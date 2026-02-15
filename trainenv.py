@@ -1798,7 +1798,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 CE_ind = num_grads - 1 if do_CE_loss else -1
                 unsplit_ind = num_grads - int(do_CE_loss) - 1 if do_unsplit_loss else -1
                 
-                if batch_index >= 18:
+                if batch_index >= 17:
                     print()
                     print_grads(grads_all[0], net, prefix=f"bi {batch_index}, loss={loss.item()}")
                     
