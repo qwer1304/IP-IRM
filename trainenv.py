@@ -1798,6 +1798,10 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 CE_ind = num_grads - 1 if do_CE_loss else -1
                 unsplit_ind = num_grads - int(do_CE_loss) - 1 if do_unsplit_loss else -1
                 
+                if batch_index >= 19:
+                    print()
+                    print_grads(grads_all[0], net, prefix=f"bi {batch_index}")
+                    
                 # 2. Consume the list of gradients sample-by-sample
                 # This is better for memory because we can clear each sample after processing
                 for ii in range(num_grads):
