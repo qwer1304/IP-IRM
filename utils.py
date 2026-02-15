@@ -1672,7 +1672,7 @@ def microbatches(X, mb_size, min_size=2):
             continue  # skip this tiny micro-batch
         yield Xb
 
-def safe_normalize(x, dim=1, eps=1e-6, p=2, detach=False):
+def safe_normalize(x, dim=1, eps=1e-4, p=2, detach=False):
     r = x.norm(p=p, dim=dim, keepdim=True).clamp_min(eps)
     y = x / r.detach() if detach else x / r 
     return y
