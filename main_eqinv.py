@@ -282,11 +282,11 @@ def test_knn(net, feature_bank, feature_labels, test_data_loader, num_classes, a
             sim_weight = (sim_weight / args.knn_temp).exp()
 
             # counts for each class
-            one_hot_label = torch.zeros(data.size(0) * args.k, c, device=sim_labels.device)
+            one_hot_label = torch.zeros(data.size(0) * args.k, num_classes, device=sim_labels.device)
             # [B*K, C]
             one_hot_label = one_hot_label.scatter(dim=-1, index=sim_labels.view(-1, 1).long(), value=1.0)
             # weighted score ---> [B, C]
-            pred_scores = torch.sum(one_hot_label.view(data.size(0), -1, c) * sim_weight.unsqueeze(dim=-1), dim=1)
+            pred_scores = torch.sum(one_hot_label.view(data.size(0), -1, num_classes) * sim_weight.unsqueeze(dim=-1), dim=1)
 
             pred_labels = pred_scores.argsort(dim=-1, descending=True)
             total_top1 += torch.sum((pred_labels[:, :1] == target.unsqueeze(dim=-1)).any(dim=-1).float()).item()
@@ -297,7 +297,7 @@ def test_knn(net, feature_bank, feature_labels, test_data_loader, num_classes, a
 
             # Loop-free update of per-class counts
             # For each class c: count how many predictions & targets match
-            for cls in range(c):
+            for cls in range(num_classes):
                 mask = (target == cls)
                 if mask.any():
                     per_class_total[cls] += mask.sum()
