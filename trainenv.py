@@ -1916,19 +1916,21 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
             else:
                 p.grad += total_grad_flat_weighted.view(p.shape)
                 
+            """
             # Are grads present and nonzero?
             print(pind, "requires_grad=", p.requires_grad,
                   "grad is None?", p.grad is None,
                   "grad norm=", None if p.grad is None else p.grad.norm().item())
-
-            #print(f"pind {pind} name {name} norm {total_grad_flat_weighted.norm():.2e}")
             """
+
+            print(f"pind {pind} name {name} norm {total_grad_flat_weighted.norm():.2e}")
+            #"""
             print(f"{loss_unsplit_grads_final[pind].norm().item()}, {loss_unsplit_weight}")
             print(f"{loss_CE_grads_final[pind].norm().item()}, {loss_CE_weight}")
             print(f"{loss_grads_final[pind].norm().item()}, {loss_weight}")
             print(f"{penalty_grads_final[pind].norm().item()}, {penalty_weight}")
             print(f"{loss_mask_sparsity_grads[pind].norm().item()}, {mask_sparsity_weight}")
-            """
+            #"""
         
         # -----------------------
         # Step 3: optimizer step
