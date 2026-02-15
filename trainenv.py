@@ -1903,7 +1903,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         loss_weighted      *= loss_grad_scaler
         penalty_weighted   *= penalty_grad_scaler 
         """
-        #print()
+        print()
         for pind, (name, p) in enumerate(net.named_parameters()):
             total_grad_flat_weighted = (   loss_unsplit_grads_final[pind] * loss_unsplit_weight  * args.Lscaler * loss_unsplit_grad_scaler
                                          + loss_CE_grads_final[pind]      * loss_CE_weight       * args.Lscaler * loss_CE_grad_scaler
@@ -1916,6 +1916,11 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
             else:
                 p.grad += total_grad_flat_weighted.view(p.shape)
                 
+            # Are grads present and nonzero?
+            print(pind, "requires_grad=", p.requires_grad,
+                  "grad is None?", p.grad is None,
+                  "grad norm=", None if p.grad is None else p.grad.norm().item())
+
             #print(f"pind {pind} name {name} norm {total_grad_flat_weighted.norm():.2e}")
             """
             print(f"{loss_unsplit_grads_final[pind].norm().item()}, {loss_unsplit_weight}")
