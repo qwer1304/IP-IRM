@@ -474,7 +474,7 @@ class MoCoSupConLossModule(LossModule):
             self.total_maxneg += l_neg.max().item()  * l_pos.size(0)
             self.count        += l_pos.size(0)
 
-        # save in state for queue update at end of batch
+        # save in state for queue update at end of micro-batch
         self.out_k        = out_k 
         self.out_k_indexs = indexs
 
@@ -1858,12 +1858,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
             torch.cuda.empty_cache()
         # end for j in range(idxs):
         torch.cuda.empty_cache()
-
-        loss_module.post_batch()
-        loss_unsplit_module.post_batch()
-        if loss_CE_module is not None:
-            loss_CE_module.post_batch()
-
         trained_samples += this_batch_size # total number of samples processed so far
         
         gradients_accumulation_step += 1
@@ -2142,6 +2136,10 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         del info_dict
         torch.cuda.empty_cache()
 
+        loss_module.post_batch()
+        loss_unsplit_module.post_batch()
+        if loss_CE_module is not None:
+            loss_CE_module.post_batch()
         mask_activation_noise = net.module.mask_fun.sample().detach()
 
     # end for batch_index, data_env in enumerate(train_bar):
