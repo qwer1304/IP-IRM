@@ -1408,9 +1408,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
     do_gradnorm      = (not args.baseline) and args.gradnorm        and (epoch >= args.gradnorm_epoch)
     do_mask_sparsity = (not args.baseline) and args.opt_mask
     
-    print()
-    print(do_loss, do_unsplit_loss, do_CE_loss, do_penalty, do_gradnorm, do_mask_sparsity)
-
     loader_batch_size            = batch_size
     gradients_accumulation_steps = args.gradients_accumulation_batch_size // loader_batch_size 
     gpu_batch_size               = args.micro_batch_size
@@ -1568,7 +1565,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                     Each entry is a tuple with an entry for per net's parameter grad or None
                 """
                 grads_all             = [None] * num_grads 
-                print(f"num_grads={num_grads}, len(grads_all)={len(grads_all)}")
                 
                 mask_activation = net.module.mask_fun.activation(u=mask_activation_noise)
 
@@ -1800,6 +1796,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 view_shape = (num_partitions, args.env_num, -1)
                 CE_ind = num_grads - 1 if do_CE_loss else -1
                 unsplit_ind = num_grads - int(do_CE_loss) - 1 if do_unsplit_loss else -1
+                
+                print()
+                print(num_env_tasks, penalty_offset, CE_ind, unsplit_ind)
 
                 # 2. Consume the list of gradients sample-by-sample
                 # This is better for memory because we can clear each sample after processing
