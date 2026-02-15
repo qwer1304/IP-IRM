@@ -1011,6 +1011,11 @@ def calculate_scalers(loss_CE_grads_final, loss_unsplit_grads_final, loss_grads_
 
     loss_unsplit_grads_final_weighted, l_unsplit_grads_flat_weighted, loss_unsplit_grad_norm_weighted = \
         setup_grads_and_norms(loss_unsplit_grads_final, loss_unsplit_weight, args.Lscaler, device, True)
+    if not torch.isfinite(loss_unsplit_grad_norm_weighted):
+        print()
+        print_grads(loss_unsplit_grads_final, net, prefix="unsplit")
+        exit(-1)
+
     default_grads_weighted_vector = torch.zeros_like(l_unsplit_grads_flat_weighted)
     loss_CE_grads_final_weighted, l_CE_grads_flat_weighted, loss_CE_grad_norm_weighted = \
         setup_grads_and_norms(loss_CE_grads_final, loss_CE_weight, args.Lscaler, device, do_CE_loss, default_grads_weighted_vector=default_grads_weighted_vector)
