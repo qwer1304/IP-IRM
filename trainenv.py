@@ -1407,6 +1407,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
     do_penalty       = (not args.baseline) and (penalty_weight > 0)
     do_gradnorm      = (not args.baseline) and args.gradnorm        and (epoch >= args.gradnorm_epoch)
     do_mask_sparsity = (not args.baseline) and args.opt_mask
+    
+    print()
+    print(do_loss, do_unsplit_loss, do_CE_loss, do_penalty, do_gradnorm, do_mask_sparsity)
 
     loader_batch_size            = batch_size
     gradients_accumulation_steps = args.gradients_accumulation_batch_size // loader_batch_size 
@@ -1565,6 +1568,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                     Each entry is a tuple with an entry for per net's parameter grad or None
                 """
                 grads_all             = [None] * num_grads 
+                print(f"num_grads={num_grads}, len(grads_all)={len(grads_all)}")
                 
                 mask_activation = net.module.mask_fun.activation(u=mask_activation_noise)
 
