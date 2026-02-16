@@ -507,10 +507,10 @@ def load_checkpoint(path, model, model_momentum, optimizer, gradnorm_balancer, g
                         if torch.is_tensor(v):
                             optimizer.state[p][k] = v.to(device)
 
-    if "optimizer" in checkpoint and checkpoint["optimizer"] is not None:
+    if "optimizer" in checkpoint and checkpoint["optimizer"] is not None and optimizer is not None:
         restore_optimizer(optimizer, checkpoint["optimizer"], device, "main")
                         
-    if ("gradnorm_optimizer" in checkpoint) and (checkpoint["gradnorm_optimizer"] is not None):
+    if ("gradnorm_optimizer" in checkpoint) and (checkpoint["gradnorm_optimizer"] is not None) and (and gradnorm_optimizer is not None):
         restore_optimizer(gradnorm_optimizer, checkpoint["gradnorm_optimizer"], device, "gradnorm")
 
     # Restore RNG states (if present)
@@ -857,10 +857,10 @@ if __name__ == '__main__':
     start_epoch = 1
     if args.resume:
         if os.path.isfile(args.resume):
-            (model, model_momentum, optimizer, queue_proj_, _,
+            (model, model_momentum, _, queue_proj_, _,
              start_epoch, best_acc1, best_epoch,
-             updated_split, updated_split_all, ema_, gradnorm_balancer, gradnorm_optimizer) = \
-                load_checkpoint(args.resume, model, model_momentum, optimizer, gradnorm_balancer, gradnorm_optimizer, classifier_not_needed=False)
+             updated_split, updated_split_all, ema_, gradnorm_balancer, _) = \
+                load_checkpoint(args.resume, model, model_momentum, optimizer=None, gradnorm_balancer, gradnorm_optimizer=None, classifier_not_needed=False)
  
             queue_proj = queue_proj_ or queue_proj
  
