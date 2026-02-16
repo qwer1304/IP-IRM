@@ -1329,7 +1329,7 @@ def make_train_transform(image_size=64, randgray=True, normalize='CIFAR', gpu=Tr
     else:
         return cpu_transform
         
-def make_test_transform(normalize='CIFAR'):
+def make_test_transform(normalize='CIFAR', gpu=True):
     if (normalize == 'CIFAR') or (normalize == 'STL'):
         norm_mean = [0.4914, 0.4822, 0.4465]
         norm_std = [0.2023, 0.1994, 0.2010]
@@ -1346,6 +1346,10 @@ def make_test_transform(normalize='CIFAR'):
     gpu_transform = K.AugmentationSequential(
         K.Normalize(mean=norm_mean, std=norm_std)
     )
+    if gpu:
+        return gpu_transform
+    else:
+        return cpu_transform
 
 def atomic_save(state, is_best, filename='checkpoint.pth.tar', sync=True):
     filename_tmp = filename + ".tmp"
