@@ -860,7 +860,7 @@ if __name__ == '__main__':
             (model, model_momentum, _, queue_proj_, _,
              start_epoch, best_acc1, best_epoch,
              updated_split, updated_split_all, ema_, gradnorm_balancer, _) = \
-                load_checkpoint(args.resume, model, model_momentum, optimizer=None, gradnorm_balancer, gradnorm_optimizer=None, classifier_not_needed=False)
+                load_checkpoint(args.resume, model, model_momentum, optimizer=None, gradnorm_balancer=gradnorm_balancer, gradnorm_optimizer=None, classifier_not_needed=False)
  
             queue_proj = queue_proj_ or queue_proj
  
