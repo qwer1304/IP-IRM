@@ -833,22 +833,30 @@ if __name__ == '__main__':
     def get_optimizer_params(model, args):
         ssl_type = args.ssl_type.lower()
         params = []
-        params.append({'params': model.module.f.parameters(), 'lr': args.featurizer_lr if args.featurizer_lr > 0 else args.lr})
+        LRs = {}
+        lr = args.featurizer_lr if args.featurizer_lr > 0 else args.lr
+        LRs.update('backbone', lr) 
+        params.append({'params': model.module.f.parameters(), 'lr': lr, 'name': 'backbone'})
         if ssl_type == "simsiam":
-            params.append({'params': model.module.arms['projector'].parameters(), 'lr': args.projector_lr if args.projector_lr > 0 else args.lr})
-            params.append({'params': model.module.arms['predictor'].parameters(), 'lr': args.predictor_lr if args.predictor_lr > 0 else args.lr})
+            lr = args.projector_lr if args.projector_lr > 0 else args.lr
+            LRs.update('projector', lr) 
+            params.append({'params': model.module.arms['projector'].parameters(), 'lr': lr, 'name': 'projector'})
+            lr = args.predictor_lr if args.predictor_lr > 0 else args.lr
+            LRs.update('predictor', lr) 
+            params.append({'params': model.module.arms['predictor'].parameters(), 'lr': lr, 'name': 'predictor'})
         else:
-            params.append({'params': model.module.arms['projector'].parameters(), 'lr': args.projector_lr if args.projector_lr > 0 else args.lr})
-        return params
+            lr = args.projector_lr if args.projector_lr > 0 else args.lr
+            LRs.update('projector', lr) 
+            params.append({'params': model.module.arms['projector'].parameters(), 'lr': lr, 'name': 'projector'})
+        return params, LRs
 
     if args.opt == "Adam":
-        params = get_optimizer_params(model, args)
+        params, LRs = get_optimizer_params(model, args)
         optimizer = optim.Adam(params, weight_decay=args.weight_decay, betas=args.betas)
         gradnorm_optimizer = optim.Adam(gradnorm_balancer.parameters(), lr=args.gradnorm_lr, weight_decay=args.gradnorm_weight_decay, betas=args.gradnorm_betas)        
     elif args.opt == 'SGD':
         optimizer          = optim.SGD(model.parameters(),             lr=args.lr, weight_decay=args.weight_decay, momentum=args.SGD_momentum)
         gradnorm_optimizer = optim.SGD(gradnorm_balancer.parameters(), lr=args.gradnorm_lr, weight_decay=args.weight_decay, momentum=args.SGD_momentum)
-
 
     # optionally resume from a checkpoint
     best_acc1 = 0
@@ -864,27 +872,12 @@ if __name__ == '__main__':
                         gradnorm_optimizer=gradnorm_optimizer, classifier_not_needed=False)
  
             # set LRs to current values
-            # 1. Map all parameter IDs from your model to identify them later
-            backbone_ids = set(id(p) for p in model.module.f.parameters())
-            projector_ids = set(id(p) for p in model.module.arms['projector'].parameters())
-
-            print()
-            for gi, group in enumerate(optimizer.param_groups):
-                # Grab the ID of the first parameter in this group
-                sample_param_id = id(group['params'][0])
-                
-                if sample_param_id in backbone_ids:
-                    group['name'] = 'backbone'
-                    print(f"backbone: prev group['lr'] {group['lr']}, params[0] {params[0]['lr']}")
-                    group['lr'] = params[0]['lr']
-                    print(f"backbone: current group['lr'] {group['lr']}")
-                elif sample_param_id in projector_ids:
-                    group['name'] = 'projector'
-                    print(f"projector: prev group['lr'] {group['lr']}, params[1] {params[1]['lr']}")
-                    group['lr'] = params[1]['lr']
-                    print(f"projector: current group['lr'] {group['lr']}")
+            for group in optimizer.param_groups:
+                group_name = group.get('name')
+                if group_name in LRs:
+                    group['lr'] = LRs[group_name]                    
                 else:
-                    print("param not found in backbone or projector")
+                    print(f"Unknown group {group_name} in LRs {LRs.keys()}")
 
             for gi, group in enumerate(gradnorm_optimizer.param_groups):
                 group['lr'] = args.gradnorm_lr
