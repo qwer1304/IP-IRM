@@ -922,7 +922,7 @@ if __name__ == '__main__':
                 load_checkpoint(args.resume, model, model_momentum, optimizer, gradnorm_balancer, gradnorm_optimizer, classifier_not_needed=False)
  
             # set LRs to current values
-            for gi, group in eumerate(optimizer.param_groups):
+            for gi, group in enumerate(optimizer.param_groups):
                 group['lr'] = params[gi]['lr']
             for gi, group in eumerate(gradnorm_optimizer.param_groups):
                 group['lr'] = args.gradnorm_lr
