@@ -510,7 +510,7 @@ def load_checkpoint(path, model, model_momentum, optimizer, gradnorm_balancer, g
     if "optimizer" in checkpoint and checkpoint["optimizer"] is not None and optimizer is not None:
         restore_optimizer(optimizer, checkpoint["optimizer"], device, "main")
                         
-    if ("gradnorm_optimizer" in checkpoint) and (checkpoint["gradnorm_optimizer"] is not None) and (and gradnorm_optimizer is not None):
+    if ("gradnorm_optimizer" in checkpoint) and (checkpoint["gradnorm_optimizer"] is not None) and (gradnorm_optimizer is not None):
         restore_optimizer(gradnorm_optimizer, checkpoint["gradnorm_optimizer"], device, "gradnorm")
 
     # Restore RNG states (if present)
