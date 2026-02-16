@@ -866,7 +866,7 @@ if __name__ == '__main__':
             # set LRs to current values
             for gi, group in enumerate(optimizer.param_groups):
                 group['lr'] = params[gi]['lr']
-            for gi, group in eumerate(gradnorm_optimizer.param_groups):
+            for gi, group in enumerate(gradnorm_optimizer.param_groups):
                 group['lr'] = args.gradnorm_lr
 
             queue_proj = queue_proj_ or queue_proj
