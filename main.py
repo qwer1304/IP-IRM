@@ -857,11 +857,18 @@ if __name__ == '__main__':
     start_epoch = 1
     if args.resume:
         if os.path.isfile(args.resume):
-            (model, model_momentum, _, queue_proj_, _,
+            (model, model_momentum, optimizer, queue_proj_, _,
              start_epoch, best_acc1, best_epoch,
-             updated_split, updated_split_all, ema_, gradnorm_balancer, _) = \
-                load_checkpoint(args.resume, model, model_momentum, optimizer=None, gradnorm_balancer=gradnorm_balancer, gradnorm_optimizer=None, classifier_not_needed=False)
+             updated_split, updated_split_all, ema_, gradnorm_balancer, gradnorm_optimizer) = \
+                load_checkpoint(args.resume, model, model_momentum, optimizer=optimizer, gradnorm_balancer=gradnorm_balancer, 
+                        gradnorm_optimizer=gradnorm_optimizer, classifier_not_needed=False)
  
+            # set LRs to current values
+            for gi, group in eumerate(optimizer.param_groups):
+                group['lr'] = params[gi]['lr']
+            for gi, group in eumerate(gradnorm_optimizer.param_groups):
+                group['lr'] = args.gradnorm_lr
+
             queue_proj = queue_proj_ or queue_proj
  
             # dummy for debug multiple partitions

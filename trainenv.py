@@ -1268,6 +1268,16 @@ def make_rand_dither_weight(num_partitions, env_num, weight_env_eps, device):
     return weight_env
     
 def set_BN_adapt(net, adapt_bn, bn_momentum):
+    """
+    Mode        track_running_stats Result                  Updates Buffers (running_mean, running_var)?
+    .train()    True                Uses Batch Stats        YES (via momentum)
+    .train()    False               Uses Batch Stats        NO (no buffers exist)
+    .eval()     True                Uses Running Buffers    NO
+    .eval()     False               Uses Batch Stats        NO (no buffers exist)
+    Standard normalization (using batch or running stats) always forces the data tohave a mean of 0 aand a variance of 1.
+    The Affine Parameters-specifically Weight (\gamma) and Bias (\beta)-allow the model to "undo" or shift the rigid
+    normalization if it helps the loss.
+    """
     for m in net.modules():
         if isinstance(m, (torch.nn.BatchNorm3d, nn.BatchNorm2d, nn.BatchNorm1d)):
             if not adapt_bn:

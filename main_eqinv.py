@@ -551,10 +551,10 @@ def load_checkpoint(path, model, model_momentum, optimizer, gradnorm_balancer, g
                         if torch.is_tensor(v):
                             optimizer.state[p][k] = v.to(device)
 
-    if "optimizer" in checkpoint and checkpoint["optimizer"] is not None:
+    if "optimizer" in checkpoint and checkpoint["optimizer"] is not None and optimizer is not None:
         restore_optimizer(optimizer, checkpoint["optimizer"], device, "main")
                         
-    if ("gradnorm_optimizer" in checkpoint) and (checkpoint["gradnorm_optimizer"] is not None):
+    if ("gradnorm_optimizer" in checkpoint) and (checkpoint["gradnorm_optimizer"] is not None) and (gradnorm_optimizer is not None):
         restore_optimizer(gradnorm_optimizer, checkpoint["gradnorm_optimizer"], device, "gradnorm")
 
     # Restore RNG states (if present)
@@ -921,6 +921,12 @@ if __name__ == '__main__':
              updated_split, updated_split_all, ema_, gradnorm_balancer, gradnorm_optimizer) = \
                 load_checkpoint(args.resume, model, model_momentum, optimizer, gradnorm_balancer, gradnorm_optimizer, classifier_not_needed=False)
  
+            # set LRs to current values
+            for gi, group in eumerate(optimizer.param_groups):
+                group['lr'] = params[gi]['lr']
+            for gi, group in eumerate(gradnorm_optimizer.param_groups):
+                group['lr'] = args.gradnorm_lr
+
             queue_proj = queue_proj_ or queue_proj
             queue_noproj     = queue_noproj_     or queue_noproj
             if not args.baseline:
