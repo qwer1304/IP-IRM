@@ -864,8 +864,11 @@ if __name__ == '__main__':
                         gradnorm_optimizer=gradnorm_optimizer, classifier_not_needed=False)
  
             # set LRs to current values
+            print()
             for gi, group in enumerate(optimizer.param_groups):
+                print(f"group {gi}, group LR {group['lr']}")
                 group['lr'] = params[gi]['lr']
+                print(f"group {gi}, params LR {params[gi]['lr']}")
             for gi, group in enumerate(gradnorm_optimizer.param_groups):
                 group['lr'] = args.gradnorm_lr
 
