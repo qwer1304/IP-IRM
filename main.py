@@ -835,18 +835,18 @@ if __name__ == '__main__':
         params = []
         LRs = {}
         lr = args.featurizer_lr if args.featurizer_lr > 0 else args.lr
-        LRs.update('backbone', lr) 
+        LRs.update(backbone=lr) 
         params.append({'params': model.module.f.parameters(), 'lr': lr, 'name': 'backbone'})
         if ssl_type == "simsiam":
             lr = args.projector_lr if args.projector_lr > 0 else args.lr
-            LRs.update('projector', lr) 
+            LRs.update(projector=lr) 
             params.append({'params': model.module.arms['projector'].parameters(), 'lr': lr, 'name': 'projector'})
             lr = args.predictor_lr if args.predictor_lr > 0 else args.lr
-            LRs.update('predictor', lr) 
+            LRs.update(predictor=lr) 
             params.append({'params': model.module.arms['predictor'].parameters(), 'lr': lr, 'name': 'predictor'})
         else:
             lr = args.projector_lr if args.projector_lr > 0 else args.lr
-            LRs.update('projector', lr) 
+            LRs.update(projector=lr) 
             params.append({'params': model.module.arms['projector'].parameters(), 'lr': lr, 'name': 'projector'})
         return params, LRs
 
