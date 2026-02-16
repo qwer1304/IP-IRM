@@ -864,11 +864,28 @@ if __name__ == '__main__':
                         gradnorm_optimizer=gradnorm_optimizer, classifier_not_needed=False)
  
             # set LRs to current values
+            # 1. Map all parameter IDs from your model to identify them later
+            backbone_ids = set(id(p) for p in model.module.f.parameters())
+            projector_ids = set(id(p) for p in model.module.arms['projector'].parameters())
+
             print()
             for gi, group in enumerate(optimizer.param_groups):
-                print(f"group {gi}, group LR {group['lr']}")
-                group['lr'] = params[gi]['lr']
-                print(f"group {gi}, params LR {params[gi]['lr']}")
+                # Grab the ID of the first parameter in this group
+                sample_param_id = id(group['params'][0])
+                
+                if sample_param_id in backbone_ids:
+                    group['name'] = 'backbone'
+                    print(f"backbone: prev group['lr'] {group['lr']}, params[0] {params[0]['lr']}")
+                    group['lr'] = params[0]['lr']
+                    print(f"backbone: current group['lr'] {group['lr']}")
+                elif sample_param_id in projector_ids:
+                    group['name'] = 'projector'
+                    print(f"projector: prev group['lr'] {group['lr']}, params[1] {params[1]['lr']}")
+                    group['lr'] = params[1]['lr']
+                    print(f"projector: current group['lr'] {group['lr']}")
+                else:
+                    print("param not found in backbone or projector")
+
             for gi, group in enumerate(gradnorm_optimizer.param_groups):
                 group['lr'] = args.gradnorm_lr
 
