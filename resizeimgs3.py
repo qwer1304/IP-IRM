@@ -65,7 +65,7 @@ def main(args):
                 # Method 0 reduces CPU load during encoding for faster I/O
                 cv2.imwrite(str(dest), final_img, [
                     cv2.IMWRITE_WEBP_QUALITY, 80, 
-                    64, 0 #cv2.IMWRITE_WEBP_METHOD, 0
+                    65, 4 #cv2.IMWRITE_WEBP_METHOD, 4, use 0 for faster
                 ])            
 
             pbar.update(1)
