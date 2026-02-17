@@ -730,11 +730,11 @@ if __name__ == '__main__':
     parser.add_argument('--clamp_weights_for_progress', action="store_true", help="clamp loss' weights for progress")
     
     parser.add_argument('--adapt_bn', action="store_true", help="adapt BN layers")
-    parser.add_argument('--featurizer_lr', type=float, default=0.0, help="featurizer LR")
-    parser.add_argument('--mask_lr', type=float, default=0.0, help="mask LR")
-    parser.add_argument('--projector_lr', type=float, default=0.0, help="projector LR")
-    parser.add_argument('--predictor_lr', type=float, default=0.0, help="predictor LR")
-    parser.add_argument('--classifier_lr', type=float, default=0.0, help="classifer LR")
+    parser.add_argument('--featurizer_lr', type=float, default=-1., help="featurizer LR")
+    parser.add_argument('--mask_lr', type=float, default=-1., help="mask LR")
+    parser.add_argument('--projector_lr', type=float, default=-1., help="projector LR")
+    parser.add_argument('--predictor_lr', type=float, default=-1., help="predictor LR")
+    parser.add_argument('--classifier_lr', type=float, default=-1., help="classifer LR")
     parser.add_argument('--bn_momentum', type=float, default=0.1, help="BN momentum")
 
     #### add mask
@@ -890,16 +890,29 @@ if __name__ == '__main__':
     def get_optimizer_params(model, args):
         ssl_type = args.ssl_type.lower()
         params = []
-        params.append({'params': model.module.f.parameters(), 'lr': args.featurizer_lr if args.featurizer_lr > 0 else args.lr})
-        params.append({'params': model.module.arms['classifier'].parameters(), 'lr': args.classifier_lr if args.classifier_lr > 0 else args.lr})
+        LRs = {}
+        lr = args.featurizer_lr if args.featurizer_lr >= 0 else args.lr
+        LRs.update(backbone=lr) 
+        params.append({'params': model.module.f.parameters(), 'lr': lr, 'name': 'backbone'})
+        lr = args.classifier_lr if args.classifier_lr >= 0 else args.lr
+        LRs.update(classifier=lr) 
+        params.append({'params': model.module.arms['classifier'].parameters(), 'lr': lr, 'name': 'classifier'})
         if args.opt_mask:
-            params.append({'params': model.module.mask_fun.parameters(), 'lr': args.mask_lr if args.mask_lr > 0 else args.lr})
+            lr = args.mask_lr if args.mask_lr >= 0 else args.lr
+            LRs.update(mask=lr) 
+            params.append({'params': model.module.mask_fun.parameters(), 'lr': lr, 'name': 'mask'})
         if ssl_type == "simsiam":
-            params.append({'params': model.module.arms['projector'].parameters(), 'lr': args.projector_lr if args.projector_lr > 0 else args.lr})
-            params.append({'params': model.module.arms['predictor'].parameters(), 'lr': args.predictor_lr if args.predictor_lr > 0 else args.lr})
+            lr = args.projector_lr if args.projector_lr >= 0 else args.lr
+            LRs.update(projector=lr) 
+            params.append({'params': model.module.arms['projector'].parameters(), 'lr': lr, 'name': 'projector'})
+            lr = args.predictor_lr if args.predictor_lr >= 0 else args.lr
+            LRs.update(predictor=lr) 
+            params.append({'params': model.module.arms['predictor'].parameters(), 'lr': lr, 'name': 'predictor'})
         else:
-            params.append({'params': model.module.arms['projector'].parameters(), 'lr': args.projector_lr if args.projector_lr > 0 else args.lr})
-        return params
+            lr = args.projector_lr if args.projector_lr >= 0 else args.lr
+            LRs.update(projector=lr) 
+            params.append({'params': model.module.arms['projector'].parameters(), 'lr': lr, 'name': 'projector'})
+        return params, LRs
 
     if args.opt == "Adam":
         params = get_optimizer_params(model, args)
@@ -922,8 +935,13 @@ if __name__ == '__main__':
                 load_checkpoint(args.resume, model, model_momentum, optimizer, gradnorm_balancer, gradnorm_optimizer, classifier_not_needed=False)
  
             # set LRs to current values
-            for gi, group in enumerate(optimizer.param_groups):
-                group['lr'] = params[gi]['lr']
+            for group in optimizer.param_groups:
+                group_name = group.get('name')
+                if group_name in LRs:
+                    group['lr'] = LRs[group_name]                    
+                else:
+                    print(f"Unknown group {group_name} in LRs {LRs.keys()}")
+
             for gi, group in enumerate(gradnorm_optimizer.param_groups):
                 group['lr'] = args.gradnorm_lr
 

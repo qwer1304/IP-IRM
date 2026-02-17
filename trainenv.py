@@ -2101,7 +2101,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                    f" Env/{args.ssl_type} {total_env_loss_weighted/trained_samples:.3e}" + \
                    f" {args.penalty_type} {total_pen_loss_weighted/trained_samples:.3e}" + \
                    f" Sparsity {loss_mask_sparsity_weighted.item():.3e}" + \
-                   f" LR {train_optimizer.param_groups[0]['lr']:.4f} PW {penalty_weight_orig:.6g}" + \
+                   f" LR BB {train_optimizer.param_groups[0]['lr']:.4f} PW {penalty_weight_orig:.6g}" + \
                    f" dot:{ll_str}{lk_str}{lp_str}{kk_str}{kp_str}{pp_str}" + \
                    f" cos:{lk_cos_str}{lp_cos_str}{kp_cos_str}" + \
                    f" {gradnorm_str}" + \

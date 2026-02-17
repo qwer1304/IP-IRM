@@ -692,9 +692,9 @@ if __name__ == '__main__':
     parser.add_argument('--clamp_weights_for_progress', action="store_true", help="clamp loss' weights for progress")
     
     parser.add_argument('--adapt_bn', action="store_true", help="adapt BN layers")
-    parser.add_argument('--featurizer_lr', type=float, default=0.0, help="featurizer LR")
-    parser.add_argument('--projector_lr', type=float, default=0.0, help="projector LR")
-    parser.add_argument('--predictor_lr', type=float, default=0.0, help="predictor LR")
+    parser.add_argument('--featurizer_lr', type=float, default=-1., help="featurizer LR")
+    parser.add_argument('--projector_lr', type=float, default=-1., help="projector LR")
+    parser.add_argument('--predictor_lr', type=float, default=-1., help="predictor LR")
     parser.add_argument('--bn_momentum', type=float, default=0.1, help="BN momentum")
     
     parser.add_argument('--decimate_partitions', type=int, default=None, help='whether to decimate partitions')
@@ -834,18 +834,18 @@ if __name__ == '__main__':
         ssl_type = args.ssl_type.lower()
         params = []
         LRs = {}
-        lr = args.featurizer_lr if args.featurizer_lr > 0 else args.lr
+        lr = args.featurizer_lr if args.featurizer_lr >= 0 else args.lr
         LRs.update(backbone=lr) 
         params.append({'params': model.module.f.parameters(), 'lr': lr, 'name': 'backbone'})
         if ssl_type == "simsiam":
-            lr = args.projector_lr if args.projector_lr > 0 else args.lr
+            lr = args.projector_lr if args.projector_lr >= 0 else args.lr
             LRs.update(projector=lr) 
             params.append({'params': model.module.arms['projector'].parameters(), 'lr': lr, 'name': 'projector'})
-            lr = args.predictor_lr if args.predictor_lr > 0 else args.lr
+            lr = args.predictor_lr if args.predictor_lr >= 0 else args.lr
             LRs.update(predictor=lr) 
             params.append({'params': model.module.arms['predictor'].parameters(), 'lr': lr, 'name': 'predictor'})
         else:
-            lr = args.projector_lr if args.projector_lr > 0 else args.lr
+            lr = args.projector_lr if args.projector_lr >= 0 else args.lr
             LRs.update(projector=lr) 
             params.append({'params': model.module.arms['projector'].parameters(), 'lr': lr, 'name': 'projector'})
         return params, LRs
