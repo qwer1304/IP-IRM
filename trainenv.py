@@ -1920,7 +1920,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         loss_weighted      *= loss_grad_scaler
         penalty_weighted   *= penalty_grad_scaler 
         """
-        #print()
+        if args.debug_print_grads: print()
+        
         for pind, (name, p) in enumerate(net.named_parameters()):
             total_grad_flat_weighted = (   loss_unsplit_grads_final[pind] * loss_unsplit_weight  * args.Lscaler * loss_unsplit_grad_scaler
                                          + loss_CE_grads_final[pind]      * loss_CE_weight       * args.Lscaler * loss_CE_grad_scaler
@@ -1940,14 +1941,13 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                   "grad norm=", None if p.grad is None else p.grad.norm().item())
             """
 
-            """
-            print(f"pind {pind} name {name} norm {total_grad_flat_weighted.norm():.2e}")
-            print(f"{loss_unsplit_grads_final[pind].norm().item()}, {loss_unsplit_weight}")
-            print(f"{loss_CE_grads_final[pind].norm().item()}, {loss_CE_weight}")
-            print(f"{loss_grads_final[pind].norm().item()}, {loss_weight}")
-            print(f"{penalty_grads_final[pind].norm().item()}, {penalty_weight}")
-            print(f"{loss_mask_sparsity_grads[pind].norm().item()}, {mask_sparsity_weight}")
-            """
+            if args.debug_print_grads:
+                print(f"pind {pind} name {name} norm {total_grad_flat_weighted.norm().item():.2e}")
+                print(f"Unsplit {loss_unsplit_grads_final[pind].norm().item():.2e}, {loss_unsplit_weight}")
+                print(f"CE {loss_CE_grads_final[pind].norm().item():.2e}, {loss_CE_weight}")
+                print(f"Loss {loss_grads_final[pind].norm().item():.2e}, {loss_weight}")
+                print(f"Penalty {penalty_grads_final[pind].norm().item():.2e}, {penalty_weight}")
+                print(f"Mask {loss_mask_sparsity_grads[pind].norm().item():.2e}, {mask_sparsity_weight}")
         
         # -----------------------
         # Step 3: optimizer step
