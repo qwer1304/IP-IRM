@@ -891,27 +891,19 @@ if __name__ == '__main__':
         ssl_type = args.ssl_type.lower()
         params = []
         LRs = {}
-        lr = args.featurizer_lr if args.featurizer_lr >= 0 else args.lr
-        LRs.update(backbone=lr) 
-        params.append({'params': model.module.f.parameters(), 'lr': lr, 'name': 'backbone'})
-        lr = args.classifier_lr if args.classifier_lr >= 0 else args.lr
-        LRs.update(classifier=lr) 
-        params.append({'params': model.module.arms['classifier'].parameters(), 'lr': lr, 'name': 'classifier'})
+
+        def set_lr(self_lr, default_lr, group, parameters):
+            lr = self_lr if self_lr >= 0 else default_lr
+            LRs[group] = lr
+            params.append({'params': parameters, 'lr': lr, 'name': 'backbone'})
+                   
+        set_lr(args.featurizer_lr, args.lr, 'backbone',   model.module.f.parameters())
+        set_lr(args.classifier_lr, args.lr, 'classifier', model.module.arms['classifier'].parameters(),)
+        set_lr(args.projector_lr,  args.lr, 'projector',  model.module.arms['projector'].parameters())
         if args.opt_mask:
-            lr = args.mask_lr if args.mask_lr >= 0 else args.lr
-            LRs.update(mask=lr) 
-            params.append({'params': model.module.mask_fun.parameters(), 'lr': lr, 'name': 'mask'})
+            set_lr(args.mask_lr, args.lr, 'mask', model.module.mask_fun.parameters())
         if ssl_type == "simsiam":
-            lr = args.projector_lr if args.projector_lr >= 0 else args.lr
-            LRs.update(projector=lr) 
-            params.append({'params': model.module.arms['projector'].parameters(), 'lr': lr, 'name': 'projector'})
-            lr = args.predictor_lr if args.predictor_lr >= 0 else args.lr
-            LRs.update(predictor=lr) 
-            params.append({'params': model.module.arms['predictor'].parameters(), 'lr': lr, 'name': 'predictor'})
-        else:
-            lr = args.projector_lr if args.projector_lr >= 0 else args.lr
-            LRs.update(projector=lr) 
-            params.append({'params': model.module.arms['projector'].parameters(), 'lr': lr, 'name': 'projector'})
+            set_lr(args.predictor_lr, args.lr, 'predictor', model.module.arms['predictor'].parameters())
         return params, LRs
 
     if args.opt == "Adam":
