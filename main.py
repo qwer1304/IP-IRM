@@ -592,9 +592,6 @@ if __name__ == '__main__':
     parser.add_argument('--name', type=str, default='None', help='experiment name')
     parser.add_argument('--pretrain_model', default=None, type=str, help='pretrain model used?')
     parser.add_argument('--baseline', action="store_true", default=False, help='SSL baseline?')
-    parser.add_argument('--train_envs', type=str, nargs='+', default=None, required=True)
-    parser.add_argument('--test_envs', type=str, nargs='+', default=None)
-    parser.add_argument('--holdout_fraction', type=float, default=0.8)
     parser.add_argument('--seed', type=int, default=0)
 
     #### ours model param ####
