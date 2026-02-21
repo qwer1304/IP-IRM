@@ -569,6 +569,7 @@ if __name__ == '__main__':
     parser.add_argument('--train_transform', default='test', type=str, choices=['train', 'test', 'train_mixed']) # in LP train transfrom = test transfrom
     parser.add_argument('--test_transform', default='test', type=str, choices=['train', 'test'])
     parser.add_argument('--val_transform', default='test', type=str, choices=['train', 'test'])
+    parser.add_argument('--terrainc_transform', action="store_true", default=False, help='TerraInc specific transform')
 
     parser.add_argument('--mask_idcs', type=int, nargs='+', default=None, help="Feature mask indices")
 
@@ -619,7 +620,8 @@ if __name__ == '__main__':
         test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
             pin_memory=True, persistent_workers=te_pw)
     elif args.dataset == 'ImageNet':
-        train_transform = utils.make_train_transform(image_size, randgray=not args.norandgray, normalize=args.image_class, mixed=args.train_transform=='train_mixed')
+        train_transform = utils.make_train_transform(image_size, randgray=not args.norandgray, normalize=args.image_class, 
+                            mixed=args.train_transform=='train_mixed', terrainc=args.terrainc_transform)
         test_transform = utils.make_test_transform(normalize=args.image_class)
 
         if False:
