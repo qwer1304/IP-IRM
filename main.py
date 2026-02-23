@@ -274,7 +274,7 @@ def get_feature_bank(net, memory_data_loader, args, progress=False, prefix="Test
 # test for one epoch, use weighted knn to find the most similar images' label to assign the test image
 def test(net, feature_bank, feature_labels, test_data_loader, num_classes, args, progress=False, prefix="Test:", mask_u=None, masked_features=False):
     net.eval()
-       
+        
     total_top1, total_top5, total_num = 0.0, 0.0, 0
     with torch.no_grad():
         # loop test data to predict the label by weighted knn search
@@ -283,12 +283,12 @@ def test(net, feature_bank, feature_labels, test_data_loader, num_classes, args,
         if progress:
             test_bar = tqdm(test_data_loader,
                 total=len(test_data_loader),
-                ncols=args.ncols,               # total width available
-                dynamic_ncols=False,            # disable autosizing
-                bar_format=bar_format           # request bar width
+                ncols=args.ncols,                # total width available
+                dynamic_ncols=False,             # disable autosizing
+                bar_format=bar_format            # request bar width
             )
         else:
-           test_bar = test_data_loader
+            test_bar = test_data_loader
     
         if isinstance(test_data_loader.dataset, Subset):
             dataset = test_data_loader.dataset.dataset
@@ -310,6 +310,8 @@ def test(net, feature_bank, feature_labels, test_data_loader, num_classes, args,
         # For macro-accuracy computation
         per_class_correct = torch.zeros(num_classes, dtype=torch.long, device=feature_bank[0].device)
         per_class_total   = torch.zeros(num_classes, dtype=torch.long, device=feature_bank[0].device)
+        # MRR Accumulator [NEW]
+        per_class_mrr_sum = torch.zeros(num_classes, dtype=torch.float, device=feature_bank[0].device)
 
         for data, target in test_bar:
             data, target = data.cuda(non_blocking=True), target.cuda(non_blocking=True)
@@ -326,19 +328,26 @@ def test(net, feature_bank, feature_labels, test_data_loader, num_classes, args,
 
             total_num += data.size(0)
             # compute cos similarity between each feature vector and feature bank ---> [B, N]
-            # feature & feature_bank are normalized
             sim_matrix = torch.mm(feature, feature_bank) # places sim_matrix on cuda
+            
             # [B, K]
-            # A namedtuple of (values, indices) is returned with the values and indices 
-            # of the largest k elements of each row of the input tensor in the given dimension dim.
             sim_weight, sim_indices = sim_matrix.topk(k=args.k, dim=-1)
-            # [B, K]
-            # The "original size" refers to the size of that dimension in the input tensor, after any necessary 
-            # prepending of 1s on the left to match number of requested dimensions.    
-            # For each sample, picks the top-k labels that correspond to the similarity matrix of that sample and the feature bank 
-            #                                                 (B,N)
+            
+            # For each sample, picks the top-k labels
             sim_labels = torch.gather(feature_labels.expand(data.size(0), -1), dim=-1, index=sim_indices)
             sim_weight = (sim_weight / args.knn_temp).exp()
+
+            # --- [MRR Batch Calculation] --- [NEW]
+            mrr_targets = target.view(-1, 1)
+            matches = (sim_labels == mrr_targets)
+            # Get index of first match. argmax returns 0 if no True exists.
+            first_match_idx = torch.argmax(matches.int(), dim=1) 
+            found_any_match = matches.any(dim=1)
+
+            batch_rr = torch.zeros(data.size(0), device=sim_labels.device)
+            # Reciprocal Rank: 1 / (rank + 1)
+            batch_rr[found_any_match] = 1.0 / (first_match_idx[found_any_match].float() + 1.0)
+            # -------------------------------
 
             # counts for each class
             one_hot_label = torch.zeros(data.size(0) * args.k, num_classes, device=sim_labels.device)
@@ -355,19 +364,22 @@ def test(net, feature_bank, feature_labels, test_data_loader, num_classes, args,
             pred = pred_labels[:, 0]   # [B]
 
             # Loop-free update of per-class counts
-            # For each class c: count how many predictions & targets match
             for cls in range(num_classes):
                 mask = (target == cls)
                 if mask.any():
                     per_class_total[cls] += mask.sum()
                     per_class_correct[cls] += (pred[mask] == cls).sum()
+                    per_class_mrr_sum[cls] += batch_rr[mask].sum() # [NEW]
 
             if progress:
                 # Avoid division by zero in rare cases
                 valid = per_class_total > 0
                 macro_acc = (per_class_correct[valid].float() / per_class_total[valid].float()).mean().item()
-                test_bar.set_description('KNN {} Epoch: [{}/{}] Acc@1:{:.2f}% Acc@5:{:.2f}% Macro-Acc:{:.2f}%'
-                                         .format(prefix, epoch, epochs, total_top1 / total_num * 100, total_top5 / total_num * 100, macro_acc * 100))
+                # Calculate current Macro-MRR for the bar [NEW]
+                macro_mrr = (per_class_mrr_sum[valid] / per_class_total[valid].float()).mean().item()
+                
+                test_bar.set_description('KNN {} Ep:[{}/{}] Acc@1:{:.2f}% Macro-Acc:{:.2f}% Macro-MRR:{:.3f}'
+                                          .format(prefix, epoch, epochs, total_top1 / total_num * 100, macro_acc * 100, macro_mrr))
 
             # compute output
             if args.extract_features:
@@ -382,6 +394,8 @@ def test(net, feature_bank, feature_labels, test_data_loader, num_classes, args,
         # Avoid division by zero in rare cases
         valid = per_class_total > 0
         macro_acc = (per_class_correct[valid].float() / per_class_total[valid].float()).mean().item()
+        # Final Macro-MRR [NEW]
+        macro_mrr = (per_class_mrr_sum[valid] / per_class_total[valid].float()).mean().item()
 
         if feature_list:
             feature = torch.cat(feature_list, dim=0)
@@ -391,9 +405,9 @@ def test(net, feature_bank, feature_labels, test_data_loader, num_classes, args,
             pred_scores = torch.cat(pred_scores_list, dim=0)
 
             # Save to file
-            prefix = "test" if "Test" in prefix else "val"
+            prefix_save = "test" if "Test" in prefix else "val"
             directory = f'results/{args.dataset}/{args.name}'
-            fp = os.path.join(directory, f"{prefix}_features_dump.pt")       
+            fp = os.path.join(directory, f"{prefix_save}_features_dump.pt")       
             os.makedirs(os.path.dirname(fp), exist_ok=True)
 
             state = {
@@ -404,12 +418,14 @@ def test(net, feature_bank, feature_labels, test_data_loader, num_classes, args,
                 'pred_scores':  pred_scores,
                 'model_epoch':  epoch,
                 'n_classes':    args.class_num,
+                'macro_mrr':    macro_mrr, # [NEW]
             }
 
             utils.atomic_save(state, False, filename=fp)
-            print(f"Dumped features into {fp}")
+            print(f"Dumped features into {fp} | Macro-MRR: {macro_mrr:.4f}")
 
-    return total_top1 / total_num * 100, total_top5 / total_num * 100, macro_acc * 100
+    # Return total_top1, total_top5, macro_acc, and macro_mrr
+    return total_top1 / total_num * 100, total_top5 / total_num * 100, macro_acc * 100, macro_mrr * 100
     
 def load_checkpoint(path, model, model_momentum, optimizer, gradnorm_balancer, gradnorm_optimizer, device="cuda", classifier_not_needed=False):
     print("=> loading checkpoint '{}'".format(path))
@@ -921,19 +937,19 @@ if __name__ == '__main__':
             print('eval on train data')
             train_loader = DataLoader(mem_data[1], batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
                 pin_memory=True, persistent_workers=te_pw)
-            train_acc_1, train_acc_5, train_macro_acc = test(model, feauture_bank, feature_labels, train_loader, c, args, progress=True, prefix="Train:")
+            train_acc_1, train_acc_5, train_macro_acc, train_mrr = test(model, feauture_bank, feature_labels, train_loader, c, args, progress=True, prefix="Train:")
         if len(args.evaluate) == 0:
             args.evaluate = ['val', 'test']
         if 'val' in args.evaluate:
             print('eval on val data')
             val_loader = DataLoader(val_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=True, 
                 pin_memory=True, persistent_workers=te_pw)
-            val_acc_1, val_acc_5, val_macro_acc = test(model, feauture_bank, feature_labels, val_loader, c, args, progress=True, prefix="Val:")
+            val_acc_1, val_acc_5, val_macro_acc, val_mrr = test(model, feauture_bank, feature_labels, val_loader, c, args, progress=True, prefix="Val:")
         if 'test' in args.evaluate:
             print('eval on test data')
             test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=True, 
                 pin_memory=True, persistent_workers=te_pw)
-            test_acc_1, test_acc_5, test_macro_acc = test(model, feauture_bank, feature_labels, test_loader, c, args, progress=True, prefix="Test:")
+            test_acc_1, test_acc_5, test_macro_acc, test_mrr = test(model, feauture_bank, feature_labels, test_loader, c, args, progress=True, prefix="Test:")
         exit()
 
     if not args.resume and os.path.exists(log_file):
@@ -1056,18 +1072,18 @@ if __name__ == '__main__':
         if (epoch >= args.test_freq) and ((epoch % args.test_freq == 0) or (epoch == epochs)): # eval knn every test_freq epochs
             test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=True, 
                 pin_memory=False, persistent_workers=te_pw)
-            test_acc_1, test_acc_5, test_macro_acc = test(model, feauture_bank, feature_labels, test_loader, c, args, progress=True, prefix="Test:")
+            test_acc_1, test_acc_5, test_macro_acc, test_mrr = test(model, feauture_bank, feature_labels, test_loader, c, args, progress=True, prefix="Test:")
             test_loader = shutdown_loader(test_loader)
             gc.collect()              # run Python's garbage collector
             txt_write = open("results/{}/{}/{}".format(args.dataset, args.name, 'knn_result.txt'), 'a')
-            txt_write.write('\ntest_acc@1: {}, test_acc@5: {}, test_macro_acc: {}'.format(test_acc_1, test_acc_5, test_macro_acc))
+            txt_write.write('\ntest_acc@1: {}, test_acc@5: {}, test_macro_acc: {}, test_mrr: {}'.format(test_acc_1, test_acc_5, test_macro_acc, test_mrr))
             torch.save(model.state_dict(), 'results/{}/{}/model_{}.pth'.format(args.dataset, args.name, epoch))
 
         if (epoch >= args.val_freq) and ((epoch % args.val_freq == 0) or (epoch == epochs)) and (args.dataset == 'ImageNet'):
             # evaluate on validation set
             val_loader = DataLoader(val_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=True, 
                 pin_memory=False, persistent_workers=te_pw)
-            acc1, _, _ = test(model, feauture_bank, feature_labels, val_loader, c, args, progress=True, prefix="Val:")
+            acc1, _, _, _ = test(model, feauture_bank, feature_labels, val_loader, c, args, progress=True, prefix="Val:")
             val_loader = shutdown_loader(val_loader)
             gc.collect()              # run Python's garbage collector
 
