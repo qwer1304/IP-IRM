@@ -414,11 +414,11 @@ def test(net, feature_bank, feature_labels, test_data_loader, num_classes, args,
 
             # Save to file
             if "Test" in prefix:
-                prefix = "test"
+                prefix_save = "test"
             elif "Val" in prefix:
-                prefix = "val"
+                prefix_save = "val"
             elif "Train" in prefix:
-                prefix = "train"
+                prefix_save = "train"
             directory = f'results/{args.dataset}/{args.name}'
             fp = os.path.join(directory, f"{prefix_save}_features_dump.pt")       
             os.makedirs(os.path.dirname(fp), exist_ok=True)
