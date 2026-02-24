@@ -332,6 +332,8 @@ def test(net, feature_bank, feature_labels, test_data_loader, num_classes, args,
             
             # [B, K]
             sim_weight, sim_indices = sim_matrix.topk(k=args.k, dim=-1)
+
+            local_decay = (sim_weight[:, 0] - sim_weight[:, 4]).mean().item()
             
             # For each sample, picks the top-k labels
             sim_labels = torch.gather(feature_labels.expand(data.size(0), -1), dim=-1, index=sim_indices)
@@ -378,8 +380,8 @@ def test(net, feature_bank, feature_labels, test_data_loader, num_classes, args,
                 # Calculate current Macro-MRR for the bar [NEW]
                 macro_mrr = (per_class_mrr_sum[valid] / per_class_total[valid].float()).mean().item()
                 
-                test_bar.set_description('KNN {} Ep:[{}/{}] Acc@1:{:.2f}% Macro-Acc:{:.2f}% Macro-MRR:{:.3f}'
-                                          .format(prefix, epoch, epochs, total_top1 / total_num * 100, macro_acc * 100, macro_mrr))
+                test_bar.set_description('KNN {} Ep:[{}/{}] Acc@1:{:.2f}% Macro-Acc:{:.2f}% Macro-MRR:{:.3f} Decay:{:.3f}'
+                                          .format(prefix, epoch, epochs, total_top1 / total_num * 100, macro_acc * 100, macro_mrr, local_decay))
 
             # compute output
             if args.extract_features:
