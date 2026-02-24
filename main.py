@@ -383,7 +383,7 @@ def test(net, feature_bank, feature_labels, test_data_loader, num_classes, args,
                 # Calculate current Macro-MRR for the bar [NEW]
                 macro_mrr = (per_class_mrr_sum[valid] / per_class_total[valid].float()).mean().item()
                 
-                test_bar.set_description('KNN {} Ep:[{}/{}] Acc@1:{:.2f}% Macro-Acc:{:.2f}% Macro-MRR:{:.3f} Decay:{:.3f}'
+                test_bar.set_description('KNN {} Epoch [{}/{}] Acc@1:{:.2f}% Macro-Acc:{:.2f}% Macro-MRR:{:.3f} Decay:{:.3f}'
                                           .format(prefix, epoch, epochs, total_top1 / total_num * 100, macro_acc * 100, macro_mrr, total_decay_sum / total_num))
 
             # compute output
@@ -413,7 +413,12 @@ def test(net, feature_bank, feature_labels, test_data_loader, num_classes, args,
             pred_scores = torch.cat(pred_scores_list, dim=0)
 
             # Save to file
-            prefix_save = "test" if "Test" in prefix else "val"
+            if "Test" in prefix:
+                prefix = "test"
+            elif "Val" in prefix:
+                prefix = "val"
+            elif "Train" in prefix:
+                prefix = "train"
             directory = f'results/{args.dataset}/{args.name}'
             fp = os.path.join(directory, f"{prefix_save}_features_dump.pt")       
             os.makedirs(os.path.dirname(fp), exist_ok=True)
@@ -677,7 +682,7 @@ if __name__ == '__main__':
                     help='test epoch freqeuncy')
     parser.add_argument('--norandgray', action="store_true", default=False, help='skip rand gray transform')
     parser.add_argument('--random_aug', action="store_true", default=False, help='random_aug')
-    parser.add_argument('--evaluate', type=str, default=None, nargs="*", choices=['val', 'test'], help='only evaluate')
+    parser.add_argument('--evaluate', type=str, default=None, nargs="*", choices=['train', 'val', 'test', 'knn', 'masked'], help='only evaluate')
     parser.add_argument('--extract_features', action="store_true", help="extract features for post processiin during evaluate")
     parser.add_argument('--split_train_for_test', type=float, default=None, nargs=2, help="fractions to split training data into train/val for evaluation")
 
