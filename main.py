@@ -312,6 +312,8 @@ def test(net, feature_bank, feature_labels, test_data_loader, num_classes, args,
         per_class_total   = torch.zeros(num_classes, dtype=torch.long, device=feature_bank[0].device)
         # MRR Accumulator [NEW]
         per_class_mrr_sum = torch.zeros(num_classes, dtype=torch.float, device=feature_bank[0].device)
+        
+        total_decay_sum = 0
 
         for data, target in test_bar:
             data, target = data.cuda(non_blocking=True), target.cuda(non_blocking=True)
@@ -333,7 +335,8 @@ def test(net, feature_bank, feature_labels, test_data_loader, num_classes, args,
             # [B, K]
             sim_weight, sim_indices = sim_matrix.topk(k=args.k, dim=-1)
 
-            local_decay = (sim_weight[:, 0] - sim_weight[:, 4]).mean().item()
+            batch_decay = sim_weight[:, 0] - sim_weight[:, 4]
+            total_decay_sum += batch_decay.sum().item()
             
             # For each sample, picks the top-k labels
             sim_labels = torch.gather(feature_labels.expand(data.size(0), -1), dim=-1, index=sim_indices)
@@ -381,7 +384,7 @@ def test(net, feature_bank, feature_labels, test_data_loader, num_classes, args,
                 macro_mrr = (per_class_mrr_sum[valid] / per_class_total[valid].float()).mean().item()
                 
                 test_bar.set_description('KNN {} Ep:[{}/{}] Acc@1:{:.2f}% Macro-Acc:{:.2f}% Macro-MRR:{:.3f} Decay:{:.3f}'
-                                          .format(prefix, epoch, epochs, total_top1 / total_num * 100, macro_acc * 100, macro_mrr, local_decay))
+                                          .format(prefix, epoch, epochs, total_top1 / total_num * 100, macro_acc * 100, macro_mrr, batch_decay / total_num))
 
             # compute output
             if args.extract_features:
@@ -398,6 +401,9 @@ def test(net, feature_bank, feature_labels, test_data_loader, num_classes, args,
         macro_acc = (per_class_correct[valid].float() / per_class_total[valid].float()).mean().item()
         # Final Macro-MRR [NEW]
         macro_mrr = (per_class_mrr_sum[valid] / per_class_total[valid].float()).mean().item()
+        
+        # Final aggregate score for the epoch
+        epoch_decay = total_decay_sum / total_total_num
 
         if feature_list:
             feature = torch.cat(feature_list, dim=0)
