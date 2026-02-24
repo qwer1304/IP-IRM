@@ -384,7 +384,7 @@ def test(net, feature_bank, feature_labels, test_data_loader, num_classes, args,
                 macro_mrr = (per_class_mrr_sum[valid] / per_class_total[valid].float()).mean().item()
                 
                 test_bar.set_description('KNN {} Ep:[{}/{}] Acc@1:{:.2f}% Macro-Acc:{:.2f}% Macro-MRR:{:.3f} Decay:{:.3f}'
-                                          .format(prefix, epoch, epochs, total_top1 / total_num * 100, macro_acc * 100, macro_mrr, batch_decay / total_num))
+                                          .format(prefix, epoch, epochs, total_top1 / total_num * 100, macro_acc * 100, macro_mrr, total_decay_sum / total_num))
 
             # compute output
             if args.extract_features:
