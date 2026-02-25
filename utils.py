@@ -1034,7 +1034,7 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
                         prob = torch.Tensor([2] + [1]*(num_env-1)) / (num_env + 1)
                         threshold = cal_entropy(prob, dim=0)
                         print()
-                        print(threshold. prob)
+                        print(threshold, prob)
                         constrain_loss = torch.relu(threshold - cal_entropy(param_split.mean(0), dim=0))                       
                     else:
                         constrain_loss = - cal_entropy(param_split.mean(0), dim=0)#  + cal_entropy(param_split, dim=1).mean()
