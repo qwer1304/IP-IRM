@@ -850,7 +850,7 @@ def auto_split(net, update_loader, soft_split_all, temperature, irm_temp, loss_m
                         Net result is that splits better than 2:1 are capped and don't decrease the loss anymore.
                         """
                         prob = torch.Tensor([2] + [1]*(num_env-1)) / (num_env + 1)
-                        threshold = cal_entropy(prob)
+                        threshold = cal_entropy(prob, dim=0)
                         constrain_loss = torch.relu(threshold - cal_entropy(param_split.mean(0), dim=0))
                     else:
                         """
@@ -1032,7 +1032,7 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
                 else:
                     if cons_relax: # relax constrain to make item num of groups no more than 2:1...
                         prob = torch.Tensor([2] + [1]*(num_env-1)) / (num_env + 1)
-                        threshold = cal_entropy(prob)
+                        threshold = cal_entropy(prob, dim=0)
                         print()
                         print(threshold. prob)
                         constrain_loss = torch.relu(threshold - cal_entropy(param_split.mean(0), dim=0))                       
