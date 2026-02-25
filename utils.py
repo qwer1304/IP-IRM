@@ -1078,11 +1078,11 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
             write_log('Updating Env [%d/%d] [%d/%d]  Loss: %.2f  Cont_Risk: %.2f  Inv_Risk: %.2f  Cons_Risk: %.2f  Cnt: %d  Lr: %.4f  Inv_Mode: %s'
                       %(epoch, 100, training_num, len(trainloader.dataset), sum(risk_all_list)/len(risk_all_list), sum(risk_cont_all_list)/len(risk_cont_all_list), sum(risk_penalty_all_list)/len(risk_penalty_all_list),
                         sum(risk_constrain_all_list)/len(risk_constrain_all_list), cnt, pre_optimizer.param_groups[0]['lr'], irm_mode), log_file=log_file)
-            final_split_softmax = F.softmax(soft_split_best, dim=-1)
+            final_split_softmax = F.softmax(soft_split_best, dim=-1) # (B,num_env)
             write_log('%s' %(pretty_tensor_str(final_split_softmax)), log_file=log_file, print_=True)
-            group_assign = final_split_softmax.argmax(dim=1)
+            group_assign = final_split_softmax.argmax(dim=1) # (B,)
             
-            group_assign_str = ' '.join([f"group{i} {group_assign[i].size(0)}" for i in range(num_env)])
+            group_assign_str = ' '.join([f"group{i} {(group_assign==i).sum()}" for i in range(num_env)])
             write_log('Debug: ' + group_assign_str, log_file=log_file, print_=True)
             del trainloader
             return soft_split_best
