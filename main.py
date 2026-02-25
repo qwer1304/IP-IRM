@@ -1004,7 +1004,7 @@ if __name__ == '__main__':
             cuda_rng_state = torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None
 
             utils.atomic_save({
-                'epoch':                0, # restore is from epoch+1
+                'epoch':                start_epoch-1, # restore is from epoch+1
                 'state_dict':           model.state_dict(),
                 'best_acc1':            best_acc1,
                 'best_epoch':           best_epoch,

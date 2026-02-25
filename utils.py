@@ -844,12 +844,14 @@ def auto_split(net, update_loader, soft_split_all, temperature, irm_temp, loss_m
                         """
                         Don't let the model's global prediction distribution get too peaky - stay at least roughly balanced (entropy >= 0.6365). 
                         If it starts collapsing, push it back.
-                        For 2 classes, H([0.55,0.45])~0.688, H([0.7,0.3])~0.611. So 0.6365 corresponds roughly to a 65-35 class split.  
+                        For 2 classes, and natural base, H([0.55,0.45])~0.688, H([0.7,0.3])~0.611. So 0.6365 corresponds roughly to a 65-35 class split.  
                         So, for 99-1 split, entropy is ~ 0, so relu() gives ~ 0.6365, which increases total loss.
                         For 50-50 split, entropy is ~ 0.69, so relu() gives 0, i.e., loss isn't increased.
                         Net result is that splits better than 2:1 are capped and don't decrease the loss anymore.
                         """
-                        constrain_loss = torch.relu(0.6365 - cal_entropy(param_split.mean(0), dim=0))
+                        prob = torch.Tensor([2] + [1]*(num_env-1)]) / (num_env + 1)
+                        threshold = cal_entropy(prob)
+                        constrain_loss = torch.relu(threshold - cal_entropy(param_split.mean(0), dim=0))
                     else:
                         """
                         Rewards diversity across the batch - it is more positive when the model collapses to one class. 
@@ -1028,8 +1030,12 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
                 if nonorm:
                     constrain_loss = 0.2*(- cal_entropy(param_split.mean(0), dim=0) + cal_entropy(param_split, dim=1).mean())
                 else:
-                    if cons_relax: # relax constrain to make item num of groups no more than 2:1
-                        constrain_loss = torch.relu(0.6365 - cal_entropy(param_split.mean(0), dim=0))
+                    if cons_relax: # relax constrain to make item num of groups no more than 2:1...
+                        prob = torch.Tensor([2] + [1]*(num_env-1)]) / (num_env + 1)
+                        threshold = cal_entropy(prob)
+                        print()
+                        print(threshold. prob)
+                        constrain_loss = torch.relu(threshold - cal_entropy(param_split.mean(0), dim=0))                       
                     else:
                         constrain_loss = - cal_entropy(param_split.mean(0), dim=0)#  + cal_entropy(param_split, dim=1).mean()
                 constrain_loss = constrain * constrain_loss
@@ -1077,7 +1083,9 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
             final_split_softmax = F.softmax(soft_split_best, dim=-1)
             write_log('%s' %(pretty_tensor_str(final_split_softmax)), log_file=log_file, print_=True)
             group_assign = final_split_softmax.argmax(dim=1)
-            write_log('Debug:  group1 %d  group2 %d' %(group_assign.sum(), group_assign.size(0)-group_assign.sum()), log_file=log_file, print_=True)
+            
+            group_assign_str = ' '.join([f"group{i} {group_assign[i].size(0)}" for i in range(num_env)])
+            write_log('Debug: ' + group_assign_str, log_file=log_file, print_=True)
             del trainloader
             return soft_split_best
     # end for epoch in range(100):
