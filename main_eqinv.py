@@ -947,10 +947,13 @@ if __name__ == '__main__':
                 # gradnorm restores only attributes needed to continue running. arguments are taken from  user args
                 gradnorm_balancer.set_tau(args.gradnorm_tau) # always set tau to currently provided value; also converts None to values
 
-            # use current LR, not the one from checkpoint
-            params = get_optimizer_params(model, args)
-            for pind, param_group in enumerate(optimizer.param_groups):
-                param_group['lr'] = params[pind]['lr']
+            # set LRs to current values
+            for group in optimizer.param_groups:
+                group_name = group.get('name')
+                if group_name in LRs:
+                    group['lr'] = LRs[group_name]                    
+                else:
+                    print(f"Unknown group {group_name} in LRs {LRs.keys()}")
 
             for param_group in gradnorm_optimizer.param_groups:
                 param_group['lr'] = args.gradnorm_lr 
