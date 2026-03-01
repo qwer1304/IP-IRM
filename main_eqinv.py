@@ -909,6 +909,8 @@ if __name__ == '__main__':
 
     if args.opt == "Adam":
         params = get_optimizer_params(model, args)
+        print()
+        print(params)
         optimizer = optim.Adam(params, weight_decay=args.weight_decay, betas=args.betas)
         gradnorm_optimizer = optim.Adam(gradnorm_balancer.parameters(), lr=args.gradnorm_lr, weight_decay=args.gradnorm_weight_decay, betas=args.gradnorm_betas)        
     elif args.opt == 'SGD':
