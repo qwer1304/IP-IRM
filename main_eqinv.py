@@ -896,7 +896,7 @@ if __name__ == '__main__':
         def set_lr(self_lr, default_lr, group, parameters):
             lr = self_lr if self_lr >= 0 else default_lr
             LRs[group] = lr
-            params.append({'params': parameters, 'lr': lr, 'name': 'backbone'})
+            params.append({'params': parameters, 'lr': lr, 'name': group})
                    
         set_lr(args.featurizer_lr, args.lr, 'backbone',   model.module.f.parameters())
         set_lr(args.classifier_lr, args.lr, 'classifier', model.module.arms['classifier'].parameters(),)
@@ -908,9 +908,7 @@ if __name__ == '__main__':
         return params, LRs
 
     if args.opt == "Adam":
-        params = get_optimizer_params(model, args)
-        print()
-        print(params)
+        params, LRs = get_optimizer_params(model, args)
         optimizer = optim.Adam(params, weight_decay=args.weight_decay, betas=args.betas)
         gradnorm_optimizer = optim.Adam(gradnorm_balancer.parameters(), lr=args.gradnorm_lr, weight_decay=args.gradnorm_weight_decay, betas=args.gradnorm_betas)        
     elif args.opt == 'SGD':
