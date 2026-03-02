@@ -1168,9 +1168,11 @@ if __name__ == '__main__':
             test_acc_1, test_acc_5, test_macro_acc = test(model, test_loader, args, num_classes=c, progress=True, prefix="Test:")
             test_loader = shutdown_loader(test_loader)
             gc.collect()              # run Python's garbage collector
+            """
             txt_write = open("results-eqinv/{}/{}/{}".format(args.dataset, args.name, 'inference_result.txt'), 'a')
             txt_write.write('\ntest_acc@1: {}, test_acc@5: {}, test_macro_acc: {}'.format(test_acc_1, test_acc_5, test_macro_acc))
             torch.save(model.state_dict(), 'results-eqinv/{}/{}/model_{}.pth'.format(args.dataset, args.name, epoch))
+            """
 
         if (epoch >= args.val_freq) and ((epoch % args.val_freq == 0) or (epoch == epochs)) and (args.dataset == 'ImageNet'):
             # evaluate on validation set
