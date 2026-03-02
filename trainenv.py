@@ -1903,8 +1903,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         mask_activation = net.module.mask_fun.activation(u=mask_activation_noise) # recompute since its graph was released
         loss_mask_sparsity, loss_mask_sparsity_grads, loss_mask_sparsity_norm = \
             calculate_mask_sparsity_and_grads(mask_activation, net, mask_sparsity_weight, do_mask_sparsity, args, param_groups_2_pind, loss_mask_sparsity_grads)
-        print()
-        print(loss_mask_sparsity)
         
         # Environments gradients
         loss_grads_final = calculate_loss_grads_final(loss_grads, loss_env, loss_weight_env, halves_sz, loss_module, reduction, device, do_loss)
@@ -2012,6 +2010,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         total_mask_sparsity_weighted += (mask_sparsity_weight       * loss_mask_sparsity.mean()).item() * this_batch_size * gradients_accumulation_steps
         total_loss_weighted          += loss_batch_weighted.item()                                      * this_batch_size * gradients_accumulation_steps
         
+        print()
+        print(total_mask_sparsity_weighted, loss_mask_sparsity)
         if args.print_batch:
             print() # this causes each tqdm update to be printed on a separare line
             
