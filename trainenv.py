@@ -2011,7 +2011,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         total_loss_weighted          += loss_batch_weighted.item()                                      * this_batch_size * gradients_accumulation_steps
         
         print()
-        print(total_mask_sparsity_weighted, loss_mask_sparsity)
+        print(total_mask_sparsity_weighted, loss_mask_sparsity, mask_sparsity_weight)
         if args.print_batch:
             print() # this causes each tqdm update to be printed on a separare line
             
