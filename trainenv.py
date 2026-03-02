@@ -1028,8 +1028,13 @@ def calculate_scalers(loss_CE_grads_final, loss_unsplit_grads_final, loss_grads_
     cos_lp   = delta_lp / (loss_grad_norm_weighted         * penalty_grad_norm_weighted + 1e-12)
     cos_kp   = delta_kp / (loss_unsplit_grad_norm_weighted * penalty_grad_norm_weighted + 1e-12)
 
-    Loss_grads_flat_weighted = [loss_unsplit_grads_final_weighted[p] + loss_grads_final_weighted[p] for p in range(len(loss_grads_final_weighted))]
-    L_grads_flat_weighted    = l_unsplit_grads_flat_weighted + l_grads_flat_weighted
+    Loss_grads_flat_weighted = [do_unsplit_loss*loss_unsplit_grads_final_weighted[p] + 
+                                do_loss*args.debug_dont_update_loss*loss_grads_final_weighted[p] +
+                                do_CE_loss*loss_CE_grads_final_weighted
+                                    for p in range(len(loss_grads_final_weighted))]
+    L_grads_flat_weighted    = do_unsplit_loss*l_unsplit_grads_flat_weighted + \
+                               do_loss*args.debug_dont_update_loss*l_grads_flat_weighted + \
+                               do_CE_loss*l_CE_grads_flat_weighted
     cos_Lp                   = F.cosine_similarity(L_grads_flat_weighted, p_grads_flat_weighted, dim=0)
     dot_Lp                   = L_grads_flat_weighted.dot(p_grads_flat_weighted)
 
@@ -2101,7 +2106,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                    f" CE {total_CE_loss_weighted/trained_samples:.3e}" + \
                    f" Env/{args.ssl_type} {total_env_loss_weighted/trained_samples:.3e}" + \
                    f" {args.penalty_type} {total_pen_loss_weighted/trained_samples:.3e}" + \
-                   f" Sparsity {loss_mask_sparsity_weighted.item():.3e}" + \
+                   f" Sparsity {total_mask_sparsity_weighted/trained_samples:.3e}" + \
                    f" LR BB {train_optimizer.param_groups[0]['lr']:.2e} PW {penalty_weight_orig:.6g}" + \
                    f" dot:{ll_str}{lk_str}{lp_str}{kk_str}{kp_str}{pp_str}" + \
                    f" cos:{lk_cos_str}{lp_cos_str}{kp_cos_str}" + \
