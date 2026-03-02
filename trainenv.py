@@ -1325,8 +1325,6 @@ def calculate_mask_sparsity_and_grads(mask, net, weight, do_flag, args, param_gr
             active_count = mask.sum()
             #loss = F.relu(active_count - args.mask_sparsity)  
             loss = F.softplus(active_count - args.mask_sparsity)  
-            print()
-            print(active_count, args.mask_sparsity)
         elif args.mask_nonlinearity == 'sigmoid' or args.mask_nonlinearity == 'gumbel':
             #loss = torch.mean(mask * (1 - mask))
             loss = torch.sum(torch.sqrt(torch.abs(mask) + 1e-8))
@@ -1905,6 +1903,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         mask_activation = net.module.mask_fun.activation(u=mask_activation_noise) # recompute since its graph was released
         loss_mask_sparsity, loss_mask_sparsity_grads, loss_mask_sparsity_norm = \
             calculate_mask_sparsity_and_grads(mask_activation, net, mask_sparsity_weight, do_mask_sparsity, args, param_groups_2_pind, loss_mask_sparsity_grads)
+        print()
+        print(loss_mask_sparsity)
         
         # Environments gradients
         loss_grads_final = calculate_loss_grads_final(loss_grads, loss_env, loss_weight_env, halves_sz, loss_module, reduction, device, do_loss)
