@@ -43,13 +43,15 @@ class Mask():
 
                 # Calculate threshold for the Top-K slots
                 if self.hard_K:
-                    threshold = torch.topk(x_soft, self.K).values[-1] # last Kth largest
+                    _, topk_indices = torch.topk(x_soft, self.K)
+                    topk_mask = torch.zeros_like(x, dtype=bool)
+                    topk_mask[topk_indices] = True
                 else:
-                    threshold = 0.5
+                    topk_mask = torch.ones_like(x, dtype=bool)
 
                 # 1. We never exceed K (because of threshold)
                 # 2. We don't force 'on' channels that are naturally 'off' (because of 0.5)
-                x_hard = ((x_soft > 0.5) & (x_soft >= threshold)).float()
+                x_hard = ((x_soft > 0.5) & topk_mask).float()
                 x_ret = x_hard + x_soft - x_soft.detach()
             return x_ret
         else:
