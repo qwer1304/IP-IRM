@@ -1584,6 +1584,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 grads_all             = [None] * num_grads 
                 
                 mask_activation = net.module.mask_fun.activation(u=mask_activation_noise)
+                
+                print()
+                print(mask_activation.sum())
 
                 """
                 prepare for micro-batch in loss-sepcific way:
