@@ -1325,6 +1325,8 @@ def calculate_mask_sparsity_and_grads(mask, net, weight, do_flag, args, param_gr
             active_count = mask.sum()
             #loss = F.relu(active_count - args.mask_sparsity)  
             loss = F.softplus(active_count - args.mask_sparsity)  
+            print()
+            print(active_count, args.mask_sparsity)
         elif args.mask_nonlinearity == 'sigmoid' or args.mask_nonlinearity == 'gumbel':
             #loss = torch.mean(mask * (1 - mask))
             loss = torch.sum(torch.sqrt(torch.abs(mask) + 1e-8))
