@@ -1030,7 +1030,7 @@ def calculate_scalers(loss_CE_grads_final, loss_unsplit_grads_final, loss_grads_
 
     Loss_grads_flat_weighted = [do_unsplit_loss*loss_unsplit_grads_final_weighted[p] + 
                                 do_loss*args.debug_dont_update_loss*loss_grads_final_weighted[p] +
-                                do_CE_loss*loss_CE_grads_final_weighted
+                                do_CE_loss*loss_CE_grads_final_weighted[p]
                                     for p in range(len(loss_grads_final_weighted))]
     L_grads_flat_weighted    = do_unsplit_loss*l_unsplit_grads_flat_weighted + \
                                do_loss*args.debug_dont_update_loss*l_grads_flat_weighted + \
