@@ -451,6 +451,7 @@ def load_checkpoint(path, model, model_momentum, optimizer, gradnorm_balancer, g
     updated_split = checkpoint.get("updated_split", None)
     updated_split_all = checkpoint.get("updated_split_all", None)
     ema = checkpoint.get("ema", None)
+    args = checkpoint.get("args", None)
 
 
     # Restore main model
@@ -577,6 +578,9 @@ def load_checkpoint(path, model, model_momentum, optimizer, gradnorm_balancer, g
         print("\tgradnorm load: {}".format(msg_gradnorm))
 
     print("<= loaded checkpoint '{}' (epoch {})".format(path, checkpoint.get("epoch", -1)))
+    if args is not None:
+        print("saved with args:")
+        print(args)
 
     return model, model_momentum, optimizer, queue_proj, queue_noproj, start_epoch, best_acc1, best_epoch, updated_split, updated_split_all, ema, gradnorm_balancer, gradnorm_optimizer
 
@@ -1133,4 +1137,5 @@ if __name__ == '__main__':
                     "python_rng_state": random.getstate(),
                 },
                 'ema':                  ema,
+                'args':                 args,
             }, is_best, filename='{}/{}/checkpoint.pth.tar'.format(args.save_root, args.name))
