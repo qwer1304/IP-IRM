@@ -1092,9 +1092,11 @@ if __name__ == '__main__':
             test_acc_1, test_acc_5, test_macro_acc, test_mrr = test(model, feauture_bank, feature_labels, test_loader, c, args, progress=True, prefix="Test:")
             test_loader = shutdown_loader(test_loader)
             gc.collect()              # run Python's garbage collector
+            """
             txt_write = open("results/{}/{}/{}".format(args.dataset, args.name, 'knn_result.txt'), 'a')
             txt_write.write('\ntest_acc@1: {}, test_acc@5: {}, test_macro_acc: {}, test_mrr: {}'.format(test_acc_1, test_acc_5, test_macro_acc, test_mrr))
             torch.save(model.state_dict(), 'results/{}/{}/model_{}.pth'.format(args.dataset, args.name, epoch))
+            """
 
         if (epoch >= args.val_freq) and ((epoch % args.val_freq == 0) or (epoch == epochs)) and (args.dataset == 'ImageNet'):
             # evaluate on validation set
