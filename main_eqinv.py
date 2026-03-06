@@ -1023,12 +1023,12 @@ if __name__ == '__main__':
             train_acc_1, train_acc_5, train_macro_acc = test(model, train_loader, args, num_classes=c, progress=True, prefix="Train:", mask_u=mask_activation_noise)
         if 'val' in args.evaluate:
             print('eval on val data')
-            val_loader = DataLoader(val_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=True, 
+            val_loader = DataLoader(val_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
                 pin_memory=True, persistent_workers=te_pw)
             val_acc_1, val_acc_5, val_macro_acc = test(model, val_loader, args, num_classes=c, progress=True, prefix="Val:", mask_u=mask_activation_noise)
         if 'test' in args.evaluate:
             print('eval on test data')
-            test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=True, 
+            test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
                 pin_memory=True, persistent_workers=te_pw)
             test_acc_1, test_acc_5, test_macro_acc = test(model, test_loader, args, num_classes=c, progress=True, prefix="Test:", mask_u=mask_activation_noise)
         exit()
@@ -1166,10 +1166,12 @@ if __name__ == '__main__':
                 train_loader = shutdown_loader(train_loader)
                 gc.collect()
 
+        mask_activation_noise = model.module.mask_fun.sample().detach()
+
         if (epoch >= args.test_freq) and ((epoch % args.test_freq == 0) or (epoch == epochs)): # eval model every test_freq epochs
-            test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=True, 
+            test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
                 pin_memory=False, persistent_workers=te_pw)
-            test_acc_1, test_acc_5, test_macro_acc = test(model, test_loader, args, num_classes=c, progress=True, prefix="Test:")
+            test_acc_1, test_acc_5, test_macro_acc = test(model, test_loader, args, num_classes=c, progress=True, prefix="Test:", mask_u=mask_activation_noise)
             test_loader = shutdown_loader(test_loader)
             gc.collect()              # run Python's garbage collector
             """
@@ -1180,9 +1182,9 @@ if __name__ == '__main__':
 
         if (epoch >= args.val_freq) and ((epoch % args.val_freq == 0) or (epoch == epochs)) and (args.dataset == 'ImageNet'):
             # evaluate on validation set
-            val_loader = DataLoader(val_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=True, 
+            val_loader = DataLoader(val_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
                 pin_memory=False, persistent_workers=te_pw)
-            acc1, _, _ = test(model, val_loader, args, num_classes=c, progress=True, prefix="Val:")
+            acc1, _, _ = test(model, val_loader, args, num_classes=c, progress=True, prefix="Val:", mask_u=mask_activation_noise)
             val_loader = shutdown_loader(val_loader)
             gc.collect()              # run Python's garbage collector
 

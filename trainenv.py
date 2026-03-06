@@ -101,6 +101,10 @@ class VRExCalculator(BaseCalculator):
     def num_halves():
         return 1
         
+    @staticmethod
+    def name():
+        return 'VREx'
+        
 # ---------------------------
 # Base IRM Calculator
 # ---------------------------
@@ -182,6 +186,10 @@ class IRMCalculator(BaseCalculator):
     def num_halves():
         return 2
 
+    @staticmethod
+    def name():
+        return 'IRM'
+        
 # ---------------------------
 # CE-based IRM (for MoCo)
 # ---------------------------
@@ -553,6 +561,10 @@ class MoCoSupConLossModule(LossModule):
     def is_per_env():
         return True
 
+    @staticmethod
+    def name():
+        return 'MoCoSupCon'
+
     def get_k_view(self, x):
         with torch.no_grad():
             return self.net_momentum.module.f(x)
@@ -693,6 +705,10 @@ class MoCoLossModule(LossModule):
     def is_per_env():
         return True
 
+    @staticmethod
+    def name():
+        return 'MoCo'
+
     def get_k_view(self, x):
         with torch.no_grad():
             return self.net_momentum.module.f(x)
@@ -748,6 +764,10 @@ class SimSiamLossModule(LossModule):
     def is_per_env():
         return False
 
+    @staticmethod
+    def name():
+        return 'SimSiam'
+
 # ---------------------------
 # CE Loss Module
 # ---------------------------
@@ -775,6 +795,10 @@ class CELossModule(LossModule):
     @staticmethod
     def is_per_env():
         return False
+
+    @staticmethod
+    def name():
+        return 'CE'
 
 def clamp_scalers_for_progress(norm2_dict, dot_dict, scaler_dict, ema=False):
     def consistent_dots(dot_dict, norm2_dict, eps=1e-12):
@@ -2102,10 +2126,10 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         
         desc_str = f"Epoch [{epoch}/{args.epochs}] [{trained_samples}/{total_samples}]" + \
                    f" Total {total_loss_weighted/trained_samples:.3e}" + \
-                   f" Unsplit/{args.ssl_type_unsplit} {total_unsplit_loss_weighted/trained_samples:.3e}" + \
+                   f" Unsplit/{loss_unsplit_module.name()} {total_unsplit_loss_weighted/trained_samples:.3e}" + \
                    f" CE {total_CE_loss_weighted/trained_samples:.3e}" + \
-                   f" Env/{args.ssl_type} {total_env_loss_weighted/trained_samples:.3e}" + \
-                   f" {args.penalty_type} {total_pen_loss_weighted/trained_samples:.3e}" + \
+                   f" Env/{loss_module.name()} {total_env_loss_weighted/trained_samples:.3e}" + \
+                   f" {penalty_calculator.name()} {total_pen_loss_weighted/trained_samples:.3e}" + \
                    f" Sparsity {total_mask_sparsity_weighted/trained_samples:.3e}" + \
                    f" LR BB {train_optimizer.param_groups[0]['lr']:.2e} PW {penalty_weight_orig:.6g}" + \
                    f" dot:{ll_str}{lk_str}{lp_str}{kk_str}{kp_str}{pp_str}" + \
@@ -2123,13 +2147,13 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
 
         if (batch_index % 10 - gradients_accumulation_steps + 1) == 0:
            utils.write_log('Train Epoch: [{:d}/{:d}] [{:d}/{:d}] {}: Total: {:.4f} Unsplit: {:.4f} CE: {:.4f} Env: {:.4f}'
-                            .format(epoch, args.epochs, trained_samples, total_samples, args.ssl_type, 
+                            .format(epoch, args.epochs, trained_samples, total_samples, loss_module.name(), 
                                     total_loss_weighted/trained_samples, 
                                     total_unsplit_loss_weighted/trained_samples, 
                                     total_CE_loss_weighted/trained_samples, 
                                     total_env_loss_weighted/trained_samples) + 
                             ' {}: {:.4g} LR: {:.4f} PW {:.4f} GN {:.4f}'
-                            .format(args.penalty_type, total_pen_loss_weighted/trained_samples, train_optimizer.param_groups[0]['lr'], 
+                            .format(penalty_calculator.name(), total_pen_loss_weighted/trained_samples, train_optimizer.param_groups[0]['lr'], 
                                     penalty_weight_orig, info_dict['gradnorm_loss']) + 
                             ' dot {:.2e} {:.2e} {:.2e} {:.2e} {:.2e} {:.2e}'
                             .format(info_dict['ngl2'], info_dict['dot_lk'], info_dict['dot_lp'], info_dict['ngk2'], info_dict['dot_kp'], info_dict['ngp2']) +
