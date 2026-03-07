@@ -959,12 +959,12 @@ if __name__ == '__main__':
             args.evaluate = ['val', 'test']
         if 'val' in args.evaluate:
             print('eval on val data')
-            val_loader = DataLoader(val_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=True, 
+            val_loader = DataLoader(val_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
                 pin_memory=True, persistent_workers=te_pw)
             val_acc_1, val_acc_5, val_macro_acc, val_mrr = test(model, feauture_bank, feature_labels, val_loader, c, args, progress=True, prefix="Val:")
         if 'test' in args.evaluate:
             print('eval on test data')
-            test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=True, 
+            test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
                 pin_memory=True, persistent_workers=te_pw)
             test_acc_1, test_acc_5, test_macro_acc, test_mrr = test(model, feauture_bank, feature_labels, test_loader, c, args, progress=True, prefix="Test:")
         exit()
