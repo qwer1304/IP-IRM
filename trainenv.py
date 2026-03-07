@@ -2124,7 +2124,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         else:
             gradnorm_str = ""
         
-        desc_str = f"Epoch [{epoch}/{args.epochs}] [{trained_samples}/{total_samples}]" + \
+        desc_str = f"Train Epoch [{epoch}/{args.epochs}] [{trained_samples}/{total_samples}]" + \
                    f" Total {total_loss_weighted/trained_samples:.3e}" + \
                    f" Unsplit/{loss_unsplit_module.name()} {total_unsplit_loss_weighted/trained_samples:.3e}" + \
                    f" CE {total_CE_loss_weighted/trained_samples:.3e}" + \
