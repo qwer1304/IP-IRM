@@ -1054,7 +1054,7 @@ if __name__ == '__main__':
 
         train_loss = train_env(model, train_loader, optimizer, upd_split, tr_bs, epoch, args, **kwargs)
 
-        if (epoch >= args.penalty_iters) and ((epoch - args.penalty_iters) % args.maximize_iter == 0) and (not args.baseline):
+        if (epoch > args.penalty_iters) and ((epoch - args.penalty_iters) % args.maximize_iter == 0) and (not args.baseline):
             # Maximize Step (Step 2)
             train_loader = shutdown_loader(train_loader)
             gc.collect()
