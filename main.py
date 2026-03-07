@@ -252,7 +252,7 @@ def get_feature_bank(net, memory_data_loader, args, progress=False, prefix="Test
                 data = transform(data)
                 
             feature = net.module.backbone(data)
-            feature = F.normalize(feature, dim=-1)
+            feature = utils.safe_normalize(feature, dim=-1)
             feature_bank.append(feature)
         #end for data, _, _ in feature_bar:
 
@@ -326,7 +326,7 @@ def test(net, feature_bank, feature_labels, test_data_loader, num_classes, args,
                 target = target_transform(target_raw).cuda(non_blocking=True)
 
             feature = net.module.backbone(data)
-            feature = F.normalize(feature, dim=-1)
+            feature = utils.safe_normalize(feature, dim=-1)
 
             total_num += data.size(0)
             # compute cos similarity between each feature vector and feature bank ---> [B, N]
