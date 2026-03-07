@@ -2079,7 +2079,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
             lp_cos_str = f" lp {info_dict['cos_lp']:.3e}"
             slp_str = f" llp2 {info_dict['ngllp']**2:.2e} plp2 {info_dict['ngplp']**2:.2e} lp {info_dict['shared_dot_lp']:.2e}"
             slp_cos_str = f" lp {info_dict['shared_cos_lp']:.3e}"
-            cv = (torch.sqrt(penalty_env.mean()) / (loss_env.mean() + 1e-8).item() if penalty_calculator.name() == 'VREx' else 0.
+            cv = (torch.sqrt(penalty_env.mean()) / (loss_env.mean() + 1e-8)).item() if penalty_calculator.name() == 'VREx' else 0.
             cv_str = f"CV {cv:.2e}"
         else:
             lp_str = ""
