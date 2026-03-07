@@ -2079,11 +2079,14 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
             lp_cos_str = f" lp {info_dict['cos_lp']:.3e}"
             slp_str = f" llp2 {info_dict['ngllp']**2:.2e} plp2 {info_dict['ngplp']**2:.2e} lp {info_dict['shared_dot_lp']:.2e}"
             slp_cos_str = f" lp {info_dict['shared_cos_lp']:.3e}"
+            cv = (torch.sqrt(penalty_env.mean()) / (loss_env.mean() + 1e-8).item() if penalty_calculator.name() == 'VREx' else 0.
+            cv_str = f"CV {cv:.2e}"
         else:
             lp_str = ""
             lp_cos_str = ""
             slp_str = ""
             slp_cos_str = ""
+            cv_str = ""
           
         if do_unsplit_loss and do_penalty:
             kp_str = f" kp {info_dict['dot_kp']:.2e}"
@@ -2130,6 +2133,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                    f" CE {total_CE_loss_weighted/trained_samples:.3e}" + \
                    f" Env/{loss_module.name()} {total_env_loss_weighted/trained_samples:.3e}" + \
                    f" {penalty_calculator.name()} {total_pen_loss_weighted/trained_samples:.3e}" + \
+                   f" {cv_str}" + \
                    f" Sparsity {total_mask_sparsity_weighted/trained_samples:.3e}" + \
                    f" LR BB {train_optimizer.param_groups[0]['lr']:.2e} PW {penalty_weight_orig:.6g}" + \
                    f" dot:{ll_str}{lk_str}{lp_str}{kk_str}{kp_str}{pp_str}" + \
