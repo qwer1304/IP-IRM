@@ -307,7 +307,7 @@ def test_knn(net, feature_bank, feature_labels, test_data_loader, num_classes, a
                 # Avoid division by zero in rare cases
                 valid = per_class_total > 0
                 macro_acc = (per_class_correct[valid].float() / per_class_total[valid].float()).mean().item()
-                test_bar.set_description('KNN {} Epoch: [{}/{}] Acc@1:{:.2f}% Acc@5:{:.2f}% Macro-Acc:{:.2f}%'
+                test_bar.set_description('KNN {} Epoch [{}/{}] Acc@1:{:.2f}% Acc@5:{:.2f}% Macro-Acc:{:.2f}%'
                                          .format(prefix, epoch, epochs, total_top1 / total_num * 100, total_top5 / total_num * 100, macro_acc * 100))
 
         # end for data, _, target in test_bar
@@ -399,7 +399,7 @@ def test(net, test_data_loader, args, num_classes, progress=False, prefix="Test:
                 # Avoid division by zero in rare cases
                 valid = per_class_total > 0
                 macro_acc = (per_class_correct[valid].float() / per_class_total[valid].float()).mean().item()
-                test_bar.set_description('{} Epoch: [{}/{}] Acc@1:{:.2f}% Acc@5:{:.2f}% Macro-Acc:{:.2f}%'
+                test_bar.set_description('{} Epoch [{}/{}] Acc@1:{:.2f}% Acc@5:{:.2f}% Macro-Acc:{:.2f}%'
                                          .format(prefix, epoch, epochs, total_top1 / total_num * 100, total_top5 / total_num * 100, macro_acc * 100))
 
             # compute output
@@ -846,10 +846,10 @@ if __name__ == '__main__':
         checkpoint = torch.load(args.pretrain_path, map_location=device, weights_only=False)
         if 'state_dict' in checkpoint.keys():
             state_dict = checkpoint['state_dict']
-            print(f" Epoch: {checkpoint['epoch']}")
+            print(f" Epoch {checkpoint['epoch']}")
         else:
             state_dict = checkpoint
-            print(" Epoch: N/A")
+            print(" Epoch N/A")
     else:
         state_dict = None
         print('Using default model')

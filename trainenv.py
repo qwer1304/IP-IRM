@@ -2146,7 +2146,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         train_bar.set_description(desc_str)
 
         if (batch_index % 10 - gradients_accumulation_steps + 1) == 0:
-           utils.write_log('Train Epoch: [{:d}/{:d}] [{:d}/{:d}] {}: Total: {:.4f} Unsplit: {:.4f} CE: {:.4f} Env: {:.4f}'
+           utils.write_log('Train Epoch [{:d}/{:d}] [{:d}/{:d}] {}: Total: {:.4f} Unsplit: {:.4f} CE: {:.4f} Env: {:.4f}'
                             .format(epoch, args.epochs, trained_samples, total_samples, loss_module.name(), 
                                     total_loss_weighted/trained_samples, 
                                     total_unsplit_loss_weighted/trained_samples, 
