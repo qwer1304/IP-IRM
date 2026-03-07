@@ -387,7 +387,7 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
 
             valid = per_class_total > 0
             macro_acc = (per_class_correct[valid].float() / per_class_total[valid].float()).mean().item()
-            data_bar.set_description('{} Epoch: [{}/{}] [{}/{}] Loss: {:.4f} Acc@1: {:.2f}% Acc@5: {:.2f}% Macro-Acc:{:.2f}%'
+            data_bar.set_description('{} Epoch [{}/{}] [{}/{}] Loss: {:.4f} Acc@1: {:.2f}% Acc@5: {:.2f}% Macro-Acc:{:.2f}%'
                                      .format(dataset.capitalize(), epoch, epochs, total_num, len(data_loader.dataset),
                                              total_loss / total_num,
                                              total_correct_1 / total_num * 100, total_correct_5 / total_num * 100, macro_acc * 100))
