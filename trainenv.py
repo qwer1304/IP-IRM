@@ -2081,13 +2081,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
             slp_str = f" llp2 {info_dict['ngllp']**2:.2e} plp2 {info_dict['ngplp']**2:.2e} lp {info_dict['shared_dot_lp']:.2e}"
             slp_cos_str = f" lp {info_dict['shared_cos_lp']:.3e}"
             if penalty_calculator.name() == 'VREx':
-                total_pen_loss = total_pen_loss_weighted / (penalty_weight + 1e-8)
-                total_env_loss = total_env_loss_weighted / (loss_weight + 1e-8)
-                cv = (math.sqrt(total_pen_loss) / (total_env_loss + 1e-8))
-                print()
-                print(total_pen_loss_weighted, penalty_weight, total_pen_loss)
-                print(total_env_loss_weighted, loss_weight, total_env_loss)
-                print(cv)
+                mean_pen_loss_epoch = total_pen_loss_weighted / (penalty_weight + 1e-8) / trained_samples
+                mean_env_loss_epoch = total_env_loss_weighted / (loss_weight + 1e-8) / trained_samples
+                cv = (math.sqrt(mean_pen_loss_epoch) / (mean_env_loss_epoch + 1e-8))
                 cv_str = f"CV {cv:.2e}"
             else:
                 cv_str = ""                
