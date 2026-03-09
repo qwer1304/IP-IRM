@@ -2,6 +2,7 @@ import torch
 import torch.optim as optim
 import torch.nn as nn
 import torch.nn.functional as F
+import math
 
 from tqdm.auto import tqdm
 
@@ -2082,7 +2083,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
             if penalty_calculator.name() == 'VREx':
                 total_pen_loss = total_pen_loss_weighted / (penalty_weight + 1e-8)
                 total_env_loss = total_env_loss_weighted / (loss_weight + 1e-8)
-                cv = (torch.sqrt(total_pen_loss) / (total_env_loss + 1e-8)).item()
+                cv = (math.sqrt(total_pen_loss) / (total_env_loss + 1e-8))
                 cv_str = f"CV {cv:.2e}"
             else:
                 cv_str = ""                
