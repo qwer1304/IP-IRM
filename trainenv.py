@@ -2084,6 +2084,10 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 total_pen_loss = total_pen_loss_weighted / (penalty_weight + 1e-8)
                 total_env_loss = total_env_loss_weighted / (loss_weight + 1e-8)
                 cv = (math.sqrt(total_pen_loss) / (total_env_loss + 1e-8))
+                print()
+                print(total_pen_loss_weighted, penalty_weight, total_pen_loss)
+                print(total_env_loss_weighted, loss_weight, total_env_loss)
+                print(cv)
                 cv_str = f"CV {cv:.2e}"
             else:
                 cv_str = ""                
