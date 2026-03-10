@@ -1478,10 +1478,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
             ascii=True,         # Uses simple chars (less likely to break the socket)
             )
 
-for data in pbar:
-    # Your training logic
-    pbar.set_description(f"Loss: {loss.item():.4f}")
-
     loss_CE_module = kwargs['loss_CE_module']
     
     loss_unsplit_module = kwargs['loss_unsplit_module']
