@@ -582,7 +582,7 @@ def load_checkpoint(path, model, model_momentum, optimizer, gradnorm_balancer, g
         print("saved with args:")
         print(args)
 
-    return model, model_momentum, optimizer, queue_proj, queue_noproj, start_epoch, best_acc1, best_epoch, updated_split, updated_split_all, ema, gradnorm_balancer, gradnorm_optimizer
+    return model, model_momentum, optimizer, queue_proj, queue_noproj, start_epoch, best_acc1, best_epoch, updated_split, updated_split_all, ema, gradnorm_balancer, gradnorm_optimizer, args
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train IP-IRM')
@@ -895,10 +895,12 @@ if __name__ == '__main__':
         if os.path.isfile(args.resume):
             (model, model_momentum, optimizer, queue_proj_, _,
              start_epoch, best_acc1, best_epoch,
-             updated_split, updated_split_all, ema_, gradnorm_balancer, gradnorm_optimizer) = \
+             updated_split, updated_split_all, ema_, gradnorm_balancer, gradnorm_optimizer, args_) = \
                 load_checkpoint(args.resume, model, model_momentum, optimizer=optimizer, gradnorm_balancer=gradnorm_balancer, 
                         gradnorm_optimizer=gradnorm_optimizer, classifier_not_needed=False)
  
+            if args_ is not None:
+                args = args_
             # set LRs to current values
             for group in optimizer.param_groups:
                 group_name = group.get('name')
