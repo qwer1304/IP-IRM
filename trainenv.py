@@ -1472,7 +1472,15 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
             ncols=args.ncols,               # total width available
             dynamic_ncols=False,            # disable autosizing
             bar_format=bar_format,          # request bar width
+            file=sys.stdout,    # Ensures it uses standard output
+            mininterval=10.0,   # Only updates the UI every 10 seconds
+            maxinterval=20.0,   # Limits the maximum refresh rate
+            ascii=True,         # Uses simple chars (less likely to break the socket)
             )
+
+for data in pbar:
+    # Your training logic
+    pbar.set_description(f"Loss: {loss.item():.4f}")
 
     loss_CE_module = kwargs['loss_CE_module']
     

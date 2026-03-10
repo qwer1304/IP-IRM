@@ -1039,6 +1039,8 @@ if __name__ == '__main__':
             it._shutdown_workers()
         return None
 
+    print("Running training with args:")
+    print(args)
     for epoch in range(start_epoch, epochs + 1):
         if train_loader is None:
             train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, shuffle=True, 
