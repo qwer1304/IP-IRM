@@ -228,11 +228,15 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
     per_class_correct = torch.zeros(num_class, dtype=torch.long, device="cuda")
     per_class_total   = torch.zeros(num_class, dtype=torch.long, device="cuda")
     bar_format = '{l_bar}{bar:' + str(args.bar) + '}{r_bar}' #{bar:-' + str(args.bar) + 'b}'
-    data_bar = tqdm(train_loader,
-            total=len(train_loader),        # number of batches
+    data_bar = tqdm(data_loader,
+            total=len(data_loader),        # number of batches
             ncols=args.ncols,               # total width available
             dynamic_ncols=False,            # disable autosizing
             bar_format=bar_format,          # request bar width
+            file=sys.stdout,    # Ensures it uses standard output
+            mininterval=1.0,   # Only updates the UI every 10 seconds
+            maxinterval=2.0,   # Limits the maximum refresh rate
+            ascii=True,         # Uses simple chars (less likely to break the socket)
             )
 
     if args.mixup:
