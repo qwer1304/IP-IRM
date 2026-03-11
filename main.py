@@ -897,7 +897,7 @@ if __name__ == '__main__':
         if os.path.isfile(args.resume):
             (model, model_momentum, optimizer, queue_proj_, _,
              start_epoch, best_acc1, best_epoch,
-             updated_split, updated_split_all, ema_, gradnorm_balancer, gradnorm_optimizer, train_data_hash_) = \
+             updated_split, updated_split_all, ema_, gradnorm_balancer, gradnorm_optimizer, train_hash_) = \
                 load_checkpoint(args.resume, model, model_momentum, optimizer=optimizer, gradnorm_balancer=gradnorm_balancer, 
                         gradnorm_optimizer=gradnorm_optimizer, classifier_not_needed=False)
  
