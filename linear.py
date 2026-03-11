@@ -309,7 +309,8 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
                     mask = torch.zeros(feature.size(-1)).to(feature.device)
                     mask[args.mask_idcs] = 1.0
 
-                    feature = F.normalize(feature * mask, dim=-1)
+                    # don't normalize after applying mask
+                    #feature = F.normalize(feature * mask, dim=-1)
                     out = net.module.fc(feature)
 
                 loss = loss_criterion(out, target)
