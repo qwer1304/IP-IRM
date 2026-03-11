@@ -28,6 +28,8 @@ from types import SimpleNamespace
 import sys
 from collections import defaultdict
 
+import hashlib
+
 class ParseMixed(argparse.Action):
     def __init__(self, option_strings, dest, types=None, **kwargs):
         if types is None:
@@ -1686,4 +1688,13 @@ def safe_normalize(x, dim=1, eps=1e-4, p=2, detach=False):
     r = x.norm(p=p, dim=dim, keepdim=True).clamp_min(eps)
     y = x / r.detach() if detach else x / r 
     return y
+    
+def compute_dataset_fingerprint(dataset):
+    """
+    Compute a fingerprint of the dataset based on file paths and labels.
+    """
+    # Use all (filepath, label) pairs in order
+    pairs = [(os.path.basename(fp), label) for fp, label in dataset.samples]
+    fingerprint = hashlib.md5(str(pairs).encode()).hexdigest()
+    return fingerprint
     

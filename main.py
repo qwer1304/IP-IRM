@@ -452,6 +452,7 @@ def load_checkpoint(path, model, model_momentum, optimizer, gradnorm_balancer, g
     updated_split_all = checkpoint.get("updated_split_all", None)
     ema = checkpoint.get("ema", None)
     args = checkpoint.get("args", None)
+    train_hash = checkpoint.get("train_hash", None)
 
 
     # Restore main model
@@ -582,7 +583,8 @@ def load_checkpoint(path, model, model_momentum, optimizer, gradnorm_balancer, g
         print("saved with args:")
         print(args)
 
-    return model, model_momentum, optimizer, queue_proj, queue_noproj, start_epoch, best_acc1, best_epoch, updated_split, updated_split_all, ema, gradnorm_balancer, gradnorm_optimizer
+    return model, model_momentum, optimizer, queue_proj, queue_noproj, start_epoch, best_acc1, best_epoch, updated_split, updated_split_all, ema, \
+            gradnorm_balancer, gradnorm_optimizer, train_hash
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train IP-IRM')
@@ -895,7 +897,7 @@ if __name__ == '__main__':
         if os.path.isfile(args.resume):
             (model, model_momentum, optimizer, queue_proj_, _,
              start_epoch, best_acc1, best_epoch,
-             updated_split, updated_split_all, ema_, gradnorm_balancer, gradnorm_optimizer) = \
+             updated_split, updated_split_all, ema_, gradnorm_balancer, gradnorm_optimizer, train_data_hash_) = \
                 load_checkpoint(args.resume, model, model_momentum, optimizer=optimizer, gradnorm_balancer=gradnorm_balancer, 
                         gradnorm_optimizer=gradnorm_optimizer, classifier_not_needed=False)
  
@@ -914,6 +916,7 @@ if __name__ == '__main__':
  
             # dummy for debug multiple partitions
             # updated_split_all.append(torch.randn((len(update_data), args.env_num), requires_grad=True, device=device))
+            train_hash = None
             if not args.baseline:
                 num_partitions = len(updated_split_all) if updated_split_all is not None else 0
                 print(f"found {num_partitions} partitions")
@@ -923,6 +926,10 @@ if __name__ == '__main__':
                         assert False, "Partitons from checkpoint have different length from dataset" 
                     assert updated_split_all[0].size(-1) == args.env_num, \
                         f"env_num in args {args.env_num} doesn't match that in partitions {updated_split_all[0].size(-1)}"
+                        
+                    train_hash = utils.compute_dataset_fingerprint(train_data)
+                    if train_hash_ is not None and train_hash is not None:
+                        assert train_hash == train_hash_, f"Current train dataset hash {train_hash} != hash from checkpoint {train_hash_}!" 
                 if (ema_ is not None) and (args.ema == 'retain'): # exists in checkpoint
                     ema = ema_
                 ema.set_active(args.ema) # set to what the user has currently set
@@ -1026,6 +1033,8 @@ if __name__ == '__main__':
                     "python_rng_state": random.getstate(),
                 },
                 'ema':                  ema,
+                'train_hash':           train_hash,
+                'args':                 args,
             }, False, filename='{}/{}/checkpoint_1st.pth.tar'.format(args.save_root, args.name))
 
     train_loader = None
@@ -1141,5 +1150,6 @@ if __name__ == '__main__':
                     "python_rng_state": random.getstate(),
                 },
                 'ema':                  ema,
+                'train_hash':           train_hash,
                 'args':                 args,
             }, is_best, filename='{}/{}/checkpoint.pth.tar'.format(args.save_root, args.name))

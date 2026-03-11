@@ -1112,6 +1112,7 @@ if __name__ == '__main__':
         
     fp_dist = os.path.join(directory, 'env_ref_dist')
     
+    memory_hash = utils.compute_dataset_fingerprint(memory_data)
     if args.only_cluster or not os.path.exists(fp): # recalculate cluster OR cluster doesn't exist
         memory_loader = DataLoader(memory_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
             pin_memory=False, persistent_workers=te_pw)
@@ -1131,7 +1132,7 @@ if __name__ == '__main__':
             env_ref_set, partitions = utils_cluster.cal_cosine_distance(model, memory_loader, args.class_num, temperature=args.cluster_temp, 
                 anchor_class=None, class_debias_logits=True, K=args.num_clusters)
         os.makedirs(os.path.dirname(fp), exist_ok=True)
-        torch.save(partitions, fp)
+        torch.save({'partitions': partitions, 'memory_hash': memory_hash}, fp)
         print(f'cluster {fp} ready!') 
         if args.only_cluster:
             exit(1)
@@ -1139,7 +1140,13 @@ if __name__ == '__main__':
         memory_loader = shutdown_loader(memory_loader)
         gc.collect()              # run Python's garbage collector
     else:
-        partitions = torch.load(fp)
+        checkpoint = torch.load(fp)
+        partitions = checkpoint.get("partitions", None)
+        memory_hash_ = checkpoint.get("memory_hash", None)
+        
+        if memory_hash is not None and memory_hash_ is not None:
+            assert memory_hash == memory_hash_, f"Current train dataset hash {memory_hash} != hash from checkpoint {memory_hash_}!" 
+
         print(f'Cluster {fp} loaded.')
         assert len(partitions) == args.num_clusters, "Num clusters in cluster file {} != num_clusters {}".format(len(partitions), args.num_clusters)
         assert partitions[0].size(1) == args.env_num, "Num envs in cluster file {} != num_envs {}".format(partitions[0].size(1), args.env_num)
