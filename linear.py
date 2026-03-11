@@ -29,6 +29,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+import sys
+
 class ShallowMLPProbe(nn.Module):
     def __init__(self, D, C, H=64, use_bn=False):
         super().__init__()
