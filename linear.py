@@ -233,10 +233,6 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
             ncols=args.ncols,               # total width available
             dynamic_ncols=False,            # disable autosizing
             bar_format=bar_format,          # request bar width
-            file=sys.stdout,    # Ensures it uses standard output
-            mininterval=0.5,   # Only updates the UI every 10 seconds
-            maxinterval=2.0,   # Limits the maximum refresh rate
-            ascii=True,         # Uses simple chars (less likely to break the socket)
             )
 
     if args.mixup:
