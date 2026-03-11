@@ -300,18 +300,18 @@ def main(args):
     P_train, P_val, R_train, R_val = prune_domains(domains, classes, counts, train_fraction=0.8, lp_train_target_per_class=M, do_trim=args.balance_counts)
 
     if args.select_method == 'train':
-        with os.scandir(input_dir) as e:
+        with sorted(os.scandir(input_dir), key=lambda e: e.name) as e:
             for env_dir in e:   # env_dir is directory of per-label sub-directories
                 if env_dir.name not in args.domain_names:
                     continue
                 if env_dir.name != args.test_domain:
                     env_idx = domains.index(env_dir.name)
-                    with os.scandir(env_dir) as l:
+                    with sorted(os.scandir(env_dir), key=lambda l: l.name)  as l:
                         for lab_dir in l:   # lab_dir is a label sub-directory
                             if lab_dir.is_dir():
                                 label = lab_dir.name
                                 label_idx = classes.index(label)
-                                with os.scandir(lab_dir) as fs:     # fs are the images of a label
+                                with sorted(os.scandir(lab_dir), key=lambda f: f.name) as fs:     # fs are the images of a label
                                     files = [f for f in fs if f.is_file()]
                                     num_files = len(files)
                                     f_idx = np.random.permutation(num_files)
