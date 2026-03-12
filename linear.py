@@ -311,6 +311,7 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
 
                     # don't normalize after applying mask
                     masked_feature = feature * mask
+                    masked_feature = utils.safe_normalize(masked_feature, dim=-1)
                     out = net.module.fc(masked_feature)
 
                 loss = loss_criterion(out, target)
