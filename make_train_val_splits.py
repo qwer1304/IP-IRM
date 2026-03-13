@@ -219,12 +219,19 @@ def prune_domains(domains, classes, raw, train_fraction=0.8, lp_train_target_per
 
     def print_table(name, X):
         print(name + ":")
-        header = "      " + " ".join(f"{c:>9}" for c in CLASSES)
+        header = "      " + " ".join(f"{c:>9}" for c in CLASSES) + "total:>9"
         print(header)
         for d in range(D):
             row = f"{DOMAINS[d]:>5} "
             row += " ".join(f"{int(X[d,c]):9d}" for c in range(C))
+            row += f"{sum(X[d,:]:9d}")
             print(row)
+        for c in range(C):
+            row = "total:>5"
+            row += " ".join(f"{int(X[:,c]):9d}" for c in range(C))
+            print(row)
+        row = f"Total {sum(X):9d}")
+        print(row)
         print()
 
     print("TerraInc counts summary")
