@@ -311,6 +311,7 @@ def main(args):
                 continue
             print(env_dir.name)
             if env_dir.name != args.test_domain:
+                print(env_dir.name, args.test_domain, env_dir.name != args.test_domain)
                 env_idx = domains.index(env_dir.name)
                 l = sorted(os.scandir(env_dir), key=lambda e: e.name)
                 for lab_dir in l:   # lab_dir is a label sub-directory
@@ -369,27 +370,29 @@ def main(args):
                             dst = os.path.join(output_lab_dir, fp.name)
                             dst = Path(dst)                                    
                             dst.symlink_to(src.absolute())
-                else:
-                    l = sorted(os.scandir(env_dir), key=lambda e: e.name)
-                    for lab_dir in l:   # lab_dir is a label sub-directory
-                        if lab_dir.is_dir():
-                            label = lab_dir.name
-                            fs = sorted(os.scandir(lab_dir), key=lambda e: e.name)
-                            files = [f for f in fs if f.is_file()]
-                            output_lab_dir_R = os.path.join(save_dir_R_test, label + '/')
-                            os.makedirs(output_lab_dir_R, exist_ok=True)                                    
-                            output_lab_dir_P = os.path.join(save_dir_P_test, label + '/')
-                            os.makedirs(output_lab_dir_P, exist_ok=True)                                    
-                            for fp in files:
-                                src = Path(fp.path)
-                                # R Test
-                                dst = os.path.join(output_lab_dir_R, fp.name)
-                                dst = Path(dst)                                    
-                                dst.symlink_to(src.absolute())
-                                # P Test
-                                dst = os.path.join(output_lab_dir_P, fp.name)
-                                dst = Path(dst)                                    
-                                dst.symlink_to(src.absolute())
+                    #end if lab_dir.is_dir():
+            else: # test domain
+                l = sorted(os.scandir(env_dir), key=lambda e: e.name)
+                for lab_dir in l:   # lab_dir is a label sub-directory
+                    if lab_dir.is_dir():
+                        label = lab_dir.name
+                        fs = sorted(os.scandir(lab_dir), key=lambda e: e.name)
+                        files = [f for f in fs if f.is_file()]
+                        output_lab_dir_R = os.path.join(save_dir_R_test, label + '/')
+                        os.makedirs(output_lab_dir_R, exist_ok=True)                                    
+                        output_lab_dir_P = os.path.join(save_dir_P_test, label + '/')
+                        os.makedirs(output_lab_dir_P, exist_ok=True)                                    
+                        for fp in files:
+                            src = Path(fp.path)
+                            # R Test
+                            dst = os.path.join(output_lab_dir_R, fp.name)
+                            dst = Path(dst)                                    
+                            dst.symlink_to(src.absolute())
+                            # P Test
+                            dst = os.path.join(output_lab_dir_P, fp.name)
+                            dst = Path(dst)                                    
+                            dst.symlink_to(src.absolute())
+            #end if env_dir.name != args.test_domain:
     elif args.select_method == 'loo':
         assert False, "needs updating for R/P split"
         e = sorted(os.scandir(input_dir), key=lambda e: e.name)
@@ -404,6 +407,7 @@ def main(args):
                 else:
                     output_task_dir = save_dir_train
                 shutil.copytree(env_dir, output_task_dir, dirs_exist_ok=True)
+    #end if args.select_method == 'train':
 
 def bounded_type(x, min_val, max_val, cast_type=float):
     try:
