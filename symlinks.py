@@ -11,31 +11,31 @@ def record_symlinks(root: Path, out_file: Path):
     root = root.resolve()
     symlinks = {}
 
-for dirpath, dirnames, filenames in os.walk(root):
-    # 1. Sort in-place to ensure deterministic traversal of subdirectories
-    dirnames.sort()
-    # 2. Sort filenames to ensure deterministic processing of files
-    filenames.sort()
+    for dirpath, dirnames, filenames in os.walk(root):
+        # 1. Sort in-place to ensure deterministic traversal of subdirectories
+        dirnames.sort()
+        # 2. Sort filenames to ensure deterministic processing of files
+        filenames.sort()
 
-    dirpath = Path(dirpath)
+        dirpath = Path(dirpath)
 
-    # Check files (now in alphabetical order)
-    for name in filenames:
-        p = dirpath / name
-        if p.is_symlink():
-            symlinks[str(p)] = os.readlink(p)
+        # Check files (now in alphabetical order)
+        for name in filenames:
+            p = dirpath / name
+            if p.is_symlink():
+                symlinks[str(p)] = os.readlink(p)
 
-    # Check directories (now in alphabetical order)
-    for name in dirnames:
-        p = dirpath / name
-        if p.is_symlink():
-            symlinks[str(p)] = os.readlink(p)
-            
-    with open(out_file, "w") as f:
-        # This sorts the dictionary alphabetically by the path string
-        json.dump(symlinks, f, indent=2, sort_keys=True)
+        # Check directories (now in alphabetical order)
+        for name in dirnames:
+            p = dirpath / name
+            if p.is_symlink():
+                symlinks[str(p)] = os.readlink(p)
 
-    print(f"Recorded {len(symlinks)} symlinks -> {out_file}")
+        with open(out_file, "w") as f:
+            # This sorts the dictionary alphabetically by the path string
+            json.dump(symlinks, f, indent=2, sort_keys=True)
+
+        print(f"Recorded {len(symlinks)} symlinks -> {out_file}")
 
 def restore_symlinks(map_file: Path):
     """
