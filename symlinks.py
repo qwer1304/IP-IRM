@@ -35,7 +35,7 @@ def record_symlinks(root: Path, out_file: Path):
             # This sorts the dictionary alphabetically by the path string
             json.dump(symlinks, f, indent=2, sort_keys=True)
 
-        print(f"Recorded {len(symlinks)} symlinks -> {out_file}")
+    print(f"Recorded {len(symlinks)} symlinks -> {out_file}")
 
 def restore_symlinks(map_file: Path):
     """
