@@ -309,6 +309,7 @@ def main(args):
         for env_dir in e:   # env_dir is directory of per-label sub-directories
             if env_dir.name not in args.domain_names:
                 continue
+            print(env_dir.name)
             if env_dir.name != args.test_domain:
                 env_idx = domains.index(env_dir.name)
                 l = sorted(os.scandir(env_dir), key=lambda e: e.name)
