@@ -263,6 +263,14 @@ class Imagenet_idx(ImageFolder):
     def __init__(self, root, transform=None, target_transform=None, class_to_idx=None):
         self.class_to_idx = class_to_idx
         super(Imagenet_idx, self).__init__(root, transform, target_transform, loader=pyvips_loader)
+
+        # "self" is now populated with .samples and .imgs
+        # Sort the list in place by the file path (index 0 of the tuple)
+        self.samples.sort(key=lambda x: x[0])
+        
+        # Ensure the legacy alias matches the sorted list
+        self.imgs = self.samples        
+
         self.index_pos = -1
     def __getitem__(self, index):
         """
@@ -296,6 +304,14 @@ class Imagenet(ImageFolder):
     def __init__(self, root, transform=None, target_transform=None, class_to_idx=None):
         self.class_to_idx = class_to_idx
         super(Imagenet, self).__init__(root, transform, target_transform, loader=pyvips_loader)
+
+        # "self" is now populated with .samples and .imgs
+        # Sort the list in place by the file path (index 0 of the tuple)
+        self.samples.sort(key=lambda x: x[0])
+        
+        # Ensure the legacy alias matches the sorted list
+        self.imgs = self.samples        
+
         self.index_pos = None
 
     def __getitem__(self, index):
@@ -329,6 +345,14 @@ class Imagenet_idx_pair(ImageFolder):
     def __init__(self, root, transform=None, target_transform=None, class_to_idx=None):
         self.class_to_idx = class_to_idx
         super(Imagenet_idx_pair, self).__init__(root, transform, target_transform, loader=pyvips_loader)
+
+        # "self" is now populated with .samples and .imgs
+        # Sort the list in place by the file path (index 0 of the tuple)
+        self.samples.sort(key=lambda x: x[0])
+        
+        # Ensure the legacy alias matches the sorted list
+        self.imgs = self.samples        
+
         self.index_pos = -1
 
     def __getitem__(self, index):
@@ -364,6 +388,14 @@ class Imagenet_pair(ImageFolder):
     def __init__(self, root, transform=None, target_transform=None, class_to_idx=None):
         self.class_to_idx = class_to_idx
         super(Imagenet_pair, self).__init__(root, transform, target_transform, loader=pyvips_loader)
+
+        # "self" is now populated with .samples and .imgs
+        # Sort the list in place by the file path (index 0 of the tuple)
+        self.samples.sort(key=lambda x: x[0])
+        
+        # Ensure the legacy alias matches the sorted list
+        self.imgs = self.samples        
+
         self.index_pos = None
 
     def __getitem__(self, index):
@@ -401,6 +433,14 @@ class Imagenet_idx_pair_transformone(ImageFolder):
         self.class_to_idx = class_to_idx
         super(Imagenet_idx_pair_transformone, self).__init__(root, transform_simple, target_transform, loader=pyvips_loader)
         self.transform_hard = transform_hard
+
+        # "self" is now populated with .samples and .imgs
+        # Sort the list in place by the file path (index 0 of the tuple)
+        self.samples.sort(key=lambda x: x[0])
+        
+        # Ensure the legacy alias matches the sorted list
+        self.imgs = self.samples        
+
         self.index_pos = -1
 
     def __getitem__(self, index):

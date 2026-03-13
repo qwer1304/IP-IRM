@@ -893,6 +893,10 @@ if __name__ == '__main__':
     best_epoch = 0
     resumed = False
     start_epoch = 1
+    train_hash = utils.compute_dataset_fingerprint(train_data)
+    update_hash = utils.compute_dataset_fingerprint(update_data)
+    assert train_hash == update_hash, f"train hash {train_hash} != update_hash {update_hash}" 
+    
     if args.resume:
         if os.path.isfile(args.resume):
             (model, model_momentum, optimizer, queue_proj_, _,
@@ -916,7 +920,6 @@ if __name__ == '__main__':
  
             # dummy for debug multiple partitions
             # updated_split_all.append(torch.randn((len(update_data), args.env_num), requires_grad=True, device=device))
-            train_hash = None
             if not args.baseline:
                 num_partitions = len(updated_split_all) if updated_split_all is not None else 0
                 print(f"found {num_partitions} partitions")
@@ -927,7 +930,6 @@ if __name__ == '__main__':
                     assert updated_split_all[0].size(-1) == args.env_num, \
                         f"env_num in args {args.env_num} doesn't match that in partitions {updated_split_all[0].size(-1)}"
                         
-                    train_hash = utils.compute_dataset_fingerprint(train_data)
                     if train_hash_ is not None and train_hash is not None:
                         assert train_hash == train_hash_, f"Current train dataset hash {train_hash} != hash from checkpoint {train_hash_}!" 
                 if (ema_ is not None) and (args.ema == 'retain'): # exists in checkpoint

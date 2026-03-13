@@ -300,104 +300,104 @@ def main(args):
     P_train, P_val, R_train, R_val = prune_domains(domains, classes, counts, train_fraction=0.8, lp_train_target_per_class=M, do_trim=args.balance_counts)
 
     if args.select_method == 'train':
-        with sorted(os.scandir(input_dir), key=lambda e: e.name) as e:
-            for env_dir in e:   # env_dir is directory of per-label sub-directories
-                if env_dir.name not in args.domain_names:
-                    continue
-                if env_dir.name != args.test_domain:
-                    env_idx = domains.index(env_dir.name)
-                    with sorted(os.scandir(env_dir), key=lambda l: l.name)  as l:
-                        for lab_dir in l:   # lab_dir is a label sub-directory
-                            if lab_dir.is_dir():
-                                label = lab_dir.name
-                                label_idx = classes.index(label)
-                                with sorted(os.scandir(lab_dir), key=lambda f: f.name) as fs:     # fs are the images of a label
-                                    files = [f for f in fs if f.is_file()]
-                                    num_files = len(files)
-                                    f_idx = np.random.permutation(num_files)
-                                    
-                                    # R Train
-                                    train_num = R_train[env_idx, label_idx]
-                                    train_idx = f_idx[:train_num]
-                                    
-                                    output_lab_dir = os.path.join(save_dir_R_train, label + '/')
-                                    os.makedirs(output_lab_dir, exist_ok=True)                                    
-                                    for fp in [files[i] for i in train_idx]:
-                                        src = Path(fp.path)
-                                        dst = os.path.join(output_lab_dir, fp.name)
-                                        dst = Path(dst)    
-                                        dst.symlink_to(src.absolute())
-                                    
-                                    # R Val
-                                    val_num = R_val[env_idx, label_idx]
-                                    val_idx = f_idx[train_num:train_num+val_num]
-                                    
-                                    output_lab_dir = os.path.join(save_dir_R_val, label + '/')
-                                    os.makedirs(output_lab_dir, exist_ok=True)
-                                    for fp in [files[i] for i in val_idx]:
-                                        src = Path(fp.path)
-                                        dst = os.path.join(output_lab_dir, fp.name)
-                                        dst = Path(dst)                                    
-                                        dst.symlink_to(src.absolute())
+        e = sorted(os.scandir(input_dir), key=lambda e: e.name)
+        for env_dir in e:   # env_dir is directory of per-label sub-directories
+            if env_dir.name not in args.domain_names:
+                continue
+            if env_dir.name != args.test_domain:
+                env_idx = domains.index(env_dir.name)
+                l = sorted(os.scandir(env_dir), key=lambda e: e.name)
+                for lab_dir in l:   # lab_dir is a label sub-directory
+                    if lab_dir.is_dir():
+                        label = lab_dir.name
+                        label_idx = classes.index(label)
+                        fs = sorted(os.scandir(lab_dir), key=lambda e: e.name)
+                        files = [f for f in fs if f.is_file()]
+                        num_files = len(files)
+                        f_idx = np.random.permutation(num_files)
 
-                                    # P Train
-                                    train_num = P_train[env_idx, label_idx]
-                                    train_idx = f_idx[:train_num]
-                                    
-                                    output_lab_dir = os.path.join(save_dir_P_train, label + '/')
-                                    os.makedirs(output_lab_dir, exist_ok=True)                                    
-                                    for fp in [files[i] for i in train_idx]:
-                                        src = Path(fp.path)
-                                        dst = os.path.join(output_lab_dir, fp.name)
-                                        dst = Path(dst)                                    
-                                        dst.symlink_to(src.absolute())
-                                    
-                                    # P Val
-                                    val_num = P_val[env_idx, label_idx]
-                                    val_idx = f_idx[train_num:train_num+val_num]
-                                    
-                                    output_lab_dir = os.path.join(save_dir_P_val, label + '/')
-                                    os.makedirs(output_lab_dir, exist_ok=True)
-                                    for fp in [files[i] for i in val_idx]:
-                                        src = Path(fp.path)
-                                        dst = os.path.join(output_lab_dir, fp.name)
-                                        dst = Path(dst)                                    
-                                        dst.symlink_to(src.absolute())
+                        # R Train
+                        train_num = R_train[env_idx, label_idx]
+                        train_idx = f_idx[:train_num]
+
+                        output_lab_dir = os.path.join(save_dir_R_train, label + '/')
+                        os.makedirs(output_lab_dir, exist_ok=True)                                    
+                        for fp in [files[i] for i in train_idx]:
+                            src = Path(fp.path)
+                            dst = os.path.join(output_lab_dir, fp.name)
+                            dst = Path(dst)    
+                            dst.symlink_to(src.absolute())
+
+                        # R Val
+                        val_num = R_val[env_idx, label_idx]
+                        val_idx = f_idx[train_num:train_num+val_num]
+
+                        output_lab_dir = os.path.join(save_dir_R_val, label + '/')
+                        os.makedirs(output_lab_dir, exist_ok=True)
+                        for fp in [files[i] for i in val_idx]:
+                            src = Path(fp.path)
+                            dst = os.path.join(output_lab_dir, fp.name)
+                            dst = Path(dst)                                    
+                            dst.symlink_to(src.absolute())
+
+                        # P Train
+                        train_num = P_train[env_idx, label_idx]
+                        train_idx = f_idx[:train_num]
+
+                        output_lab_dir = os.path.join(save_dir_P_train, label + '/')
+                        os.makedirs(output_lab_dir, exist_ok=True)                                    
+                        for fp in [files[i] for i in train_idx]:
+                            src = Path(fp.path)
+                            dst = os.path.join(output_lab_dir, fp.name)
+                            dst = Path(dst)                                    
+                            dst.symlink_to(src.absolute())
+
+                        # P Val
+                        val_num = P_val[env_idx, label_idx]
+                        val_idx = f_idx[train_num:train_num+val_num]
+
+                        output_lab_dir = os.path.join(save_dir_P_val, label + '/')
+                        os.makedirs(output_lab_dir, exist_ok=True)
+                        for fp in [files[i] for i in val_idx]:
+                            src = Path(fp.path)
+                            dst = os.path.join(output_lab_dir, fp.name)
+                            dst = Path(dst)                                    
+                            dst.symlink_to(src.absolute())
                 else:
-                    with os.scandir(env_dir) as l:
-                        for lab_dir in l:   # lab_dir is a label sub-directory
-                            if lab_dir.is_dir():
-                                label = lab_dir.name
-                                with os.scandir(lab_dir) as fs:     # fs are the images of a label
-                                    files = [f for f in fs if f.is_file()]
-                                    output_lab_dir_R = os.path.join(save_dir_R_test, label + '/')
-                                    os.makedirs(output_lab_dir_R, exist_ok=True)                                    
-                                    output_lab_dir_P = os.path.join(save_dir_P_test, label + '/')
-                                    os.makedirs(output_lab_dir_P, exist_ok=True)                                    
-                                    for fp in files:
-                                        src = Path(fp.path)
-                                        # R Test
-                                        dst = os.path.join(output_lab_dir_R, fp.name)
-                                        dst = Path(dst)                                    
-                                        dst.symlink_to(src.absolute())
-                                        # P Test
-                                        dst = os.path.join(output_lab_dir_P, fp.name)
-                                        dst = Path(dst)                                    
-                                        dst.symlink_to(src.absolute())
+                    l = sorted(os.scandir(env_dir), key=lambda e: e.name)
+                    for lab_dir in l:   # lab_dir is a label sub-directory
+                        if lab_dir.is_dir():
+                            label = lab_dir.name
+                            fs = sorted(os.scandir(lab_dir), key=lambda e: e.name)
+                            files = [f for f in fs if f.is_file()]
+                            output_lab_dir_R = os.path.join(save_dir_R_test, label + '/')
+                            os.makedirs(output_lab_dir_R, exist_ok=True)                                    
+                            output_lab_dir_P = os.path.join(save_dir_P_test, label + '/')
+                            os.makedirs(output_lab_dir_P, exist_ok=True)                                    
+                            for fp in files:
+                                src = Path(fp.path)
+                                # R Test
+                                dst = os.path.join(output_lab_dir_R, fp.name)
+                                dst = Path(dst)                                    
+                                dst.symlink_to(src.absolute())
+                                # P Test
+                                dst = os.path.join(output_lab_dir_P, fp.name)
+                                dst = Path(dst)                                    
+                                dst.symlink_to(src.absolute())
     elif args.select_method == 'loo':
         assert False, "needs updating for R/P split"
-        with os.scandir(input_dir) as e:      # env_dir is directory of per-label sub-directories
-            for env_dir in e:
-                if env_dir.name not in args.domain_names:
-                    continue
-                if env_dir.is_dir():
-                    if env_dir == args.val_dir:
-                        output_task_dir = save_dir_val
-                    elif env_dir == args.test_dir:
-                        output_task_dir = save_dir_test
-                    else:
-                        output_task_dir = save_dir_train
-                    shutil.copytree(env_dir, output_task_dir, dirs_exist_ok=True)
+        e = sorted(os.scandir(input_dir), key=lambda e: e.name)
+        for env_dir in e:
+            if env_dir.name not in args.domain_names:
+                continue
+            if env_dir.is_dir():
+                if env_dir == args.val_dir:
+                    output_task_dir = save_dir_val
+                elif env_dir == args.test_dir:
+                    output_task_dir = save_dir_test
+                else:
+                    output_task_dir = save_dir_train
+                shutil.copytree(env_dir, output_task_dir, dirs_exist_ok=True)
 
 def bounded_type(x, min_val, max_val, cast_type=float):
     try:
