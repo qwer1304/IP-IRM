@@ -224,13 +224,13 @@ def prune_domains(domains, classes, raw, train_fraction=0.8, lp_train_target_per
         for d in range(D):
             row = f"{DOMAINS[d]:>5} "
             row += " ".join(f"{int(X[d,c]):9d}" for c in range(C))
-            row += f"{sum(X[d,:]:9d)}"
+            row += f"{int(sum(X[d,:])):9d}"
             print(row)
         for c in range(C):
             row = "total:>5"
-            row += " ".join(f"{int(X[:,c]):9d}" for c in range(C))
+            row += " ".join(f"{int(sum(X[:,c])):9d}" for c in range(C))
             print(row)
-        row = f"Total {sum(X):9d}"
+        row = f"Total {int(sum(X)):9d}"
         print(row)
         print()
 
