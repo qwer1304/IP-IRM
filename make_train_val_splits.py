@@ -230,7 +230,7 @@ def prune_domains(domains, classes, raw, train_fraction=0.8, lp_train_target_per
             row = "total:>5"
             row += " ".join(f"{int(X[:,c]):9d}" for c in range(C))
             print(row)
-        row = f"Total {sum(X):9d}")
+        row = f"Total {sum(X):9d}"
         print(row)
         print()
 
