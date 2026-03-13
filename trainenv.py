@@ -319,7 +319,7 @@ class MoCoSupConLossModule(LossModule):
         self.queue = queue
         self.momentum = kwargs['momentum']
         self.net_momentum.train()
-        self.temperature = temperature or 1.0
+        self.temperature = temperature or [1.0, 1.0]
         self.this_batch_size = 0
         self.debug = debug
         self.neg_idxs = []
@@ -457,14 +457,14 @@ class MoCoSupConLossModule(LossModule):
         y_queue = get_targets(idx_queue, dataset, pos_q.device)
         y_all = torch.cat([y_batch, y_queue], dim=0) # (N,)
 
-        logits = (out_q @ k_all.T) / self.temperature # (B,N)
+        logits = (out_q @ k_all.T) # (B,N)
         
         # for each sample in the batch (row) give the samples in the batch and queue w/ the same label
         pos_mask = (y_batch[:, None] == y_all[None, :])   # (B,N)
         pos_mask[:, :len(y_batch)].fill_diagonal_(False)  # remove self-keys
 
         # Replace non-positives with -inf
-        pos_logits = logits.masked_fill(~pos_mask, -1e9)
+        pos_logits = (logits  / self.temperature[0]).masked_fill(~pos_mask, -1e9)
         # One logit per anchor = logsumexp over positives
         if False:
             num_pos = pos_mask.sum(dim=1, keepdim=True).clamp(min=1)
@@ -474,7 +474,7 @@ class MoCoSupConLossModule(LossModule):
             
         l_pos = torch.logsumexp(pos_logits, dim=1, keepdim=True) + supcon_correction # (B,1)
         
-        l_neg = logits.masked_fill(pos_mask, -1e9) # (B,N)
+        l_neg = (logits  / self.temperature[1]).masked_fill(pos_mask, -1e9) # (B,N)
         
         self._logits = torch.cat([l_pos, l_neg], dim=1) # (B,1+N), positive logit is in column 0
         self.labels = torch.zeros(self._logits.size(0), dtype=torch.long, device=self._logits.device)
@@ -583,7 +583,7 @@ class MoCoLossModule(LossModule):
         self.momentum = kwargs['momentum']
         self.net_momentum.train()
         self.queue = queue
-        self.temperature = temperature or 1.0
+        self.temperature = temperature or [1.0, 1.0]
         self.this_batch_size = 0
         self.debug = debug
         self.neg_idxs = []
@@ -675,8 +675,14 @@ class MoCoLossModule(LossModule):
             self.count        += l_pos.size(0)
 
         # sum over batch, per env handled by driver
-        temperature = temperature or self.temperature
-        loss = F.cross_entropy(scale * self._logits[pos_idxs] / temperature, self.labels[pos_idxs], reduction=reduction)
+        if temperature is None:
+            temperature = self.temperature
+        else:
+            if not isinstance(temeperature, list):
+                temperature = [temperature]*2
+        logits = self._logits[pos_idxs]
+        logits = torch.cat((logits[:,0] / temperature[0], logits[:,1:] / temperature[1]), dim=1)
+        loss = F.cross_entropy(scale * logits, self.labels[pos_idxs], reduction=reduction)
         return loss
 
     def post_micro_batch(self):
