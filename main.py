@@ -325,7 +325,8 @@ def test(net, feature_bank, feature_labels, test_data_loader, num_classes, args,
         # MRR Accumulator [NEW]
         per_class_mrr_sum = torch.zeros(num_classes, dtype=torch.float, device=feature_bank[0].device)
         
-        total_decay_sum = 0
+        total_decay04_sum = 0
+        total_decay48_sum = 0
 
         for data, target in test_bar:
             data, target = data.cuda(non_blocking=True), target.cuda(non_blocking=True)
@@ -347,8 +348,10 @@ def test(net, feature_bank, feature_labels, test_data_loader, num_classes, args,
             # [B, K]
             sim_weight, sim_indices = sim_matrix.topk(k=args.k, dim=-1)
 
-            batch_decay = sim_weight[:, 0] - sim_weight[:, 4]
-            total_decay_sum += batch_decay.sum().item()
+            batch_decay = sim_weight[:, 0] - sim_weight[:, 5] # 0 -> 4
+            total_decay04_sum += batch_decay.sum().item()
+            batch_decay = sim_weight[:, 4] - sim_weight[:, 9] # 4 -> 8 
+            total_decay48_sum += batch_decay.sum().item()
             
             # For each sample, picks the top-k labels
             sim_labels = torch.gather(feature_labels.expand(data.size(0), -1), dim=-1, index=sim_indices)
@@ -395,8 +398,9 @@ def test(net, feature_bank, feature_labels, test_data_loader, num_classes, args,
                 # Calculate current Macro-MRR for the bar [NEW]
                 macro_mrr = (per_class_mrr_sum[valid] / per_class_total[valid].float()).mean().item()
                 
-                test_bar.set_description('KNN {} Epoch [{}/{}] Acc@1:{:.2f}% Macro-Acc:{:.2f}% Macro-MRR:{:.3f} Decay:{:.3f}'
-                                          .format(prefix, epoch, epochs, total_top1 / total_num * 100, macro_acc * 100, macro_mrr, total_decay_sum / total_num))
+                test_bar.set_description('KNN {} Epoch [{}/{}] Acc@1:{:.2f}% Macro-Acc:{:.2f}% Macro-MRR:{:.3f} Decay (04:{:.3f},48:{:.3f})'
+                                          .format(prefix, epoch, epochs, total_top1 / total_num * 100, macro_acc * 100, macro_mrr, 
+                                                  total_decay04_sum / total_num, total_decay48_sum / total_num))
 
             # compute output
             if args.extract_features:
