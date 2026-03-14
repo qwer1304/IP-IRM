@@ -419,7 +419,8 @@ def test(net, feature_bank, feature_labels, test_data_loader, num_classes, args,
         macro_mrr = (per_class_mrr_sum[valid] / per_class_total[valid].float()).mean().item()
         
         # Final aggregate score for the epoch
-        epoch_decay = total_decay_sum / total_num
+        epoch_decay04 = total_decay04_sum / total_num
+        epoch_decay48 = total_decay48_sum / total_num
 
         if feature_list:
             feature = torch.cat(feature_list, dim=0)
