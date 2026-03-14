@@ -311,7 +311,7 @@ class LossModule:
 # MoCo+SupCon Loss Module
 # ---------------------------
 class MoCoSupConLossModule(LossModule):
-    def __init__(self, *args, net_momentum=None, queue=None, temperature=None, debug=False, filter_indices=None, master=True, **kwargs):
+    def __init__(self, *args, net_momentum=None, queue=None, temperature=None, debug=False, filter_indices=None, master=True, multipos_infonce=True, **kwargs):
         super().__init__(*args, **kwargs)
         assert net_momentum is not None
         assert queue is not None
@@ -325,6 +325,7 @@ class MoCoSupConLossModule(LossModule):
         self.neg_idxs = []
         self.filter_indices_hook = filter_indices
         self.master = master
+        self.multipos_infonce = multipos_infonce
         if self.debug:
             self.total_pos = 0.0
             self.total_neg = 0.0
@@ -466,7 +467,7 @@ class MoCoSupConLossModule(LossModule):
         # Replace non-positives with -inf
         pos_logits = (logits  / self.temperature[0]).masked_fill(~pos_mask, -1e9)
         # One logit per anchor = logsumexp over positives
-        if False:
+        if not self.multipos_infonce:
             num_pos = pos_mask.sum(dim=1, keepdim=True).clamp(min=1)
             supcon_correction = -num_pos.log()
         else:

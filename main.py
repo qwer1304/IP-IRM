@@ -176,6 +176,10 @@ def train_partition(net, update_loader, soft_split, random_init=False, args=None
                 ncols=args.ncols,               # total width available
                 dynamic_ncols=False,            # disable autosizing
                 bar_format=bar_format,          # request bar width
+                file=sys.stdout,    # Ensures it uses standard output
+                mininterval=1.0,   # Only updates the UI every 10 seconds
+                maxinterval=2.0,   # Limits the maximum refresh rate
+                ascii=True,         # Uses simple chars (less likely to break the socket)
                 desc='train_partition(): Feature extracting'
             )
             if True:
@@ -241,6 +245,10 @@ def get_feature_bank(net, memory_data_loader, args, progress=False, prefix="Test
                 ncols=args.ncols,               # total width available
                 dynamic_ncols=False,            # disable autosizing
                 bar_format=bar_format,          # request bar width
+                file=sys.stdout,    # Ensures it uses standard output
+                mininterval=1.0,    # Only updates the UI every 10 seconds
+                maxinterval=2.0,    # Limits the maximum refresh rate
+                ascii=True,         # Uses simple chars (less likely to break the socket)
                 desc='get_feature_bank(), memory: Feature extracting'
             )
         else:
@@ -593,6 +601,7 @@ def load_checkpoint(path, model, model_momentum, optimizer, gradnorm_balancer, g
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train IP-IRM')
     parser.add_argument('--ssl_type', default='MoCo', type=str, choices=['MoCo', 'SimSiam', 'MoCoSupCon'], help='SSL type')    
+    parser.add_argument('--multipos_infonce', action="store_true", help='use multi-positive InfoNCE in SupCon')
     parser.add_argument('--ssl_type_unsplit', default='MoCo', type=str, choices=['MoCo', 'SimSiam', 'MoCoSupCon'], help='SSL type')    
     parser.add_argument('--ssl_type_partition', default='MoCoSupCon', type=str, choices=['MoCo', 'SimSiam', 'MoCoSupCon', 'SimCLR'], help='SSL type for partition')    
     parser.add_argument('--penalty_type', default='IRM', type=str, choices=['IRM', 'VREx'], help='Penalty type')        
@@ -993,7 +1002,7 @@ if __name__ == '__main__':
     kwargs.update(losses_and_penalty_dict)
     ssl_type = args.ssl_type.lower()
     if ssl_type == 'moco' or ssl_type == 'mocosupcon':
-        kwargs.update({'temperature': moco_temperature})
+        kwargs.update({'temperature': moco_temperature, "multipos_infonce": args.multipos_infonce})
     elif ssl_type == 'simsiam':
         pass
         
