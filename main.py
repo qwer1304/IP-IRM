@@ -964,7 +964,14 @@ if __name__ == '__main__':
         else:
             print("=> no checkpoint found at '{}'".format(args.resume))
 
-    moco_dict = {'net_momentum': model_momentum, 'queue_proj': queue_proj, 'queue_noproj': None, 'momentum': args.momentum}
+    moco_dict = {'net_momentum': model_momentum, 'queue_proj': queue_proj, 'queue_noproj': None, 'momentum': args.momentum,
+                 'temperature': moco_temperature, "multipos_infonce": args.multipos_infonce}
+    if args.domains_path is not None:
+        domains = torch.load(args.domains_path, weights_only=False)
+        domains = domains['partitions'][0]
+        domains = torch.argmax(domains).to(device)
+        moco_dict.update({'domains': domains, 'crossdomain_alpha': args.crossdomain_alpha})
+    
     losses_and_penalty_dict = build_losses_and_penalty_dict(args, model, class_weights=None, moco_dict=moco_dict)
                     
     # training loop
@@ -1008,16 +1015,6 @@ if __name__ == '__main__':
     
     kwargs = {'ema': ema, 'gradnorm_balancer': gradnorm_balancer, 'gradnorm_optimizer': gradnorm_optimizer, 'log_file': log_file}
     kwargs.update(losses_and_penalty_dict)
-    ssl_type = args.ssl_type.lower()
-    if ssl_type == 'moco' or ssl_type == 'mocosupcon':
-        kwargs.update({'temperature': moco_temperature, "multipos_infonce": args.multipos_infonce})
-        if args.domains_path is not None:
-            domains = torch.load(args.domains_path, weights_only=False)
-            domains = domains['partitions'][0]
-            domains = torch.argmax(domains).to(device)
-            kwargs.update({'domains': domains, 'crossdomain_alpha': args.crossdomain_alpha})
-    elif ssl_type == 'simsiam':
-        pass
         
     # update partition for the first time, if we need one
     if not args.baseline:
