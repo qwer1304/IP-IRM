@@ -969,7 +969,7 @@ if __name__ == '__main__':
     if args.domains_path is not None:
         domains = torch.load(args.domains_path, weights_only=False)
         domains = domains['partitions'][0]
-        domains = torch.argmax(domains).to(device)
+        domains = torch.argmax(domains, dim=1).to(device)
         moco_dict.update({'domains': domains, 'crossdomain_alpha': args.crossdomain_alpha})
     
     losses_and_penalty_dict = build_losses_and_penalty_dict(args, model, class_weights=None, moco_dict=moco_dict)
