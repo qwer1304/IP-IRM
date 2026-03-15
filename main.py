@@ -691,6 +691,9 @@ if __name__ == '__main__':
     parser.add_argument('--class_to_idx', type=str, default=None, help='a function definition to apply to class to obtain it index')
     parser.add_argument('--image_class', choices=['ImageNet', 'STL', 'CIFAR'], default='ImageNet', help='Image class, default=ImageNet')
     parser.add_argument('--class_num', default=1000, type=int, help='num of classes')
+    parser.add_argument('--domains_path', type=str, default=None, help='domains file of training samples')
+    parser.add_argument('--crossdomain_alpha', type=float, default=1.0, help='multiplier of cross domain positives')
+
     parser.add_argument('--ncols', default=80, type=int, help='number of columns in terminal')
     parser.add_argument('--bar', default=50, type=int, help='length of progess bar')
 
@@ -1008,6 +1011,11 @@ if __name__ == '__main__':
     ssl_type = args.ssl_type.lower()
     if ssl_type == 'moco' or ssl_type == 'mocosupcon':
         kwargs.update({'temperature': moco_temperature, "multipos_infonce": args.multipos_infonce})
+        if args.domains_path is not None:
+            domains = torch.load(args.domains_path, weights_only=False)
+            domains = domains['partitions'][0]
+            domains = torch.argmax(domains).to(device)
+            kwargs.update({'domains': domains, 'crossdomain_alpha': args.crossdomain_alpha})
     elif ssl_type == 'simsiam':
         pass
         

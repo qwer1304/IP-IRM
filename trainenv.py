@@ -311,7 +311,8 @@ class LossModule:
 # MoCo+SupCon Loss Module
 # ---------------------------
 class MoCoSupConLossModule(LossModule):
-    def __init__(self, *args, net_momentum=None, queue=None, temperature=None, debug=False, filter_indices=None, master=True, multipos_infonce=True, **kwargs):
+    def __init__(self, *args, net_momentum=None, queue=None, temperature=None, debug=False, filter_indices=None, master=True, 
+                    multipos_infonce=True, domains=None, crossdomain_alpha=1.0, **kwargs):
         super().__init__(*args, **kwargs)
         assert net_momentum is not None
         assert queue is not None
@@ -326,6 +327,8 @@ class MoCoSupConLossModule(LossModule):
         self.filter_indices_hook = filter_indices
         self.master = master
         self.multipos_infonce = multipos_infonce
+        self.domains = domains
+        self.crossdomain_alpha = crossdomain_alpha
         if self.debug:
             self.total_pos = 0.0
             self.total_neg = 0.0
@@ -465,7 +468,23 @@ class MoCoSupConLossModule(LossModule):
         pos_mask[:, :len(y_batch)].fill_diagonal_(False)  # remove self-keys
 
         # Replace non-positives with -inf
-        pos_logits = (logits  / self.temperature[0]).masked_fill(~pos_mask, -1e9)
+        pos_logits = logits  / self.temperature[0] # (B,N)
+        
+        if self.domains is not None:
+            idx_all = torch.cat([indexs, idx_queue], dim=0) # (N,) 
+            domain_all = self.domains[idx_all] # (N,)
+            # Extract domains of the current batch - NOT queue (first B entries of domain_all)
+            domain_batch = domain_all[:len(y_batch)].view(-1, 1) # (B,1)           
+            # Create the multiplier mask
+            # (B, 1) == (1, N) results in (B, N)
+            # 1.0 where domains match, alpha where they don't
+            domain_mask = torch.where(domain_all[None, :] == domain_batch, 1.0, self.crossdomain_alpha) # (B,N)
+            # Apply transformation to pos_logits
+            # We multiply by alpha for non-matching domains
+            pos_logits *= domain_mask
+
+        pos_logits = pos_logits.masked_fill(~pos_mask, -1e9) # (B,N)
+
         # One logit per anchor = logsumexp over positives
         if not self.multipos_infonce:
             num_pos = pos_mask.sum(dim=1, keepdim=True).clamp(min=1)
