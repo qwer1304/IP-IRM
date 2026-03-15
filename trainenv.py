@@ -481,7 +481,7 @@ class MoCoSupConLossModule(LossModule):
             domain_mask = torch.where(domain_all[None, :] == domain_batch, 1.0, self.crossdomain_alpha) # (B,N)
             # Apply transformation to pos_logits
             # We multiply by alpha for non-matching domains
-            pos_logits *= domain_mask
+            pos_logits += torch.log(domain_mask)
 
         pos_logits = pos_logits.masked_fill(~pos_mask, -1e9) # (B,N)
 
