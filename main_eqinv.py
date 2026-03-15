@@ -1142,6 +1142,7 @@ if __name__ == '__main__':
     else:
         checkpoint = torch.load(fp)
         partitions = checkpoint.get("partitions", None)
+        assert partitions is not None, f"No partitions in cluster file {fp}"
         memory_hash_ = checkpoint.get("memory_hash", None)
         
         if memory_hash is not None and memory_hash_ is not None:
