@@ -70,7 +70,7 @@ class MaskModule(nn.Module):
                 elif activation_method.mask_type == 'sigmoid' or activation_method.mask_type == 'gumbel':
                     def get_bounds(K, N=2048, W=2):
                         # The Logit of the probability
-                        b = torch.log(K / (N - K))
+                        b = torch.log(torch.tensor(K / (N - K)))
                         L = b - (W / 2)
                         H = b + (W / 2)
                         return L, H
