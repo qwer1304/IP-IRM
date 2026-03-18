@@ -27,7 +27,7 @@ class Mask():
     def __call__(self, x, u=None):
         # x: (num_features,) tensor
         if self.mask_type == 'sigmoid':
-            return torch.sigmoid(x)
+            return torch.sigmoid(x / self.tau)
         elif self.mask_type == 'ident':
             return x
         elif self.mask_type == 'gumbel':

@@ -753,7 +753,7 @@ if __name__ == '__main__':
     #### add mask
     parser.add_argument('--mask_nonlinearity', type=str, default='sigmoid', choices=['sigmoid', 'ident', 'gumbel'], help='type of non-linearity in mask')
     parser.add_argument('--opt_mask', action="store_true", default=False, help='optimize the mask')
-    parser.add_argument('--gumbel_tau', type=float, default=1.0, help='tau for gumbel mask')
+    parser.add_argument('--mask_tau', type=float, default=1.0, help='tau for mask sigmoid')
     parser.add_argument('--gumbel_soft', action="store_true", help='soft gumbel')
     parser.add_argument('--mask_sparsity', type=int, default=None, help='sparsity K s.t. # of hot masks <= K')
     parser.add_argument('--mask_sparsity_weight', type=float, default=0.0, help='weight of sparsity loss')
@@ -869,7 +869,7 @@ if __name__ == '__main__':
     arms_blueprints, shortcuts = build_arms_blueprints(args, num_classes=c)
 
     # Mask
-    mask_fun = Mask(args.mask_nonlinearity, tau=args.gumbel_tau, soft=args.gumbel_soft, K=args.mask_sparsity, hard_K=args.mask_hard_sparsity_limit)
+    mask_fun = Mask(args.mask_nonlinearity, tau=args.mask_tau, soft=args.gumbel_soft, K=args.mask_sparsity, hard_K=args.mask_hard_sparsity_limit)
     mask_blueprint = partial(MaskModule, mask_fun, trainable=args.opt_mask, device=device)
 
     # Model
