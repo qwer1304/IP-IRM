@@ -968,7 +968,7 @@ if __name__ == '__main__':
         else:
             print("=> no checkpoint found at '{}'".format(args.resume))
 
-    moco_dict = {'net_momentum': model_momentum, 'queue_proj': queue_proj, 'queue_noproj': None, 'momentum': args.momentum,
+    moco_dict = {'net_momentum': model_momentum, 'queue_proj': queue_proj, 'queue_noproj': queue_noproj, 'momentum': args.momentum,
                  'temperature': moco_temperature,}
     if args.domains_path is not None:
         domains = torch.load(args.domains_path, weights_only=False)
