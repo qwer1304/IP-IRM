@@ -1393,7 +1393,12 @@ def calculate_mask_sparsity_and_grads(mask, net, weight, do_flag, args, param_gr
             loss = F.softplus(active_count - args.mask_sparsity)  
         elif args.mask_nonlinearity == 'sigmoid' or args.mask_nonlinearity == 'gumbel':
             #loss = torch.mean(mask * (1 - mask))
-            loss = torch.sum(torch.sqrt(torch.abs(mask) + 1e-8))
+            if args.sparsity_loss == "L1/2":
+                loss = torch.sum(torch.sqrt(torch.abs(mask) + 1e-8))
+            elif args.sparsity_loss == "Hoyer":
+                loss = mask.norm(1) / (mask.norm(2) + 1e-8)
+            else:
+                assert False, f"unknown sparsity loss {args.sparity_loss}"
         else: # indentity. WHAT TO DO?
             active_count = mask.abs().sum() # drive to 0
         grads = calculate_grads(loss, net)
