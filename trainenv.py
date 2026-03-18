@@ -1068,10 +1068,10 @@ def setup_grads_and_norms(grads_final, weight, Lscaler, device, do_flag, default
         grads_norm_weighted   = torch.tensor(0., dtype=torch.float, device=device)
     return grads_weighted, grads_weighted_vector, grads_norm_weighted
 
-def calculate_scalers(loss_CE_grads_final, loss_unsplit_grads_final, loss_grads_final, penalty_grads_final, 
-                      loss_CE_aggregator,  loss_unsplit_aggregator,  loss_env,         penalty_env,
-                      loss_CE_weight,      loss_unsplit_weight,      loss_weight,      penalty_weight,
-                      do_CE_loss,          do_unsplit_loss,          do_loss,          do_penalty, 
+def calculate_scalers(loss_CE_grads_final, loss_unsplit_grads_final, loss_grads_final, penalty_grads_final, loss_mask_sparsity_grads,
+                      loss_CE_aggregator,  loss_unsplit_aggregator,  loss_env,         penalty_env,         loss_mask_sparsity,
+                      loss_CE_weight,      loss_unsplit_weight,      loss_weight,      penalty_weight,      mask_sparsity_weight, 
+                      do_CE_loss,          do_unsplit_loss,          do_loss,          do_penalty,          do_mask_sparsity,
                       gradnorm_balancer,   do_gradnorm, 
                       device, ema, args,  param_groups_2_pind, net):
 
@@ -1085,14 +1085,18 @@ def calculate_scalers(loss_CE_grads_final, loss_unsplit_grads_final, loss_grads_
         setup_grads_and_norms(loss_grads_final, loss_weight, args.Lscaler, device, do_loss, default_grads_weighted_vector=default_grads_weighted_vector)
     penalty_grads_final_weighted, p_grads_flat_weighted, penalty_grad_norm_weighted = \
         setup_grads_and_norms(penalty_grads_final, penalty_weight, args.Lscaler, device, do_penalty, default_grads_weighted_vector=default_grads_weighted_vector)
+    mask_grads_final_weighted, m_grads_flat_weighted, mask_grad_norm_weighted = \
+        setup_grads_and_norms(loss_mask_sparsity_grads, mask_sparsity_weight, args.Lscaler, device, do_mask_sparsity, default_grads_weighted_vector=default_grads_weighted_vector)
 
     # Compute dot products & cosines
     delta_lk = l_grads_flat_weighted.dot(l_unsplit_grads_flat_weighted)       
     delta_lp = l_grads_flat_weighted.dot(p_grads_flat_weighted)
     delta_kp = l_unsplit_grads_flat_weighted.dot(p_grads_flat_weighted)
+    delta_km = l_unsplit_grads_flat_weighted.dot(m_grads_flat_weighted)
     cos_lk   = delta_lk / (loss_unsplit_grad_norm_weighted * loss_grad_norm_weighted    + 1e-12)
     cos_lp   = delta_lp / (loss_grad_norm_weighted         * penalty_grad_norm_weighted + 1e-12)
     cos_kp   = delta_kp / (loss_unsplit_grad_norm_weighted * penalty_grad_norm_weighted + 1e-12)
+    cos_km   = delta_km / (loss_unsplit_grad_norm_weighted * mask_grad_norm_weighted + 1e-12)
 
     Loss_grads_flat_weighted = [do_unsplit_loss*loss_unsplit_grads_final_weighted[p] + 
                                 do_loss*args.debug_dont_update_loss*loss_grads_final_weighted[p] +
@@ -1104,10 +1108,11 @@ def calculate_scalers(loss_CE_grads_final, loss_unsplit_grads_final, loss_grads_
     cos_Lp                   = F.cosine_similarity(L_grads_flat_weighted, p_grads_flat_weighted, dim=0)
     dot_Lp                   = L_grads_flat_weighted.dot(p_grads_flat_weighted)
 
-    loss_weighted         = loss_weight         * loss_env.mean()
-    loss_unsplit_weighted = loss_unsplit_weight * loss_unsplit_aggregator.mean()
-    loss_CE_weighted      = loss_CE_weight      * loss_CE_aggregator.mean()
-    penalty_weighted      = penalty_weight      * penalty_env.mean()
+    loss_weighted         = loss_weight          * loss_env.mean()
+    loss_unsplit_weighted = loss_unsplit_weight  * loss_unsplit_aggregator.mean()
+    loss_CE_weighted      = loss_CE_weight       * loss_CE_aggregator.mean()
+    penalty_weighted      = penalty_weight       * penalty_env.mean()
+    loss_mask_weighted    = mask_sparsity_weight * loss_mask_sparsity.mean()
 
     # Compute SHARED dot products & cosines
     shared_pind = get_shared_ind(param_groups_2_pind, args)
@@ -1137,6 +1142,8 @@ def calculate_scalers(loss_CE_grads_final, loss_unsplit_grads_final, loss_grads_
         calc_delta_and_cos(loss_unsplit_grads_final_weighted, penalty_grads_final_weighted, shared_pind['kp'], do_unsplit_loss, do_penalty)     
     shared_delta_pc, shared_cos_pc, shared_ngppc, shared_ngcpc = \
         calc_delta_and_cos(penalty_grads_final_weighted, loss_CE_grads_final_weighted, shared_pind['pc'], do_penalty, do_CE_loss)
+    shared_delta_km, shared_cos_km, shared_ngkkm, shared_ngmkm = \
+        calc_delta_and_cos(loss_unsplit_grads_final_weighted, loss_mask_weighted, param_groups_2_pind['mask'], do_unsplit_loss, do_mask_sparsity)
     shared_dot_Lp,   shared_cos_Lp, shared_ngLLp, shared_ngpLp = \
         calc_delta_and_cos(Loss_grads_flat_weighted, penalty_grads_final_weighted, shared_pind['kp'], do_unsplit_loss or do_loss, do_penalty) # 'l' and 'p' share same pars
 
@@ -1256,12 +1263,14 @@ def calculate_scalers(loss_CE_grads_final, loss_unsplit_grads_final, loss_grads_
         'shared_dot_kp':     shared_delta_kp.item(), 
         'shared_dot_kc':     shared_delta_kc.item(), 
         'shared_dot_pc':     shared_delta_pc.item(), 
+        'shared_dot_km':     shared_delta_km.item(), 
         'shared_dot_Lp':     shared_dot_Lp.item(), 
         'shared_cos_lk':     shared_cos_lk.item(),
         'shared_cos_lp':     shared_cos_lp.item(),
         'shared_cos_kp':     shared_cos_kp.item(),
         'shared_cos_kc':     shared_cos_kc.item(),
         'shared_cos_pc':     shared_cos_pc.item(),
+        'shared_cos_km':     shared_cos_km.item(),
         'shared_cos_lc':     shared_cos_lc.item(),
         'shared_cos_Lp':     shared_cos_Lp.item(),
         'ngc2':              ngc2.item(),
@@ -1994,10 +2003,10 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         penalty_grads_final = rotate_penalty_grads(penalty_grads_final, loss_grads_final, args.grad_rotate, do_penalty)
 
         loss_CE_grad_scaler, loss_unsplit_grad_scaler, loss_grad_scaler, penalty_grad_scaler, gradnorm_loss, info_dict = \
-            calculate_scalers(loss_CE_grads_final, loss_unsplit_grads_final, loss_grads_final, penalty_grads_final, 
-                              loss_CE_aggregator,  loss_unsplit_aggregator,  loss_env,         penalty_env,
-                              loss_CE_weight,      loss_unsplit_weight,      loss_weight,      penalty_weight,
-                              do_CE_loss,          do_unsplit_loss,          do_loss,          do_penalty, 
+            calculate_scalers(loss_CE_grads_final, loss_unsplit_grads_final, loss_grads_final, penalty_grads_final, loss_mask_sparsity_grads,
+                              loss_CE_aggregator,  loss_unsplit_aggregator,  loss_env,         penalty_env,         loss_mask_sparsity,
+                              loss_CE_weight,      loss_unsplit_weight,      loss_weight,      penalty_weight,      mask_sparsity_weight, 
+                              do_CE_loss,          do_unsplit_loss,          do_loss,          do_penalty,          do_mask_sparsity,
                               gradnorm_balancer, do_gradnorm, 
                               device, ema, args,  param_groups_2_pind, net) 
 
@@ -2107,7 +2116,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
             
             mask_energy = mask_activation.sum().item() 
             mask_sparsity_str = f" sparsity {args.mask_nonlinearity}: ngs2 {loss_mask_sparsity_norm**2:.2e} " + \
-                f"sum(activation) {mask_energy:.3e} mask_CV {(total_mask_CV / num_updates).item()}"
+                f"sum(activation) {mask_energy:.3e} mask_CV {(total_mask_CV / num_updates).item()}" + \
+                f" km {info_dict['shared_cos_km']:.2e}"
+
             if args.mask_nonlinearity != 'gumbel' or args.gumbel_soft: # soft mask
                 mask_effective_number = (mask_activation.sum()**2 / ((mask_activation**2).sum() + 1e-9)).item()
                 mask_entropy = -(mask_activation * torch.log(mask_activation + 1e-8) + (1 - mask_activation) * torch.log(1 - mask_activation + 1e-8)).mean().item()
