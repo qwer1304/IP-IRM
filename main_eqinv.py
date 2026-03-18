@@ -332,7 +332,7 @@ def test(net, test_data_loader, args, num_classes, progress=False, prefix="Test:
                 total=len(test_data_loader),
                 ncols=args.ncols,               # total width available
                 dynamic_ncols=False,            # disable autosizing
-                bar_format=bar_format           # request bar width
+                bar_format=bar_format,          # request bar width
                 file=sys.stdout,    # Ensures it uses standard output
                 mininterval=1.0,   # Only updates the UI every 10 seconds
                 maxinterval=2.0,   # Limits the maximum refresh rate
