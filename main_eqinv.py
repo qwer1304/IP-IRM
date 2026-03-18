@@ -612,6 +612,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--feature_dim', default=128, type=int, help='Feature dim for latent vector')
     parser.add_argument('--temperature', default=0.5, type=float, help='Temperature in SSL softmax')
+    parser.add_argument('--moco_temperature', default=[0.5,0.5], type=float, nargs=2, help='Temperature used in softmax', metavar="[+temp, -temp]")
     parser.add_argument('--norandgray', action="store_true", default=False, help='skip rand gray transform')
     parser.add_argument('--random_aug', action="store_true", default=False, help='random_aug')
 
@@ -681,6 +682,8 @@ if __name__ == '__main__':
     parser.add_argument('--class_to_idx', type=str, default=None, help='a function definition to apply to class to obtain its index')
     parser.add_argument('--image_class', choices=['ImageNet', 'STL', 'CIFAR'], default='ImageNet', help='Image class, default=ImageNet')
     parser.add_argument('--class_num', default=1000, type=int, help='num of classes')
+    parser.add_argument('--domains_path', type=str, default=None, help='domains file of training samples')
+    parser.add_argument('--crossdomain_alpha', type=float, default=1.0, help='multiplier of cross domain positives')
 
     parser.add_argument('--ncols', default=80, type=int, help='number of columns in terminal')
     parser.add_argument('--bar', default=50, type=int, help='length of progess bar')
@@ -789,7 +792,7 @@ if __name__ == '__main__':
     # warnings
     warnings.filterwarnings("always", category=UserWarning)
     
-    feature_dim, temperature = args.feature_dim, args.temperature
+    feature_dim, temperature, moco_temperature = args.feature_dim, args.temperature, args.moco_temperature
     epochs  = args.epochs
     dl_tr, dl_te, dl_u, dl_uo = args.dl_tr, args.dl_te, args.dl_u, args.dl_uo
     target_transform = eval(args.target_transform) if args.target_transform is not None else None
@@ -965,7 +968,14 @@ if __name__ == '__main__':
         else:
             print("=> no checkpoint found at '{}'".format(args.resume))
 
-    moco_dict = {'net_momentum': model_momentum, 'queue_proj': queue_proj, 'queue_noproj': queue_noproj, 'momentum': args.momentum}
+    moco_dict = {'net_momentum': model_momentum, 'queue_proj': queue_proj, 'queue_noproj': None, 'momentum': args.momentum,
+                 'temperature': moco_temperature,}
+    if args.domains_path is not None:
+        domains = torch.load(args.domains_path, weights_only=False)
+        domains = domains['partitions'][0]
+        domains = torch.argmax(domains, dim=1).to(device)
+        moco_dict.update({'domains': domains, 'crossdomain_alpha': args.crossdomain_alpha})
+
     losses_and_penalty_dict = build_losses_and_penalty_dict(args, model, class_weights=None, moco_dict=moco_dict)
 
     # training loop

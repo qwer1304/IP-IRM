@@ -312,7 +312,7 @@ class LossModule:
 # ---------------------------
 class MoCoSupConLossModule(LossModule):
     def __init__(self, *args, net_momentum=None, queue=None, temperature=None, debug=False, filter_indices=None, master=True, 
-                    multipos_infonce=True, domains=None, crossdomain_alpha=1.0, **kwargs):
+                    domains=None, crossdomain_alpha=1.0, **kwargs):
         super().__init__(*args, **kwargs)
         assert net_momentum is not None
         assert queue is not None
@@ -326,7 +326,6 @@ class MoCoSupConLossModule(LossModule):
         self.neg_idxs = []
         self.filter_indices_hook = filter_indices
         self.master = master
-        self.multipos_infonce = multipos_infonce
         self.domains = domains
         self.crossdomain_alpha = crossdomain_alpha
         if self.debug:
@@ -380,8 +379,21 @@ class MoCoSupConLossModule(LossModule):
                     But CE expects one logit, not an average.
                     Rewrite the average:
                         1/|P(i)|\sum_{p \in P(i)} s_{ip} = log(1/|P(i)|\sum_{p \in P(i)} exp(s_{ip})) - C_i (*)
-                    Dropping the anchor-only constant C_i and expanding the log(), we use:
-                        z_0 = log(\sum_{p \in P(i)} exp(s_{ip}))) - log(|P(i)|)
+                    Expanding the log():
+                    = log(\sum_{p \in P(i)} exp(s_{ip})) - log(|P(i)| - C_i
+                    L_SC = -1/|P(i)|\sum_{p \in P(i)} s_{ip} + log(\sum_{a \in A(i)} exp(s_{ia}))
+                    L_MP = -log(\sum_{p \in P(i)} exp(s_{ip})) + log(\sum_{a \in A(i)} exp(s_{ia}))
+                    Subtract:
+                        L_SC - L_MP = log(\sum_{p \in P(i)} exp(s_{ip})) - 1/|P(i)|\sum_{p \in P(i)} s_{ip}
+                    Now write:
+                        log(\sum_{p \in P(i)} exp(s_{ip})) = log(|P(i)|) + log(1/|P(i)|\sum_{p \in P(i)} exp(s_{ip}))
+                    so
+                        L_SC = L_MP + log(|P(i)|) + [log(1/|P(i)|\sum_{p \in P(i)} exp(s_{ip})) - 1/|P(i)|\sum_{p \in P(i)} s_{ip}] =
+                               L_MP + log(|P(i)|) + C_i
+                    Now drop C_i:
+                        L_SC = L_MP + log(|P(i)|)
+                        z_0_MP = log(\sum_{p \in P(i)} exp(s_{ip})))
+                        z_0_SC = log(\sum_{p \in P(i)} exp(s_{ip}))) - log(|P(i)|) = z_0_MP - log(|P(i)|)
 
         Step 3a - Derivation of (*):
             Apply a pure algebraic identity (no approximations):
@@ -433,7 +445,15 @@ class MoCoSupConLossModule(LossModule):
                     avoids over-penalizing anchors with many positives
                     commonly used (quietly) in MoCo-SupCon hybrids
                 True averaged SupCon:
-                    sharper, but more sensitive to class imbalance + queue effects            
+                    sharper, but more sensitive to class imbalance + queue effects  
+            Key Fact:
+                If two per-sample losses differ by an additive constant that does not depend on the parameters, i.e.  
+                    L_MP(i) = L_SC(i) - c
+                then:
+                    - ERM gradients are identical.
+                    - IRMv1 penalty gradients are identical.
+                    - VREx gradients are also identical.
+                But the penalty value itself is not identical.
         """
         assert indexs is not None, 'indexs cannot be None'
         assert len(pos_q) == len(indexs), f"len(pos_q) {len(pos_q)} != len(indexs) {len(indexs)}"
@@ -485,14 +505,8 @@ class MoCoSupConLossModule(LossModule):
 
         pos_logits = pos_logits.masked_fill(~pos_mask, -1e9) # (B,N)
 
-        # One logit per anchor = logsumexp over positives
-        if not self.multipos_infonce:
-            num_pos = pos_mask.sum(dim=1, keepdim=True).clamp(min=1)
-            supcon_correction = -num_pos.log()
-        else:
-            supcon_correction = 0.
-            
-        l_pos = torch.logsumexp(pos_logits, dim=1, keepdim=True) + supcon_correction # (B,1)
+        # One logit per anchor = logsumexp over positives           
+        l_pos = torch.logsumexp(pos_logits, dim=1, keepdim=True) # (B,1)
         
         l_neg = (logits  / self.temperature[1]).masked_fill(pos_mask, -1e9) # (B,N)
         

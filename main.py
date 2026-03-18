@@ -606,7 +606,6 @@ def load_checkpoint(path, model, model_momentum, optimizer, gradnorm_balancer, g
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train IP-IRM')
     parser.add_argument('--ssl_type', default='MoCo', type=str, choices=['MoCo', 'SimSiam', 'MoCoSupCon'], help='SSL type')    
-    parser.add_argument('--multipos_infonce', action="store_true", help='use multi-positive InfoNCE in SupCon')
     parser.add_argument('--ssl_type_unsplit', default='MoCo', type=str, choices=['MoCo', 'SimSiam', 'MoCoSupCon'], help='SSL type')    
     parser.add_argument('--ssl_type_partition', default='MoCoSupCon', type=str, choices=['MoCo', 'SimSiam', 'MoCoSupCon', 'SimCLR'], help='SSL type for partition')    
     parser.add_argument('--penalty_type', default='IRM', type=str, choices=['IRM', 'VREx'], help='Penalty type')        
@@ -965,7 +964,7 @@ if __name__ == '__main__':
             print("=> no checkpoint found at '{}'".format(args.resume))
 
     moco_dict = {'net_momentum': model_momentum, 'queue_proj': queue_proj, 'queue_noproj': None, 'momentum': args.momentum,
-                 'temperature': moco_temperature, "multipos_infonce": args.multipos_infonce}
+                 'temperature': moco_temperature,}
     if args.domains_path is not None:
         domains = torch.load(args.domains_path, weights_only=False)
         domains = domains['partitions'][0]

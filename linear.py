@@ -785,6 +785,7 @@ if __name__ == '__main__':
             txt_write.write('\ntest_loss: {}, test_acc@1: {}, test_acc@5: {}'.format(test_loss, test_acc_1, test_acc_5))
             if args.dataset == 'ImageNet':
                 txt_write.write('\nval_loss: {}, val_acc@1: {}, val_acc@5: {}'.format(val_loss, val_acc_1, val_acc_5))
+        exit(1)
     
     else:
         for epoch in range(args.start_epoch, epochs + 1):
