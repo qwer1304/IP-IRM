@@ -309,8 +309,8 @@ def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test
                     mask = torch.zeros(feature.size(-1)).to(feature.device)
                     mask[args.mask_idcs] = 1.0
 
-                    # don't normalize after applying mask
                     masked_feature = feature * mask
+                    # Gemini says to normalize
                     masked_feature = utils.safe_normalize(masked_feature, dim=-1)
                     out = net.module.fc(masked_feature)
 

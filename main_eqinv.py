@@ -333,6 +333,10 @@ def test(net, test_data_loader, args, num_classes, progress=False, prefix="Test:
                 ncols=args.ncols,               # total width available
                 dynamic_ncols=False,            # disable autosizing
                 bar_format=bar_format           # request bar width
+                file=sys.stdout,    # Ensures it uses standard output
+                mininterval=1.0,   # Only updates the UI every 10 seconds
+                maxinterval=2.0,   # Limits the maximum refresh rate
+                ascii=True,         # Uses simple chars (less likely to break the socket)
             )
         else:
            test_bar = test_data_loader
@@ -374,7 +378,8 @@ def test(net, test_data_loader, args, num_classes, progress=False, prefix="Test:
             features = utils.safe_normalize(features, dim=-1)
             mask_activation = net.module.mask_fun.activation(u=mask_u)
             masked_features = features * mask_activation
-            #masked_features = utils.safe_normalize(masked_features, dim=-1)
+            # Gemini says to normalize
+            masked_features = utils.safe_normalize(masked_features, dim=-1)
             
             out = net.module.fc(masked_features)
 
@@ -1172,6 +1177,7 @@ if __name__ == '__main__':
 
     print("Running training with args:")
     print(args)
+    print() # insert separating line
     for epoch in range(start_epoch, epochs + 1):
         if train_loader is None:
             train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, shuffle=True, 
