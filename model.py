@@ -98,7 +98,7 @@ class MaskModule(nn.Module):
                         final_bias = (low + high) / 2
                         return r + final_bias
 
-                    init_logit = init_mask_to_neff(n=init_dims, target_k=activation_method.K)
+                    init_logit = init_mask_to_neff(n=input_dim, target_k=activation_method.K)
                 #end if activation_method.mask_type == 'gumbel' and not activation_method.gumbel_soft:
             # end if activation_method.K:
 
