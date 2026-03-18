@@ -1516,7 +1516,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
     total_pen_loss_weighted      = 0.0
     total_mask_sparsity_weighted = 0.0
     total_loss_weighted          = 0.0
-
+    total_mask_CV                = 0.0
+    
     bar_format = '{l_bar}{bar:' + str(args.bar) + '}{r_bar}' #{bar:-' + str(args.bar) + 'b}'
     train_bar = tqdm(train_loader,
             total=len(train_loader),        # number of batches
@@ -2097,8 +2098,15 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         # mask sparsity measures
         mask_sparsity_str = ""
         if do_mask_sparsity:
+            mask_grads_pind = param_groups_2_pind['mask']
+            assert len(mask_grads_pind) == 1, f"len(mask_grads_pind)={len(mask_grads_pind)}"
+            mask_grad_vector = loss_mask_sparsity_grads[mask_grads_pind[0]]
+            mask_CV = torch.std(mask_grad_vector) / (torch.mean(mask_grad_vector) + 1e-8)
+            total_mask_CV += mask_CV * this_batch_size * gradients_accumulation_steps
+            
             mask_energy = mask_activation.sum().item() 
-            mask_sparsity_str = f" sparsity {args.mask_nonlinearity}: ngs2 {loss_mask_sparsity_norm**2:.2e} sum(activation) {mask_energy:.3e}"
+            mask_sparsity_str = f" sparsity {args.mask_nonlinearity}: ngs2 {loss_mask_sparsity_norm**2:.2e} " + \
+                f"sum(activation) {mask_energy:.3e} mask_CV {(total_mask_CV / trained_samples).item()}"
             if args.mask_nonlinearity != 'gumbel' or args.gumbel_soft: # soft mask
                 mask_effective_number = (mask_activation.sum()**2 / ((mask_activation**2).sum() + 1e-9)).item()
                 mask_entropy = -(mask_activation * torch.log(mask_activation + 1e-8) + (1 - mask_activation) * torch.log(1 - mask_activation + 1e-8)).mean().item()
