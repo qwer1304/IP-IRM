@@ -1468,7 +1468,12 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
     if args.increasing_weight:
         penalty_weight = utils.increasing_weight(args.increasing_weight, args.penalty_weight, args.penalty_iters, epoch, args.epochs)
     elif args.penalty_iters < 200:
-        penalty_weight = args.penalty_weight if epoch >= args.penalty_iters else 0.
+        if args.penalty_weight == 0.:
+            penalty_weight = 0.
+        elif epoch < args.penalty_iters:
+            penalty_weight = 1.
+        else:
+            penalty_weight = args.penalty_weight
     else:
         penalty_weight = args.penalty_weight
     
@@ -2001,8 +2006,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         for pind, (name, p) in enumerate(net.named_parameters()):
             total_grad_flat_weighted = (   loss_unsplit_grads_final[pind] * loss_unsplit_weight  * args.Lscaler * loss_unsplit_grad_scaler
                                          + loss_CE_grads_final[pind]      * loss_CE_weight       * args.Lscaler * loss_CE_grad_scaler
-                                         + loss_grads_final[pind]         * loss_weight          * args.Lscaler * loss_grad_scaler * int(not args.debug_dont_update_loss)     
-                                         + penalty_grads_final[pind]      * penalty_weight       * args.Lscaler * penalty_grad_scaler  
+                                         + loss_grads_final[pind]         * loss_weight          * args.Lscaler * loss_grad_scaler    * int(not args.debug_dont_update_loss)     
+                                         + penalty_grads_final[pind]      * penalty_weight       * args.Lscaler * penalty_grad_scaler * int(epoch >= args.penalty_iters)
                                          + loss_mask_sparsity_grads[pind] * mask_sparsity_weight * args.Lscaler * 1.0
                                        )
             if p.grad is None:
