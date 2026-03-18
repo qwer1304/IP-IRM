@@ -1143,7 +1143,7 @@ def calculate_scalers(loss_CE_grads_final, loss_unsplit_grads_final, loss_grads_
     shared_delta_pc, shared_cos_pc, shared_ngppc, shared_ngcpc = \
         calc_delta_and_cos(penalty_grads_final_weighted, loss_CE_grads_final_weighted, shared_pind['pc'], do_penalty, do_CE_loss)
     shared_delta_km, shared_cos_km, shared_ngkkm, shared_ngmkm = \
-        calc_delta_and_cos(loss_unsplit_grads_final_weighted, loss_mask_weighted, param_groups_2_pind['mask'], do_unsplit_loss, do_mask_sparsity)
+        calc_delta_and_cos(loss_unsplit_grads_final_weighted, mask_grads_final_weighted, param_groups_2_pind['mask'], do_unsplit_loss, do_mask_sparsity)
     shared_dot_Lp,   shared_cos_Lp, shared_ngLLp, shared_ngpLp = \
         calc_delta_and_cos(Loss_grads_flat_weighted, penalty_grads_final_weighted, shared_pind['kp'], do_unsplit_loss or do_loss, do_penalty) # 'l' and 'p' share same pars
 
