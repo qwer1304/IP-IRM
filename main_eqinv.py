@@ -759,7 +759,7 @@ if __name__ == '__main__':
     parser.add_argument('--mask_sparsity_weight', type=float, default=0.0, help='weight of sparsity loss')
     parser.add_argument('--mask_hard_sparsity_limit', action="store_true", help='if true, # masks always <= K')    
     parser.add_argument('--mask_save_freq', type=int, default=None, help='save mask frequency')
-    parser.add_argument('--mask_sparisty_loss', type=str, default="L1/2", choices=['L1/2', 'Hoyer'], help='Loss to use for sparsity')
+    parser.add_argument('--mask_sparsity_loss', type=str, default="L1/2", choices=['L1/2', 'Hoyer'], help='Loss to use for sparsity')
 
     # clustering
     parser.add_argument('--cluster_path', type=str, default=None, 
