@@ -2127,7 +2127,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 f"mask_CV {(total_mask_CV / num_updates).item():.2f}" + \
                 f" cos: km {info_dict['shared_cos_km']:.2e} cm {info_dict['shared_cos_cm']:.2e} pm {info_dict['shared_cos_pm']:.2e}"
 
-            if args.mask_nonlinearity != 'gumbel' or args.gumbel_soft: # soft mask
+            if True or args.mask_nonlinearity != 'gumbel' or args.gumbel_soft: # soft mask
                 mask_effective_number = (mask_activation.sum()**2 / ((mask_activation**2).sum() + 1e-9)).item()
                 mask_entropy = -(mask_activation * torch.log(mask_activation + 1e-8) + (1 - mask_activation) * torch.log(1 - mask_activation + 1e-8)).mean().item()
                 m1_m2 = mask_activation.norm(1) / (mask_activation.norm(2) + 1e-9)

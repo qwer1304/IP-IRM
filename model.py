@@ -28,7 +28,7 @@ class Mask():
         # x: (num_features,) tensor
         if self.mask_type == 'sigmoid':
             mask = torch.sigmoid(x / self.tau)
-            mask = torch.where(mask < 0.1, torch.zeros_like(mask), mask)
+            #mask = torch.where(mask < 0.1, torch.zeros_like(mask), mask)
             return mask
         elif self.mask_type == 'ident':
             return x
