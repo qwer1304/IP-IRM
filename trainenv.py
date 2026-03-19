@@ -2125,6 +2125,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
             mask_sparsity_str = f" sparsity {args.mask_nonlinearity}: ngs2 {loss_mask_sparsity_norm**2:.2e} " + \
                 f"preactivation: mean {mask_preactivation.mean().item():.2e} std {torch.std(mask_preactivation).item():.2e} " + \
                 f"mask_CV {(total_mask_CV / num_updates).item():.2f}" + \
+                f" dot: km {info_dict['shared_dot_km']:.2e} cm {info_dict['shared_dot_cm']:.2e} pm {info_dict['shared_dot_pm']:.2e} " + \
                 f" cos: km {info_dict['shared_cos_km']:.2e} cm {info_dict['shared_cos_cm']:.2e} pm {info_dict['shared_cos_pm']:.2e}"
 
             if True or args.mask_nonlinearity != 'gumbel' or args.gumbel_soft: # soft mask
