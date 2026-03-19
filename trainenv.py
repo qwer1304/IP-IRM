@@ -1406,6 +1406,8 @@ def calculate_mask_sparsity_and_grads(mask, net, weight, do_flag, args, param_gr
                 loss = torch.sum(torch.sqrt(torch.abs(mask) + 1e-8))
             elif args.mask_sparsity_loss == "Hoyer":
                 loss = mask.norm(1) / (mask.norm(2) + 1e-8)
+            elif args.mask_sparsity_loss == "Hoyer_inf":
+                loss = mask.norm(1) / (mask.max() + 1e-8)
             else:
                 assert False, f"unknown sparsity loss {args.mask_sparsity_loss}"
         else: # indentity. WHAT TO DO?
@@ -1992,6 +1994,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
             penalty_env  = torch.tensor(0, dtype=torch.float, device=device)
 
         mask_activation = net.module.mask_fun.activation(u=mask_activation_noise) # recompute since its graph was released
+        mask_preactivation = net.module.mask_fun.mask
         loss_mask_sparsity, loss_mask_sparsity_grads, loss_mask_sparsity_norm = \
             calculate_mask_sparsity_and_grads(mask_activation, net, mask_sparsity_weight, do_mask_sparsity, args, param_groups_2_pind, loss_mask_sparsity_grads)
         
@@ -2107,16 +2110,13 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         # mask sparsity measures
         mask_sparsity_str = ""
         if do_mask_sparsity:
-            mask_grads_pind = param_groups_2_pind['mask']
-            assert len(mask_grads_pind) == 1, f"len(mask_grads_pind)={len(mask_grads_pind)}"
-            mask_grad_vector = loss_mask_sparsity_grads[mask_grads_pind[0]]
-            mask_CV = torch.std(mask_grad_vector) / (torch.mean(mask_grad_vector) + 1e-8)
+            mask_CV = torch.std(mask_activation) / (torch.mean(mask_activation) + 1e-8)
             total_mask_CV += mask_CV
             num_updates = int((batch_index + 1) / gradients_accumulation_steps)
             
-            mask_energy = mask_activation.sum().item() 
             mask_sparsity_str = f" sparsity {args.mask_nonlinearity}: ngs2 {loss_mask_sparsity_norm**2:.2e} " + \
-                f"sum(activation) {mask_energy:.3e} mask_CV {(total_mask_CV / num_updates).item()}" + \
+                f"preactivation: mean {mask_preactivation.mean().item():.2e} std {torch.std(mask_preactivation).item():.2e} " + \
+                f"mask_CV {(total_mask_CV / num_updates).item():.2f}" + \
                 f" km {info_dict['shared_cos_km']:.2e}"
 
             if args.mask_nonlinearity != 'gumbel' or args.gumbel_soft: # soft mask
