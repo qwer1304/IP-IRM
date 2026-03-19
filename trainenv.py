@@ -1144,6 +1144,10 @@ def calculate_scalers(loss_CE_grads_final, loss_unsplit_grads_final, loss_grads_
         calc_delta_and_cos(penalty_grads_final_weighted, loss_CE_grads_final_weighted, shared_pind['pc'], do_penalty, do_CE_loss)
     shared_delta_km, shared_cos_km, shared_ngkkm, shared_ngmkm = \
         calc_delta_and_cos(loss_unsplit_grads_final_weighted, mask_grads_final_weighted, param_groups_2_pind['mask'], do_unsplit_loss, do_mask_sparsity)
+    shared_delta_cm, shared_cos_cm, shared_ngccm, shared_ngmcm = \
+        calc_delta_and_cos(loss_CE_grads_final_weighted, mask_grads_final_weighted, param_groups_2_pind['mask'], do_CE_loss, do_mask_sparsity)
+    shared_delta_pm, shared_cos_pm, shared_ngppm, shared_ngmpm = \
+        calc_delta_and_cos(penalty_grads_final_weighted, mask_grads_final_weighted, param_groups_2_pind['mask'], do_penalty, do_mask_sparsity)
     shared_dot_Lp,   shared_cos_Lp, shared_ngLLp, shared_ngpLp = \
         calc_delta_and_cos(Loss_grads_flat_weighted, penalty_grads_final_weighted, shared_pind['kp'], do_unsplit_loss or do_loss, do_penalty) # 'l' and 'p' share same pars
 
@@ -1264,6 +1268,8 @@ def calculate_scalers(loss_CE_grads_final, loss_unsplit_grads_final, loss_grads_
         'shared_dot_kc':     shared_delta_kc.item(), 
         'shared_dot_pc':     shared_delta_pc.item(), 
         'shared_dot_km':     shared_delta_km.item(), 
+        'shared_dot_cm':     shared_delta_cm.item(), 
+        'shared_dot_pm':     shared_delta_pm.item(), 
         'shared_dot_Lp':     shared_dot_Lp.item(), 
         'shared_cos_lk':     shared_cos_lk.item(),
         'shared_cos_lp':     shared_cos_lp.item(),
@@ -1271,6 +1277,8 @@ def calculate_scalers(loss_CE_grads_final, loss_unsplit_grads_final, loss_grads_
         'shared_cos_kc':     shared_cos_kc.item(),
         'shared_cos_pc':     shared_cos_pc.item(),
         'shared_cos_km':     shared_cos_km.item(),
+        'shared_cos_cm':     shared_cos_cm.item(),
+        'shared_cos_pm':     shared_cos_pm.item(),
         'shared_cos_lc':     shared_cos_lc.item(),
         'shared_cos_Lp':     shared_cos_Lp.item(),
         'ngc2':              ngc2.item(),
@@ -2117,7 +2125,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
             mask_sparsity_str = f" sparsity {args.mask_nonlinearity}: ngs2 {loss_mask_sparsity_norm**2:.2e} " + \
                 f"preactivation: mean {mask_preactivation.mean().item():.2e} std {torch.std(mask_preactivation).item():.2e} " + \
                 f"mask_CV {(total_mask_CV / num_updates).item():.2f}" + \
-                f" km {info_dict['shared_cos_km']:.2e}"
+                f" cos: km {info_dict['shared_cos_km']:.2e} cm {info_dict['shared_cos_cm']:.2e} pm {info_dict['shared_cos_pm']:.2e}"
 
             if args.mask_nonlinearity != 'gumbel' or args.gumbel_soft: # soft mask
                 mask_effective_number = (mask_activation.sum()**2 / ((mask_activation**2).sum() + 1e-9)).item()
