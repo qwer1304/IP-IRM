@@ -1099,11 +1099,11 @@ def calculate_scalers(loss_CE_grads_final, loss_unsplit_grads_final, loss_grads_
     cos_km   = delta_km / (loss_unsplit_grad_norm_weighted * mask_grad_norm_weighted + 1e-12)
 
     Loss_grads_flat_weighted = [do_unsplit_loss*loss_unsplit_grads_final_weighted[p] + 
-                                do_loss*args.debug_dont_update_loss*loss_grads_final_weighted[p] +
+                                do_loss*args.dont_update_loss*loss_grads_final_weighted[p] +
                                 do_CE_loss*loss_CE_grads_final_weighted[p]
                                     for p in range(len(loss_grads_final_weighted))]
     L_grads_flat_weighted    = do_unsplit_loss*l_unsplit_grads_flat_weighted + \
-                               do_loss*args.debug_dont_update_loss*l_grads_flat_weighted + \
+                               do_loss*args.dont_update_loss*l_grads_flat_weighted + \
                                do_CE_loss*l_CE_grads_flat_weighted
     cos_Lp                   = F.cosine_similarity(L_grads_flat_weighted, p_grads_flat_weighted, dim=0)
     dot_Lp                   = L_grads_flat_weighted.dot(p_grads_flat_weighted)
@@ -2033,9 +2033,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         for pind, (name, p) in enumerate(net.named_parameters()):
             total_grad_flat_weighted = (   loss_unsplit_grads_final[pind] * loss_unsplit_weight  * args.Lscaler * loss_unsplit_grad_scaler
                                          + loss_CE_grads_final[pind]      * loss_CE_weight       * args.Lscaler * loss_CE_grad_scaler
-                                         + loss_grads_final[pind]         * loss_weight          * args.Lscaler * loss_grad_scaler    * int(not args.debug_dont_update_loss)     
+                                         + loss_grads_final[pind]         * loss_weight          * args.Lscaler * loss_grad_scaler    * int(not args.dont_update_loss)     
                                          + penalty_grads_final[pind]      * penalty_weight       * args.Lscaler * penalty_grad_scaler * int(epoch >= args.penalty_iters)
-                                         + loss_mask_sparsity_grads[pind] * mask_sparsity_weight * args.Lscaler * 1.0
+                                         + loss_mask_sparsity_grads[pind] * mask_sparsity_weight * args.Lscaler * 1.0                 * int(not args.dont_update_mask_sparsity)
                                        )
             if p.grad is None:
                 p.grad  = total_grad_flat_weighted.view(p.shape)
@@ -2079,7 +2079,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         if args.debug_print_loss:
             print()
             if do_loss:
-                print(f"loss computed; loss grads {'not' if args.debug_dont_update_loss else ''} updating the model")
+                print(f"loss computed; loss grads {'not' if args.dont_update_loss else ''} updating the model")
                 print(f"loss_env.size()={loss_env.size()}")
                 for p in range(loss_env.size(1)):
                     risk_p = loss_env[:,p].squeeze()

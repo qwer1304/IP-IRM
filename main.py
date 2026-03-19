@@ -675,7 +675,8 @@ if __name__ == '__main__':
 
     parser.add_argument('--debug', action="store_true", default=False, help='debug?')
     parser.add_argument('--print_batch', action="store_true", default=False, help='print every batch')
-    parser.add_argument('--debug_dont_update_loss', action="store_true", default=False, help='debug?')
+    parser.add_argument('--dont_update_loss', action="store_true", default=False, help='debug?')
+    parser.add_argument('--dont_update_mask_sparsity', action="store_true", default=False, help='debug?')
     parser.add_argument('--debug_print_loss', action="store_true", default=False, help='debug?')
     parser.add_argument('--debug_print_grads', action="store_true", default=False, help='debug?')
 
