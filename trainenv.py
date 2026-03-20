@@ -2032,7 +2032,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         
         for pind, (name, p) in enumerate(net.named_parameters()):
             if do_mask and 'mask' in name and args.mask_scaler is not None:
-                ce_scaler, unsplit_scaler, env_scaler = *args.mask_scaler
+                ce_scaler, unsplit_scaler, env_scaler = args.mask_scaler
             else:
                 ce_scaler, unsplit_scaler, env_scaler = 1.0, 1.0, 1.0
             total_grad_flat_weighted = (   loss_unsplit_grads_final[pind] * loss_unsplit_weight  * args.Lscaler * loss_unsplit_grad_scaler * unsplit_scaler
