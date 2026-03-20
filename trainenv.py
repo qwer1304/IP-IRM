@@ -2031,7 +2031,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         if args.debug_print_grads: print()
         
         for pind, (name, p) in enumerate(net.named_parameters()):
-            if 'mask' in name and args.mask_scaler is not None:
+            if 'mask' in name and args.mask_scalers is not None:
                 ce_scaler, unsplit_scaler, env_scaler = args.mask_scaler
             else:
                 ce_scaler, unsplit_scaler, env_scaler = 1.0, 1.0, 1.0
