@@ -761,7 +761,7 @@ if __name__ == '__main__':
     parser.add_argument('--mask_hard_sparsity_limit', action="store_true", help='if true, # masks always <= K')    
     parser.add_argument('--mask_save_freq', type=int, default=None, help='save mask frequency')
     parser.add_argument('--mask_sparsity_loss', type=str, default="L1/2", choices=['L1/2', 'Hoyer', 'Hoyer_inf'], help='Loss to use for sparsity')
-    parser.add_argument('--mask_scalers', default=None, nargs=3*2, type=float, nargs=3, metavar='CE Unsplit Env',    
+    parser.add_argument('--mask_scalers', default=None, type=float, nargs=3, metavar='[CE Unsplit Env]',    
                         help='Releative to penalty mask grads update scalers')
 
     # clustering
