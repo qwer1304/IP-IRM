@@ -1004,27 +1004,27 @@ if __name__ == '__main__':
             memory_data = mem_data[0]
         memory_loader = DataLoader(memory_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
             pin_memory=True, persistent_workers=te_pw)
-        feauture_bank, feature_labels = get_feature_bank(model, memory_loader, args, progress=True, prefix="Evaluate:", mask_u=mask_activation_noise,
-                                            masked_features='masked' in args.evaluate)
+        feauture_bank, feature_labels = get_feature_bank(model, memory_loader, args, progress=True, prefix="Evaluate:", 
+            mask_u=mask_activation_noise, masked_features='masked' in args.evaluate, training=False)
         
         if args.split_train_for_test:
             print('eval on train data')
             train_loader = DataLoader(mem_data[1], batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
                 pin_memory=True, persistent_workers=te_pw)
             train_acc_1, train_acc_5, train_macro_acc = test_knn(model, feauture_bank, feature_labels, train_loader, c, args, progress=True, prefix="Train:",
-                    mask_u=mask_activation_noise, masked_features='masked' in args.evaluate)
+                    mask_u=mask_activation_noise, masked_features='masked' in args.evaluate, training=False)
         if 'val' in args.evaluate:
             print('eval on val data')
             val_loader = DataLoader(val_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=True, 
                 pin_memory=True, persistent_workers=te_pw)
             val_acc_1, val_acc_5, val_macro_acc = test_knn(model, feauture_bank, feature_labels, val_loader, c, args, progress=True, prefix="Val:",
-                    mask_u=mask_activation_noise, masked_features='masked' in args.evaluate)
+                    mask_u=mask_activation_noise, masked_features='masked' in args.evaluate, training=False)
         if 'test' in args.evaluate:
             print('eval on test data')
             test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=True, 
                 pin_memory=True, persistent_workers=te_pw)
             test_acc_1, test_acc_5, test_macro_acc = test_knn(model, feauture_bank, feature_labels, test_loader, c, args, progress=True, prefix="Test:",
-                    mask_u=mask_activation_noise, masked_features='masked' in args.evaluate)
+                    mask_u=mask_activation_noise, masked_features='masked' in args.evaluate, training=False)
         exit()
 
     if args.evaluate is not None:
@@ -1040,17 +1040,20 @@ if __name__ == '__main__':
             train_data  = utils.Imagenet(root=args.data + '/train', transform=transform, target_transform=target_transform, class_to_idx=class_to_idx)
             train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, shuffle=False, 
                pin_memory=True, persistent_workers=tr_pw)
-            train_acc_1, train_acc_5, train_macro_acc = test(model, train_loader, args, num_classes=c, progress=True, prefix="Train:", mask_u=mask_activation_noise)
+            train_acc_1, train_acc_5, train_macro_acc = test(model, train_loader, args, num_classes=c, progress=True, prefix="Train:", 
+                mask_u=mask_activation_noise, training=False)
         if 'val' in args.evaluate:
             print('eval on val data')
             val_loader = DataLoader(val_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
                 pin_memory=True, persistent_workers=te_pw)
-            val_acc_1, val_acc_5, val_macro_acc = test(model, val_loader, args, num_classes=c, progress=True, prefix="Val:", mask_u=mask_activation_noise)
+            val_acc_1, val_acc_5, val_macro_acc = test(model, val_loader, args, num_classes=c, progress=True, prefix="Val:", 
+                mask_u=mask_activation_noise, training=False)
         if 'test' in args.evaluate:
             print('eval on test data')
             test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
                 pin_memory=True, persistent_workers=te_pw)
-            test_acc_1, test_acc_5, test_macro_acc = test(model, test_loader, args, num_classes=c, progress=True, prefix="Test:", mask_u=mask_activation_noise)
+            test_acc_1, test_acc_5, test_macro_acc = test(model, test_loader, args, num_classes=c, progress=True, prefix="Test:", 
+                mask_u=mask_activation_noise, training=False)
         exit()
 
     if not args.resume and os.path.exists(log_file):

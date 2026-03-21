@@ -23,8 +23,9 @@ class Mask():
         self.soft = soft
         self.K = K
         self.hard_K = hard_K
+        self.u = None
 
-    def __call__(self, x, u=None):
+    def __call__(self, x, u=None, training=True):
         # x: (num_features,) tensor
         if self.mask_type == 'sigmoid':
             mask = torch.sigmoid(x / self.tau)
@@ -34,7 +35,14 @@ class Mask():
             return x
         elif self.mask_type == 'gumbel':
             # Sample Gumbel noise
-            if u is None: u = torch.rand_like(x)
+            if training:
+                if u is None: u = torch.rand_like(x)
+                self.u = u
+            else: # use stored u unless it has never been stored
+                if self.u is None:
+                    if u is None: u = torch.rand_like(x)
+                else:
+                    u = self.u
             g = -torch.log(-torch.log(u + 1e-20) + 1e-20)
             x_soft = torch.sigmoid((x + g) / self.tau)  # (N,)
 
