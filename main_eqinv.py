@@ -781,6 +781,7 @@ if __name__ == '__main__':
     parser.add_argument('--train_transform', default='test', type=str, choices=['train', 'test', 'train_mixed']) # in LP train transfrom = test transfrom
     parser.add_argument('--test_transform', default='test', type=str, choices=['train', 'test'])
     parser.add_argument('--val_transform', default='test', type=str, choices=['train', 'test'])
+    parser.add_argument('--terrainc_transform', action="store_true", default=False, help='TerraInc specific transform')
 
     # args parse
     args = parser.parse_args()
@@ -839,7 +840,7 @@ if __name__ == '__main__':
         test_data = utils.CIFAR100(root=args.data, train=False, transform=test_transform, target_transform=target_transform)
     elif args.dataset == 'ImageNet':
         train_transform = utils.make_train_transform(image_size, randgray=not args.norandgray, normalize=args.image_class, 
-                            mixed=args.train_transform=='train_mixed', hard=args.random_aug)
+                            mixed=args.train_transform=='train_mixed', hard=args.random_aug, terrainc=args.terrainc_transform)
         test_transform = utils.make_test_transform(normalize=args.image_class)
         
         transform   = train_transform if 'train' in args.train_transform else test_transform
