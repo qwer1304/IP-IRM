@@ -197,7 +197,7 @@ def get_feature_bank(net, memory_data_loader, args, progress=False, prefix="Test
             feature = net.module.backbone(data)
             feature = utils.safe_normalize(feature, dim=-1)
             if masked_features:
-                mask_activation = net.module.mask_fun.activation(u=mask_u)
+                mask_activation = net.module.mask_fun.activation(u=mask_u, training=False)
                 feature = feature * mask_activation
                 #feature = utils.safe_normalize(feature, dim=-1)
             feature_bank.append(feature)
