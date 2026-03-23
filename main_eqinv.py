@@ -185,6 +185,10 @@ def get_feature_bank(net, memory_data_loader, args, progress=False, prefix="Test
                 dynamic_ncols=False,            # disable autosizing
                 bar_format=bar_format,          # request bar width
                 desc='get_feature_bank(), memory: Feature extracting'
+                file=sys.stdout,    # Ensures it uses standard output
+                mininterval=1.0,   # Only updates the UI every 10 seconds
+                maxinterval=2.0,   # Limits the maximum refresh rate
+                ascii=True,         # Uses simple chars (less likely to break the socket)
             )
         else:
             feature_bar = memory_data_loader
@@ -232,6 +236,10 @@ def test_knn(net, feature_bank, feature_labels, test_data_loader, num_classes, a
                 ncols=args.ncols,               # total width available
                 dynamic_ncols=False,            # disable autosizing
                 bar_format=bar_format           # request bar width
+                file=sys.stdout,    # Ensures it uses standard output
+                mininterval=1.0,   # Only updates the UI every 10 seconds
+                maxinterval=2.0,   # Limits the maximum refresh rate
+                ascii=True,         # Uses simple chars (less likely to break the socket)
             )
         else:
            test_bar = test_data_loader
