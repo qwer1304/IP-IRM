@@ -2126,7 +2126,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
             total_mask_CV += mask_CV
             num_updates = int((batch_index + 1) / gradients_accumulation_steps)
             
-            mask_sparsity_str = f" sparsity {args.mask_nonlinearity}: ngs2 {loss_mask_sparsity_norm**2:.2e} " + \
+            mask_hard_str = 'hard' if args.mask_nonlinearity == 'gumbel' and not args.gumbel_soft else 'soft' 
+            mask_sparsity_str = f" sparsity {args.mask_nonlinearity} {mask_hard_str}: ngs2 {loss_mask_sparsity_norm**2:.2e} " + \
                 f"preactivation: mean {mask_preactivation.mean().item():.2e} std {torch.std(mask_preactivation).item():.2e} " + \
                 f"mask_CV {(total_mask_CV / num_updates).item():.2f}" + \
                 f" dot: km {info_dict['shared_dot_km']:.2e} cm {info_dict['shared_dot_cm']:.2e} pm {info_dict['shared_dot_pm']:.2e}" + \
