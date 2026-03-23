@@ -2239,7 +2239,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                    f" {gradnorm_str}" + \
                    f" decr: l {info_dict['loss_decrease_cond']:.2e} k {info_dict['loss_unsplit_decrease_cond']:.2e} p {info_dict['penalty_decrease_cond']:.2e}" + \
                    f" Lp: cos {info_dict['cos_Lp']:.3e} dot {info_dict['dot_Lp']:.3e} gn_prgrs {info_dict['gradnorm_progress']:.6g}" + \
-                   f" shared_dot:{slk_str}{slp_str}{skp_str}{slc_str}{skc_str}{spc_str}" + \
+                   f" shared_dot:{skp_str}{skc_str}{spc_str}{slc_str}{slk_str}{slp_str}" + \
                    f" shared_cos:{slk_cos_str}{slp_cos_str}{skp_cos_str}{slc_cos_str}{skc_cos_str}{spc_cos_str}" + \
                    f" Lp: shared cos {info_dict['shared_cos_Lp']:.3e} shared dot {info_dict['shared_dot_Lp']:.3e}" + \
                    f" {mask_sparsity_str}"
