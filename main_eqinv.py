@@ -252,7 +252,8 @@ def test_knn(net, feature_bank, feature_labels, test_data_loader, num_classes, a
         if mask_u is None:
             mask_u = net.module.mask_fun.sample().detach()
 
-        for data, target in test_bar:
+        for samples in test_bar:
+            data, target = samples[0], samples[1]
             data, target = data.cuda(non_blocking=True), target.cuda(non_blocking=True)
             
             if transform is not None:
