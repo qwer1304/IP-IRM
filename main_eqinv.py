@@ -68,9 +68,10 @@ def build_losses_and_penalty_dict(args, net, class_weights=None, moco_dict=None)
 
     kwargs = moco_dict
     kwargs.update({'CEweights': class_weights})
-    if (not args.domained_clusters) and (loss_type == 'mocosupcon'):
-        def filter_indices(idxs, labels, partition, **kwargs):
-            idxs = idxs[labels==partition]
+    if loss_type == 'mocosupcon':
+        def filter_indices(idxs, labels, partition, partition_tag, **kwargs):
+            if partition_tag == 'classes':
+                idxs = idxs[labels==partition]
             return idxs
         kwargs.update({'filter_indices': filter_indices})
 
@@ -613,6 +614,98 @@ def load_checkpoint(path, model, model_momentum, optimizer, gradnorm_balancer, g
 
     return model, model_momentum, optimizer, queue_proj, queue_noproj, start_epoch, best_acc1, best_epoch, updated_split, updated_split_all, ema, gradnorm_balancer, gradnorm_optimizer
 
+def prepare_clusters(args, resumed, memory_loader, device):
+    def get_check_cluster_file(fp):
+        checkpoint = torch.load(fp)
+        partitions = checkpoint.get("partitions", None)
+        assert partitions is not None, f"No partitions in cluster file {fp}"
+        memory_hash_ = checkpoint.get("memory_hash", None)
+        
+        if memory_hash is not None and memory_hash_ is not None:
+            assert memory_hash == memory_hash_, f"Current train dataset hash {memory_hash} != hash from checkpoint {memory_hash_}!" 
+
+        print(f'Cluster {fp} loaded.')
+        assert len(partitions) == args.num_clusters, "Num clusters in cluster file {} != num_clusters {}".format(len(partitions), args.num_clusters)
+        assert partitions[0].size(1) == args.env_num, "Num envs in cluster file {} != num_envs {}".format(partitions[0].size(1), args.env_num)
+
+        return partitions
+
+    clusters_dict = {}
+    if 'classes' in args.cluster:
+        if args.classes_cluster_path is None: # specific cluster not given
+            directory = f'misc/{args.name}'
+            pattern = 'env_ref_set_*' 
+
+            # Find matching files
+            files = glob.glob(os.path.join(directory, pattern))
+
+            # Sort by modification time
+            files_sorted = sorted(files, key=os.path.getmtime, reverse=True)
+            fp_exist = None
+            if files_sorted:
+                fp_exist = files_sorted[0]
+
+            if args.resume and resumed:
+                hash_object = hashlib.sha256(args.resume.encode())
+                hex_dig = hash_object.hexdigest()
+                suffix = hex_dig + '_resumed'
+            elif args.pretrain_path is not None and os.path.isfile(args.pretrain_path):
+                hash_object = hashlib.sha256(args.pretrain_path.encode())
+                hex_dig = hash_object.hexdigest()
+                suffix = hex_dig + '_pretrained'
+            else:
+                suffix = 'default'
+            fp_new = os.path.join(directory, 'env_ref_set_' + suffix)
+
+            if args.only_cluster or not fp_exist:
+                fp = fp_new
+            else:
+                fp = fp_exist
+
+        else: # classes cluster given
+            directory = f'misc/{args.name}'
+            fp = args.classes_cluster_path # full path
+
+        fp_dist = os.path.join(directory, 'env_ref_dist') # cluster distances for debug
+    
+    memory_hash = utils.compute_dataset_fingerprint(memory_data)
+    if args.only_cluster or not os.path.exists(fp): # recalculate cluster OR cluster doesn't exist
+        # Cannot use end="" b/c cal_cosine_distance prints progress bar and overwrites its
+        if args.only_cluster:
+            print('Recalculation of cluster file requested... ')
+        else:
+            print('No cluster file, creating... ')
+        env_ref_set, partitions, dist = utils_cluster.cal_cosine_distance(model, memory_loader, args.class_num, temperature=args.cluster_temp, 
+            anchor_class=None, class_debias_logits=True, K=args.num_clusters)
+        if args.cluster_save_dist: # save cluster distances for debug
+            os.makedirs(os.path.dirname(fp_dist), exist_ok=True)
+            # dist is a dictionary with anchor classes as keys of similarity scores
+            torch.save(dist, fp_dist)
+            print(f"Cluster distances saved in {fp_dist}")
+        os.makedirs(os.path.dirname(fp), exist_ok=True)
+        torch.save({'partitions': partitions, 'memory_hash': memory_hash}, fp)
+        print(f'cluster {fp} ready!') 
+        if args.only_cluster:
+            exit(1)
+        
+        memory_loader = shutdown_loader(memory_loader)
+        gc.collect()              # run Python's garbage collector
+    else: # cluster wasnt't (re-)created
+        partitions = get_check_cluster_file(fp, args)
+
+    partitions = [p.to(device) for p in partitions]
+    clusters_dict['classes'] = partitions
+
+    if 'domained' in args.cluster:
+        assert args.domained_cluster_path is not None, f"domained cluster requested but file not given"
+        fp = args.domained_cluster_path # full path
+        assert os.path.exists(fp), f"domained cluster file {fp} doesn't exist"
+        partitions = get_check_cluster_file(fp, args)
+    partitions = [p.to(device) for p in partitions]
+    clusters_dict['domained'] = partitions
+    
+    return clusters_dict
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train EqInv')
     parser.add_argument('--ssl_type', default='MoCo', type=str, choices=['MoCo', 'SimSiam', 'MoCoSupCon'], help='SSL type')    
@@ -774,16 +867,16 @@ if __name__ == '__main__':
                         help='Releative to penalty mask grads update scalers')
 
     # clustering
-    parser.add_argument('--cluster_path', type=str, default=None, 
-        help='path to cluster file. None means automatic creation ./misc/<name>/env_ref_set_<resumed|pretrained|default>')
+    parser.add_argument('--clusters', type=str, nargs='*', choices=['classes', 'domained'],  
+        help='clusters to use', required=True)
+    parser.add_argument('--classes_cluster_path', type=str, default=None, 
+        help='path to classes cluster file. None means automatic creation ./misc/<name>/env_ref_set_<resumed|pretrained|default>')
     parser.add_argument('--only_cluster', action="store_true", help='only do clustering')
     parser.add_argument('--cluster_temp', type=float, default=0.1, help='temperature for clusteing') 
     parser.add_argument('--cluster_save_dist', action="store_true", help='save cluster distances in ./misc/<name>/env_ref_dist')
     parser.add_argument('--num_clusters', type=int, default=2, help='number of custer K') 
-    parser.add_argument('--clusters_to_use', type=int, nargs='+', default=None, help='clusters to use out of K clusters') 
-    parser.add_argument('--domained_clusters', action="store_true", help='clusters represent domains')
+    parser.add_argument('--domained_cluster_path', type=str, default=None, help='path to domained cluster file.')
     
-
     parser.add_argument('--backbone_propagate', action="store_true", default=False, help='whether to propagate inv loss to backbone')
     parser.add_argument('--decimate_partitions', type=int, default=None, help='whether to decimate partitions')
 
@@ -1108,87 +1201,21 @@ if __name__ == '__main__':
     
     #### Process Cluster
 
-    if args.cluster_path is None: # specific cluster not given
-        directory = f'misc/{args.name}'
-        pattern = 'env_ref_set_*' 
-
-        # Find matching files
-        files = glob.glob(os.path.join(directory, pattern))
-
-        # Sort by modification time
-        files_sorted = sorted(files, key=os.path.getmtime, reverse=True)
-        fp_exist = None
-        if files_sorted:
-            fp_exist = files_sorted[0]
-        
-        if args.resume and resumed:
-            hash_object = hashlib.sha256(args.resume.encode())
-            hex_dig = hash_object.hexdigest()
-            suffix = hex_dig + '_resumed'
-        elif args.pretrain_path is not None and os.path.isfile(args.pretrain_path):
-            hash_object = hashlib.sha256(args.pretrain_path.encode())
-            hex_dig = hash_object.hexdigest()
-            suffix = hex_dig + '_pretrained'
-        else:
-            suffix = 'default'
-        fp_new = os.path.join(directory, 'env_ref_set_' + suffix)
-        
-        if args.only_cluster or not fp_exist:
-            fp = fp_new
-        else:
-            fp = fp_exist
-            
-    else:
-        directory = f'misc/{args.name}'
-        fp = args.cluster_path
-        
-    fp_dist = os.path.join(directory, 'env_ref_dist')
-    
-    memory_hash = utils.compute_dataset_fingerprint(memory_data)
-    if args.only_cluster or not os.path.exists(fp): # recalculate cluster OR cluster doesn't exist
-        memory_loader = DataLoader(memory_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
-            pin_memory=False, persistent_workers=te_pw)
-        # Cannot use end="" b/c cal_cosine_distance prints progress bar and overwrites its
-        if args.only_cluster:
-            print('Recalculation of cluster file requested... ')
-        else:
-            print('No cluster file, creating... ')
-        if args.cluster_save_dist: # save cluster distances
-            env_ref_set, partitions, dist = utils_cluster.cal_cosine_distance(model, memory_loader, args.class_num, temperature=args.cluster_temp, 
-                anchor_class=None, class_debias_logits=True, return_dist=True, K=args.num_clusters)
-            os.makedirs(os.path.dirname(fp_dist), exist_ok=True)
-            # dist is a dictionary with anchor classes as keys of similarity scores
-            torch.save(dist, fp_dist)
-            print(f"Cluster distances saved in {fp_dist}")
-        else:
-            env_ref_set, partitions = utils_cluster.cal_cosine_distance(model, memory_loader, args.class_num, temperature=args.cluster_temp, 
-                anchor_class=None, class_debias_logits=True, K=args.num_clusters)
-        os.makedirs(os.path.dirname(fp), exist_ok=True)
-        torch.save({'partitions': partitions, 'memory_hash': memory_hash}, fp)
-        print(f'cluster {fp} ready!') 
-        if args.only_cluster:
-            exit(1)
-        
-        memory_loader = shutdown_loader(memory_loader)
-        gc.collect()              # run Python's garbage collector
-    else:
-        checkpoint = torch.load(fp)
-        partitions = checkpoint.get("partitions", None)
-        assert partitions is not None, f"No partitions in cluster file {fp}"
-        memory_hash_ = checkpoint.get("memory_hash", None)
-        
-        if memory_hash is not None and memory_hash_ is not None:
-            assert memory_hash == memory_hash_, f"Current train dataset hash {memory_hash} != hash from checkpoint {memory_hash_}!" 
-
-        print(f'Cluster {fp} loaded.')
-        assert len(partitions) == args.num_clusters, "Num clusters in cluster file {} != num_clusters {}".format(len(partitions), args.num_clusters)
-        assert partitions[0].size(1) == args.env_num, "Num envs in cluster file {} != num_envs {}".format(partitions[0].size(1), args.env_num)
-        assert args.clusters_to_use is None or \
-            max(args.clusters_to_use) <= args.num_clusters-1, "Largest cluster to use {} must be < {}".format(max(args.clusters_to_use), args.num_clusters)
-    partitions = [p.to(device) for p in partitions]
+    memory_loader = DataLoader(memory_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
+        pin_memory=False, persistent_workers=te_pw)
+    clusters_dict = prepare_clusters(args, memory_loader, device)
+    def merge_clusters(clusters_dict):
+        partitions = []
+        split_tags = []
+        for k,v in cluster_dicts.items():
+            partitions.append(v)
+            split_tags.append([k]*len(v)
+        return partitions, split_tags
+    partitions, split_tags = merge_clusters(clusters_dict)
 
     # 'partitions' should be a list of splits, each one the size of the whole dataset w/ dim=1 equal to the number of environments.
     # each entry is a weight of sample's membership "strength" in an environment
+    # 'split_tags' gives for each partition the type of cluster it came from: 'classes' or 'domained'
 
     train_loader = None
 

@@ -312,7 +312,7 @@ class LossModule:
 # ---------------------------
 class MoCoSupConLossModule(LossModule):
     def __init__(self, *args, net_momentum=None, queue=None, temperature=None, debug=False, filter_indices=None, master=True, 
-                    domains=None, crossdomain_alpha=1.0, **kwargs):
+                    domains=None, crossdomain_alpha=1.0, split_tags=None, **kwargs):
         super().__init__(*args, **kwargs)
         assert net_momentum is not None
         assert queue is not None
@@ -1742,6 +1742,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
 
                 if do_loss or do_penalty:
                     for partition_num, partition in enumerate(partitions):
+                        partition_tag = split_tags[partition_num] if split_tags is not None else None
                         for env in range(args.env_num):
                         
                             is_last = (partition_num == (num_partitions-1)) and (env == (args.env_num-1))
@@ -1752,7 +1753,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                             # Need to filter the samples s.t. the samples in micro-batch are ONLY those which class==partition
                             # Use 'assign_idxs_multi' to break ties correctly
                             env_idxs = utils.assign_idxs_multi(indexs, partition, env)
-                            idxs = loss_module.filter_indices(env_idxs, labels=labels[env_idxs], partition=active_partition_idx[partition_num], env=env)
+                            idxs = loss_module.filter_indices(env_idxs, labels=labels[env_idxs], partition=active_partition_idx[partition_num], 
+                                env=env, partition_tag=partition_tag)
 
                             if (N := len(idxs)) == 0:
                                 continue

@@ -3,8 +3,7 @@ import torch.nn.functional as F
 from torch.utils import data
 from tqdm import tqdm
 
-def cal_cosine_distance(net, memory_data_loader, c, temperature, transform=None, anchor_class=None, class_debias_logits=False, mask=None, K=2, 
-                            return_dist=False):
+def cal_cosine_distance(net, memory_data_loader, c, temperature, transform=None, anchor_class=None, class_debias_logits=False, mask=None, K=2):
     net.eval()
     total_top1, total_top5, total_num, feature_bank, target_bank, idx_bank = 0.0, 0.0, 0, [], [], []
     target_transform = memory_data_loader.dataset.target_transform
@@ -97,10 +96,7 @@ def cal_cosine_distance(net, memory_data_loader, c, temperature, transform=None,
         partitions.append(weights)
     #end for anchor_class_ in anchor_class_set:
 
-    if return_dist:
-        return env_set, partitions, env_set_dist
-    else:
-        return env_set, partitions
+    return env_set, partitions, env_set_dist
 
 class SampleFeature(data.Dataset):
     def __init__(self, feature_bank):
