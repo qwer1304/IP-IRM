@@ -2,6 +2,7 @@ import torch
 import torch.nn.functional as F
 from torch.utils import data
 from tqdm import tqdm
+import sys
 
 def cal_cosine_distance(net, memory_data_loader, c, temperature, transform=None, anchor_class=None, class_debias_logits=False, mask=None, K=2):
     net.eval()
