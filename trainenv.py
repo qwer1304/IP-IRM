@@ -1451,7 +1451,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
     print()
     print(type(partitions), len(partitions), type(partitions[0]), partitions[0].size(), len(train_loader.dataset))
     print(split_tags)
-    exit(0)
+
     ema = kwargs['ema']
     gradnorm_balancer, gradnorm_optimizer = kwargs['gradnorm_balancer'], kwargs['gradnorm_optimizer']
     log_file = kwargs['log_file']
@@ -1619,6 +1619,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         this_batch_size = len(indexs_batch) # for the case drop_last=False
         
         loss_module.pre_batch(data_batch, indexs_batch, partitions)
+        print()
+        print(indexs_batch.max(), [p.size(0) for p in partitions])
         loss_unsplit_module.pre_batch(data_batch, indexs_batch, partitions)
         if loss_CE_module is not None:
             loss_CE_module.pre_batch(data_batch) # weights handled below
