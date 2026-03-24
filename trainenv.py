@@ -2187,9 +2187,12 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 cv = (math.sqrt(mean_pen_loss_epoch) / (mean_env_loss_epoch + 1e-8))
                 cv_str = f"CV {cv:.2e}"
                 
-                loss_env_str = ", ".join([f"{x:.2e}" for x in total_env_loss_partitions.tolist()])
-                penalty_env_str = ", ".join([f"{x:.2e}" for x in total_pen_loss_partitions.tolist()])
-                partitions_metrics_str = f"Partitions: loss {loss_env_str} penalty {penalty_env_str}"               
+                cv_partitions = np.sqrt(total_pen_loss_partitions) / (total_pen_loss_partitions + 1e-8)
+                loss_partitions_str = ", ".join([f"{x:.2e}" for x in total_env_loss_partitions.tolist()])
+                penalty_partitions_str = ", ".join([f"{x:.2e}" for x in total_pen_loss_partitions.tolist()])
+                cv_partitions_str = ", ".join([f"{x:.2e}" for x in cv_partitions.tolist()])
+                
+                partitions_metrics_str = f"Partitions: loss {loss_partitions_str} penalty {penalty_partitions_str} {cv_partitions_str}"               
             else:
                 cv_str = ""
                 partitions_metrics_str = ""
