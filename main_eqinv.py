@@ -1208,7 +1208,7 @@ if __name__ == '__main__':
         partitions = []
         split_tags = []
         for k,v in clusters_dict.items():
-            partitions.append(v)
+            partitions.append(*v)
             split_tags.append([k]*len(v))
         return partitions, split_tags
     partitions, split_tags = merge_clusters(clusters_dict)
@@ -1227,7 +1227,7 @@ if __name__ == '__main__':
             train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, shuffle=True, 
                                 pin_memory=True, persistent_workers=tr_pw, drop_last=tr_dl)
 
-        train_loss = train_env(model, train_loader, optimizer, partitions, tr_bs, epoch, args, **kwargs)
+        train_loss = train_env(model, train_loader, optimizer, partitions, tr_bs, epoch, args, split_tags=split_tags, **kwargs)
 
         # eval model every test_freq/val_freq and last epochs
         if (                                 (epoch >= args.test_freq) and ((epoch % args.test_freq == 0) or (epoch == epochs))) or \
