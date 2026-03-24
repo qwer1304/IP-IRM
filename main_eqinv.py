@@ -686,7 +686,7 @@ def prepare_clusters(args, resumed, memory_loader, device):
         torch.save({'partitions': partitions, 'memory_hash': memory_hash}, fp)
         print(f'cluster {fp} ready!') 
         if args.only_cluster:
-            exit(1)
+            exit(0)
         
         memory_loader = shutdown_loader(memory_loader)
         gc.collect()              # run Python's garbage collector
@@ -1207,7 +1207,7 @@ if __name__ == '__main__':
     def merge_clusters(clusters_dict):
         partitions = []
         split_tags = []
-        for k,v in cluster_dicts.items():
+        for k,v in clusters_dicts.items():
             partitions.append(v)
             split_tags.append([k]*len(v))
         return partitions, split_tags
