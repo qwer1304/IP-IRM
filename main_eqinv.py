@@ -631,7 +631,7 @@ def prepare_clusters(args, resumed, memory_loader, device):
         return partitions
 
     clusters_dict = {}
-    if 'classes' in args.cluster:
+    if 'classes' in args.clusters:
         if args.classes_cluster_path is None: # specific cluster not given
             directory = f'misc/{args.name}'
             pattern = 'env_ref_set_*' 
