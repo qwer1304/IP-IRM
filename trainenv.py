@@ -10,6 +10,7 @@ from tqdm.auto import tqdm
 import utils
 
 from math import ceil, prod
+import numpy as np
 
 class BaseCalculator:
     def __init__(self, loss_module, *args, debug=False, device='cuda', **kwargs):
