@@ -691,7 +691,7 @@ def prepare_clusters(args, resumed, memory_loader, device):
         memory_loader = shutdown_loader(memory_loader)
         gc.collect()              # run Python's garbage collector
     else: # cluster wasnt't (re-)created
-        partitions = get_check_cluster_file(fp, args.num_classes, args)
+        partitions = get_check_cluster_file(fp, args.num_clusters, args)
 
     partitions = [p.to(device) for p in partitions]
     clusters_dict['classes'] = partitions
