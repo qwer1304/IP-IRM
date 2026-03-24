@@ -1449,8 +1449,9 @@ def calculate_mask_sparsity_and_grads(mask, net, weight, do_flag, args, param_gr
 def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch, args, split_tags=None, **kwargs):
 
     print()
-    print(type(partitions), len(partitions), type(partitions[0]), partitions[0].size())
+    print(type(partitions), len(partitions), type(partitions[0]), partitions[0].size(), len(train_loader.dataset))
     print(split_tags)
+    exit(0)
     ema = kwargs['ema']
     gradnorm_balancer, gradnorm_optimizer = kwargs['gradnorm_balancer'], kwargs['gradnorm_optimizer']
     log_file = kwargs['log_file']
