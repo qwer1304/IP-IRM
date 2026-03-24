@@ -1537,6 +1537,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
     total_mask_sparsity_weighted = 0.0
     total_loss_weighted          = 0.0
     total_mask_CV                = 0.0
+    total_pen_loss_partitions    = np.zeros(num_partitions)
+    total_env_loss_partitions    = np.zeros(num_partitions)
     
     bar_format = '{l_bar}{bar:' + str(args.bar) + '}{r_bar}' #{bar:-' + str(args.bar) + 'b}'
     train_bar = tqdm(train_loader,
@@ -2118,7 +2120,10 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         total_env_loss_weighted      += (loss_weight * int(do_loss) * loss_env.mean(2).mean()).item()    * this_batch_size * gradients_accumulation_steps
         total_mask_sparsity_weighted += (mask_sparsity_weight       * loss_mask_sparsity.mean()).item()  * this_batch_size * gradients_accumulation_steps
         total_loss_weighted          += loss_batch_weighted.item()                                       * this_batch_size * gradients_accumulation_steps
-        
+
+        total_pen_loss_partitions    += torch.squeeze(penalty_env.mean(2)).detach().cpu().numpy()
+        total_env_loss_partitions    += torch.squeeze(loss_env.mean(2)).detach().cpu().numpy()
+
         if args.print_batch:
             print() # this causes each tqdm update to be printed on a separare line
             
@@ -2180,8 +2185,13 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 mean_env_loss_epoch = total_env_loss_weighted / (loss_weight + 1e-8) / trained_samples
                 cv = (math.sqrt(mean_pen_loss_epoch) / (mean_env_loss_epoch + 1e-8))
                 cv_str = f"CV {cv:.2e}"
+                
+                loss_env_str = ", ".join([f"{x:.2f}" for x in total_env_loss_partitions.tolist()])
+                penalty_env_str = ", ".join([f"{x:.2f}" for x in total_pen_loss_partitions.tolist()])
+                partitions_metrics_str = f"Partitions: loss {loss_env_str} penalty {penalty_env_str}"               
             else:
-                cv_str = ""                
+                cv_str = ""
+                partitions_metrics_str = ""
         else:
             lp_str = ""
             lp_cos_str = ""
@@ -2245,7 +2255,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                    f" shared_dot:{skp_str}{skc_str}{spc_str}{slc_str}{slk_str}{slp_str}" + \
                    f" shared_cos:{skp_cos_str}{skc_cos_str}{spc_cos_str}{slc_cos_str}{slk_cos_str}{slp_cos_str}" + \
                    f" Lp: shared cos {info_dict['shared_cos_Lp']:.3e} shared dot {info_dict['shared_dot_Lp']:.3e}" + \
-                   f" {mask_sparsity_str}"
+                   f" {mask_sparsity_str}" + \
+                   f" {partitions_metrics_str}"
 
         desc_str += loss_module.get_debug_info_str()
         train_bar.set_description(desc_str)
