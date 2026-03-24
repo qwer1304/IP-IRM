@@ -676,7 +676,7 @@ def prepare_clusters(args, resumed, memory_loader, device):
         else:
             print('No cluster file, creating... ')
         env_ref_set, partitions, dist = utils_cluster.cal_cosine_distance(model, memory_loader, args.class_num, temperature=args.cluster_temp, 
-            anchor_class=None, class_debias_logits=True, K=args.num_clusters)
+            anchor_class=None, class_debias_logits=True, K=args.env_num)
         if args.cluster_save_dist: # save cluster distances for debug
             os.makedirs(os.path.dirname(fp_dist), exist_ok=True)
             # dist is a dictionary with anchor classes as keys of similarity scores
@@ -691,7 +691,7 @@ def prepare_clusters(args, resumed, memory_loader, device):
         memory_loader = shutdown_loader(memory_loader)
         gc.collect()              # run Python's garbage collector
     else: # cluster wasnt't (re-)created
-        partitions = get_check_cluster_file(fp, args.num_clusters, args)
+        partitions = get_check_cluster_file(fp, args.class_num, args)
 
     partitions = [p.to(device) for p in partitions]
     clusters_dict['classes'] = partitions
@@ -772,7 +772,6 @@ if __name__ == '__main__':
     parser.add_argument('--penalty_iters', default=0, type=int, help='penalty weight start iteration')
     parser.add_argument('--increasing_weight', nargs=5, type=float, default=None, help='increasing penalty weight', 
             metavar='penalty_warmup, scale, speed, eps, debug')
-    parser.add_argument('--env_num', default=2, type=int, help='number of environments in partition')
     parser.add_argument('--weight_env_eps', default=0., type=float, help='eps for per-env grad noise')
 
     parser.add_argument('--debug', action="store_true", default=False, help='debug?')
@@ -874,7 +873,7 @@ if __name__ == '__main__':
     parser.add_argument('--only_cluster', action="store_true", help='only do clustering')
     parser.add_argument('--cluster_temp', type=float, default=0.1, help='temperature for clusteing') 
     parser.add_argument('--cluster_save_dist', action="store_true", help='save cluster distances in ./misc/<name>/env_ref_dist')
-    parser.add_argument('--num_clusters', type=int, default=2, help='number of custer K') 
+    parser.add_argument('--env_num', default=2, type=int, help='number of environments in partition')
     parser.add_argument('--domained_cluster_path', type=str, default=None, help='path to domained cluster file.')
     parser.add_argument('--decimate_partitions', type=int, default=None, help='whether to decimate partitions')
     
