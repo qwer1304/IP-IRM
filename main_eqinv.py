@@ -615,7 +615,7 @@ def load_checkpoint(path, model, model_momentum, optimizer, gradnorm_balancer, g
     return model, model_momentum, optimizer, queue_proj, queue_noproj, start_epoch, best_acc1, best_epoch, updated_split, updated_split_all, ema, gradnorm_balancer, gradnorm_optimizer
 
 def prepare_clusters(args, resumed, memory_loader, device):
-    def get_check_cluster_file(fp):
+    def get_check_cluster_file(fp, num_partitions, args):
         checkpoint = torch.load(fp)
         partitions = checkpoint.get("partitions", None)
         assert partitions is not None, f"No partitions in cluster file {fp}"
@@ -625,7 +625,7 @@ def prepare_clusters(args, resumed, memory_loader, device):
             assert memory_hash == memory_hash_, f"Current train dataset hash {memory_hash} != hash from checkpoint {memory_hash_}!" 
 
         print(f'Cluster {fp} loaded.')
-        assert len(partitions) == args.num_clusters, "Num clusters in cluster file {} != num_clusters {}".format(len(partitions), args.num_clusters)
+        assert len(partitions) == num_partitions, "Num clusters in cluster file {} != num_partitions {}".format(len(partitions), num_partitions)
         assert partitions[0].size(1) == args.env_num, "Num envs in cluster file {} != num_envs {}".format(partitions[0].size(1), args.env_num)
 
         return partitions
@@ -691,7 +691,7 @@ def prepare_clusters(args, resumed, memory_loader, device):
         memory_loader = shutdown_loader(memory_loader)
         gc.collect()              # run Python's garbage collector
     else: # cluster wasnt't (re-)created
-        partitions = get_check_cluster_file(fp, args)
+        partitions = get_check_cluster_file(fp, args.num_classes, args)
 
     partitions = [p.to(device) for p in partitions]
     clusters_dict['classes'] = partitions
@@ -700,7 +700,7 @@ def prepare_clusters(args, resumed, memory_loader, device):
         assert args.domained_cluster_path is not None, f"domained cluster requested but file not given"
         fp = args.domained_cluster_path # full path
         assert os.path.exists(fp), f"domained cluster file {fp} doesn't exist"
-        partitions = get_check_cluster_file(fp, args)
+        partitions = get_check_cluster_file(fp, 1, args)
     partitions = [p.to(device) for p in partitions]
     clusters_dict['domained'] = partitions
     
