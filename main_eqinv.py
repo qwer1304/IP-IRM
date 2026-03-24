@@ -627,6 +627,7 @@ def prepare_clusters(args, resumed, memory_loader, device):
         print(f'Cluster {fp} loaded.')
         assert len(partitions) == num_partitions, "Num clusters in cluster file {} != num_partitions {}".format(len(partitions), num_partitions)
         assert partitions[0].size(1) == args.env_num, "Num envs in cluster file {} != num_envs {}".format(partitions[0].size(1), args.env_num)
+        assert partitions[0].size(0) == len(memory_loader.dataset), f"# of samples {partitions[0].size(0)} in partitions != # samples {len(memory_loader.dataset)} in the dataset"
 
         return partitions
 

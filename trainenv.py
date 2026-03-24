@@ -1108,10 +1108,10 @@ def calculate_scalers(loss_CE_grads_final, loss_unsplit_grads_final, loss_grads_
     cos_Lp                   = F.cosine_similarity(L_grads_flat_weighted, p_grads_flat_weighted, dim=0)
     dot_Lp                   = L_grads_flat_weighted.dot(p_grads_flat_weighted)
 
-    loss_weighted         = loss_weight          * loss_env.mean()
+    loss_weighted         = loss_weight          * loss_env.mean(2).mean()
     loss_unsplit_weighted = loss_unsplit_weight  * loss_unsplit_aggregator.mean()
     loss_CE_weighted      = loss_CE_weight       * loss_CE_aggregator.mean()
-    penalty_weighted      = penalty_weight       * penalty_env.mean()
+    penalty_weighted      = penalty_weight       * penalty_env.mean(2).mean() # mean over partitions of per-partitions envs
     loss_mask_weighted    = mask_sparsity_weight * loss_mask_sparsity.mean()
 
     # Compute SHARED dot products & cosines
@@ -2078,10 +2078,10 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         gradnorm_update(gradnorm_balancer, gradnorm_loss, gradnorm_optimizer, args, do_gradnorm)
 
         # True loss reflecting progress does NOT include balancing scalers
-        loss_weighted               = loss_weight          * loss_env.mean()
+        loss_weighted               = loss_weight          * loss_env.mean(2).mean()
         loss_unsplit_weighted       = loss_unsplit_weight  * loss_unsplit_aggregator.mean()
         loss_CE_weighted            = loss_CE_weight       * loss_CE_aggregator.mean()
-        penalty_weighted            = penalty_weight       * penalty_env.mean()
+        penalty_weighted            = penalty_weight       * penalty_env.mean(2).mean() # mean over partitions of per-partitions envs
         
         if args.debug_print_loss:
             print()
@@ -2112,12 +2112,12 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
 
         # total loss is sum of losses so far over entire batch aggregation period.
         # loss_cont is sometimes non-zero even when do_loss==False. This happens in EqInv where loss_cont is NOT included in the total loss.
-        total_unsplit_loss_weighted  += (loss_unsplit_weight        * loss_unsplit_aggregator).item()   * this_batch_size * gradients_accumulation_steps
-        total_CE_loss_weighted       += (loss_CE_weight             * loss_CE_aggregator).item()        * this_batch_size * gradients_accumulation_steps
-        total_pen_loss_weighted      += (penalty_weight             * penalty_env.mean()).item()        * this_batch_size * gradients_accumulation_steps
-        total_env_loss_weighted      += (loss_weight * int(do_loss) * loss_env.mean()).item()           * this_batch_size * gradients_accumulation_steps
-        total_mask_sparsity_weighted += (mask_sparsity_weight       * loss_mask_sparsity.mean()).item() * this_batch_size * gradients_accumulation_steps
-        total_loss_weighted          += loss_batch_weighted.item()                                      * this_batch_size * gradients_accumulation_steps
+        total_unsplit_loss_weighted  += (loss_unsplit_weight        * loss_unsplit_aggregator).item()    * this_batch_size * gradients_accumulation_steps
+        total_CE_loss_weighted       += (loss_CE_weight             * loss_CE_aggregator).item()         * this_batch_size * gradients_accumulation_steps
+        total_pen_loss_weighted      += (penalty_weight             * penalty_env.mean(2).mean()).item() * this_batch_size * gradients_accumulation_steps
+        total_env_loss_weighted      += (loss_weight * int(do_loss) * loss_env.mean(2).mean()).item()    * this_batch_size * gradients_accumulation_steps
+        total_mask_sparsity_weighted += (mask_sparsity_weight       * loss_mask_sparsity.mean()).item()  * this_batch_size * gradients_accumulation_steps
+        total_loss_weighted          += loss_batch_weighted.item()                                       * this_batch_size * gradients_accumulation_steps
         
         if args.print_batch:
             print() # this causes each tqdm update to be printed on a separare line
