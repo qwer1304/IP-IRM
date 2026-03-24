@@ -696,7 +696,7 @@ def prepare_clusters(args, resumed, memory_loader, device):
     partitions = [p.to(device) for p in partitions]
     clusters_dict['classes'] = partitions
 
-    if 'domained' in args.cluster:
+    if 'domained' in args.clusters:
         assert args.domained_cluster_path is not None, f"domained cluster requested but file not given"
         fp = args.domained_cluster_path # full path
         assert os.path.exists(fp), f"domained cluster file {fp} doesn't exist"

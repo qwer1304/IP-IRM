@@ -7,10 +7,15 @@ def cal_cosine_distance(net, memory_data_loader, c, temperature, transform=None,
     net.eval()
     total_top1, total_top5, total_num, feature_bank, target_bank, idx_bank = 0.0, 0.0, 0, [], [], []
     target_transform = memory_data_loader.dataset.target_transform
-
     with torch.no_grad():
         # generate feature bank
-        for images, target, images_idx in tqdm(memory_data_loader, desc='Feature extracting'):
+        for images, target, images_idx in tqdm(memory_data_loader, 
+                desc='Feature extracting',
+                file=sys.stdout,    # Ensures it uses standard output
+                mininterval=1.0,   # Only updates the UI every 10 seconds
+                maxinterval=2.0,   # Limits the maximum refresh rate
+                ascii=True,         # Uses simple chars (less likely to break the socket)
+                ):
             images = images.cuda(non_blocking=True)
             images = transform(images) if transform is not None else images
             feature = net.module.backbone(images)
