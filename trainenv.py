@@ -1448,10 +1448,6 @@ def calculate_mask_sparsity_and_grads(mask, net, weight, do_flag, args, param_gr
 # ssl training with IP-IRM
 def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch, args, split_tags=None, **kwargs):
 
-    print()
-    print(type(partitions), len(partitions), type(partitions[0]), partitions[0].size(), len(train_loader.dataset))
-    print(split_tags)
-
     ema = kwargs['ema']
     gradnorm_balancer, gradnorm_optimizer = kwargs['gradnorm_balancer'], kwargs['gradnorm_optimizer']
     log_file = kwargs['log_file']
@@ -1618,8 +1614,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         data_batch, labels_batch, indexs_batch = data_env # 'data_batch' is an batch of images, 'indexs_batch' is their corresponding indices 
         this_batch_size = len(indexs_batch) # for the case drop_last=False
         
-        print()
-        print(indexs_batch.max(), [p.size(0) for p in partitions])
         loss_module.pre_batch(data_batch, indexs_batch, partitions)
         loss_unsplit_module.pre_batch(data_batch, indexs_batch, partitions)
         if loss_CE_module is not None:
