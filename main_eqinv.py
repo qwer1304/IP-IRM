@@ -1207,7 +1207,7 @@ if __name__ == '__main__':
     def merge_clusters(clusters_dict):
         partitions = []
         split_tags = []
-        for k,v in clusters_dicts.items():
+        for k,v in clusters_dict.items():
             partitions.append(v)
             split_tags.append([k]*len(v))
         return partitions, split_tags
