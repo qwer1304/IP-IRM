@@ -1171,7 +1171,7 @@ if __name__ == '__main__':
         kwargs.update({'temperature': temperature})
         if ssl_type == 'mocosupcon':
             def filter_indices(idxs, labels, partition, partition_tag, **kwargs):
-                if partition_tag = 'classes':
+                if partition_tag == 'classes':
                     idxs = idxs[labels==partition]
                 return idxs
             kwargs.update({'filter_indices': filter_indices})
