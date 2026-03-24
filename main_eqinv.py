@@ -1204,7 +1204,7 @@ if __name__ == '__main__':
 
     memory_loader = DataLoader(memory_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
         pin_memory=False, persistent_workers=te_pw)
-    clusters_dict = prepare_clusters(args, memory_loader, device)
+    clusters_dict = prepare_clusters(args, resumed, memory_loader, device)
     def merge_clusters(clusters_dict):
         partitions = []
         split_tags = []
