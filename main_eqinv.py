@@ -876,9 +876,9 @@ if __name__ == '__main__':
     parser.add_argument('--cluster_save_dist', action="store_true", help='save cluster distances in ./misc/<name>/env_ref_dist')
     parser.add_argument('--num_clusters', type=int, default=2, help='number of custer K') 
     parser.add_argument('--domained_cluster_path', type=str, default=None, help='path to domained cluster file.')
+    parser.add_argument('--decimate_partitions', type=int, default=None, help='whether to decimate partitions')
     
     parser.add_argument('--backbone_propagate', action="store_true", default=False, help='whether to propagate inv loss to backbone')
-    parser.add_argument('--decimate_partitions', type=int, default=None, help='whether to decimate partitions')
 
     parser.add_argument('--train_transform', default='test', type=str, choices=['train', 'test', 'train_mixed']) # in LP train transfrom = test transfrom
     parser.add_argument('--test_transform', default='test', type=str, choices=['train', 'test'])
@@ -1170,8 +1170,9 @@ if __name__ == '__main__':
     if ssl_type == 'moco' or ssl_type == 'mocosupcon':
         kwargs.update({'temperature': temperature})
         if ssl_type == 'mocosupcon':
-            def filter_indices(idxs, labels, partition, **kwargs):
-                idxs = idxs[labels==partition]
+            def filter_indices(idxs, labels, partition, partition_tag, **kwargs):
+                if partition_tag = 'classes':
+                    idxs = idxs[labels==partition]
                 return idxs
             kwargs.update({'filter_indices': filter_indices})
     elif ssl_type == 'simsiam':

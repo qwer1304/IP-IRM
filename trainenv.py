@@ -312,7 +312,7 @@ class LossModule:
 # ---------------------------
 class MoCoSupConLossModule(LossModule):
     def __init__(self, *args, net_momentum=None, queue=None, temperature=None, debug=False, filter_indices=None, master=True, 
-                    domains=None, crossdomain_alpha=1.0, split_tags=None, **kwargs):
+                    domains=None, crossdomain_alpha=1.0, **kwargs):
         super().__init__(*args, **kwargs)
         assert net_momentum is not None
         assert queue is not None
@@ -1385,16 +1385,17 @@ def calculate_grads(loss, net, retain_graph=False):
     )
     return grads
 
-def get_stochastic_partitions(all_partitions, k=5):
+def get_stochastic_partitions(all_partitions, split_tags, k=5):
     # all_partitions a list of tensors
     num_total = len(all_partitions)
     # Pick k random indices to keep
     active_idxs = sorted(torch.randperm(num_total)[:k].tolist())
     
     # Create list: tensor of index that was picked
-    subset = [all_partitions[i] for i in active_idxs]
+    partitions_subset = [all_partitions[i] for i in active_idxs]
+    split_tags_subset = [split_tags[i] for i in active_idxs] if split_tags is not None else None
     
-    return subset, active_idxs
+    return partitions_subset, split_tags_subset, active_idxs
 
 def print_grads(grads, net, prefix=""):
     for pind, (name, p) in enumerate(net.named_parameters()):
@@ -1445,7 +1446,7 @@ def calculate_mask_sparsity_and_grads(mask, net, weight, do_flag, args, param_gr
     return loss.detach(), grads_flat, grads_norm_weighted
         
 # ssl training with IP-IRM
-def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch, args, **kwargs):
+def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch, args, split_tags=None, **kwargs):
 
     ema = kwargs['ema']
     gradnorm_balancer, gradnorm_optimizer = kwargs['gradnorm_balancer'], kwargs['gradnorm_optimizer']
@@ -1604,7 +1605,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
 
         if args.decimate_partitions:
             assert args.decimate_partitions <= len(partitions), f"# of partitions to decimate {args.decimate_partitions} > # partitions {len(partitions)}"
-            partitions, active_partition_idx = get_stochastic_partitions(partitions, k=args.decimate_partitions)
+            partitions, split_tags, active_partition_idx = get_stochastic_partitions(partitions, split_tags, k=args.decimate_partitions)
         else:
             active_partition_idx = list(range(num_partitions))
         
@@ -1742,7 +1743,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
 
                 if do_loss or do_penalty:
                     for partition_num, partition in enumerate(partitions):
-                        partition_tag = split_tags[partition_num] if split_tags is not None else None
                         for env in range(args.env_num):
                         
                             is_last = (partition_num == (num_partitions-1)) and (env == (args.env_num-1))
@@ -1753,8 +1753,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                             # Need to filter the samples s.t. the samples in micro-batch are ONLY those which class==partition
                             # Use 'assign_idxs_multi' to break ties correctly
                             env_idxs = utils.assign_idxs_multi(indexs, partition, env)
+                            partition_tag = split_tags[active_partition_idx[partition_num]] if split_tags is not None else None
                             idxs = loss_module.filter_indices(env_idxs, labels=labels[env_idxs], partition=active_partition_idx[partition_num], 
-                                env=env, partition_tag=partition_tag)
+                                partition_tag=partition_tag, env=env)
 
                             if (N := len(idxs)) == 0:
                                 continue
