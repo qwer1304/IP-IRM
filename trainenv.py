@@ -1618,9 +1618,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         data_batch, labels_batch, indexs_batch = data_env # 'data_batch' is an batch of images, 'indexs_batch' is their corresponding indices 
         this_batch_size = len(indexs_batch) # for the case drop_last=False
         
-        loss_module.pre_batch(data_batch, indexs_batch, partitions)
         print()
         print(indexs_batch.max(), [p.size(0) for p in partitions])
+        loss_module.pre_batch(data_batch, indexs_batch, partitions)
         loss_unsplit_module.pre_batch(data_batch, indexs_batch, partitions)
         if loss_CE_module is not None:
             loss_CE_module.pre_batch(data_batch) # weights handled below
