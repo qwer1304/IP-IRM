@@ -658,7 +658,7 @@ def prepare_clusters(args, resumed, memory_loader, device):
                 suffix = 'default'
             fp_new = os.path.join(directory, 'env_ref_set_' + suffix)
 
-            if args.only_cluster or not fp_exist:
+            if args.cluster_reinit or not fp_exist:
                 fp = fp_new
             else:
                 fp = fp_exist
@@ -670,9 +670,9 @@ def prepare_clusters(args, resumed, memory_loader, device):
         fp_dist = os.path.join(directory, 'env_ref_dist') # cluster distances for debug
     
     memory_hash = utils.compute_dataset_fingerprint(memory_data)
-    if args.only_cluster or not os.path.exists(fp): # recalculate cluster OR cluster doesn't exist
+    if args.cluster_reinit or not os.path.exists(fp): # recalculate cluster OR cluster doesn't exist
         # Cannot use end="" b/c cal_cosine_distance prints progress bar and overwrites its
-        if args.only_cluster:
+        if args.cluster_reinit:
             print('Recalculation of cluster file requested... ')
         else:
             print('No cluster file, creating... ')
@@ -686,7 +686,7 @@ def prepare_clusters(args, resumed, memory_loader, device):
         os.makedirs(os.path.dirname(fp), exist_ok=True)
         torch.save({'partitions': partitions, 'memory_hash': memory_hash}, fp)
         print(f'cluster {fp} ready!') 
-        if args.only_cluster:
+        if args.cluster_reinit == 'only':
             exit(0)
         
         memory_loader = shutdown_loader(memory_loader)
@@ -871,7 +871,7 @@ if __name__ == '__main__':
         help='clusters to use', required=True)
     parser.add_argument('--classes_cluster_path', type=str, default=None, 
         help='path to classes cluster file. None means automatic creation ./misc/<name>/env_ref_set_<resumed|pretrained|default>')
-    parser.add_argument('--only_cluster', action="store_true", help='only do clustering')
+    parser.add_argument('--cluster_reinit', type=str, choices=['only', 'recalc'], default=None, help='only do clustering')
     parser.add_argument('--cluster_temp', type=float, default=0.1, help='temperature for clusteing') 
     parser.add_argument('--cluster_save_dist', action="store_true", help='save cluster distances in ./misc/<name>/env_ref_dist')
     parser.add_argument('--env_num', default=2, type=int, help='number of environments in partition')
