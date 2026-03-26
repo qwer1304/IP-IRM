@@ -688,9 +688,6 @@ def prepare_clusters(args, resumed, memory_loader, device):
         print(f'cluster {fp} ready!') 
         if args.cluster_reinit == 'only':
             exit(0)
-        
-        memory_loader = shutdown_loader(memory_loader)
-        gc.collect()              # run Python's garbage collector
     else: # cluster wasnt't (re-)created
         partitions = get_check_cluster_file(fp, args.class_num, args)
 
@@ -1205,6 +1202,9 @@ if __name__ == '__main__':
     memory_loader = DataLoader(memory_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
         pin_memory=False, persistent_workers=te_pw)
     clusters_dict = prepare_clusters(args, resumed, memory_loader, device)
+    memory_loader = shutdown_loader(memory_loader)
+    gc.collect()              # run Python's garbage collector
+    
     def merge_clusters(clusters_dict):
         partitions = []
         split_tags = []
