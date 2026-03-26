@@ -1,6 +1,7 @@
 import torch
 import torch.nn.functional as F
-from torch.utils import data, safe_normalize
+from torch.utils import data
+from utils import safe_normalize
 from tqdm import tqdm
 import sys
 
