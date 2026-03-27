@@ -22,7 +22,7 @@ def cal_cosine_distance(net, memory_data_loader, c, temperature, transform=None,
             images = transform(images) if transform is not None else images
             feature = safe_normalize(net.module.backbone(images), dim=-1)
             if use_mask:
-                feature = safe_normalize(net.module.mask(feature, dim=-1)
+                feature = safe_normalize(net.module.mask(feature, dim=-1))
             feature_bank.append(F.normalize(feature, dim=-1))
             target = target_transform(target) if target_transform is not None else target
             target_bank.append(target)
