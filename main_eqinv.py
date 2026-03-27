@@ -632,6 +632,7 @@ def prepare_clusters(args, resumed, memory_loader, device):
         return partitions
 
     clusters_dict = {}
+    memory_hash = utils.compute_dataset_fingerprint(memory_data)
     if 'classes' in args.clusters:
         if args.classes_cluster_path is None: # specific cluster not given
             directory = f'misc/{args.name}'
@@ -670,7 +671,6 @@ def prepare_clusters(args, resumed, memory_loader, device):
 
         fp_dist = os.path.join(directory, 'env_ref_dist') # cluster distances for debug
     
-        memory_hash = utils.compute_dataset_fingerprint(memory_data)
         if args.cluster_reinit or not os.path.exists(fp): # recalculate cluster OR cluster doesn't exist
             # Cannot use end="" b/c cal_cosine_distance prints progress bar and overwrites its
             if args.cluster_reinit:
