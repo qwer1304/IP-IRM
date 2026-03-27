@@ -5,7 +5,7 @@ from utils import safe_normalize
 from tqdm import tqdm
 import sys
 
-def cal_cosine_distance(net, memory_data_loader, c, temperature, transform=None, anchor_class=None, class_debias_logits=False, mask=None, K=2):
+def cal_cosine_distance(net, memory_data_loader, c, temperature, transform=None, anchor_class=None, class_debias_logits=False, mask=None, K=2, use_mask=False):
     net.eval()
     total_top1, total_top5, total_num, feature_bank, target_bank, idx_bank = 0.0, 0.0, 0, [], [], []
     target_transform = memory_data_loader.dataset.target_transform
@@ -21,7 +21,8 @@ def cal_cosine_distance(net, memory_data_loader, c, temperature, transform=None,
             images = images.cuda(non_blocking=True)
             images = transform(images) if transform is not None else images
             feature = safe_normalize(net.module.backbone(images), dim=-1)
-            #feature = safe_normalize(net.module.mask(feature, dim=-1)
+            if use_mask:
+                feature = safe_normalize(net.module.mask(feature, dim=-1)
             feature_bank.append(F.normalize(feature, dim=-1))
             target = target_transform(target) if target_transform is not None else target
             target_bank.append(target)

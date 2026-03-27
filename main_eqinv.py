@@ -677,7 +677,7 @@ def prepare_clusters(args, resumed, memory_loader, device):
         else:
             print('No cluster file, creating... ')
         env_ref_set, partitions, dist = utils_cluster.cal_cosine_distance(model, memory_loader, args.class_num, temperature=args.cluster_temp, 
-            anchor_class=None, class_debias_logits=True, K=args.env_num)
+            anchor_class=None, class_debias_logits=True, K=args.env_num, use_mask=args.cluster_use_mask)
         if args.cluster_save_dist: # save cluster distances for debug
             os.makedirs(os.path.dirname(fp_dist), exist_ok=True)
             # dist is a dictionary with anchor classes as keys of similarity scores
@@ -759,6 +759,7 @@ if __name__ == '__main__':
 
     #### model param ####
     parser.add_argument('--penalty_weight', default=1.0, type=float, help='invariance weight')
+    parser.add_argument('--penalty_backbone_scaler', default=1.0, type=float, help='scaler of penalty weight for BB update')
     parser.add_argument('--penalty_cont', default=1.0, type=float, help='cont loss weight')
     parser.add_argument('--unsplit_cont', action="store_true", default=False, help='unsplit original contrastive?')
     parser.add_argument('--penalty_unsplit_cont', default=1.0, type=float, help='unsplit loss weight')
@@ -871,6 +872,7 @@ if __name__ == '__main__':
     parser.add_argument('--cluster_reinit', type=str, choices=['only', 'recalc'], default=None, help='only do clustering')
     parser.add_argument('--cluster_temp', type=float, default=0.1, help='temperature for clusteing') 
     parser.add_argument('--cluster_save_dist', action="store_true", help='save cluster distances in ./misc/<name>/env_ref_dist')
+    parser.add_argument('--cluster_use_mask', action="store_true", help='use mask to claculate cluster')
     parser.add_argument('--env_num', default=2, type=int, help='number of environments in partition')
     parser.add_argument('--domained_cluster_path', type=str, default=None, help='path to domained cluster file.')
     parser.add_argument('--decimate_partitions', type=int, default=None, help='whether to decimate partitions')
