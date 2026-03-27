@@ -777,8 +777,9 @@ if __name__ == '__main__':
     parser.add_argument('--weight_env_eps', default=0., type=float, help='eps for per-env grad noise')
 
     parser.add_argument('--debug', action="store_true", default=False, help='debug?')
-    parser.add_argument('--dont_update_loss', action="store_true", default=False, help='debug?')
-    parser.add_argument('--dont_update_mask_sparsity', action="store_true", default=False, help='debug?')
+    parser.add_argument('--dont_update_loss', action="store_true", default=False, help="don't update model w/ Env loss's gradients")
+    parser.add_argument('--dont_update_CE', action="store_true", default=False, help="don't update model w/ CE loss's gradients")
+    parser.add_argument('--dont_update_mask_sparsity', action="store_true", default=False, help="don't update model w/ Sparsity loss's gradients")
     parser.add_argument('--debug_print_loss', action="store_true", default=False, help='debug?')
     parser.add_argument('--debug_print_grads', action="store_true", default=False, help='debug?')
     parser.add_argument('--print_batch', action="store_true", default=False, help='print every batch')
