@@ -666,33 +666,36 @@ def prepare_clusters(args, resumed, memory_loader, device):
         else: # classes cluster given
             directory = f'misc/{args.name}'
             fp = args.classes_cluster_path # full path
+        #end if args.classes_cluster_path is None: # specific cluster not given
 
         fp_dist = os.path.join(directory, 'env_ref_dist') # cluster distances for debug
     
-    memory_hash = utils.compute_dataset_fingerprint(memory_data)
-    if args.cluster_reinit or not os.path.exists(fp): # recalculate cluster OR cluster doesn't exist
-        # Cannot use end="" b/c cal_cosine_distance prints progress bar and overwrites its
-        if args.cluster_reinit:
-            print('Recalculation of cluster file requested... ')
-        else:
-            print('No cluster file, creating... ')
-        env_ref_set, partitions, dist = utils_cluster.cal_cosine_distance(model, memory_loader, args.class_num, temperature=args.cluster_temp, 
-            anchor_class=None, class_debias_logits=True, K=args.env_num, use_mask=args.cluster_use_mask)
-        if args.cluster_save_dist: # save cluster distances for debug
-            os.makedirs(os.path.dirname(fp_dist), exist_ok=True)
-            # dist is a dictionary with anchor classes as keys of similarity scores
-            torch.save(dist, fp_dist)
-            print(f"Cluster distances saved in {fp_dist}")
-        os.makedirs(os.path.dirname(fp), exist_ok=True)
-        torch.save({'partitions': partitions, 'memory_hash': memory_hash}, fp)
-        print(f'cluster {fp} ready!') 
-        if args.cluster_reinit == 'only':
-            exit(0)
-    else: # cluster wasnt't (re-)created
-        partitions = get_check_cluster_file(fp, args.class_num, args)
+        memory_hash = utils.compute_dataset_fingerprint(memory_data)
+        if args.cluster_reinit or not os.path.exists(fp): # recalculate cluster OR cluster doesn't exist
+            # Cannot use end="" b/c cal_cosine_distance prints progress bar and overwrites its
+            if args.cluster_reinit:
+                print('Recalculation of cluster file requested... ')
+            else:
+                print('No cluster file, creating... ')
+            env_ref_set, partitions, dist = utils_cluster.cal_cosine_distance(model, memory_loader, args.class_num, temperature=args.cluster_temp, 
+                anchor_class=None, class_debias_logits=True, K=args.env_num, use_mask=args.cluster_use_mask)
+            if args.cluster_save_dist: # save cluster distances for debug
+                os.makedirs(os.path.dirname(fp_dist), exist_ok=True)
+                # dist is a dictionary with anchor classes as keys of similarity scores
+                torch.save(dist, fp_dist)
+                print(f"Cluster distances saved in {fp_dist}")
+            os.makedirs(os.path.dirname(fp), exist_ok=True)
+            torch.save({'partitions': partitions, 'memory_hash': memory_hash}, fp)
+            print(f'cluster {fp} ready!') 
+            if args.cluster_reinit == 'only':
+                exit(0)
+        else: # cluster wasnt't (re-)created
+            partitions = get_check_cluster_file(fp, args.class_num, args)
+        #end if args.cluster_reinit or not os.path.exists(fp): # recalculate cluster OR cluster doesn't exist
 
-    partitions = [p.to(device) for p in partitions]
-    clusters_dict['classes'] = partitions
+        partitions = [p.to(device) for p in partitions]
+        clusters_dict['classes'] = partitions
+    #end if 'classes' in args.clusters:
 
     if 'domained' in args.clusters:
         assert args.domained_cluster_path is not None, f"domained cluster requested but file not given"
