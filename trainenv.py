@@ -1415,53 +1415,52 @@ def calculate_mask_sparsity_and_grads(mask, total_grad, net, weight, do_flag, ar
     def continuous_signed_sparsity(mask, total_grad, target,
                                    use_soft=False, hard_mask=True,
                                    sigmoid_linear_range=(0.1,0.9)):
+        # 1. Ensure mask is the active leaf in the graph
+        m = mask # Assuming mask is already the output of your sigmoid/softplus
 
-        m = mask.float()
-        if not hard_mask:
-            D = m.numel()
-            low, high = sigmoid_linear_range
-            responsive = (m > low) & (m < high)
-            m = m * responsive.float()  # only consider responsive region for soft masks
+        # 2. Soft-Gate the "Auto-Wins" instead of boolean indexing
+        # We want a continuous weight: 1.0 if it's a 'loss', 0.0 if it's an 'auto-win'
+        # auto_wins = (total_grad < 0)
+        # We use a steep sigmoid to create a differentiable 'gate'
+        k_gate = 10.0 
+        # gate is ~0 if total_grad is negative (auto-win), ~1 if positive (needs pressure)
+        gate = torch.sigmoid(k_gate * total_grad) 
 
-        # 2. Identify "automatic wins" (DOWN masks that are already decreasing)
+        # 3. Compute continuous weights for the gradient agreement
+        k_slope = 5.0
+        # high weight for dimensions where total_grad is slightly negative/neutral
+        # low weight where total_grad is strongly positive (defended by CE/Penalty)
+        weights = torch.sigmoid(-k_slope * total_grad)
+
+        # 4. Combine: This is the critical differentiable path
+        # We multiply the mask by the gate (to ignore auto-wins) 
+        # and by the weights (to prioritize agreement).
+        m_weighted = m * gate * weights
+
+        # 5. Compute effective sparsity metric
         if hard_mask:
-            auto_wins = (m == 1) & (total_grad < 0)
+            # Differentiable "count" of effectively active, non-auto-win dimensions
+            effective_on = m_weighted.sum()
+            # Add back the static count of auto-wins if you need to hit a hard target
+            # but keep it detached so it doesn't break the mask's gradient
+            with torch.no_grad():
+                auto_win_count = ((mask > 0.5) & (total_grad < 0)).float().sum()
+
+            excess = (effective_on + auto_win_count) - target
         else:
-            auto_wins = (total_grad < 0) & (m > 0)  # responsive masks decreasing
-
-        remaining = m.clone()
-        remaining[auto_wins] = 0  # remove auto wins from further sparsity pressure
-
-        # 3. Compute continuous signed weights for remaining masks
-        # Map total_grad to weight: slightly negative -> higher weight, strongly positive -> lower weight
-        # Here we use a smooth monotone decreasing function
-        # w_i = sigmoid(-k * total_grad) optionally scaled to [0,1]
-        k = 5.0  # slope, can be adjusted
-        weights = torch.sigmoid(-k * total_grad)  # high for negative grad, low for positive grad
-        weights = weights * remaining  # zero out auto-wins
-
-        # 4. Compute effective sparsity metric
-        if hard_mask:
-            # weighted sum of remaining ON masks
-            effective_on = (weights).sum() + auto_wins.sum()
-            excess = effective_on - target
-        else:
-            # weighted Hoyer sparsity
-            m_weighted = m * weights
+            # Weighted Hoyer
             l1 = m_weighted.sum()
             l2 = torch.sqrt((m_weighted**2).sum() + 1e-8)
             D = m.numel()
-            hoyer = (D**0.5 - l1 / l2) / (D**0.5 - 1.0)
+            hoyer = (D**0.5 - l1 / (l2 + 1e-9)) / (D**0.5 - 1.0)
             excess = hoyer - target
 
-        # 5. Loss with hard or soft target
+        # 6. Final Loss
         if use_soft:
-            loss = F.softplus(excess)
+            return F.softplus(excess)
         else:
-            loss = F.relu(excess)
-
-        return loss
-
+            return F.relu(excess)
+            
     if do_flag:
         loss = continuous_signed_sparsity(mask, total_grad, args.mask_sparsity,
                     use_soft=False, hard_mask=args.mask_nonlinearity == 'gumbel' and not args.gumbel_soft)
