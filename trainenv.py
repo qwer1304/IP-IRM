@@ -1412,57 +1412,51 @@ def calculate_mask_sparsity_and_grads(mask, total_grad, net, weight, do_flag, ar
     # use_soft: whether to use soft limit (Softplus) or hard limit (ReLU)
     # hard_mask: bool, whether masks are hard (True) or soft sigmoid (False)
 
-    def continuous_signed_sparsity(mask, total_grad, target,
+    def continuous_signed_sparsity(mask, total_grad, target, 
                                    use_soft=False, hard_mask=True,
-                                   sigmoid_linear_range=(0.1,0.9)):
-        # 1. Ensure mask is the active leaf in the graph
-        m = mask # Assuming mask is already the output of your sigmoid/softplus
+                                   sigmoid_linear_range=(0.1, 0.9), k=5.0):
+        # 1. Continuous Pressure Weight (The "Smart" part)
+        # Weight is 0 for Free Lunches (grad <= 0).
+        # Weight decays from 1.0 toward 0 for Defended masks (grad > 0).
+        pressure_weight = torch.where(
+            total_grad <= 0,
+            torch.zeros_like(total_grad),
+            torch.exp(-k * total_grad)
+        )
 
-        # 2. Soft-Gate the "Auto-Wins" instead of boolean indexing
-        # We want a continuous weight: 1.0 if it's a 'loss', 0.0 if it's an 'auto-win'
-        # auto_wins = (total_grad < 0)
-        # We use a steep sigmoid to create a differentiable 'gate'
-        k_gate = 10.0 
-        # gate is ~0 if total_grad is negative (auto-win), ~1 if positive (needs pressure)
-        gate = torch.sigmoid(k_gate * total_grad) 
+        # 2. Mask Pre-processing
+        m = mask.float()
+        if not hard_mask:
+            # For soft masks, only apply pressure to 'responsive' values 
+            # that aren't already collapsed to the floor/ceiling.
+            low, high = sigmoid_linear_range
+            responsive = (m > low) & (m < high)
+            m = m * responsive.float()
 
-        # 3. Compute continuous weights for the gradient agreement
-        k_slope = 5.0
-        # high weight for dimensions where total_grad is slightly negative/neutral
-        # low weight where total_grad is strongly positive (defended by CE/Penalty)
-        weights = torch.sigmoid(-k_slope * total_grad)
+        # 3. Calculate Pressure-Adjusted Volume
+        # This represents the 'Attackable' portion of the mask distribution.
+        effective_on = (m * pressure_weight).sum()
 
-        # 4. Combine: This is the critical differentiable path
-        # We multiply the mask by the gate (to ignore auto-wins) 
-        # and by the weights (to prioritize agreement).
-        m_weighted = m * gate * weights
+        # 4. Calculate Remaining Budget
+        # We count masks that are already successfully 'moving down' 
+        # as occupying the UB slots.
+        with torch.no_grad():
+            # Using a threshold of 0.5 to define an 'Active' mask for the budget count
+            free_lunch_count = ((mask > 0.5) & (total_grad < 0)).float().sum()
 
-        # 5. Compute effective sparsity metric
-        if hard_mask:
-            # Differentiable "count" of effectively active, non-auto-win dimensions
-            effective_on = m_weighted.sum()
-            # Add back the static count of auto-wins if you need to hit a hard target
-            # but keep it detached so it doesn't break the mask's gradient
-            with torch.no_grad():
-                auto_win_count = ((mask > 0.5) & (total_grad < 0)).float().sum()
+        adjusted_target = torch.clamp(torch.tensor(target) - free_lunch_count, min=0)
 
-            excess = (effective_on + auto_win_count) - target
-        else:
-            # Weighted Hoyer
-            l1 = m_weighted.sum()
-            l2 = torch.sqrt((m_weighted**2).sum() + 1e-8)
-            D = m.numel()
-            hoyer = (D**0.5 - l1 / (l2 + 1e-9)) / (D**0.5 - 1.0)
-            excess = hoyer - target
+        # 5. Compute Excess
+        excess = effective_on - adjusted_target
 
-        # 6. Final Loss
-        print()
-        print(effective_on, auto_win_count, target, excess)
+        # 6. Final Loss Choice
         if use_soft:
+            # Softplus provides a non-zero gradient even when slightly under target
             return F.softplus(excess)
         else:
+            # ReLU is a hard constraint (zero loss if under target)
             return F.relu(excess)
-            
+    
     if do_flag:
         loss = continuous_signed_sparsity(mask, total_grad, args.mask_sparsity,
                     use_soft=False, hard_mask=args.mask_nonlinearity == 'gumbel' and not args.gumbel_soft)
