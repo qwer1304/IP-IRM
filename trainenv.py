@@ -1464,6 +1464,12 @@ def calculate_mask_sparsity_and_grads(mask, total_grad, net, weight, do_flag, ar
     if do_flag:
         loss = continuous_signed_sparsity(mask, total_grad, args.mask_sparsity,
                     use_soft=False, hard_mask=args.mask_nonlinearity == 'gumbel' and not args.gumbel_soft)
+        print()
+        if loss.grad_fn is None:
+            print("sparsity loss detached")
+        else:
+            print(f"sparsity loss attached {loss} {loss.grad_fn}")
+            
         grads = calculate_grads(loss, net)
         grads_flat = [  # dLoss / dTheta
             torch.zeros(p.numel(), dtype=p.dtype, device=p.device)
