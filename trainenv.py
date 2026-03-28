@@ -1456,6 +1456,8 @@ def calculate_mask_sparsity_and_grads(mask, total_grad, net, weight, do_flag, ar
             excess = hoyer - target
 
         # 6. Final Loss
+        print()
+        print(f"excess {excess}")
         if use_soft:
             return F.softplus(excess)
         else:
@@ -1464,7 +1466,6 @@ def calculate_mask_sparsity_and_grads(mask, total_grad, net, weight, do_flag, ar
     if do_flag:
         loss = continuous_signed_sparsity(mask, total_grad, args.mask_sparsity,
                     use_soft=False, hard_mask=args.mask_nonlinearity == 'gumbel' and not args.gumbel_soft)
-        loss = mask.sum()
         grads = calculate_grads(loss, net)
 
         print()
