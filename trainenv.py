@@ -1464,12 +1464,6 @@ def calculate_mask_sparsity_and_grads(mask, total_grad, net, weight, do_flag, ar
     if do_flag:
         loss = continuous_signed_sparsity(mask, total_grad, args.mask_sparsity,
                     use_soft=False, hard_mask=args.mask_nonlinearity == 'gumbel' and not args.gumbel_soft)
-        print()
-        if loss.grad_fn is None:
-            print("sparsity loss detached")
-        else:
-            print(f"sparsity loss attached {loss} {loss.grad_fn}")
-            
         grads = calculate_grads(loss, net)
         grads_flat = [  # dLoss / dTheta
             torch.zeros(p.numel(), dtype=p.dtype, device=p.device)
@@ -1492,6 +1486,8 @@ def calculate_mask_sparsity_and_grads(mask, total_grad, net, weight, do_flag, ar
     _, _, grads_norm_weighted =  \
         setup_grads_and_norms(grads_flat, weight, args.Lscaler, mask.device, do_flag, default_grads_weighted_vector=grads_flat)
 
+    print()
+    print(do_flag, grads_norm_weighted)
     return loss.detach(), grads_flat, grads_norm_weighted
         
 # ssl training with IP-IRM
