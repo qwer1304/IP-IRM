@@ -641,8 +641,8 @@ def prepare_clusters(args, resumed, memory_loader, device):
             # Find matching files
             files = glob.glob(os.path.join(directory, pattern))
 
-            # Sort by modification time
-            files_sorted = sorted(files, key=os.path.getmtime, reverse=True)
+            # file names include date of creation, so come first
+            files_sorted = sorted(files, reverse=True)
             fp_exist = None
             if files_sorted:
                 fp_exist = files_sorted[0]
@@ -650,14 +650,15 @@ def prepare_clusters(args, resumed, memory_loader, device):
             if args.resume and resumed:
                 hash_object = hashlib.sha256(args.resume.encode())
                 hex_dig = hash_object.hexdigest()
-                suffix = hex_dig + '_resumed'
+                suffix = hex_dig[:10] + '_resumed'
             elif args.pretrain_path is not None and os.path.isfile(args.pretrain_path):
                 hash_object = hashlib.sha256(args.pretrain_path.encode())
                 hex_dig = hash_object.hexdigest()
-                suffix = hex_dig + '_pretrained'
+                suffix = hex_dig[:10] + '_pretrained'
             else:
                 suffix = 'default'
-            fp_new = os.path.join(directory, 'env_ref_set_' + suffix)
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M")
+            fp_new = os.path.join(directory, 'env_ref_set_' + timestamp + suffix)
 
             if args.cluster_reinit or not fp_exist:
                 fp = fp_new
