@@ -1418,7 +1418,6 @@ def calculate_mask_sparsity_and_grads(mask, total_grad, net, weight, do_flag, ar
 
         m = mask.float()
         if not hard_mask:
-            m = torch.sigmoid(x)
             D = m.numel()
             low, high = sigmoid_linear_range
             responsive = (m > low) & (m < high)
