@@ -2237,8 +2237,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 Ds2 = torch.sqrt(torch.tensor(mask_activation.size(0)))
                 hoyer_mask_sparsity = ((Ds2 - m1_m2) / (Ds2 - 1 + 1e-9)).item()
 
-                on_logits  = mask_preactivation[mask_activation >= 0.5]   # (Neff,)
-                off_logits = mask_preactivation[mask_activation < 0.5]   # (D - Neff,)
+                on_logits  = mask_preactivation[mask_activation == 1]   # (Neff,)
+                off_logits = mask_preactivation[mask_activation == 0]   # (D - Neff,)
                 min_on  = on_logits.min().detach().cpu().item()    # marginal ON  - most likely to flip OFF
                 max_off = off_logits.max().detach().cpu().item()   # marginal OFF - most likely to flip ON
                 gap     = min_on - max_off   # positive = clean separation, negative = already overlapping
