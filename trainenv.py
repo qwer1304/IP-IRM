@@ -1457,7 +1457,7 @@ def calculate_mask_sparsity_and_grads(mask, total_grad, net, weight, do_flag, ar
 
         # 6. Final Loss
         print()
-        print((effective_on, auto_win_count, target, excess)
+        print(effective_on, auto_win_count, target, excess)
         if use_soft:
             return F.softplus(excess)
         else:
