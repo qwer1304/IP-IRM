@@ -2239,12 +2239,12 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
 
                 on_logits  = mask_preactivation[mask_activation >= 0.5]   # (Neff,)
                 off_logits = mask_preactivation[mask_activation < 0.5]   # (D - Neff,)
-                min_on  = on_logits.min()    # marginal ON  - most likely to flip OFF
-                max_off = off_logits.max()   # marginal OFF - most likely to flip ON
+                min_on  = on_logits.min().detach().cpu().item()    # marginal ON  - most likely to flip OFF
+                max_off = off_logits.max().detach().cpu().item()   # marginal OFF - most likely to flip ON
                 gap     = min_on - max_off   # positive = clean separation, negative = already overlapping
-                gap     = gap.detach().cpu().item()
 
-                mask_sparsity_str += f" Neff {mask_effective_number:.2f} Entropy {mask_entropy:.2e} Hoyer {hoyer_mask_sparsity:.2e} gap {gap:.3e}"
+                mask_sparsity_str += f" Neff {mask_effective_number:.2f} Entropy {mask_entropy:.2e} Hoyer {hoyer_mask_sparsity:.2e}" + \
+                                     f" mon_on {min_on:.3e} min_off {min_off:.3e} gap {gap:.3e}"
 
         if do_loss:
             ll_str = f" ll {info_dict['ngl2']:.2e}"
