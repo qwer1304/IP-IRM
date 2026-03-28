@@ -2064,7 +2064,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 ce_mask_scaler, unsplit_mask_scaler, env_mask_scaler = 1.0, 1.0, 1.0
             penalty_BB_scaler = 1.0
 
-            pind = param_groups_2_pind['mask']
+            pind = param_groups_2_pind['mask'][0]
 
             total_grad_flat_weighted = (   loss_unsplit_grads_final[pind] * loss_unsplit_weight  * args.Lscaler * unsplit_mask_scaler
                                          + loss_CE_grads_final[pind]      * loss_CE_weight       * args.Lscaler * ce_mask_scaler      * int(not args.dont_update_CE) 
