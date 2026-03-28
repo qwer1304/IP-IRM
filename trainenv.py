@@ -1452,7 +1452,7 @@ def calculate_mask_sparsity_and_grads(mask, total_grad, net, weight, do_flag, ar
         # 6. Final Loss Choice
         loss = F.softplus(excess) if use_soft else F.relu(excess)
             
-        print(f"target {target}, effective_on {effective_on}, free_lunch_count {free_lunch_count}, adjusted_target {adjusted_target}, excess {excess}, loss  {loss}"
+        print(f"target {target}, effective_on {effective_on}, free_lunch_count {free_lunch_count}, adjusted_target {adjusted_target}, excess {excess}, loss  {loss}")
         exit()
     
     if do_flag:
