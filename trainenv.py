@@ -1419,7 +1419,8 @@ def calculate_mask_sparsity_and_grads(mask, total_grad, net, weight, do_flag, ar
         k: float = 5.0,           # Scalar - Steepness of the opposition (Delta_i)
         epsilon: float = 0.01,    # Scalar - Tailwind pressure for "Free Lunches"
         hard_mask: bool = True,   # Switch - False for Soft Masks, True for Hard Masks
-        use_soft: bool = False    # 'relu' or 'softplus' for the budget guard
+        use_soft: bool = False,   # 'relu' or 'softplus' for the budget guard
+        beta: float = 1.0         # beta for softplus when use_soft=True
     ) -> torch.Tensor:
         """
         Unified Physics Engine for Sparsity Constraints.
@@ -1474,7 +1475,7 @@ def calculate_mask_sparsity_and_grads(mask, total_grad, net, weight, do_flag, ar
             budget_loss = torch.relu(excess)
         else:
             # Softplus provides smoother gradients around the 1024 boundary.
-            budget_loss = F.softplus(excess)
+            budget_loss = F.softplus(excess, beta=beta)
 
         # --- 6. THE TAILWIND (The 'Free Lunch' cleanup) ---
         # [1] - Constant nudge for masks the App is already pushing OFF.
@@ -1486,7 +1487,8 @@ def calculate_mask_sparsity_and_grads(mask, total_grad, net, weight, do_flag, ar
     
     if do_flag:
         loss = continuous_signed_sparsity(mask, total_grad, args.mask_sparsity,
-                    use_soft=False, hard_mask=args.mask_nonlinearity == 'gumbel' and not args.gumbel_soft)
+                    use_soft=not args.mask_sparsity_relu, hard_mask=args.mask_nonlinearity == 'gumbel' and not args.gumbel_soft, 
+                    beta=args.sparsity_softplus_beta)
         grads = calculate_grads(loss, net)
 
         grads_flat = [  # dLoss / dTheta
