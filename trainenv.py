@@ -1404,24 +1404,68 @@ def print_grads(grads, net, prefix=""):
             continue
         print(f"{prefix} pind {pind} name {name} norm {grads[pind].norm():.2e}")
 
-def calculate_mask_sparsity_and_grads(mask, net, weight, do_flag, args, param_groups_2_pind, default_grads_flat):
+def calculate_mask_sparsity_and_grads(mask, total_grad, net, weight, do_flag, args, param_groups_2_pind, default_grads_flat):
+    # ---------- Inputs ----------
+    # mask: hard mask vector (0/1) if using hard masks, or activations for soft mask shape [num_masks]
+    # total_grad: combined gradient vector w.r.t mask of all tasks, shape [num_tasks, num_masks]
+    # target: target number of ON masks (hard) or target Hoyer (soft)
+    # use_soft: whether to use soft limit (Softplus) or hard limit (ReLU)
+    # hard_mask: bool, whether masks are hard (True) or soft sigmoid (False)
+
+    def continuous_signed_sparsity(mask, total_grad, target,
+                                   use_soft=False, hard_mask=True,
+                                   sigmoid_linear_range=(0.1,0.9)):
+
+        m = mask.float()
+        if not hard_mask:
+            m = torch.sigmoid(x)
+            D = m.numel()
+            low, high = sigmoid_linear_range
+            responsive = (m > low) & (m < high)
+            m = m * responsive.float()  # only consider responsive region for soft masks
+
+        # 2. Identify "automatic wins" (DOWN masks that are already decreasing)
+        if hard_mask:
+            auto_wins = (m == 1) & (total_grad < 0)
+        else:
+            auto_wins = (total_grad < 0) & (m > 0)  # responsive masks decreasing
+
+        remaining = m.clone()
+        remaining[auto_wins] = 0  # remove auto wins from further sparsity pressure
+
+        # 3. Compute continuous signed weights for remaining masks
+        # Map total_grad to weight: slightly negative -> higher weight, strongly positive -> lower weight
+        # Here we use a smooth monotone decreasing function
+        # w_i = sigmoid(-k * total_grad) optionally scaled to [0,1]
+        k = 5.0  # slope, can be adjusted
+        weights = torch.sigmoid(-k * total_grad)  # high for negative grad, low for positive grad
+        weights = weights * remaining  # zero out auto-wins
+
+        # 4. Compute effective sparsity metric
+        if hard_mask:
+            # weighted sum of remaining ON masks
+            effective_on = (weights).sum() + auto_wins.sum()
+            excess = effective_on - target
+        else:
+            # weighted Hoyer sparsity
+            m_weighted = m * weights
+            l1 = m_weighted.sum()
+            l2 = torch.sqrt((m_weighted**2).sum() + 1e-8)
+            D = m.numel()
+            hoyer = (D**0.5 - l1 / l2) / (D**0.5 - 1.0)
+            excess = hoyer - target
+
+        # 5. Loss with hard or soft target
+        if use_soft:
+            loss = F.softplus(excess)
+        else:
+            loss = F.relu(excess)
+
+        return loss
+
     if do_flag:
-        if args.mask_nonlinearity == 'gumbel' and not args.gumbel_soft:
-            active_count = mask.sum()
-            #loss = F.relu(active_count - args.mask_sparsity)  
-            loss = F.softplus(active_count - args.mask_sparsity)  
-        elif args.mask_nonlinearity == 'sigmoid' or args.mask_nonlinearity == 'gumbel':
-            #loss = torch.mean(mask * (1 - mask))
-            if args.mask_sparsity_loss == "L1/2":
-                loss = torch.sum(torch.sqrt(torch.abs(mask) + 1e-8))
-            elif args.mask_sparsity_loss == "Hoyer":
-                loss = mask.norm(1) / (mask.norm(2) + 1e-8)
-            elif args.mask_sparsity_loss == "Hoyer_inf":
-                loss = mask.norm(1) / (mask.max() + 1e-8)
-            else:
-                assert False, f"unknown sparsity loss {args.mask_sparsity_loss}"
-        else: # indentity. WHAT TO DO?
-            active_count = mask.abs().sum() # drive to 0
+        loss = continuous_signed_sparsity(mask, total_grad, args.mask_sparsity,
+                    use_soft=False, hard_mask=args.mask_nonlinearity == 'gumbel' and not args.gumbel_soft)
         grads = calculate_grads(loss, net)
         grads_flat = [  # dLoss / dTheta
             torch.zeros(p.numel(), dtype=p.dtype, device=p.device)
@@ -2007,11 +2051,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         else:
             penalty_env  = torch.tensor(0, dtype=torch.float, device=device)
 
-        mask_activation = net.module.mask_fun.activation(u=mask_activation_noise) # recompute since its graph was released
-        mask_preactivation = net.module.mask_fun.mask
-        loss_mask_sparsity, loss_mask_sparsity_grads, loss_mask_sparsity_norm = \
-            calculate_mask_sparsity_and_grads(mask_activation, net, mask_sparsity_weight, do_mask_sparsity, args, param_groups_2_pind, loss_mask_sparsity_grads)
-        
         # Environments gradients
         loss_grads_final = calculate_loss_grads_final(loss_grads, loss_env, loss_weight_env, halves_sz, loss_module, reduction, device, do_loss)
 
@@ -2019,13 +2058,33 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                                 args.penalty_sigma, reduction, device, do_penalty)
         penalty_grads_final = rotate_penalty_grads(penalty_grads_final, loss_grads_final, args.grad_rotate, do_penalty)
 
+        if do_mask_sparsity:
+            if args.mask_scalers is not None:
+                ce_mask_scaler, unsplit_mask_scaler, mask_env_scaler = args.mask_scalers
+            else:
+                ce_mask_scaler, unsplit_mask_scaler, env_mask_scaler = 1.0, 1.0, 1.0
+            penalty_BB_scaler = 1.0
+
+            pind = param_groups_2_pind['mask']
+
+            total_grad_flat_weighted = (   loss_unsplit_grads_final[pind] * loss_unsplit_weight  * args.Lscaler * unsplit_mask_scaler
+                                         + loss_CE_grads_final[pind]      * loss_CE_weight       * args.Lscaler * ce_mask_scaler      * int(not args.dont_update_CE) 
+                                         + loss_grads_final[pind]         * loss_weight          * args.Lscaler * env_mask_scaler     * int(not args.dont_update_loss)     
+                                         + penalty_grads_final[pind]      * penalty_weight       * args.Lscaler * penalty_BB_scaler   * int(epoch >= args.penalty_iters)
+                                       )
+
+            mask_activation = net.module.mask_fun.activation(u=mask_activation_noise) # recompute since its graph was released
+            mask_preactivation = net.module.mask_fun.mask
+            loss_mask_sparsity, loss_mask_sparsity_grads, loss_mask_sparsity_norm = \
+                calculate_mask_sparsity_and_grads(mask_activation, total_grad_flat_weighted, net, mask_sparsity_weight, do_mask_sparsity, args, param_groups_2_pind, loss_mask_sparsity_grads)
+
         loss_CE_grad_scaler, loss_unsplit_grad_scaler, loss_grad_scaler, penalty_grad_scaler, gradnorm_loss, info_dict = \
             calculate_scalers(loss_CE_grads_final, loss_unsplit_grads_final, loss_grads_final, penalty_grads_final, loss_mask_sparsity_grads,
                               loss_CE_aggregator,  loss_unsplit_aggregator,  loss_env,         penalty_env,         loss_mask_sparsity,
                               loss_CE_weight,      loss_unsplit_weight,      loss_weight,      penalty_weight,      mask_sparsity_weight, 
                               do_CE_loss,          do_unsplit_loss,          do_loss,          do_penalty,          do_mask_sparsity,
-                              gradnorm_balancer, do_gradnorm, 
-                              device, ema, args,  param_groups_2_pind, net) 
+                              gradnorm_balancer,   do_gradnorm, 
+                              device, ema, args,   param_groups_2_pind, net) 
 
         """
         Don't multiply individual task's loss by scaler, since it's misleading
@@ -2038,19 +2097,20 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         
         for pind, (name, p) in enumerate(net.named_parameters()):
             if 'mask' in name and args.mask_scalers is not None:
-                ce_scaler, unsplit_scaler, env_scaler = args.mask_scalers
+                ce_mask_scaler, unsplit_mask_scaler, env_mask_scaler = args.mask_scalers
             else:
-                ce_scaler, unsplit_scaler, env_scaler = 1.0, 1.0, 1.0
+                ce_mask_scaler, unsplit_mask_scaler, env_mask_scaler = 1.0, 1.0, 1.0
             if 'backbone' in name and args.backbone_propagate:
-                penalty_scaler = args.penalty_backbone_scaler
+                penalty_BB_scaler = args.penalty_backbone_scaler
             else:
-                penalty_scaler = 1.0
-            total_grad_flat_weighted = (   loss_unsplit_grads_final[pind] * loss_unsplit_weight  * args.Lscaler * loss_unsplit_grad_scaler * unsplit_scaler
-                                         + loss_CE_grads_final[pind]      * loss_CE_weight       * args.Lscaler * loss_CE_grad_scaler      * ce_scaler      * int(not args.dont_update_CE) 
-                                         + loss_grads_final[pind]         * loss_weight          * args.Lscaler * loss_grad_scaler         * env_scaler     * int(not args.dont_update_loss)     
-                                         + penalty_grads_final[pind]      * penalty_weight       * args.Lscaler * penalty_grad_scaler      * penalty_scaler * int(epoch >= args.penalty_iters)
-                                         + loss_mask_sparsity_grads[pind] * mask_sparsity_weight * args.Lscaler * 1.0                      * 1.0            * int(not args.dont_update_mask_sparsity)
+                penalty_BB_scaler = 1.0
+            total_grad_flat_weighted = (   loss_unsplit_grads_final[pind] * loss_unsplit_weight  * args.Lscaler * loss_unsplit_grad_scaler * unsplit_mask_scaler
+                                         + loss_CE_grads_final[pind]      * loss_CE_weight       * args.Lscaler * loss_CE_grad_scaler      * ce_mask_scaler      * int(not args.dont_update_CE) 
+                                         + loss_grads_final[pind]         * loss_weight          * args.Lscaler * loss_grad_scaler         * env_mask_scaler     * int(not args.dont_update_loss)     
+                                         + penalty_grads_final[pind]      * penalty_weight       * args.Lscaler * penalty_grad_scaler      * penalty_BB_scaler   * int(epoch >= args.penalty_iters)
+                                         + loss_mask_sparsity_grads[pind] * mask_sparsity_weight * args.Lscaler * 1.0                      * 1.0                 * int(not dont_update_mask_sparsity)
                                        )
+        
             if p.grad is None:
                 p.grad  = total_grad_flat_weighted.view(p.shape)
             else:
