@@ -1488,8 +1488,6 @@ def calculate_mask_sparsity_and_grads(mask, total_grad, net, weight, do_flag, ar
     _, _, grads_norm_weighted =  \
         setup_grads_and_norms(grads_flat, weight, args.Lscaler, mask.device, do_flag, default_grads_weighted_vector=grads_flat)
 
-    print()
-    print(do_flag, grads_norm_weighted)
     return loss.detach(), grads_flat, grads_norm_weighted
         
 # ssl training with IP-IRM
