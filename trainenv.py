@@ -2107,7 +2107,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                                          + loss_CE_grads_final[pind]      * loss_CE_weight       * args.Lscaler * loss_CE_grad_scaler      * ce_mask_scaler      * int(not args.dont_update_CE) 
                                          + loss_grads_final[pind]         * loss_weight          * args.Lscaler * loss_grad_scaler         * env_mask_scaler     * int(not args.dont_update_loss)     
                                          + penalty_grads_final[pind]      * penalty_weight       * args.Lscaler * penalty_grad_scaler      * penalty_BB_scaler   * int(epoch >= args.penalty_iters)
-                                         + loss_mask_sparsity_grads[pind] * mask_sparsity_weight * args.Lscaler * 1.0                      * 1.0                 * int(not dont_update_mask_sparsity)
+                                         + loss_mask_sparsity_grads[pind] * mask_sparsity_weight * args.Lscaler * 1.0                      * 1.0                 * int(not args.dont_update_mask_sparsity)
                                        )
         
             if p.grad is None:
