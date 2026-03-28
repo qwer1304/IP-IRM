@@ -53,7 +53,8 @@ class Mask():
 
                 # Calculate threshold for the Top-K slots
                 if self.hard_K:
-                    _, topk_indices = torch.topk(x_soft, self.K)
+                    _, topk_indices = torch.topk(x, self.K)
+                    #_, topk_indices = torch.topk(x_soft, self.K)
                     topk_mask = torch.zeros_like(x, dtype=bool)
                     topk_mask[topk_indices] = True
                 else:
