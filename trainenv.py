@@ -2059,7 +2059,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
 
         if do_mask_sparsity:
             if args.mask_scalers is not None:
-                ce_mask_scaler, unsplit_mask_scaler, mask_env_scaler = args.mask_scalers
+                ce_mask_scaler, unsplit_mask_scaler, env_mask_scaler = args.mask_scalers
             else:
                 ce_mask_scaler, unsplit_mask_scaler, env_mask_scaler = 1.0, 1.0, 1.0
             penalty_BB_scaler = 1.0
