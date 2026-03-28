@@ -1468,7 +1468,7 @@ def calculate_mask_sparsity_and_grads(mask, total_grad, net, weight, do_flag, ar
 
         print()
         for pind, (name, p) in enumerate(net.named_parameters()):
-            print(pind, name, grads[pind].norm())
+            print(pind, name, p.norm() if p is not None else 'none')
         exit()
 
         grads_flat = [  # dLoss / dTheta
