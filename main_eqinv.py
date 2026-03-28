@@ -32,6 +32,8 @@ from functools import partial
 
 import utils_cluster
 
+import datetime
+
 sys.modules['__main__'].FeatureQueue = utils.FeatureQueue
 
 def build_losses_and_penalty_dict(args, net, class_weights=None, moco_dict=None):
