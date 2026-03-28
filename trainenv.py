@@ -1450,22 +1450,15 @@ def calculate_mask_sparsity_and_grads(mask, total_grad, net, weight, do_flag, ar
         excess = effective_on - adjusted_target
 
         # 6. Final Loss Choice
-        if use_soft:
-            # Softplus provides a non-zero gradient even when slightly under target
-            return F.softplus(excess)
-        else:
-            # ReLU is a hard constraint (zero loss if under target)
-            return F.relu(excess)
+        loss = F.softplus(excess) if use_soft else F.relu(excess)
+            
+        print(f"target {target}, effective_on {effective_on}, free_lunch_count {free_lunch_count}, adjusted_target {adjusted_target}, excess {excess}, loss  {loss}"
+        exit()
     
     if do_flag:
         loss = continuous_signed_sparsity(mask, total_grad, args.mask_sparsity,
                     use_soft=False, hard_mask=args.mask_nonlinearity == 'gumbel' and not args.gumbel_soft)
         grads = calculate_grads(loss, net)
-
-        print()
-        for pind, (name, p) in enumerate(net.named_parameters()):
-            print(pind, name, grads[pind].norm() if grads[pind] is not None else 'none')
-        exit()
 
         grads_flat = [  # dLoss / dTheta
             torch.zeros(p.numel(), dtype=p.dtype, device=p.device)
