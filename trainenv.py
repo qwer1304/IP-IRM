@@ -2244,7 +2244,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 gap     = min_on - max_off   # positive = clean separation, negative = already overlapping
 
                 mask_sparsity_str += f" Neff {mask_effective_number:.2f} Entropy {mask_entropy:.2e} Hoyer {hoyer_mask_sparsity:.2e}" + \
-                                     f" mon_on {min_on:.3e} min_off {min_off:.3e} gap {gap:.3e}"
+                                     f" mon_on {min_on:.3e} max_off {max_off:.3e} gap {gap:.3e}"
 
         if do_loss:
             ll_str = f" ll {info_dict['ngl2']:.2e}"
