@@ -288,6 +288,7 @@ def main(args):
     
     # count number of samples in each class and training domain
     domains, classes, counts = count_domains(input_dir, set(args.domain_names)-set([args.test_domain])) 
+    domains_test, classes_test, counts_test = count_domains(input_dir, set([args.test_domain])) 
     if args.count_only:
         print('Domains:')
         print(domains)
@@ -295,7 +296,14 @@ def main(args):
         print(classes)
         print('Counts:')
         print(counts)
-        exit(1)
+        # Test domains        
+        print('Domains test:')
+        print(domains_test)
+        print('Classes test:')
+        print(classes_test)
+        print('Counts test:')
+        print(counts_test)
+        exit()
     Sc = np.sum(counts, axis=0) # sum over domains
     Mc_max = np.median(Sc)
     M_range = [2*args.M, 4*args.M]
