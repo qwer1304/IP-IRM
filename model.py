@@ -43,8 +43,14 @@ class Mask():
                     if u is None: u = torch.rand_like(x)
                 else:
                     u = self.u
+            """
             g = -torch.log(-torch.log(u + 1e-20) + 1e-20)
             x_soft = torch.sigmoid((x + g) / self.tau)  # (N,)
+            """
+            # Zero-Centered (Standard Gumbel-Softmax trick)
+            g1 = -torch.log(-torch.log(u1 + 1e-20) + 1e-20)
+            g2 = -torch.log(-torch.log(u2 + 1e-20) + 1e-20)
+            x_soft = torch.sigmoid((x + g1 - g2) / self.tau)
 
             if self.soft:
                 x_ret = x_soft
