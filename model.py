@@ -77,7 +77,8 @@ class MaskModule(nn.Module):
             if activation_method.K:
                 if activation_method.mask_type == 'gumbel' and not activation_method.soft:
                         target_p = activation_method.K / input_dim  # e.g., 256 / 2048
-                        init_logit = torch.log(torch.tensor(target_p / (1 - target_p)))
+                        #init_logit = torch.log(torch.tensor(target_p / (1 - target_p)))
+                        init_logit = torch.tensor(0.0)
                 elif activation_method.mask_type == 'sigmoid' or activation_method.mask_type == 'gumbel':
                     def get_bounds(K, N=2048, W=2):
                         # The Logit of the probability
