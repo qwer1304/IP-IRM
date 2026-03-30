@@ -1483,10 +1483,10 @@ def calculate_mask_sparsity_and_grads(mask, total_grad, net, weight, do_flag, ar
         tailwind_loss = epsilon * (mask * is_pulling_off).sum()
 
         # --- TOTAL LOSS ---
-        return budget_loss + tailwind_loss
+        return budget_loss + tailwind_loss, budget_loss, tailwind_loss
     
     if do_flag:
-        loss = continuous_signed_sparsity(mask, total_grad, args.mask_sparsity,
+        loss, budget_loss, tailwind_loss = continuous_signed_sparsity(mask, total_grad, args.mask_sparsity,
                     use_soft=not args.mask_sparsity_relu, hard_mask=args.mask_nonlinearity == 'gumbel' and not args.gumbel_soft, 
                     beta=args.mask_sparsity_softplus_beta)
         grads = calculate_grads(loss, net)
@@ -1512,7 +1512,7 @@ def calculate_mask_sparsity_and_grads(mask, total_grad, net, weight, do_flag, ar
     _, _, grads_norm_weighted =  \
         setup_grads_and_norms(grads_flat, weight, args.Lscaler, mask.device, do_flag, default_grads_weighted_vector=grads_flat)
 
-    return loss.detach(), grads_flat, grads_norm_weighted
+    return loss.detach(), grads_flat, grads_norm_weighted, budget_loss.detach, tailwind_loss.detach()
         
 # ssl training with IP-IRM
 def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch, args, split_tags=None, **kwargs):
@@ -2099,8 +2099,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
 
             mask_activation = net.module.mask_fun.activation(u=mask_activation_noise) # recompute since its graph was released
             mask_preactivation = net.module.mask_fun.mask
-            loss_mask_sparsity, loss_mask_sparsity_grads, loss_mask_sparsity_norm = \
-                calculate_mask_sparsity_and_grads(mask_activation, total_grad_flat_weighted, net, mask_sparsity_weight, do_mask_sparsity, args, param_groups_2_pind, loss_mask_sparsity_grads)
+            loss_mask_sparsity, loss_mask_sparsity_grads, loss_mask_sparsity_norm, budget_loss, tailwind_loss = \
+                calculate_mask_sparsity_and_grads(mask_activation, total_grad_flat_weighted, net, mask_sparsity_weight, 
+                        do_mask_sparsity, args, param_groups_2_pind, loss_mask_sparsity_grads)
 
         loss_CE_grad_scaler, loss_unsplit_grad_scaler, loss_grad_scaler, penalty_grad_scaler, gradnorm_loss, info_dict = \
             calculate_scalers(loss_CE_grads_final, loss_unsplit_grads_final, loss_grads_final, penalty_grads_final, loss_mask_sparsity_grads,
@@ -2230,7 +2231,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 f"preactivation: mean {mask_preactivation.mean().item():.2e} std {torch.std(mask_preactivation).item():.2e} " + \
                 f"mask_CV {(total_mask_CV / num_updates).item():.2f}" + \
                 f" dot: km {info_dict['shared_dot_km']:.2e} cm {info_dict['shared_dot_cm']:.2e} pm {info_dict['shared_dot_pm']:.2e}" + \
-                f" cos: km {info_dict['shared_cos_km']:.2e} cm {info_dict['shared_cos_cm']:.2e} pm {info_dict['shared_cos_pm']:.2e}"
+                f" cos: km {info_dict['shared_cos_km']:.2e} cm {info_dict['shared_cos_cm']:.2e} pm {info_dict['shared_cos_pm']:.2e}" + \
+                f" budget {budget_loss.item():.2e} tailwind {tailwind_loss.item():.2e}"
 
             if True or args.mask_nonlinearity != 'gumbel' or args.gumbel_soft: # soft mask
                 mask_effective_number = (mask_activation.sum()**2 / ((mask_activation**2).sum() + 1e-9)).item()
