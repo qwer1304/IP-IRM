@@ -1413,7 +1413,11 @@ def calculate_mask_sparsity_and_grads(mask, total_grad, net, weight, do_flag, ar
     # hard_mask: bool, whether masks are hard (True) or soft sigmoid (False)
 
     def continuous_signed_sparsity(mask, grad_app, target=200, k=5.0, 
-                                   use_soft=True, beta=0.07, epsilon=0.015):
+                                   use_soft=True, beta=0.07, epsilon=0.015, hard_mask=True):
+        
+        # Get total number of potential masks
+        N = mask.numel()
+    
         # 1. Identify directions
         is_pulling_on = (grad_app < 0).float()
         is_pulling_off = (grad_app > 0).float()
@@ -1434,8 +1438,21 @@ def calculate_mask_sparsity_and_grads(mask, total_grad, net, weight, do_flag, ar
         term_mask_off = (1.0 - mask) * (is_pulling_on * pull_on_force)
 
         m_adj = term_mask_on + term_mask_off
-        n_eff = m_adj.sum()
 
+        if hard_mask:
+            # Physical count
+            n_eff = m_adj.sum()
+        else:
+            # Soft case: Map Hoyer back to a "number of masks" scale
+            sqrt_N = torch.sqrt(torch.tensor(float(N)))
+            sum_abs = torch.sum(torch.abs(m_adj))
+            sum_sq = torch.sqrt(torch.sum(m_adj**2) + 1e-8)
+
+            # Hoyer formula (0 = dense, 1 = sparse)
+            hoyer = (sqrt_N - (sum_abs / sum_sq)) / (sqrt_N - 1.0)
+            # Convert to equivalent number of active masks
+            n_eff = N * (1.0 - hoyer)
+        
         # 4. Budget Loss (The Ramp)
         excess = n_eff - target
         budget_loss = F.softplus(excess, beta=beta) if use_soft else torch.relu(excess)
