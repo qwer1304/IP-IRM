@@ -1412,81 +1412,43 @@ def calculate_mask_sparsity_and_grads(mask, total_grad, net, weight, do_flag, ar
     # use_soft: whether to use soft limit (Softplus) or hard limit (ReLU)
     # hard_mask: bool, whether masks are hard (True) or soft sigmoid (False)
 
-    def continuous_signed_sparsity(
-        mask: torch.Tensor,       # [D] - Mask values (Hard {0,1} or Soft [0,1])
-        grad_app: torch.Tensor,   # [D] - Application gradients (negative = wants ON)
-        target: int = 1024,       # Scalar - Maximum allowed "Effective" masks
-        k: float = 5.0,           # Scalar - Steepness of the opposition (Delta_i)
-        epsilon: float = 0.01,    # Scalar - Tailwind pressure for "Free Lunches"
-        hard_mask: bool = True,   # Switch - False for Soft Masks, True for Hard Masks
-        use_soft: bool = False,   # 'relu' or 'softplus' for the budget guard
-        beta: float = 1.0         # beta for softplus when use_soft=True
-    ) -> torch.Tensor:
-        """
-        Unified Physics Engine for Sparsity Constraints.
-
-        Logic:
-        1. Opposition: Calculate Delta_i (Intent to change) based on grad_app.
-        2. Occupancy: Calculate m_adj (Adjusted Mask) as the 'Unprotected' count.
-        3. Aggregation: If soft, use Hoyer to get N_eff (Hard-Equivalent Count).
-                        If hard, use simple Sum.
-        4. Guard: Apply ReLU/Softplus to the (Count - Target) excess.
-        5. Tailwind: Constant downward pressure on masks the App is already killing.
-        """
-        D = mask.shape[0] # Dimension of the mask vector (e.g., 2048)
-
-        # --- 1. DIRECTIONAL INTENT ---
-        # is_pulling_on: [D] - 1.0 where App wants to turn mask ON (grad < 0)
-        # is_pulling_off: [D] - 1.0 where App is already killing mask (grad > 0)
+    def continuous_signed_sparsity(mask, grad_app, target=200, k=5.0.0, 
+                                   use_soft=True, beta=0.07, epsilon=0.015):
+        # 1. Identify directions
         is_pulling_on = (grad_app < 0).float()
         is_pulling_off = (grad_app > 0).float()
 
-        # --- 2. THE OPPOSITION (Delta_i) ---
-        # [D] - Range [0, 1]. 
-        # 1.0 = Success (We prune/block), 0.0 = Failure (App defends/breaches).
-        # We only oppose when the App is fighting us (grad < 0).
-        delta_i = torch.exp(k * grad_app) * is_pulling_on
+        # 2. Define the Forces (App's desire)
+        pull_on_force = torch.exp(-k * torch.abs(grad_app)) * is_pulling_on
+        pull_off_force = torch.exp(-k * torch.abs(grad_app)) * is_pulling_off
 
-        # --- 3. ADJUSTED MASK OCCUPANCY (m_adj) ---
-        # [D] - Logic: (Existing ONs we fail to prune) + (Potential OFFs we fail to block)
-        # This keeps 'mask' differentiable even when m=0.
-        m_adj = (mask * (1.0 - delta_i)) + ((1.0 - mask) * (1.0 - delta_i))
+        # 3. Adjusted Occupancy (m_adj)
+        """
+        The "net demand" for capacity; it counts ON masks the App wants to keep and 
+        OFF masks the App is trying to resurrect, while ignoring masks the App is already pruning.
+        """
+        # The Logic:
+        # Mask is ON: count is (1.0 - pull_off_force) if app pulls OFF or pull_on_force if app pulls ON
+        term_mask_on = mask * torch.where(is_pulling_off > 0, 1.0 - pull_off_force, pull_on_force)
+        # Mask is OFF: count is pull_on_force (if app pulls ON). If app pulls OFF, don't count it.
+        term_mask_off = (1.0 - mask) * (is_pulling_on * pull_on_force)
 
-        # --- 4. EFFECTIVE COUNT (N_eff) ---
-        # [1] - Scalar count of how many slots are "effectively" occupied.
-        if not hard_mask:
-            # Hoyer maps a blurry vector to a sparsity-weighted count.
-            # It forces the optimizer to 'Crystallize' soft masks into 0 or 1.
-            l1 = torch.norm(m_adj, p=1)
-            l2 = torch.norm(m_adj, p=2)
-            sqrt_D = torch.sqrt(torch.tensor(float(D), device=mask.device))
+        m_adj = term_mask_on + term_mask_off
+        n_eff = m_adj.sum()
 
-            # Hoyer metric scaled to [0, D]
-            hoyer_val = (sqrt_D - (l1 / (l2 + 1e-8))) / (sqrt_D - 1.0)
-            n_eff = hoyer_val * D
-        else:
-            # For Hard Masks, a simple sum of the adjusted occupancy is enough.
-            n_eff = m_adj.sum()
-
-        # --- 5. THE BUDGET GUARD (Pressure Valve) ---
-        # [1] - Only fires if the effective count exceeds the target (1024).
+        # 4. Budget Loss (The Ramp)
         excess = n_eff - target
-        if not use_soft:
-            budget_loss = torch.relu(excess)
-        else:
-            # Softplus provides smoother gradients around the 1024 boundary.
-            budget_loss = F.softplus(excess, beta=beta)
+        budget_loss = F.softplus(excess, beta=beta) if use_soft else torch.relu(excess)
 
-        # --- 6. THE TAILWIND (The 'Free Lunch' cleanup) ---
-        # [1] - Constant nudge for masks the App is already pushing OFF.
-        # This is not gated by the 1024 budget; it always cleans up residuals.
-        tailwind_loss = epsilon * (mask * is_pulling_off).sum()
+        # 5. Targeted Tailwind (The Nudge)
+        # Reinforces OFF-OFF agreement case
+        tailwind_mask = (1.0 - mask) * is_pulling_off
+        tailwind_loss = epsilon * tailwind_mask.sum()
 
-        # --- TOTAL LOSS ---
-        return budget_loss + tailwind_loss, budget_loss, tailwind_loss
+        return budget_loss + tailwind_loss, budget_loss, tailwind_loss, n_eff
     
     if do_flag:
-        loss, budget_loss, tailwind_loss = continuous_signed_sparsity(mask, total_grad, args.mask_sparsity,
+        loss, budget_loss, tailwind_loss, n_eff = continuous_signed_sparsity(mask, total_grad, args.mask_sparsity,
                     use_soft=not args.mask_sparsity_relu, hard_mask=args.mask_nonlinearity == 'gumbel' and not args.gumbel_soft, 
                     beta=args.mask_sparsity_softplus_beta)
         grads = calculate_grads(loss, net)
@@ -1509,12 +1471,13 @@ def calculate_mask_sparsity_and_grads(mask, total_grad, net, weight, do_flag, ar
         loss = torch.Tensor([0.]).to(mask.device)
         budget_loss = torch.Tensor([0.]).to(mask.device)
         tailwind_loss = torch.Tensor([0.]).to(mask.device)
+        n_eff = torch.Tensor([0.]).to(mask.device)
         grads_flat = default_grads_flat
 
     _, _, grads_norm_weighted =  \
         setup_grads_and_norms(grads_flat, weight, args.Lscaler, mask.device, do_flag, default_grads_weighted_vector=grads_flat)
 
-    return loss.detach(), grads_flat, grads_norm_weighted, budget_loss.detach(), tailwind_loss.detach()
+    return loss.detach(), grads_flat, grads_norm_weighted, budget_loss.detach(), tailwind_loss.detach(), n_eff.detach()
         
 # ssl training with IP-IRM
 def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch, args, split_tags=None, **kwargs):
@@ -2101,7 +2064,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
 
             mask_activation = net.module.mask_fun.activation(u=mask_activation_noise) # recompute since its graph was released
             mask_preactivation = net.module.mask_fun.mask
-            loss_mask_sparsity, loss_mask_sparsity_grads, loss_mask_sparsity_norm, budget_loss, tailwind_loss = \
+            loss_mask_sparsity, loss_mask_sparsity_grads, loss_mask_sparsity_norm, budget_loss, tailwind_loss, n_eff = \
                 calculate_mask_sparsity_and_grads(mask_activation, total_grad_flat_weighted, net, mask_sparsity_weight, 
                         do_mask_sparsity, args, param_groups_2_pind, loss_mask_sparsity_grads)
 
@@ -2234,7 +2197,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 f"mask_CV {(total_mask_CV / num_updates).item():.2f}" + \
                 f" dot: km {info_dict['shared_dot_km']:.2e} cm {info_dict['shared_dot_cm']:.2e} pm {info_dict['shared_dot_pm']:.2e}" + \
                 f" cos: km {info_dict['shared_cos_km']:.2e} cm {info_dict['shared_cos_cm']:.2e} pm {info_dict['shared_cos_pm']:.2e}" + \
-                f" budget {budget_loss.item():.2e} tailwind {tailwind_loss.item():.2e}"
+                f" budget {budget_loss.item():.2e} tailwind {tailwind_loss.item():.2e} n_eff {n_eff.item():.2e}"
 
             if True or args.mask_nonlinearity != 'gumbel' or args.gumbel_soft: # soft mask
                 mask_effective_number = (mask_activation.sum()**2 / ((mask_activation**2).sum() + 1e-9)).item()
