@@ -1507,12 +1507,14 @@ def calculate_mask_sparsity_and_grads(mask, total_grad, net, weight, do_flag, ar
 
     else:
         loss = torch.Tensor([0.]).to(mask.device)
+        budget_loss = torch.Tensor([0.]).to(mask.device)
+        tailwind_loss = torch.Tensor([0.]).to(mask.device)
         grads_flat = default_grads_flat
 
     _, _, grads_norm_weighted =  \
         setup_grads_and_norms(grads_flat, weight, args.Lscaler, mask.device, do_flag, default_grads_weighted_vector=grads_flat)
 
-    return loss.detach(), grads_flat, grads_norm_weighted, budget_loss.detach, tailwind_loss.detach()
+    return loss.detach(), grads_flat, grads_norm_weighted, budget_loss.detach(), tailwind_loss.detach()
         
 # ssl training with IP-IRM
 def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch, args, split_tags=None, **kwargs):
