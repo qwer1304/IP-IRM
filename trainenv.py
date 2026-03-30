@@ -1467,7 +1467,7 @@ def calculate_mask_sparsity_and_grads(mask, total_grad, net, weight, do_flag, ar
     if do_flag:
         loss, budget_loss, tailwind_loss, n_eff = continuous_signed_sparsity(mask, total_grad, args.mask_sparsity,
                     use_soft=not args.mask_sparsity_relu, hard_mask=args.mask_nonlinearity == 'gumbel' and not args.gumbel_soft, 
-                    beta=args.mask_sparsity_softplus_beta epsilon=args.mask_sparsity_epsilon, k=args.mask_sparsity_k)
+                    beta=args.mask_sparsity_softplus_beta, epsilon=args.mask_sparsity_epsilon, k=args.mask_sparsity_k)
         grads = calculate_grads(loss, net)
 
         grads_flat = [  # dLoss / dTheta
