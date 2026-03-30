@@ -1412,7 +1412,7 @@ def calculate_mask_sparsity_and_grads(mask, total_grad, net, weight, do_flag, ar
     # use_soft: whether to use soft limit (Softplus) or hard limit (ReLU)
     # hard_mask: bool, whether masks are hard (True) or soft sigmoid (False)
 
-    def continuous_signed_sparsity(mask, grad_app, target=200, k=5.0.0, 
+    def continuous_signed_sparsity(mask, grad_app, target=200, k=5.0, 
                                    use_soft=True, beta=0.07, epsilon=0.015):
         # 1. Identify directions
         is_pulling_on = (grad_app < 0).float()
