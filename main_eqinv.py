@@ -870,6 +870,7 @@ if __name__ == '__main__':
     parser.add_argument('--mask_sparsity_softplus_beta', type=float, default=0.07, help='beta in softplus sparsity loss')
     parser.add_argument('--mask_sparsity_epsilon', type=float, default=0.015, help='tailwind force')
     parser.add_argument('--mask_sparsity_k', type=float, default=5.0, help="k in app's force calculation")
+    parser.add_argument('--mask_clamp', type=float, default=None, help="clamp of mask preactivation for liveness")
     parser.add_argument('--mask_save_freq', type=int, default=None, help='save mask frequency')
     parser.add_argument('--mask_scalers', default=None, type=float, nargs=3, metavar='[CE Unsplit Env]',    
                         help='Releative to penalty mask grads update scalers')

@@ -2150,7 +2150,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
 
         train_optimizer.step()
         train_optimizer.zero_grad(set_to_none=True)    # clear gradients at beginning of next gradients batch
-
+        net.module.mask_fun.clamp(args.mask_clamp)
+        
         gradnorm_update(gradnorm_balancer, gradnorm_loss, gradnorm_optimizer, args, do_gradnorm)
 
         # True loss reflecting progress does NOT include balancing scalers

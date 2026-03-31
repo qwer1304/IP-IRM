@@ -132,6 +132,10 @@ class MaskModule(nn.Module):
     def sample(self):
         return torch.rand_like(self.mask)
 
+    def clamp(self, clamp):
+        if clamp is not None:
+            with torch.no_grad():
+                self.mask.clamp_(-clamp, clamp)
 
 def create_mlp(
     input_dim: int,
