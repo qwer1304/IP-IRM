@@ -63,7 +63,9 @@ class Mask():
 
                 # 1. We never exceed K (because of threshold)
                 # 2. We don't force 'on' channels that are naturally 'off' (because of 0.5)
-                threshold = 0.5 + torch.randn_like(x_soft) * self.sigma # small jitter to help w/ s;uctuations around 0.5
+                noise = torch.randn_like(x_soft) * self.sigma
+                noise_positive = torch.relu(noise)
+                threshold = 0.5 - noise_positive  # small jitter to help w/ s;uctuations around 0.5
                 x_hard = ((x_soft > threshold) & topk_mask).float()
                 x_ret = x_hard + x_soft - x_soft.detach()
             return x_ret
