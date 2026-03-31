@@ -868,6 +868,7 @@ if __name__ == '__main__':
     parser.add_argument('--mask_hard_sparsity_limit', action="store_true", help='if true, # masks always <= K') 
     parser.add_argument('--mask_sparsity_relu', action="store_true", help='if true, uses relu in sparsity loss') 
     parser.add_argument('--mask_sparsity_softplus_beta', type=float, default=0.07, help='beta in softplus sparsity loss')
+    parser.add_argument('--mask_sparsity_leakyrelu_alpha', type=float, default=0.0, help='alpha in leakyrelu sparsity loss')
     parser.add_argument('--mask_sparsity_epsilon', type=float, default=0.015, help='tailwind force')
     parser.add_argument('--mask_sparsity_k', type=float, default=5.0, help="k in app's force calculation")
     parser.add_argument('--mask_clamp', type=float, default=None, help="clamp of mask preactivation for liveness")
