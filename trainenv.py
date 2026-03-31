@@ -1457,7 +1457,7 @@ def calculate_mask_sparsity_and_grads(mask, total_grad, net, weight, do_flag, ar
         excess = n_eff - target
         if use_soft:
             budget_loss = F.softplus(excess, beta=beta) 
-        elif args.alpha > 0:
+        elif alpha > 0:
             budget_loss = F.leaky_relu(excess, negative_slope=alpha)
         else:
             budget_loss = torch.relu(excess) 
