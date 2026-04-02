@@ -2072,9 +2072,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
 
         if do_mask_sparsity:
             if args.mask_scalers is not None:
-                ce_mask_scaler, unsplit_mask_scaler, env_mask_scaler = args.mask_scalers
+                ce_mask_scaler, unsplit_mask_scaler, env_mask_scaler, pen_mask_scaler = args.mask_scalers
             else:
-                ce_mask_scaler, unsplit_mask_scaler, env_mask_scaler = 1.0, 1.0, 1.0
+                ce_mask_scaler, unsplit_mask_scaler, env_mask_scaler, pen_mask_scaler = 1.0, 1.0, 1.0, 1.0
             penalty_BB_scaler = 1.0
 
             pind = param_groups_2_pind['mask'][0]
@@ -2082,7 +2082,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
             total_grad_flat_weighted = (   loss_unsplit_grads_final[pind] * loss_unsplit_weight  * args.Lscaler * unsplit_mask_scaler
                                          + loss_CE_grads_final[pind]      * loss_CE_weight       * args.Lscaler * ce_mask_scaler      * int(not args.dont_update_CE) 
                                          + loss_grads_final[pind]         * loss_weight          * args.Lscaler * env_mask_scaler     * int(not args.dont_update_loss)     
-                                         + penalty_grads_final[pind]      * penalty_weight       * args.Lscaler * penalty_BB_scaler   * int(epoch >= args.penalty_iters)
+                                         + penalty_grads_final[pind]      * penalty_weight       * args.Lscaler * pen_mask_scaler     * int(epoch >= args.penalty_iters) * penalty_BB_scaler
                                        )
 
             mask_activation = net.module.mask_fun.activation(u=mask_activation_noise) # recompute since its graph was released
