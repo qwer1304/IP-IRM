@@ -2110,9 +2110,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         
         for pind, (name, p) in enumerate(net.named_parameters()):
             if 'mask' in name and args.mask_scalers is not None:
-                ce_mask_scaler, unsplit_mask_scaler, env_mask_scaler = args.mask_scalers
+                ce_mask_scaler, unsplit_mask_scaler, env_mask_scaler, pen_mask_scaler = args.mask_scalers
             else:
-                ce_mask_scaler, unsplit_mask_scaler, env_mask_scaler = 1.0, 1.0, 1.0
+                ce_mask_scaler, unsplit_mask_scaler, env_mask_scaler, pen_mask_scaler = 1.0, 1.0, 1.0, 1.0
             if 'backbone' in name and args.backbone_propagate:
                 penalty_BB_scaler = args.penalty_backbone_scaler
             else:
@@ -2122,7 +2122,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
             total_grad_flat_weighted = (   loss_unsplit_grads_final[pind] * loss_unsplit_weight  * args.Lscaler * loss_unsplit_grad_scaler * unsplit_mask_scaler
                                          + loss_CE_grads_final[pind]      * loss_CE_weight       * args.Lscaler * loss_CE_grad_scaler      * ce_mask_scaler      * int(ce_update) 
                                          + loss_grads_final[pind]         * loss_weight          * args.Lscaler * loss_grad_scaler         * env_mask_scaler     * int(not args.dont_update_loss)     
-                                         + penalty_grads_final[pind]      * penalty_weight       * args.Lscaler * penalty_grad_scaler      * penalty_BB_scaler   * int(epoch >= args.penalty_iters)
+                                         + penalty_grads_final[pind]      * penalty_weight       * args.Lscaler * penalty_grad_scaler      * pen_mask_scaler     * int(epoch >= args.penalty_iters) * penalty_BB_scaler   
                                          + loss_mask_sparsity_grads[pind] * mask_sparsity_weight * args.Lscaler * 1.0                      * 1.0                 * int(not args.dont_update_mask_sparsity)
                                        )
         

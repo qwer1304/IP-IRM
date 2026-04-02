@@ -874,7 +874,7 @@ if __name__ == '__main__':
     parser.add_argument('--mask_threshold_sigma', type=float, default=0.01, help="noise around 0.5 hard threshold")
     parser.add_argument('--mask_clamp', type=float, default=None, help="clamp of mask preactivation for liveness")
     parser.add_argument('--mask_save_freq', type=int, default=None, help='save mask frequency')
-    parser.add_argument('--mask_scalers', default=None, type=float, nargs=3, metavar='[CE Unsplit Env]',    
+    parser.add_argument('--mask_scalers', default=None, type=float, nargs=4, metavar='[CE Unsplit Env Penalty]',    
                         help='Releative to penalty mask grads update scalers')
 
     # clustering
