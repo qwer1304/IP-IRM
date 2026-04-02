@@ -2087,7 +2087,11 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 calculate_mask_sparsity_and_grads(mask_activation, total_grad_flat_weighted, net, mask_sparsity_weight, 
                         do_mask_sparsity, args, param_groups_2_pind, loss_mask_sparsity_grads)
             pind = param_groups_2_pind['mask'][0]
-            assert torch.all(loss_mask_sparsity_grads[pind] >= 0), "some sparsity loss mask grad < 0 ->!" 
+            if not torch.all(loss_mask_sparsity_grads[pind] >= 0):
+                g = loss_mask_sparsity_grads[pind]
+                print()
+                print(g[g<0].tolist())
+                exit()
 
 
         loss_CE_grad_scaler, loss_unsplit_grad_scaler, loss_grad_scaler, penalty_grad_scaler, gradnorm_loss, info_dict = \
