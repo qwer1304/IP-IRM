@@ -1497,6 +1497,14 @@ def calculate_mask_sparsity_and_grads(mask, total_grad, net, weight, do_flag, ar
         n_eff = torch.Tensor([0.]).to(mask.device)
         grads_flat = default_grads_flat
 
+    pind = param_groups_2_pind['mask'][0]
+    if not torch.all(grads_flat[pind] >= 0):
+        g = grads_flat[pind]
+        print()
+        print("do_flag", do_flag)
+        print(g[g<0].tolist())
+        exit()
+
     _, _, grads_norm_weighted =  \
         setup_grads_and_norms(grads_flat, weight, args.Lscaler, mask.device, do_flag, default_grads_weighted_vector=grads_flat)
 
@@ -2086,13 +2094,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
             loss_mask_sparsity, loss_mask_sparsity_grads, loss_mask_sparsity_norm, budget_loss, tailwind_loss, n_eff = \
                 calculate_mask_sparsity_and_grads(mask_activation, total_grad_flat_weighted, net, mask_sparsity_weight, 
                         do_mask_sparsity, args, param_groups_2_pind, loss_mask_sparsity_grads)
-            pind = param_groups_2_pind['mask'][0]
-            if not torch.all(loss_mask_sparsity_grads[pind] >= 0):
-                g = loss_mask_sparsity_grads[pind]
-                print()
-                print(g[g<0].tolist())
-                exit()
-
 
         loss_CE_grad_scaler, loss_unsplit_grad_scaler, loss_grad_scaler, penalty_grad_scaler, gradnorm_loss, info_dict = \
             calculate_scalers(loss_CE_grads_final, loss_unsplit_grads_final, loss_grads_final, penalty_grads_final, loss_mask_sparsity_grads,
