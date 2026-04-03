@@ -80,7 +80,8 @@ class MaskModule(nn.Module):
             init_logit = torch.rand(input_dim) # default value
             if activation_method.K:
                 if activation_method.mask_type == 'gumbel' and not activation_method.soft:
-                    init_logit = 1.5 * torch.ones(input_dim, device=device) / activation_method.tau
+                    # x = z / tau => z = x * tau; target x = 1.5
+                    init_logit = 0.75 * torch.ones(input_dim, device=device) * activation_method.tau
                 elif activation_method.mask_type == 'sigmoid' or activation_method.mask_type == 'gumbel':
                     def get_bounds(K, N=2048, W=2):
                         # The Logit of the probability
