@@ -2143,7 +2143,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         
             if 'mask' in name:
                 print()
-                any_negative = (total_grad_flat_weighted.grad < 0).any()
+                any_negative = (total_grad_flat_weighted < 0).any()
                 min_val = mask.grad.min().item()
                 if any_negative:
                     num_neg = (mask.grad < 0).sum().item()
