@@ -80,9 +80,12 @@ class MaskModule(nn.Module):
             init_logit = torch.rand(input_dim) # default value
             if activation_method.K:
                 if activation_method.mask_type == 'gumbel' and not activation_method.soft:
-                        target_p = activation_method.K / input_dim  # e.g., 256 / 2048
+                        #target_p = activation_method.K / input_dim  # e.g., 256 / 2048
                         #init_logit = torch.log(torch.tensor(target_p / (1 - target_p)))
-                        init_logit = torch.tensor(1.5)
+
+                        # Set the logit so the starting activation is ~0.6-0.7 
+                        # (Active enough to be picked by Top 200, but not saturated)
+                        init_logit = torch.tensor(0.1 * activation_method.tau)  # This keeps the 'energy' independent of your temperature choice
                 elif activation_method.mask_type == 'sigmoid' or activation_method.mask_type == 'gumbel':
                     def get_bounds(K, N=2048, W=2):
                         # The Logit of the probability
@@ -119,7 +122,7 @@ class MaskModule(nn.Module):
             # end if activation_method.K:
 
             # Initialize with a small variance around the target logit
-            init_val = init_logit + (torch.randn(input_dim) * 0.01)
+            init_val = init_logit + (torch.randn(input_dim) * 0.05) # Add variance to break symmetry
             self.mask = nn.Parameter(init_val) # no need to set device, since it will be placed at the correct device with the rest of the
         else:
             self.mask = torch.ones(input_dim, device=device)
