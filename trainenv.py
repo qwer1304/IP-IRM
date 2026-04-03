@@ -2251,7 +2251,20 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 f" budget {budget_loss.item():.2e} tailwind {tailwind_loss.item():.2e} n_eff {n_eff.item():.2e}"
 
             if True or args.mask_nonlinearity != 'gumbel' or args.gumbel_soft: # soft mask
-                mask_effective_number = (mask_activation.sum()**2 / ((mask_activation**2).sum() + 1e-9)).item()
+                with torch.no_grad():
+                    # 1. Use Double Precision to stop the rounding jitter
+                    m_act_double = mask_activation.detach().double()
+                    # 2. Use a much smaller epsilon or none at all for logging
+                    # (Since we know gradients are >=0, sum squared won't be zero unless finished)
+                    sum_a = m_act_double.sum()
+                    sum_a2 = (m_act_double**2).sum()
+                    # Only use epsilon if the sum is actually zero to avoid the ratio flip
+                    if sum_a2 > 1e-18:
+                        stable_neff = (sum_a**2 / sum_a2).item()
+                    else:
+                        stable_neff = 1.0 # Or 0, depending on your convergence definition            
+            
+                mask_effective_number = stable_neff.item()
                 mask_entropy = -(mask_activation * torch.log(mask_activation + 1e-8) + (1 - mask_activation) * torch.log(1 - mask_activation + 1e-8)).mean().item()
                 m1_m2 = mask_activation.norm(1) / (mask_activation.norm(2) + 1e-9)
                 Ds2 = torch.sqrt(torch.tensor(mask_activation.size(0)))
