@@ -2167,7 +2167,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                     # If this number is decreasing, your sparsity IS working.
                     p_tau = p / args.mask_tau
                     actual_sum = p_tau.abs().sum().item()
-                    print(f"L1 Norm (Sum of |Mask/tau|): {actual_sum:.12f}, # > 0.5: {(p/tau > 0.5).sum().item()}, Min mask: {p_tau.min().item()}, Max mask: {p_tau.max().item()}")
+                    print(f"L1 Norm (Sum of |Mask/tau|): {actual_sum:.12f}, # > 0.5: {(p_tau > 0.5).sum().item()}, Min mask: {p_tau.min().item()}, Max mask: {p_tau.max().item()}")
 
             """
             # Are grads present and nonzero?
