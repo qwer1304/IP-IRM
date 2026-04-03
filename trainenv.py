@@ -2145,12 +2145,13 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 print()
                 any_negative = (total_grad_flat_weighted < 0).any()
                 min_val = total_grad_flat_weighted.min().item()
+                max_val = total_grad_flat_weighted.max().item()
                 if any_negative:
                     num_neg = (total_grad_flat_weighted < 0).sum().item()
                     min_val = total_grad_flat_weighted.min().item()
                     print(f"!!! ALERT: Found {num_neg} negative gradients! Min: {min_val}")
                 else:
-                    print(f"Confirmed: All gradients are >= 0. Min: {min_val}")
+                    print(f"Confirmed: All gradients are >= 0. Min: {min_val}, Max: {max_val}")
                 
             if p.grad is None:
                 p.grad  = total_grad_flat_weighted.view(p.shape)
