@@ -2000,12 +2000,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 CE_ind = num_grads - 1 if do_CE_loss else -1
                 unsplit_ind = num_grads - int(do_CE_loss) - 1 if do_unsplit_loss else -1
                 
-                """
-                if batch_index >= 7:
-                    print()
-                    print_grads(grads_all[0], net, prefix=f"bi {batch_index}, loss={loss.item()}")
-                """
-                    
                 # 2. Consume the list of gradients sample-by-sample
                 # This is better for memory because we can clear each sample after processing
                 for ii in range(num_grads):
@@ -2145,29 +2139,19 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                                          + loss_mask_sparsity_grads[pind] * mask_sparsity_weight * args.Lscaler * 1.0                      * 1.0                 * int(not args.dont_update_mask_sparsity)
                                        )
         
-            if 'mask' in name:
-                print()
-                any_negative = (total_grad_flat_weighted < 0).any()
-                min_val = total_grad_flat_weighted.min().item()
-                max_val = total_grad_flat_weighted.max().item()
-                if any_negative:
-                    num_neg = (total_grad_flat_weighted < 0).sum().item()
-                    min_val = total_grad_flat_weighted.min().item()
-                    print(f"!!! ALERT: Found {num_neg} negative gradients! Min: {min_val}")
-                else:
-                    print(f"Confirmed: All gradients are >= 0. Min: {min_val}, Max: {max_val}")
-    
             if p.grad is None:
                 p.grad = total_grad_flat_weighted.view(p.shape).clone().detach()
             else:
                 p.grad += total_grad_flat_weighted.view(p.shape).clone().detach()
 
+            """
             if 'mask' in name:
                 with torch.no_grad():
                     # If this number is decreasing, your sparsity IS working.
                     p_tau = p / args.mask_tau
                     actual_sum = p_tau.abs().sum().item()
                     print(f"L1 Norm (Sum of |Mask/tau|): {actual_sum:.12f}, # > 0.5: {(p_tau > 0.5).sum().item()}, Min mask: {p_tau.min().item()}, Max mask: {p_tau.max().item()}")
+            """
 
             """
             # Are grads present and nonzero?
