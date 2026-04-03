@@ -1413,61 +1413,64 @@ def calculate_mask_sparsity_and_grads(mask, total_grad, net, weight, do_flag, ar
     # hard_mask: bool, whether masks are hard (True) or soft sigmoid (False)
 
     def continuous_signed_sparsity(mask, grad_app, target=200, k=5.0, 
-                                   use_soft=True, beta=0.07, alpha=0.0, epsilon=0.015, hard_mask=True):
-        
-        # Get total number of potential masks
-        N = mask.numel()
-    
-        # 1. Identify directions
+                                   use_soft=True, beta=0.07, alpha=0.01, epsilon=0.015, hard_mask=True):
+
+        # 1. Identify directions from App's gradients
         is_pulling_on = (grad_app < 0).float()
         is_pulling_off = (grad_app > 0).float()
 
-        # 2. Define the Forces (App's desire)
-        pull_on_force = torch.exp(-k * torch.abs(grad_app)) * is_pulling_on
-        pull_off_force = torch.exp(-k * torch.abs(grad_app)) * is_pulling_off
+        # 2. Define the Forces (f = e^-k|g|)
+        # f is small if App pulls hard, large if App is indifferent
+        f = torch.exp(-k * torch.abs(grad_app))
 
-        # 3. Adjusted Occupancy (m_adj)
-        """
-        The "net demand" for capacity; it counts ON masks the App wants to keep and 
-        OFF masks the App is trying to resurrect, while ignoring masks the App is already pruning.
-        """
-        # The Logic:
-        # Mask is ON: count is (1.0 - pull_off_force) if app pulls OFF or pull_on_force if app pulls ON
-        term_mask_on = mask * torch.where(is_pulling_off > 0, 1.0 - pull_off_force, pull_on_force)
-        # Mask is OFF: count is pull_on_force (if app pulls ON). If app pulls OFF, don't count it.
-        term_mask_off = (1.0 - mask) * (is_pulling_on * pull_on_force)
-
+        # ---------------------------------------------------------
+        # 3. THE ALARM (n_eff) - For Logging & Threshold Logic
+        # This includes the "Next Step" (1-mask) term.
+        # ---------------------------------------------------------
+        term_mask_on = mask * torch.where(is_pulling_off > 0, 1.0 - f, f)
+        term_mask_off = (1.0 - mask) * (is_pulling_on * f)
         m_adj = term_mask_on + term_mask_off
 
         if hard_mask:
-            # Physical count
             n_eff = m_adj.sum()
         else:
-            # Soft case: Map Hoyer back to a "number of masks" scale
+            # Hoyer logic to map soft masks back to a "count" scale
+            N = mask.numel()
             sqrt_N = torch.sqrt(torch.tensor(float(N)))
             sum_abs = torch.sum(torch.abs(m_adj))
             sum_sq = torch.sqrt(torch.sum(m_adj**2) + 1e-8)
-
-            # Hoyer formula (0 = dense, 1 = sparse)
             hoyer = (sqrt_N - (sum_abs / sum_sq)) / (sqrt_N - 1.0)
-            # Convert to equivalent number of active masks
             n_eff = N * (1.0 - hoyer)
-        
-        # 4. Budget Loss (The Ramp)
-        excess = n_eff - target
+
+        # ---------------------------------------------------------
+        # 4. THE VOLUME KNOB (Multiplier)
+        # Detach n_eff so the Optimizer cannot see the (1-mask) math.
+        # ---------------------------------------------------------
+        excess = (n_eff - target).detach()
+
         if use_soft:
-            budget_loss = F.softplus(excess, beta=beta) 
-        elif alpha > 0:
-            budget_loss = F.leaky_relu(excess, negative_slope=alpha)
+            # Always positive, smooth transition around the target
+            multiplier = F.softplus(excess, beta=beta)
         else:
-            budget_loss = torch.relu(excess) 
+            # Leaky logic: alpha MUST be > 0 to maintain a downward "clean-up" pull
+            multiplier = torch.where(excess > 0, torch.tensor(1.0), torch.tensor(alpha))
 
-        # 5. Targeted Tailwind (The Nudge)
-        # Reinforces OFF-OFF agreement case
-        tailwind_mask = (1.0 - mask) * is_pulling_off
-        tailwind_loss = epsilon * tailwind_mask.sum()
+        # ---------------------------------------------------------
+        # 5. THE MUSCLE (Budget Loss)
+        # The Force is strictly (Multiplier * w_fix * mask).
+        # Since all three are positive, the gradient is ALWAYS positive (DOWN).
+        # ---------------------------------------------------------
+        w_fix = torch.where(is_pulling_on > 0, f, 1.0 - f).detach()
+        budget_loss = multiplier.detach() * (w_fix * mask).sum()
 
-        return budget_loss + tailwind_loss, budget_loss, tailwind_loss, n_eff
+        # 6. TAILWIND (The Nudge)
+        # Constant positive gradient for masks the App already wants to prune.
+        tailwind_loss = epsilon * (mask * is_pulling_off).sum()
+
+        total_loss = budget_loss + tailwind_loss
+
+        # Return total_loss for backward(), others for logging
+        return total_loss, budget_loss, tailwind_loss, n_eff
     
     if do_flag:
         loss, budget_loss, tailwind_loss, n_eff = continuous_signed_sparsity(mask, total_grad, args.mask_sparsity,
