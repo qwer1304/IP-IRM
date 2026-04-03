@@ -1461,7 +1461,7 @@ def calculate_mask_sparsity_and_grads(mask, total_grad, net, weight, do_flag, ar
         # Since all three are positive, the gradient is ALWAYS positive (DOWN).
         # ---------------------------------------------------------
         w_fix = torch.where(is_pulling_on > 0, f, 1.0 - f).detach()
-        budget_loss = multiplier.detach() * (w_fix * mask).sum()
+        budget_loss = multiplier.detach() * (w_fix * (mask**2)).sum()
 
         # 6. TAILWIND (The Nudge)
         # Constant positive gradient for masks the App already wants to prune.
