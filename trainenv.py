@@ -2162,7 +2162,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 with torch.no_grad():
                     # If this number is decreasing, your sparsity IS working.
                     actual_sum = p.abs().sum().item()
-                    print(f"L1 Norm (Sum of |Mask|): {actual_sum:.12f}, # > 0.01: {(p > 0.01).sum().item()}")
+                    print(f"L1 Norm (Sum of |Mask|): {actual_sum:.12f}, # > 0.05: {(p > 0.05).sum().item()}")
 
             """
             # Are grads present and nonzero?
