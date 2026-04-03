@@ -2264,7 +2264,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                     else:
                         stable_neff = 1.0 # Or 0, depending on your convergence definition            
             
-                mask_effective_number = stable_neff.item()
+                mask_effective_number = stable_neff
                 mask_entropy = -(mask_activation * torch.log(mask_activation + 1e-8) + (1 - mask_activation) * torch.log(1 - mask_activation + 1e-8)).mean().item()
                 m1_m2 = mask_activation.norm(1) / (mask_activation.norm(2) + 1e-9)
                 Ds2 = torch.sqrt(torch.tensor(mask_activation.size(0)))
