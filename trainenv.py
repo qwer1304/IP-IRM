@@ -2133,8 +2133,11 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 with torch.no_grad():
                     # If this number is decreasing, your sparsity IS working.
                     p_tau = p / args.mask_tau
-                    actual_sum = p_tau.abs().sum().item()
-                    print(f"L1 Norm (Sum of |Mask/tau|): {actual_sum:.12f}, # > 0.5: {(p_tau > 0.5).sum().item()}, Min mask: {p_tau.min().item()}, Max mask: {p_tau.max().item()}")
+                    actual_sum_pos = p_tau[p_tau > 0].sum().item()
+                    actual_sum_neg = -p_tau[p_tau < 0].sum().item()
+                    print(f"L1+ Norm (Sum of |Mask_on/tau|): {actual_sum_pos:.12f}, " + \
+                          f"L1- Norm (Sum of |Mask_off/tau|): {actual_sum_neg:.12f}, " + \
+                          f"# ON: {(p_tau > 0.).sum().item()}, Min mask: {p_tau.min().item()}, Max mask: {p_tau.max().item()}")
             """
 
             """
@@ -2221,10 +2224,18 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
             total_mask_CV += mask_CV
             num_updates = int((batch_index + 1) / gradients_accumulation_steps)
             
+            mask_p = list(net.parameters())[param_groups_2_pind['mask'][0]]
+            p_tau = mask_p / args.mask_tau
+            actual_sum_pos = p_tau[p_tau > 0].sum().item()
+            actual_sum_neg = -p_tau[p_tau < 0].sum().item()
+            preact_str = f"L1+ Norm (Sum of |Mask_on/tau|): {actual_sum_pos:.3e}, " + \
+                  f"L1- Norm (Sum of |Mask_off/tau|): {actual_sum_neg:.3e}, " + \
+                  f"# ON: {(p_tau > 0.).sum().item()}, Min mask: {p_tau.min().item()}, Max mask: {p_tau.max().item()}"
             mask_hard_str = 'hard' if args.mask_nonlinearity == 'gumbel' and not args.gumbel_soft else 'soft' 
             mask_sparsity_str = f" sparsity {args.mask_nonlinearity} {mask_hard_str}: ngs2 {loss_mask_sparsity_norm**2:.2e} " + \
                 f"preactivation: mean {mask_preactivation.mean().item():.2e} std {torch.std(mask_preactivation).item():.2e} " + \
-                f"mask_CV {(total_mask_CV / num_updates).item():.2f}" + \
+                f"mask_CV {(total_mask_CV / num_updates).item():.2f} " + \
+                preact_str + \
                 f" dot: km {info_dict['shared_dot_km']:.2e} cm {info_dict['shared_dot_cm']:.2e} pm {info_dict['shared_dot_pm']:.2e}" + \
                 f" cos: km {info_dict['shared_cos_km']:.2e} cm {info_dict['shared_cos_cm']:.2e} pm {info_dict['shared_cos_pm']:.2e}" + \
                 f" budget {budget_loss.item():.2e} tailwind {tailwind_loss.item():.2e} n_eff {n_eff.item():.2e}"
