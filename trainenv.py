@@ -2144,10 +2144,10 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
             if 'mask' in name:
                 print()
                 any_negative = (total_grad_flat_weighted < 0).any()
-                min_val = mask.grad.min().item()
+                min_val = total_grad_flat_weighted.min().item()
                 if any_negative:
-                    num_neg = (mask.grad < 0).sum().item()
-                    min_val = mask.grad.min().item()
+                    num_neg = (total_grad_flat_weighted < 0).sum().item()
+                    min_val = total_grad_flat_weighted.min().item()
                     print(f"!!! ALERT: Found {num_neg} negative gradients! Min: {min_val}")
                 else:
                     print(f"Confirmed: All gradients are >= 0. Min: {min_val}")
