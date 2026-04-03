@@ -1672,10 +1672,10 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
     mask_activation_noise = net.module.mask_fun.sample().detach()
 
     # 1. Get the actual parameter object using your index
-    mask_obj = optimizer.param_groups[0]['params'][param_groups_2_pind['mask'][0]]
+    mask_obj = train_optimizer.param_groups[0]['params'][param_groups_2_pind['mask'][0]]
 
     # 2. Access the state for that specific object
-    state = optimizer.state[mask_obj]
+    state = train_optimizer.state[mask_obj]
 
     # 3. Kill the Adam "memory" to stop the fluctuations
     if 'exp_avg' in state:
