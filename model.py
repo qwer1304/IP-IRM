@@ -80,12 +80,24 @@ class MaskModule(nn.Module):
             init_logit = torch.rand(input_dim) # default value
             if activation_method.K:
                 if activation_method.mask_type == 'gumbel' and not activation_method.soft:
-                        #target_p = activation_method.K / input_dim  # e.g., 256 / 2048
-                        #init_logit = torch.log(torch.tensor(target_p / (1 - target_p)))
+                    # Define target probabilities
+                    p_on = 0.90   # 90% active
+                    p_off = 0.05  # 5% active
 
-                        # Set the logit so the starting activation is ~0.6-0.7 
-                        # (Active enough to be picked by Top 200, but not saturated)
-                        init_logit = torch.tensor(0.1 * activation_method.tau)  # This keeps the 'energy' independent of your temperature choice
+                    # Convert probabilities to logits: log(p / (1-p))
+                    logit_on = torch.log(torch.tensor(p_on / (1 - p_on)))
+                    logit_off = torch.log(torch.tensor(p_off / (1 - p_off)))
+                    # Scale by tau so that sigmoid(x/tau) yields the target probability
+                    val_on = logit_on * activation_method.tau
+                    val_off = logit_off * activation_method.tau
+                    # 1. Create a "Floor" (Low probability ~0.02)
+                    # Logit for 0.02 is approx -3.9. Since we divide by tau (0.2), 
+                    # the parameter should be -3.9 * 0.2 = -0.78
+                    init_logit = torch.full((input_dim,), val_off)
+                    # 2. Create the "Ceiling" for the Top K (High probability ~0.98)
+                    # Logit for 0.98 is approx +3.9. Parameter = 3.9 * 0.2 = +0.78
+                    top_indices = torch.randperm(input_dim)[:activation_method.K]
+                    init_logit[top_indices] = val_on
                 elif activation_method.mask_type == 'sigmoid' or activation_method.mask_type == 'gumbel':
                     def get_bounds(K, N=2048, W=2):
                         # The Logit of the probability
