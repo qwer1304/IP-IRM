@@ -2154,10 +2154,10 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                     print(f"Confirmed: All gradients are >= 0. Min: {min_val}, Max: {max_val}")
                 
             if p.grad is None:
-                p.grad  = total_grad_flat_weighted.view(p.shape)
+                p.grad = total_grad_flat_weighted.view(p.shape).clone().detach()
             else:
-                p.grad += total_grad_flat_weighted.view(p.shape)
-                
+                p.grad += total_grad_flat_weighted.view(p.shape).clone().detach()
+
             """
             # Are grads present and nonzero?
             print(pind, "requires_grad=", p.requires_grad,
