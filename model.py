@@ -82,11 +82,14 @@ class MaskModule(nn.Module):
                 if activation_method.mask_type == 'gumbel' and not activation_method.soft:
                     # Target 95% and 5% probabilities
                         # Logit(0.95) is ~2.94. We multiply by tau.
-                        edge = 2.94 * activation_method.tau 
-                        init_logit = torch.full((input_dim,), -edge) # Start all at ~0.05 activation
-                        # Randomly set K to ~0.95 activation
-                        indices = torch.randperm(input_dim)[:activation_method.K]
-                        init_logit[indices] = edge
+                        if False:
+                            edge = 2.94 * activation_method.tau 
+                            init_logit = torch.full((input_dim,), -edge) # Start all at ~0.05 activation
+                            # Randomly set K to ~0.95 activation
+                            indices = torch.randperm(input_dim)[:activation_method.K]
+                            init_logit[indices] = edge
+                        else:
+                            init_logit = torch.full((input_dim,), 0.6*activation_method.tau)
                 elif activation_method.mask_type == 'sigmoid' or activation_method.mask_type == 'gumbel':
                     def get_bounds(K, N=2048, W=2):
                         # The Logit of the probability
@@ -123,7 +126,7 @@ class MaskModule(nn.Module):
             # end if activation_method.K:
 
             # Initialize with a small variance around the target logit
-            init_val = init_logit + (torch.randn(input_dim) * 0.1) # Add variance to break symmetry
+            init_val = init_logit + (torch.randn(input_dim) * 0.01) # 0.1 # Add variance to break symmetry
             self.mask = nn.Parameter(init_val) # no need to set device, since it will be placed at the correct device with the rest of the
         else:
             self.mask = torch.ones(input_dim, device=device)
