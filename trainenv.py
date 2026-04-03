@@ -1671,6 +1671,18 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
     train_optimizer.zero_grad(set_to_none=True) # clear gradients at the beginning 
     mask_activation_noise = net.module.mask_fun.sample().detach()
 
+    # 1. Get the actual parameter object using your index
+    mask_obj = optimizer.param_groups[0]['params'][param_groups_2_pind['mask'][0]]
+
+    # 2. Access the state for that specific object
+    state = optimizer.state[mask_obj]
+
+    # 3. Kill the Adam "memory" to stop the fluctuations
+    if 'exp_avg' in state:
+        state['exp_avg'].zero_()    # Resets the 1st moment (momentum)
+    if 'exp_avg_sq' in state:
+        state['exp_avg_sq'].zero_() # Resets the 2nd moment (velocity)
+    
     for batch_index, data_env in enumerate(train_bar):
 
         if args.decimate_partitions:
