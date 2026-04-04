@@ -80,9 +80,18 @@ class MaskModule(nn.Module):
             init_logit = torch.rand(input_dim) # default value
             if activation_method.K:
                 if activation_method.mask_type == 'gumbel' and not activation_method.soft:
-                    # x = z / tau => z = x * tau; target x = 1.5
-                    init_logit = 0.75 * torch.ones(input_dim, device=device) * activation_method.tau
+                    # Constants (The 'shape' you want in sigmoid-space)
+                    Z_HAT_INIT = 1.5   # Corresponds to Mask ~0.82
+                    Z_HAT_CLAMP = 3.0  # Corresponds to Mask ~0.95
+
+                    # The Parameter Initialization
+                    init_z = Z_HAT_INIT * activation_method.tau
+                    current_clamp = Z_HAT_CLAMP * activation_method.tau
+                    # The Noise (Scaled to stay consistent in z_hat space)
+                    noise_std = 0.01 * activation_method.tau
+                    init_logit = torch.ones(input_dim) * init_z)
                 elif activation_method.mask_type == 'sigmoid' or activation_method.mask_type == 'gumbel':
+                    assert False, "fix this"
                     def get_bounds(K, N=2048, W=2):
                         # The Logit of the probability
                         b = torch.log(torch.tensor(K / (N - K)))
@@ -118,7 +127,7 @@ class MaskModule(nn.Module):
             # end if activation_method.K:
 
             # Initialize with a small variance around the target logit
-            init_val = init_logit + (torch.randn(input_dim, device=device) * 0.05) # Add variance to break symmetry
+            init_val = init_logit + (torch.randn(input_dim, device=device) * noise_std) # Add variance to break symmetry
             self.mask = nn.Parameter(init_val) # no need to set device, since it will be placed at the correct device with the rest of the
         else:
             self.mask = torch.ones(input_dim, device=device)
