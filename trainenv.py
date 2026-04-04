@@ -2270,7 +2270,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                                      f" min_on {min_on:.3e} max_off {max_off:.3e} gap {gap:.3e}"
                                      
                 z_hat = mask_preactivation / args.mask_tau
-                K = args.mask_sparsity_k
+                K = int(args.mask_sparsity_k)
                 top_k_indices = torch.topk(z_hat, K).indices
                 top_k_set = set(top_k_indices.tolist())
 
