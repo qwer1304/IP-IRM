@@ -1741,17 +1741,21 @@ def compute_dataset_fingerprint(dataset):
 def apply_virtual_breaks(text, marker="|", width=80):
     parts = text.split(marker)
     result = ""
+    # Track exactly where we are on the current 80-char visual line
+    current_x = 0
     
     for i, part in enumerate(parts):
         result += part
+        # Update cursor position by adding segment length and taking modulo
+        current_x = (current_x + len(part)) % width
         
-        # Calculate padding ONLY if there's another part coming
         if i < len(parts) - 1:
-            # How many chars are currently on the last line?
-            current_line_fill = len(result) % width
+            # If we aren't at the very edge, add spaces to reach it
+            if current_x > 0:
+                padding = width - current_x
+                result += " " * padding
             
-            if current_line_fill > 0:
-                # Add exactly enough spaces to hit the 80-char margin
-                result += " " * (width - current_line_fill)
-                
+            # Reset cursor for the next segment starting at the left margin
+            current_x = 0
+            
     return result
