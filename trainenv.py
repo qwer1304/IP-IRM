@@ -2297,7 +2297,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 set3 = prev_top_k_mask_indices_epoch
                 print()
                 print(set1, set2, set3)
-                print(set1.intersect(set2), set1.intersect(set3), set2.intersect(ste3))
+                print(set1.intersection(set2), set1.intersection(set3), set2.intersection(ste3))
                 exit()
                 mask_sparsity_str += f" Jaccard(changed): epoch {stability_epoch:.2e}"
                 stability_batch, top_k_set = get_mask_stability(mask_preactivation, args.mask_tau, args.mask_sparsity, prev_top_k_mask_indices_batch) 
