@@ -2407,7 +2407,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                    f"|{partitions_metrics_str}"
 
         desc_str += "|" + loss_module.get_debug_info_str()
-        desc_str = utils.apply_virtual_breaks(desc_str)
+        #desc_str = utils.apply_virtual_breaks(desc_str)
         train_bar.set_description(desc_str)
 
         if (batch_index % 10 - gradients_accumulation_steps + 1) == 0:
