@@ -1738,35 +1738,20 @@ def compute_dataset_fingerprint(dataset):
     fingerprint = hashlib.md5(str(pairs).encode()).hexdigest()
     return fingerprint
     
-def apply_virtual_breaks(text, marker="|", manual_width=None):
-    """
-    Forces visual line breaks in a tqdm description by padding with spaces.
-    
-    Args:
-        text (str): The string containing markers.
-        marker (str): The character designated for a break.
-        manual_width (int): Optional override if shutil detection fails.
-    """
-    # 1. Detect the actual visual width of the Kaggle cell
-    # We subtract 1 to ensure the wrap is 'clean' across different browsers
-    if manual_width:
-        visual_width = manual_width
-    else:
-        visual_width = shutil.get_terminal_size((80, 20)).columns - 1
-
+def apply_virtual_breaks(text, marker="|", width=80):
     parts = text.split(marker)
     result = ""
-    current_pos = 0
     
     for i, part in enumerate(parts):
         result += part
-        # Update current horizontal position (handles parts > visual_width)
-        current_pos = (current_pos + len(part)) % visual_width
         
-        # 2. Insert padding if we aren't at the very end of the whole string
+        # Calculate padding ONLY if there's another part coming
         if i < len(parts) - 1:
-            spaces_to_add = visual_width - current_pos
-            result += " " * spaces_to_add
-            current_pos = 0  # Reset for the start of the next visual line
+            # How many chars are currently on the last line?
+            current_line_fill = len(result) % width
             
+            if current_line_fill > 0:
+                # Add exactly enough spaces to hit the 80-char margin
+                result += " " * (width - current_line_fill)
+                
     return result
