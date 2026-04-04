@@ -2280,15 +2280,17 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                     z_hat = mask_preactivation / tau
                     top_k_indices = torch.topk(z_hat, K).indices
                     top_k_set = set(top_k_indices.tolist())
-                    intersection = len(top_k_set.intersection(prev_set))
-                    stability = intersection / K  # 1.0 = No change, 0.0 = Total swap
+                    if prev_set is not None:
+                        intersection = len(top_k_set.intersection(prev_set))
+                        stability = intersection / K  # 1.0 = No change, 0.0 = Total swap
+                    else:
+                        stability = None
                     return stability, top_k_set
 
                 stability_epoch, _ = get_mask_stability(mask_preactivation, args.mask_tau, args.mask_sparsity, prev_top_k_mask_indices_epoch)
                 mask_sparsity_str += f" Jaccard(changed): epoch {stability_epoch:.2e}"
-                if prev_top_k_mask_indices_batch is not None:
-                    stability_batch, top_k_set = get_mask_stability(mask_preactivation, args.mask_tau, args.mask_sparsity, prev_top_k_mask_indices_batch) 
-                    mask_sparsity_str += f" batch {stability_batch:.2e}"
+                stability_batch, top_k_set = get_mask_stability(mask_preactivation, args.mask_tau, args.mask_sparsity, prev_top_k_mask_indices_batch) 
+                mask_sparsity_str += f" batch {stability_batch:.2e}" if stability_batch is not None else ""
                 prev_top_k_mask_indices_batch = top_k_set
 
         if do_loss:
