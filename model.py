@@ -118,7 +118,7 @@ class MaskModule(nn.Module):
             # end if activation_method.K:
 
             # Initialize with a small variance around the target logit
-            init_val = init_logit + (torch.randn(input_dim) * 0.05, device=device) # Add variance to break symmetry
+            init_val = init_logit + (torch.randn(input_dim, device=device) * 0.05) # Add variance to break symmetry
             self.mask = nn.Parameter(init_val) # no need to set device, since it will be placed at the correct device with the rest of the
         else:
             self.mask = torch.ones(input_dim, device=device)
