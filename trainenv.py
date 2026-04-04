@@ -2230,7 +2230,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
             actual_sum_neg = -p_tau[p_tau < 0].sum().item()
             preact_str = f"L1+ Norm (Sum of |Mask_on/tau|): {actual_sum_pos:.3e}, " + \
                   f"L1- Norm (Sum of |Mask_off/tau|): {actual_sum_neg:.3e}, " + \
-                  f"# ON: {(p_tau > 0.).sum().item()}, Min mask: {p_tau.min().item()}, Max mask: {p_tau.max().item()}"
+                  f"# ON: {(p_tau > 0.).sum().item()}, Min mask: {p_tau.min().item()::.2e}, Max mask: {p_tau.max().item():.2e}"
             mask_hard_str = 'hard' if args.mask_nonlinearity == 'gumbel' and not args.gumbel_soft else 'soft' 
             mask_sparsity_str = f" sparsity {args.mask_nonlinearity} {mask_hard_str}: ngs2 {loss_mask_sparsity_norm**2:.2e} " + \
                 f"preactivation: mean {mask_preactivation.mean().item():.2e} std {torch.std(mask_preactivation).item():.2e} " + \
