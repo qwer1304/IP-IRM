@@ -2296,7 +2296,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 set2 = torch.topk(mask_preactivation_epoch, K).indices.tolist()
                 set3 = prev_top_k_mask_indices_epoch
                 print()
-                print(ste1, set2, set3)
+                print(set1, set2, set3)
                 print(set1.intersect(set2), set1.intersect(set3), set2.intersect(ste3))
                 exit()
                 mask_sparsity_str += f" Jaccard(changed): epoch {stability_epoch:.2e}"
