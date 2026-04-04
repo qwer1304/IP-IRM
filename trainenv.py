@@ -1672,7 +1672,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
     prev_top_k_mask_indices_batch = None
     mask_preactivation_epoch = net.module.mask_fun.mask.detach().clone()
     z_hat = mask_preactivation_epoch / args.mask_tau
-    K = int(args.mask_sparsity_k)
+    K = int(args.mask_sparsity)
     top_k_indices = torch.topk(z_hat, K).indices
     prev_top_k_mask_indices_epoch = set(top_k_indices.tolist())
 
@@ -2292,25 +2292,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                     return stability, top_k_set
 
                 stability_epoch, _ = get_mask_stability(mask_preactivation, args.mask_tau, args.mask_sparsity, prev_top_k_mask_indices_epoch)
-                K = args.mask_sparsity
-                set1 = set(torch.topk(mask_preactivation, K).indices.tolist())
-                set2 = set(torch.topk(mask_preactivation_epoch, K).indices.tolist())
-                set3 = prev_top_k_mask_indices_epoch
-                print()
-                print("stability epoch", stability_epoch)
-                print("set1")
-                print(set1)
-                print("set2")
-                print(set2) 
-                print("set3")
-                print(set3)
-                print("set1 ^ set2")
-                print(set1.intersection(set2))
-                print("set1 ^ set3")
-                print(set1.intersection(set3))
-                print("set2 ^ set3")
-                print(set2.intersection(set3))
-                exit()
                 mask_sparsity_str += f" Jaccard(changed): epoch {stability_epoch:.2e}"
                 stability_batch, top_k_set = get_mask_stability(mask_preactivation, args.mask_tau, args.mask_sparsity, prev_top_k_mask_indices_batch) 
                 mask_sparsity_str += f" batch {stability_batch:.2e}" if stability_batch is not None else ""
