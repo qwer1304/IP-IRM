@@ -2247,7 +2247,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 preact_str + \
                 f"`dot: km {info_dict['shared_dot_km']:.2e} cm {info_dict['shared_dot_cm']:.2e} pm {info_dict['shared_dot_pm']:.2e}" + \
                 f" cos: km {info_dict['shared_cos_km']:.2e} cm {info_dict['shared_cos_cm']:.2e} pm {info_dict['shared_cos_pm']:.2e}" + \
-                f" budget {budget_loss.item():.2e} tailwind {tailwind_loss.item():.2e} n_eff {n_eff.item():.2e}"
+                f"`budget {budget_loss.item():.2e} tailwind {tailwind_loss.item():.2e} n_eff {n_eff.item():.2e}"
 
             if True or args.mask_nonlinearity != 'gumbel' or args.gumbel_soft: # soft mask
                 with torch.no_grad():
