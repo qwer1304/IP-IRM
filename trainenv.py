@@ -2276,7 +2276,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 gap     = min_on - max_off   # positive = clean separation, negative = already overlapping
 
                 mask_sparsity_str += f" Neff {mask_effective_number:.2f} Entropy {mask_entropy:.2e} Hoyer {hoyer_mask_sparsity:.2e}" + \
-                                     f" min_on {min_on:.3e} max_off {max_off:.3e} gap {gap:.3e}"
+                                     f"`min_on {min_on:.3e} max_off {max_off:.3e} gap {gap:.3e}"
                                      
                 def get_mask_stability(mask_preactivation, tau, K, prev_set):
                     z_hat = mask_preactivation / tau
