@@ -2292,6 +2292,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                     return stability, top_k_set
 
                 stability_epoch, _ = get_mask_stability(mask_preactivation, args.mask_tau, args.mask_sparsity, prev_top_k_mask_indices_epoch)
+                print(stability_epoch)
+                K = args.mask_sparsity
                 set1 = set(torch.topk(mask_preactivation, K).indices.tolist())
                 set2 = set(torch.topk(mask_preactivation_epoch, K).indices.tolist())
                 set3 = prev_top_k_mask_indices_epoch
