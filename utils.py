@@ -1743,7 +1743,7 @@ def apply_virtual_breaks(text, zoom_factor=100, marker="|"):
     zoom_map = {
         80: 191,  
         90: 171,  
-        100: 136, 
+        100: 140, 
         110: 123  
     }
     assert zoom_factor in zoom_map, f"zoom factor {zoom_factor} not in database"
