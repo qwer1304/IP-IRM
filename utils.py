@@ -1741,21 +1741,23 @@ def compute_dataset_fingerprint(dataset):
 def apply_virtual_breaks(text, marker="|", width=80):
     parts = text.split(marker)
     result = ""
-    # Track exactly where we are on the current 80-char visual line
-    current_x = 0
     
     for i, part in enumerate(parts):
         result += part
-        # Update cursor position by adding segment length and taking modulo
-        current_x = (current_x + len(part)) % width
         
         if i < len(parts) - 1:
-            # If we aren't at the very edge, add spaces to reach it
-            if current_x > 0:
-                padding = width - current_x
+            # Add exactly one character to represent the marker/break
+            result += " " 
+            
+            # Calculate how many spaces to hit the next 80-char boundary
+            remainder = len(result) % width
+            if remainder > 0:
+                padding = width - remainder
                 result += " " * padding
             
-            # Reset cursor for the next segment starting at the left margin
-            current_x = 0
-            
+            # --- ASSERTION CHECK ---
+            # Every segment MUST end at a perfect multiple of the width
+            if len(result) % width != 0:
+                raise ValueError(f"Padding Error: Length {len(result)} is not a multiple of {width}")
+                
     return result
