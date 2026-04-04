@@ -2236,9 +2236,10 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
             z_hat = mask_preactivation / args.mask_tau
             actual_sum_pos = z_hat[z_hat > 0].sum().item()
             actual_sum_neg = z_hat[z_hat < 0].abs().sum().item()
-            preact_str = f"L1+ Norm (Sum of |z_hat_ON|): {actual_sum_pos:.3e}" + \
-                  f"`L1- Norm (Sum of |z_hat_OFF|): {actual_sum_neg:.3e}, " + \
-                  f"# ON: {(z_hat > 0.).sum().item()}, z_hat: Min {z_hat.min().item():.2e}, Max {z_hat.max().item():.2e}"
+            preact_str = f"`L1+ Norm (Sum of |z_hat_ON|): {actual_sum_pos:.3e}, " + \
+                  f"L1- Norm (Sum of |z_hat_OFF|): {actual_sum_neg:.3e}, " + \
+                  f"# ON: {(z_hat > 0.).sum().item()}" + \
+                  f"`z_hat: Min {z_hat.min().item():.2e}, Max {z_hat.max().item():.2e}"
             mask_hard_str = 'hard' if args.mask_nonlinearity == 'gumbel' and not args.gumbel_soft else 'soft' 
             mask_sparsity_str = f" sparsity {args.mask_nonlinearity} {mask_hard_str}: ngs2 {loss_mask_sparsity_norm**2:.2e} " + \
                 f"preactivation: mean {mask_preactivation.mean().item():.2e} std {torch.std(mask_preactivation).item():.2e} " + \
