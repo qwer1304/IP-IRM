@@ -1674,7 +1674,22 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
     top_k_indices = torch.topk(z_hat, K).indices
     prev_top_k_mask_indices_epoch = set(top_k_indices.tolist())
 
-    
+
+    # --- THE TRUTH TEST ---
+    with torch.no_grad():
+        # 1. Re-run the EXACT same logic you just ran in Init
+        test_z = net.module.mask_fun.mask / args.mask_tau
+        test_indices = set(torch.topk(test_z, K).indices.tolist())
+
+        # 2. Compare the "Fresh" set to the "Anchor" set you just saved
+        init_overlap = len(test_indices.intersection(prev_top_k_mask_indices_epoch)) / K
+
+        print(f"--- INIT INTEGRITY CHECK ---")
+        print(f"Overlap at T=0: {init_overlap:.4f}") 
+        print(f"Anchor Set Size: {len(prev_top_k_mask_indices_epoch)}")
+        print(f"Live Set Size: {len(test_indices)}")
+    exit()
+
     for batch_index, data_env in enumerate(train_bar):
 
         if args.decimate_partitions:
