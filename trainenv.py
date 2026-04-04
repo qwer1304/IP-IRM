@@ -12,6 +12,8 @@ import utils
 from math import ceil, prod
 import numpy as np
 
+from copy import copy
+
 class BaseCalculator:
     def __init__(self, loss_module, *args, debug=False, device='cuda', **kwargs):
         self.loss_module         = loss_module
@@ -1668,29 +1670,16 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
     mask_activation_noise = net.module.mask_fun.sample().detach()
 
     prev_top_k_mask_indices_batch = None
-    mask_preactivation = net.module.mask_fun.mask
-    z_hat = mask_preactivation / args.mask_tau
+    mask_preactivation_epoch = net.module.mask_fun.mask.detach().clone()
+    z_hat = mask_preactivation_epoch / args.mask_tau
     K = int(args.mask_sparsity_k)
     top_k_indices = torch.topk(z_hat, K).indices
     prev_top_k_mask_indices_epoch = set(top_k_indices.tolist())
 
-
-    # --- THE TRUTH TEST ---
-    with torch.no_grad():
-        # 1. Re-run the EXACT same logic you just ran in Init
-        test_z = net.module.mask_fun.mask / args.mask_tau
-        test_indices = set(torch.topk(test_z, K).indices.tolist())
-
-        # 2. Compare the "Fresh" set to the "Anchor" set you just saved
-        init_overlap = len(test_indices.intersection(prev_top_k_mask_indices_epoch)) / K
-
-        print(f"--- INIT INTEGRITY CHECK ---")
-        print(f"Overlap at T=0: {init_overlap:.4f}") 
-        print(f"Anchor Set Size: {len(prev_top_k_mask_indices_epoch)}")
-        print(f"Live Set Size: {len(test_indices)}")
-    exit()
-
     for batch_index, data_env in enumerate(train_bar):
+
+        if batch_index > 1:
+            print(torch.topk(mask_preactivation, 10), torch.topk(mask_preactivation_epoch, 10)
 
         if args.decimate_partitions:
             assert args.decimate_partitions <= len(partitions), f"# of partitions to decimate {args.decimate_partitions} > # partitions {len(partitions)}"
@@ -2303,10 +2292,11 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                     return stability, top_k_set
 
                 stability_epoch, _ = get_mask_stability(mask_preactivation, args.mask_tau, args.mask_sparsity, prev_top_k_mask_indices_epoch)
+                print(torch.topk(mask_preactivation, 10), torch.topk(mask_preactivation_epoch, 10)
                 mask_sparsity_str += f" Jaccard(changed): epoch {stability_epoch:.2e}"
                 stability_batch, top_k_set = get_mask_stability(mask_preactivation, args.mask_tau, args.mask_sparsity, prev_top_k_mask_indices_batch) 
                 mask_sparsity_str += f" batch {stability_batch:.2e}" if stability_batch is not None else ""
-                prev_top_k_mask_indices_batch = top_k_set
+                prev_top_k_mask_indices_batch = copy(top_k_set)
 
         if do_loss:
             ll_str = f" ll {info_dict['ngl2']:.2e}"
