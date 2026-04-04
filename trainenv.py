@@ -2337,7 +2337,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 penalty_partitions_str = ", ".join([f"{x:.2e}" for x in total_pen_loss_partitions.tolist()])
                 cv_partitions_str = ", ".join([f"{x:.2e}" for x in cv_partitions.tolist()])
                 
-                partitions_metrics_str = f"Partitions: loss {loss_partitions_str} penalty {penalty_partitions_str} cv {cv_partitions_str}"               
+                partitions_metrics_str = f"Partitions: loss {loss_partitions_str}" + f"`penalty {penalty_partitions_str}" + f"`cv {cv_partitions_str}"               
             else:
                 cv_str = ""
                 partitions_metrics_str = ""
