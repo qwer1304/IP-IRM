@@ -1666,6 +1666,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
 
     train_optimizer.zero_grad(set_to_none=True) # clear gradients at the beginning 
     mask_activation_noise = net.module.mask_fun.sample().detach()
+    prev_topK_masks = None
     
     for batch_index, data_env in enumerate(train_bar):
 
@@ -2224,13 +2225,12 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
             total_mask_CV += mask_CV
             num_updates = int((batch_index + 1) / gradients_accumulation_steps)
             
-            mask_p = list(net.parameters())[param_groups_2_pind['mask'][0]]
-            p_tau = mask_p / args.mask_tau
-            actual_sum_pos = p_tau[p_tau > 0].sum().item()
-            actual_sum_neg = -p_tau[p_tau < 0].sum().item()
-            preact_str = f"L1+ Norm (Sum of |Mask_on/tau|): {actual_sum_pos:.3e}, " + \
-                  f"L1- Norm (Sum of |Mask_off/tau|): {actual_sum_neg:.3e}, " + \
-                  f"# ON: {(p_tau > 0.).sum().item()}, Min mask: {p_tau.min().item():.2e}, Max mask: {p_tau.max().item():.2e}"
+            z_hat = mask_preactivation / args.mask_tau
+            actual_sum_pos = z_hat[z_hat > 0].sum().item()
+            actual_sum_neg = z_hat[z_hat < 0].abs().sum().item()
+            preact_str = f"L1+ Norm (Sum of |z_hat_ON|): {actual_sum_pos:.3e}, " + \
+                  f"L1- Norm (Sum of |z_hat_OFF|): {actual_sum_neg:.3e}, " + \
+                  f"# ON: {(z_hat > 0.).sum().item()}, Min mask: {z_hat.min().item():.2e}, Max mask: {z_hat.max().item():.2e}"
             mask_hard_str = 'hard' if args.mask_nonlinearity == 'gumbel' and not args.gumbel_soft else 'soft' 
             mask_sparsity_str = f" sparsity {args.mask_nonlinearity} {mask_hard_str}: ngs2 {loss_mask_sparsity_norm**2:.2e} " + \
                 f"preactivation: mean {mask_preactivation.mean().item():.2e} std {torch.std(mask_preactivation).item():.2e} " + \
@@ -2268,6 +2268,18 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
 
                 mask_sparsity_str += f" Neff {mask_effective_number:.2f} Entropy {mask_entropy:.2e} Hoyer {hoyer_mask_sparsity:.2e}" + \
                                      f" min_on {min_on:.3e} max_off {max_off:.3e} gap {gap:.3e}"
+                                     
+                z_hat = mask_preactivation / args.mask_tau
+                K = args.mask_sparsity_k
+                top_k_indices = torch.topk(z_hat, K).indices
+                top_k_set = set(top_k_indices.tolist())
+
+                if prev_top_k_indices is not None:
+                    intersection = len(top_k_set.intersection(prev_top_k_indices))
+                    stability = intersection / K  # 1.0 = No change, 0.0 = Total swap
+                    mask_sparsity_str += f" Jaccard(changed) {stability:.2e}"
+                prev_top_k_indices = top_k_set
+
 
         if do_loss:
             ll_str = f" ll {info_dict['ngl2']:.2e}"
