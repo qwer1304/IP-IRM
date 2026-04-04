@@ -2238,7 +2238,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
             actual_sum_neg = z_hat[z_hat < 0].abs().sum().item()
             preact_str = f"L1+ Norm (Sum of |z_hat_ON|): {actual_sum_pos:.3e}, " + \
                   f"L1- Norm (Sum of |z_hat_OFF|): {actual_sum_neg:.3e}, " + \
-                  f"# ON: {(z_hat > 0.).sum().item()}, Min mask: {z_hat.min().item():.2e}, Max mask: {z_hat.max().item():.2e}"
+                  f"# ON: {(z_hat > 0.).sum().item()}, z_hat: Min {z_hat.min().item():.2e}, Max {z_hat.max().item():.2e}"
             mask_hard_str = 'hard' if args.mask_nonlinearity == 'gumbel' and not args.gumbel_soft else 'soft' 
             mask_sparsity_str = f" sparsity {args.mask_nonlinearity} {mask_hard_str}: ngs2 {loss_mask_sparsity_norm**2:.2e} " + \
                 f"preactivation: mean {mask_preactivation.mean().item():.2e} std {torch.std(mask_preactivation).item():.2e} " + \
@@ -2395,18 +2395,19 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                    f" {cv_str}" + \
                    f" Sparsity {total_mask_sparsity_weighted/trained_samples:.3e}" + \
                    f" LR BB {train_optimizer.param_groups[0]['lr']:.2e} PW {penalty_weight_orig:.6g}" + \
-                   f" dot:{ll_str}{lk_str}{lp_str}{kk_str}{kp_str}{pp_str}" + \
-                   f" cos:{lk_cos_str}{lp_cos_str}{kp_cos_str}" + \
-                   f" {gradnorm_str}" + \
-                   f" decr: l {info_dict['loss_decrease_cond']:.2e} k {info_dict['loss_unsplit_decrease_cond']:.2e} p {info_dict['penalty_decrease_cond']:.2e}" + \
-                   f" Lp: cos {info_dict['cos_Lp']:.3e} dot {info_dict['dot_Lp']:.3e} gn_prgrs {info_dict['gradnorm_progress']:.6g}" + \
-                   f" shared_dot:{skp_str}{skc_str}{spc_str}{slc_str}{slk_str}{slp_str}" + \
-                   f" shared_cos:{skp_cos_str}{skc_cos_str}{spc_cos_str}{slc_cos_str}{slk_cos_str}{slp_cos_str}" + \
-                   f" Lp: shared cos {info_dict['shared_cos_Lp']:.3e} shared dot {info_dict['shared_dot_Lp']:.3e}" + \
-                   f" {mask_sparsity_str}" + \
-                   f" {partitions_metrics_str}"
+                   f"|dot:{ll_str}{lk_str}{lp_str}{kk_str}{kp_str}{pp_str}" + \
+                   f"|cos:{lk_cos_str}{lp_cos_str}{kp_cos_str}" + \
+                   f"|{gradnorm_str}" + \
+                   f"|decr: l {info_dict['loss_decrease_cond']:.2e} k {info_dict['loss_unsplit_decrease_cond']:.2e} p {info_dict['penalty_decrease_cond']:.2e}" + \
+                   f"|Lp: cos {info_dict['cos_Lp']:.3e} dot {info_dict['dot_Lp']:.3e} gn_prgrs {info_dict['gradnorm_progress']:.6g}" + \
+                   f"|shared_dot:{skp_str}{skc_str}{spc_str}{slc_str}{slk_str}{slp_str}" + \
+                   f"|shared_cos:{skp_cos_str}{skc_cos_str}{spc_cos_str}{slc_cos_str}{slk_cos_str}{slp_cos_str}" + \
+                   f"|Lp: shared cos {info_dict['shared_cos_Lp']:.3e} shared dot {info_dict['shared_dot_Lp']:.3e}" + \
+                   f"|{mask_sparsity_str}" + \
+                   f"|{partitions_metrics_str}"
 
-        desc_str += loss_module.get_debug_info_str()
+        desc_str += "|" + loss_module.get_debug_info_str()
+        desc_str = utils.apply_virtual_breaks(desc_str)
         train_bar.set_description(desc_str)
 
         if (batch_index % 10 - gradients_accumulation_steps + 1) == 0:
