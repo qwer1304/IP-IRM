@@ -89,7 +89,7 @@ class MaskModule(nn.Module):
                     current_clamp = Z_HAT_CLAMP * activation_method.tau
                     # The Noise (Scaled to stay consistent in z_hat space)
                     noise_std = 0.01 * activation_method.tau
-                    init_logit = torch.ones(input_dim) * init_z
+                    init_logit = torch.ones(input_dim, device=device) * init_z
                 elif activation_method.mask_type == 'sigmoid' or activation_method.mask_type == 'gumbel':
                     assert False, "fix this"
                     def get_bounds(K, N=2048, W=2):
