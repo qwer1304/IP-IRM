@@ -2289,7 +2289,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                     return stability, top_k_set
 
                 stability_epoch, _ = get_mask_stability(mask_preactivation, args.mask_tau, args.mask_sparsity, prev_top_k_mask_indices_epoch)
-                mask_sparsity_str += f" Jaccard(changed): epoch {stability_epoch:.2e}"
+                mask_sparsity_str += f" Jaccard (stability): epoch {stability_epoch:.2e}"
                 stability_batch, top_k_set = get_mask_stability(mask_preactivation, args.mask_tau, args.mask_sparsity, prev_top_k_mask_indices_batch) 
                 mask_sparsity_str += f" batch {stability_batch:.2e}" if stability_batch is not None else ""
                 prev_top_k_mask_indices_batch = copy(top_k_set)
@@ -2407,7 +2407,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                    f"|{partitions_metrics_str}"
 
         desc_str += "|" + loss_module.get_debug_info_str()
-        #desc_str = utils.apply_virtual_breaks(desc_str)
+        desc_str = utils.apply_virtual_breaks(desc_str, args.term_zoom)
         train_bar.set_description(desc_str)
 
         if (batch_index % 10 - gradients_accumulation_steps + 1) == 0:

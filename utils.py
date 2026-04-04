@@ -1738,26 +1738,22 @@ def compute_dataset_fingerprint(dataset):
     fingerprint = hashlib.md5(str(pairs).encode()).hexdigest()
     return fingerprint
     
-def apply_virtual_breaks(text, marker="|", width=80):
+def apply_virtual_breaks(text, zoom_factor=100, marker="|"):
+    # Verified width mapping
+    zoom_map = {
+        80: 191,  
+        90: 171,  
+        100: 136, 
+        110: 123  
+    }
+    assert zoom_factor in zoom_map, f"zoom factor {zoom_factor} not in database"
+    w = zoom_map.get(zoom_factor, 136)
     parts = text.split(marker)
-    result = ""
+    res = parts[0]
     
-    for i, part in enumerate(parts):
-        result += part
-        
-        if i < len(parts) - 1:
-            # Add exactly one character to represent the marker/break
-            result += " " 
-            
-            # Calculate how many spaces to hit the next 80-char boundary
-            remainder = len(result) % width
-            if remainder > 0:
-                padding = width - remainder
-                result += " " * padding
-            
-            # --- ASSERTION CHECK ---
-            # Every segment MUST end at a perfect multiple of the width
-            if len(result) % width != 0:
-                raise ValueError(f"Padding Error: Length {len(result)} is not a multiple of {width}")
-                
-    return result
+    for i in range(1, len(parts)):
+        # Padding to reach the next visual line start based on width w
+        fill = (w - (len(res) % w)) % w
+        res += " " * fill
+        res += parts[i]
+    return res
