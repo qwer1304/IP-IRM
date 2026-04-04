@@ -1679,7 +1679,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
     for batch_index, data_env in enumerate(train_bar):
 
         if batch_index > 1:
-            print(torch.topk(mask_preactivation, 10), torch.topk(mask_preactivation_epoch, 10)
+            print(torch.topk(mask_preactivation, 10), torch.topk(mask_preactivation_epoch, 10))
 
         if args.decimate_partitions:
             assert args.decimate_partitions <= len(partitions), f"# of partitions to decimate {args.decimate_partitions} > # partitions {len(partitions)}"
