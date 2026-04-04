@@ -1666,7 +1666,14 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
 
     train_optimizer.zero_grad(set_to_none=True) # clear gradients at the beginning 
     mask_activation_noise = net.module.mask_fun.sample().detach()
-    prev_top_k_mask_indices = None
+
+    prev_top_k_mask_indices_batch = None
+    mask_preactivation = net.module.mask_fun.mask
+    z_hat = mask_preactivation / args.mask_tau
+    K = int(args.mask_sparsity_k)
+    top_k_indices = torch.topk(z_hat, K).indices
+    prev_top_k_mask_indices_epoch = set(top_k_indices.tolist())
+
     
     for batch_index, data_env in enumerate(train_bar):
 
@@ -2269,17 +2276,20 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 mask_sparsity_str += f" Neff {mask_effective_number:.2f} Entropy {mask_entropy:.2e} Hoyer {hoyer_mask_sparsity:.2e}" + \
                                      f" min_on {min_on:.3e} max_off {max_off:.3e} gap {gap:.3e}"
                                      
-                z_hat = mask_preactivation / args.mask_tau
-                K = int(args.mask_sparsity_k)
-                top_k_indices = torch.topk(z_hat, K).indices
-                top_k_set = set(top_k_indices.tolist())
-
-                if prev_top_k_mask_indices is not None:
-                    intersection = len(top_k_set.intersection(prev_top_k_mask_indices))
+                def get_mask_stability(mask_preactivation, tau, K, prev_set):
+                    z_hat = mask_preactivation / tau
+                    top_k_indices = torch.topk(z_hat, K).indices
+                    top_k_set = set(top_k_indices.tolist())
+                    intersection = len(top_k_set.intersection(prev_set))
                     stability = intersection / K  # 1.0 = No change, 0.0 = Total swap
-                    mask_sparsity_str += f" Jaccard(changed) {stability:.2e}"
-                prev_top_k_mask_indices = top_k_set
+                    return stability, top_k_set
 
+                stability_epoch, _ = get_mask_stability(mask_preactivation, args.mask_tau, args.mask_sparsity, prev_top_k_mask_indices_epoch)
+                mask_sparsity_str += f" Jaccard(changed): epoch {stability_epoch:.2e}"
+                if prev_top_k_mask_indices_batch is not None:
+                    stability_batch, top_k_set = get_mask_stability(mask_preactivation, args.mask_tau, args.mask_sparsity, prev_top_k_mask_indices_batch) 
+                    mask_sparsity_str += f" batch {stability_batch:.2e}"
+                prev_top_k_mask_indices_batch = top_k_set
 
         if do_loss:
             ll_str = f" ll {info_dict['ngl2']:.2e}"
