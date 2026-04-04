@@ -1666,7 +1666,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
 
     train_optimizer.zero_grad(set_to_none=True) # clear gradients at the beginning 
     mask_activation_noise = net.module.mask_fun.sample().detach()
-    prev_topK_masks = None
+    prev_top_k_mask_indices = None
     
     for batch_index, data_env in enumerate(train_bar):
 
@@ -2274,11 +2274,11 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 top_k_indices = torch.topk(z_hat, K).indices
                 top_k_set = set(top_k_indices.tolist())
 
-                if prev_top_k_indices is not None:
-                    intersection = len(top_k_set.intersection(prev_top_k_indices))
+                if prev_top_k_mask_indices is not None:
+                    intersection = len(top_k_set.intersection(prev_top_k_mask_indices))
                     stability = intersection / K  # 1.0 = No change, 0.0 = Total swap
                     mask_sparsity_str += f" Jaccard(changed) {stability:.2e}"
-                prev_top_k_indices = top_k_set
+                prev_top_k_mask_indices = top_k_set
 
 
         if do_loss:
