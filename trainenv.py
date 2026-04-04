@@ -2292,7 +2292,13 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                     return stability, top_k_set
 
                 stability_epoch, _ = get_mask_stability(mask_preactivation, args.mask_tau, args.mask_sparsity, prev_top_k_mask_indices_epoch)
-                print(torch.topk(mask_preactivation, 10).indices, torch.topk(mask_preactivation_epoch, 10).indices, list(prev_top_k_mask_indices_epoch)[:10])
+                set1 = torch.topk(mask_preactivation, K).indices.tolist()
+                set2 = torch.topk(mask_preactivation_epoch, K).indices.tolist()
+                set3 = prev_top_k_mask_indices_epoch
+                print()
+                print(ste1, set2, set3)
+                print(set1.intersect(set2), set1.intersect(set3), set2.intersect(ste3))
+                exit()
                 mask_sparsity_str += f" Jaccard(changed): epoch {stability_epoch:.2e}"
                 stability_batch, top_k_set = get_mask_stability(mask_preactivation, args.mask_tau, args.mask_sparsity, prev_top_k_mask_indices_batch) 
                 mask_sparsity_str += f" batch {stability_batch:.2e}" if stability_batch is not None else ""
