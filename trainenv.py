@@ -2132,6 +2132,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                                          + loss_mask_sparsity_grads[pind] * mask_sparsity_weight * args.Lscaler * 1.0                      * 1.0                 * int(not args.dont_update_mask_sparsity)
                                        )
         
+            if 'mask' in name:
+                if not torch.all(total_grad_flat_weighted == 0):
+                    print(total_grad_flat_weighted[torch.where(total_grad_flat_weighted != 0)].tolist())
             if p.grad is None:
                 p.grad = total_grad_flat_weighted.view(p.shape).clone().detach()
             else:
