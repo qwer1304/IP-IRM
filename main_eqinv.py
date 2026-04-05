@@ -1026,7 +1026,7 @@ if __name__ == '__main__':
         ssl_type = args.ssl_type.lower()
         params = []
         LRs = {}
-        weightss = {}
+        weights = {}
 
         def set_lr(self_lr, default_lr, self_weight, default_weight, group, parameters):
             lr = self_lr if self_lr >= 0 else default_lr
