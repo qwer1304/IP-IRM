@@ -1026,24 +1026,27 @@ if __name__ == '__main__':
         ssl_type = args.ssl_type.lower()
         params = []
         LRs = {}
+        weightss = {}
 
-        def set_lr(self_lr, default_lr, group, parameters):
+        def set_lr(self_lr, default_lr, self_weight, default_weight, group, parameters):
             lr = self_lr if self_lr >= 0 else default_lr
+            weight = self_weight if self_weight >= 0 else default_weight
             LRs[group] = lr
-            params.append({'params': parameters, 'lr': lr, 'name': group})
+            weights[group] = weight
+            params.append({'params': parameters, 'lr': lr, 'weight': weight, 'name': group})
                    
-        set_lr(args.featurizer_lr, args.lr, 'backbone',   model.module.f.parameters())
-        set_lr(args.classifier_lr, args.lr, 'classifier', model.module.arms['classifier'].parameters(),)
-        set_lr(args.projector_lr,  args.lr, 'projector',  model.module.arms['projector'].parameters())
+        set_lr(args.featurizer_lr, args.lr, -1, args.weight_decay, 'backbone',   model.module.f.parameters())
+        set_lr(args.classifier_lr, args.lr, -1, args.weight_decay, 'classifier', model.module.arms['classifier'].parameters(),)
+        set_lr(args.projector_lr,  args.lr, -1, args.weight_decay, 'projector',  model.module.arms['projector'].parameters())
         if args.opt_mask:
-            set_lr(args.mask_lr, args.lr, 'mask', model.module.mask_fun.parameters())
+            set_lr(args.mask_lr, args.lr, 0, args.weight_decay, 'mask', model.module.mask_fun.parameters())
         if ssl_type == "simsiam":
-            set_lr(args.predictor_lr, args.lr, 'predictor', model.module.arms['predictor'].parameters())
-        return params, LRs
+            set_lr(args.predictor_lr, args.lr, -1, args.weight_decay, 'predictor', model.module.arms['predictor'].parameters())
+        return params, LRs, weights
 
     if args.opt == "Adam":
-        params, LRs = get_optimizer_params(model, args)
-        optimizer = optim.Adam(params, weight_decay=args.weight_decay, betas=args.betas)
+        params, LRs, weights = get_optimizer_params(model, args)
+        optimizer = optim.Adam(params, betas=args.betas)
         gradnorm_optimizer = optim.Adam(gradnorm_balancer.parameters(), lr=args.gradnorm_lr, weight_decay=args.gradnorm_weight_decay, betas=args.gradnorm_betas)        
     elif args.opt == 'SGD':
         optimizer          = optim.SGD(model.parameters(),             lr=args.lr, weight_decay=args.weight_decay, momentum=args.SGD_momentum)
@@ -1068,6 +1071,10 @@ if __name__ == '__main__':
                     group['lr'] = LRs[group_name]                    
                 else:
                     print(f"Unknown group {group_name} in LRs {LRs.keys()}")
+                if group_name in weights:
+                    group['weight'] = weights[group_name]                    
+                else:
+                    print(f"Unknown group {group_name} in weights {weights.keys()}")
 
             for gi, group in enumerate(gradnorm_optimizer.param_groups):
                 group['lr'] = args.gradnorm_lr
@@ -1088,6 +1095,10 @@ if __name__ == '__main__':
                     group['lr'] = LRs[group_name]                    
                 else:
                     print(f"Unknown group {group_name} in LRs {LRs.keys()}")
+                if group_name in weights:
+                    group['weight'] = weights[group_name]                    
+                else:
+                    print(f"Unknown group {group_name} in weights {weights.keys()}")
 
             for param_group in gradnorm_optimizer.param_groups:
                 param_group['lr'] = args.gradnorm_lr 
