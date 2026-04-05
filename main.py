@@ -696,7 +696,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--ncols', default=80, type=int, help='number of columns in terminal')
     parser.add_argument('--bar', default=50, type=int, help='length of progess bar')
-    parser.add_argument('--term_zoom', default=100, type=int, help='zoom factor of terminal to support virtual line breaks in tqdm')
+    parser.add_argument('--term_zoom', default=None, type=int, help='zoom factor of terminal to support virtual line breaks in tqdm')
 
     parser.add_argument('--resume', default='', type=str, metavar='PATH',
                     help='path to latest checkpoint (default: none)')

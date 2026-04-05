@@ -1738,7 +1738,7 @@ def compute_dataset_fingerprint(dataset):
     fingerprint = hashlib.md5(str(pairs).encode()).hexdigest()
     return fingerprint
     
-def apply_virtual_breaks(text, zoom_factor=100, marker="|"):
+def apply_virtual_breaks(text, zoom_factor=None, marker="|"):
     # Verified width mapping
     zoom_map = {
         80: 191,  
@@ -1746,7 +1746,9 @@ def apply_virtual_breaks(text, zoom_factor=100, marker="|"):
         100: 140, 
         110: 123  
     }
-    assert zoom_factor in zoom_map, f"zoom factor {zoom_factor} not in database"
+    assert zoom_factor is None or zoom_factor in zoom_map, f"zoom factor {zoom_factor} not in database"
+    if zoom_factor is None:
+        zoom_factor = 200 # set a default zoom factor and rely the terminal to strip leading spaces
     w = zoom_map.get(zoom_factor, 136)
     parts = text.split(marker)
     res = parts[0]
