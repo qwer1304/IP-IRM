@@ -1748,8 +1748,9 @@ def apply_virtual_breaks(text, zoom_factor=None, marker="|"):
     }
     assert zoom_factor is None or zoom_factor in zoom_map, f"zoom factor {zoom_factor} not in database"
     if zoom_factor is None:
-        zoom_factor = 200 # set a default zoom factor and rely the terminal to strip leading spaces
-    w = zoom_map.get(zoom_factor, 136)
+        w = 200 # set a default zoom factor and rely the terminal to strip leading spaces
+    else:
+        w = zoom_map.get(zoom_factor, 200)
     parts = text.split(marker)
     res = parts[0]
     
