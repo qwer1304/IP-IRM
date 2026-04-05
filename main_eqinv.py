@@ -872,7 +872,8 @@ if __name__ == '__main__':
     parser.add_argument('--mask_sparsity_leakyrelu_alpha', type=float, default=0.0, help='alpha in leakyrelu sparsity loss')
     parser.add_argument('--mask_sparsity_epsilon', type=float, default=0.015, help='tailwind force')
     parser.add_argument('--mask_sparsity_k', type=float, default=5.0, help="k in app's force calculation")
-    parser.add_argument('--mask_threshold_sigma', type=float, default=0.01, help="noise around 0.5 hard threshold")
+    parser.add_argument('--mask_threshold_sigma', type=float, default=0.01, help="noise around hard threshold")
+    parser.add_argument('--mask_on_threshold', type=float, default=0.5, help="hard threshold")
     parser.add_argument('--mask_clamp', type=float, default=None, help="clamp of mask preactivation for liveness")
     parser.add_argument('--mask_save_freq', type=int, default=None, help='save mask frequency')
     parser.add_argument('--mask_scalers', default=None, type=float, nargs=4, metavar='[CE Unsplit Env Penalty]',    
@@ -990,7 +991,7 @@ if __name__ == '__main__':
 
     # Mask
     mask_fun = Mask(args.mask_nonlinearity, tau=args.mask_tau, soft=args.gumbel_soft, K=args.mask_sparsity, 
-        hard_K=args.mask_hard_sparsity_limit, sigma=args.mask_threshold_sigma)
+        hard_K=args.mask_hard_sparsity_limit, sigma=args.mask_threshold_sigma, on_threshold=args.mask_on_threshold)
     mask_blueprint = partial(MaskModule, mask_fun, trainable=args.opt_mask, device=device)
 
     # Model

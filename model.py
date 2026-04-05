@@ -17,7 +17,7 @@ from typing import Union, List
 from functools import partial
 
 class Mask():
-    def __init__(self, mask_type, tau=1.0, soft=False, K=None, hard_K=False, sigma=0.02):
+    def __init__(self, mask_type, tau=1.0, soft=False, K=None, hard_K=False, sigma=0.02, on_threshold=0.5):
         self.mask_type = mask_type
         self.tau = tau
         self.soft = soft
@@ -25,6 +25,7 @@ class Mask():
         self.hard_K = hard_K
         self.u = None
         self.sigma = sigma
+        self.on_threshold = on_threshold
 
     def __call__(self, x, u=None, training=True):
         # x: (num_features,) tensor
@@ -65,7 +66,7 @@ class Mask():
                 # 2. We don't force 'on' channels that are naturally 'off' (because of 0.5)
                 noise = torch.randn_like(x_soft) * self.sigma
                 noise_positive = torch.relu(noise)
-                threshold = 0.5 - noise_positive  # small jitter to help w/ s;uctuations around 0.5
+                threshold = self.on_threshold - noise_positive  # small jitter to help w/ s;uctuations around 0.5
                 x_hard = ((x_soft > threshold) & topk_mask).float()
                 x_ret = x_hard + x_soft - x_soft.detach()
             return x_ret
