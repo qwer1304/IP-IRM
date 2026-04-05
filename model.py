@@ -84,16 +84,19 @@ class MaskModule(nn.Module):
                     # This initializes all masks to be slightly above the 0.5 threshold in the most
                     # responsive zone of the sigmoid.
                     # Constants (The 'shape' you want in sigmoid-space)
-                    Z_HAT_INIT = 0.55   # Corresponds to Mask ~0.634
+                    Z_HAT_INIT = 0.20   # Corresponds to Mask ~0.55
+                    Z_HAT_MIN  = 0.04   # Corresponds to Mask ~0.51
                     Z_HAT_CLAMP = 3.0   # Corresponds to Mask ~0.95
-                    Z_HAT_NOISE = 0.02
+                    Z_HAT_NOISE = 0.01
 
                     # The Parameter Initialization
                     init_z = Z_HAT_INIT * activation_method.tau
                     current_clamp = Z_HAT_CLAMP * activation_method.tau
                     # The Noise (Scaled to stay consistent in z_hat space)
                     noise_std = Z_HAT_NOISE * activation_method.tau
-                    init_logit = torch.ones(input_dim, device=device) * init_z
+                    init_logit = torch.ones(input_dim) * init_z
+                    noise = torch.randn(input_dim) * noise_std
+                    init_val = torch.clamp(init_logit + noise, min=Z_HAT_MIN * activation_method.tau) # Add variance to break symmetry
                 elif activation_method.mask_type == 'sigmoid' or activation_method.mask_type == 'gumbel':
                     assert False, "fix this"
                     def get_bounds(K, N=2048, W=2):
@@ -127,14 +130,14 @@ class MaskModule(nn.Module):
                         return r + final_bias
 
                     init_logit = init_mask_to_neff(n=input_dim, target_k=activation_method.K)
+                    init_val = init_logit + (torch.randn(input_dim) * noise_std) # Add variance to break symmetry
                 #end if activation_method.mask_type == 'gumbel' and not activation_method.gumbel_soft:
             # end if activation_method.K:
 
             # Initialize with a small variance around the target logit
-            init_val = init_logit + (torch.randn(input_dim, device=device) * noise_std) # Add variance to break symmetry
-            self.mask = nn.Parameter(init_val) # no need to set device, since it will be placed at the correct device with the rest of the
+            self.mask = nn.Parameter(init_val) # no need to set device, since it will be placed at the correct device with the rest of the model
         else:
-            self.mask = torch.ones(input_dim, device=device)
+            self.mask = torch.ones(input_dim, device=device) # must set the device b/c it's a constant not moved to the device w/ the whole model
         # end if trainable:
         self.activation_method = activation_method
 
