@@ -1738,7 +1738,7 @@ def compute_dataset_fingerprint(dataset):
     fingerprint = hashlib.md5(str(pairs).encode()).hexdigest()
     return fingerprint
     
-def apply_virtual_breaks(text, zoom_factor=None, marker="|"):
+def apply_virtual_breaks(text, zoom_factor=None, marker="|", overflow=200):
     # Verified width mapping
     zoom_map = {
         80: 191,  
@@ -1748,15 +1748,11 @@ def apply_virtual_breaks(text, zoom_factor=None, marker="|"):
     }
     assert zoom_factor is None or zoom_factor in zoom_map, f"zoom factor {zoom_factor} not in database"
     if zoom_factor is None:
-        w = 200 # set a default zoom factor and rely the terminal to strip leading spaces
+        w = overflow # set a default zoom factor and rely the terminal to strip leading spaces
     else:
-        w = zoom_map.get(zoom_factor, 200)
-    parts = text.split(marker)
-    res = parts[0]
-    
-    for i in range(1, len(parts)):
-        # Padding to reach the next visual line start based on width w
-        fill = (w - (len(res) % w)) % w
-        res += " " * fill
-        res += parts[i]
+        w = zoom_map.get(zoom_factor, overflow)
+    # Join parts with a fixed, huge block of spaces
+    # This forces the terminal to 'trip' over the right margin
+    padding = " " * w
+    res = padding.join(text.split(marker))
     return res

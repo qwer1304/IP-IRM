@@ -81,15 +81,18 @@ class MaskModule(nn.Module):
             init_logit = torch.rand(input_dim) # default value
             if activation_method.K:
                 if activation_method.mask_type == 'gumbel' and not activation_method.soft:
+                    # This initializes all masks to be slightly above the 0.5 threshold in the most
+                    # responsive zone of the sigmoid.
                     # Constants (The 'shape' you want in sigmoid-space)
-                    Z_HAT_INIT = 1.5   # Corresponds to Mask ~0.82
-                    Z_HAT_CLAMP = 3.0  # Corresponds to Mask ~0.95
+                    Z_HAT_INIT = 0.55   # Corresponds to Mask ~0.634
+                    Z_HAT_CLAMP = 3.0   # Corresponds to Mask ~0.95
+                    Z_HAT_NOISE = 0.02
 
                     # The Parameter Initialization
                     init_z = Z_HAT_INIT * activation_method.tau
                     current_clamp = Z_HAT_CLAMP * activation_method.tau
                     # The Noise (Scaled to stay consistent in z_hat space)
-                    noise_std = 0.01 * activation_method.tau
+                    noise_std = Z_HAT_NOISE * activation_method.tau
                     init_logit = torch.ones(input_dim, device=device) * init_z
                 elif activation_method.mask_type == 'sigmoid' or activation_method.mask_type == 'gumbel':
                     assert False, "fix this"
