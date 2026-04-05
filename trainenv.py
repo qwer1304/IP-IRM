@@ -2289,7 +2289,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                     return stability, top_k_set
 
                 stability_epoch, _ = get_mask_stability(mask_preactivation, args.mask_tau, args.mask_sparsity, prev_top_k_mask_indices_epoch)
-                mask_sparsity_str += f" Jaccard (stability): epoch {stability_epoch:.2e}"
+                mask_sparsity_str += f"`Jaccard (stability): epoch {stability_epoch:.2e}"
                 stability_batch, top_k_set = get_mask_stability(mask_preactivation, args.mask_tau, args.mask_sparsity, prev_top_k_mask_indices_batch) 
                 mask_sparsity_str += f" batch {stability_batch:.2e}" if stability_batch is not None else ""
                 prev_top_k_mask_indices_batch = copy(top_k_set)
