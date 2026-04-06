@@ -310,7 +310,9 @@ def main(args):
     M = int(min(np.mean(M_range), 0.8* Mc_max))
     M = M if args.calc_M else args.M 
     
-    P_train, P_val, R_train, R_val = prune_domains(domains, classes, counts, train_fraction=0.8, lp_train_target_per_class=M, do_trim=args.balance_counts)
+    P_train, P_val, R_train, R_val = prune_domains(domains, classes, counts, train_fraction=args.train_split, lp_train_target_per_class=M, do_trim=args.balance_counts)
+    if args.calc_only: exit()
+
 
     if args.select_method == 'train':
         e = sorted(os.scandir(input_dir), key=lambda e: e.name)
@@ -437,6 +439,7 @@ if __name__ == "__main__":
     parser.add_argument('--seed', type=int, default=0)
     parser.add_argument('--domain_names', type=str, nargs='+', required=True, help='Cannot be last before selection method')
     parser.add_argument('--count_only', action='store_true', help='Only count domains')
+    parser.add_argument('--calc_only', action='store_true', help='Only calc assignments')
     parser.add_argument('--balance_counts', action='store_true', help='Balance counts')
     parser.add_argument('--M', type=int, required=True, help="Number of samples per class")
     parser.add_argument('--calc_M', action='store_true', help="Adjust M from data")
