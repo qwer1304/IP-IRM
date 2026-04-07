@@ -1417,6 +1417,7 @@ def calculate_mask_sparsity_and_grads(mask, total_grad, net, weight, do_flag, ar
     def continuous_signed_sparsity(mask, grad_app, target=200, k=5.0, 
                                    use_soft=True, beta=0.07, alpha=0.01, epsilon=0.015, hard_mask=True):
 
+        target = target if target is not None else 0
         # 1. Identify directions from App's gradients
         is_pulling_on = (grad_app < 0).float()
         is_pulling_off = (grad_app > 0).float()
@@ -1479,7 +1480,7 @@ def calculate_mask_sparsity_and_grads(mask, total_grad, net, weight, do_flag, ar
         return total_loss, budget_loss, tailwind_loss, n_eff
     
     if do_flag:
-        loss, budget_loss, tailwind_loss, n_eff = continuous_signed_sparsity(mask, total_grad, args.mask_sparsity or len(mask),
+        loss, budget_loss, tailwind_loss, n_eff = continuous_signed_sparsity(mask, total_grad, args.mask_sparsity,
                     use_soft=not args.mask_sparsity_relu, hard_mask=args.mask_nonlinearity == 'gumbel' and not args.gumbel_soft, 
                     beta=args.mask_sparsity_softplus_beta, epsilon=args.mask_sparsity_epsilon, k=args.mask_sparsity_k,
                     alpha=args.mask_sparsity_leakyrelu_alpha)
