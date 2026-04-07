@@ -80,7 +80,7 @@ class MaskModule(nn.Module):
         if trainable:
             init_logit = torch.rand(input_dim) # default value
             if activation_method.K:
-                if activation_method.mask_type == 'gumbel' and not activation_method.soft:
+                if activation_method.mask_type == 'gumbel' and (True or not activation_method.soft):
                     # This initializes all masks to be slightly above the 0.5 threshold in the most
                     # responsive zone of the sigmoid.
                     # Constants (The 'shape' you want in sigmoid-space)

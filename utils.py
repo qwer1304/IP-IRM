@@ -1748,11 +1748,14 @@ def apply_virtual_breaks(text, zoom_factor=None, marker="|", overflow=200):
     }
     assert zoom_factor is None or zoom_factor in zoom_map, f"zoom factor {zoom_factor} not in database"
     if zoom_factor is None:
-        w = overflow # set a default zoom factor and rely the terminal to strip leading spaces
+        w = overflow # set a default zoom factor and rely the terminal to  wrap around and strip leading spaces
     else:
         w = zoom_map.get(zoom_factor, overflow)
-    # Join parts with a fixed, huge block of spaces
-    # This forces the terminal to 'trip' over the right margin
-    padding = " " * w
-    res = padding.join(text.split(marker))
+    # Join parts s.t. each part become huge w/ trailing spaces
+    # This forces the terminal to 'trip' over the right margin and
+    # strip off leading spaces on the next "virtual" line
+    res = ""
+    for part in text.split(marker):
+        padding = " " * (w - len(part))
+        res += part + padding
     return res

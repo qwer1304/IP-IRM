@@ -1088,18 +1088,18 @@ def calculate_scalers(loss_CE_grads_final, loss_unsplit_grads_final, loss_grads_
         setup_grads_and_norms(loss_grads_final, loss_weight, args.Lscaler, device, do_loss, default_grads_weighted_vector=default_grads_weighted_vector)
     penalty_grads_final_weighted, p_grads_flat_weighted, penalty_grad_norm_weighted = \
         setup_grads_and_norms(penalty_grads_final, penalty_weight, args.Lscaler, device, do_penalty, default_grads_weighted_vector=default_grads_weighted_vector)
-    mask_grads_final_weighted, m_grads_flat_weighted, mask_grad_norm_weighted = \
+    mask_sparsity_grads_final_weighted, m_sparsity_grads_flat_weighted, mask_sparsity_grad_norm_weighted = \
         setup_grads_and_norms(loss_mask_sparsity_grads, mask_sparsity_weight, args.Lscaler, device, do_mask_sparsity, default_grads_weighted_vector=default_grads_weighted_vector)
 
     # Compute dot products & cosines
     delta_lk = l_grads_flat_weighted.dot(l_unsplit_grads_flat_weighted)       
     delta_lp = l_grads_flat_weighted.dot(p_grads_flat_weighted)
     delta_kp = l_unsplit_grads_flat_weighted.dot(p_grads_flat_weighted)
-    delta_km = l_unsplit_grads_flat_weighted.dot(m_grads_flat_weighted)
+    delta_km = l_unsplit_grads_flat_weighted.dot(m_sparsity_grads_flat_weighted)
     cos_lk   = delta_lk / (loss_unsplit_grad_norm_weighted * loss_grad_norm_weighted    + 1e-12)
     cos_lp   = delta_lp / (loss_grad_norm_weighted         * penalty_grad_norm_weighted + 1e-12)
     cos_kp   = delta_kp / (loss_unsplit_grad_norm_weighted * penalty_grad_norm_weighted + 1e-12)
-    cos_km   = delta_km / (loss_unsplit_grad_norm_weighted * mask_grad_norm_weighted + 1e-12)
+    cos_km   = delta_km / (loss_unsplit_grad_norm_weighted * mask_sparsity_grad_norm_weighted + 1e-12)
 
     Loss_grads_flat_weighted = [do_unsplit_loss*loss_unsplit_grads_final_weighted[p] + 
                                 do_loss*args.dont_update_loss*loss_grads_final_weighted[p] +
@@ -1146,11 +1146,11 @@ def calculate_scalers(loss_CE_grads_final, loss_unsplit_grads_final, loss_grads_
     shared_delta_pc, shared_cos_pc, shared_ngppc, shared_ngcpc = \
         calc_delta_and_cos(penalty_grads_final_weighted, loss_CE_grads_final_weighted, shared_pind['pc'], do_penalty, do_CE_loss)
     shared_delta_km, shared_cos_km, shared_ngkkm, shared_ngmkm = \
-        calc_delta_and_cos(loss_unsplit_grads_final_weighted, mask_grads_final_weighted, param_groups_2_pind['mask'], do_unsplit_loss, do_mask_sparsity)
+        calc_delta_and_cos(loss_unsplit_grads_final_weighted, mask_sparsity_grads_final_weighted, param_groups_2_pind['mask'], do_unsplit_loss, do_mask_sparsity)
     shared_delta_cm, shared_cos_cm, shared_ngccm, shared_ngmcm = \
-        calc_delta_and_cos(loss_CE_grads_final_weighted, mask_grads_final_weighted, param_groups_2_pind['mask'], do_CE_loss, do_mask_sparsity)
+        calc_delta_and_cos(loss_CE_grads_final_weighted, mask_sparsity_grads_final_weighted, param_groups_2_pind['mask'], do_CE_loss, do_mask_sparsity)
     shared_delta_pm, shared_cos_pm, shared_ngppm, shared_ngmpm = \
-        calc_delta_and_cos(penalty_grads_final_weighted, mask_grads_final_weighted, param_groups_2_pind['mask'], do_penalty, do_mask_sparsity)
+        calc_delta_and_cos(penalty_grads_final_weighted, mask_sparsity_grads_final_weighted, param_groups_2_pind['mask'], do_penalty, do_mask_sparsity)
     shared_dot_Lp,   shared_cos_Lp, shared_ngLLp, shared_ngpLp = \
         calc_delta_and_cos(Loss_grads_flat_weighted, penalty_grads_final_weighted, shared_pind['kp'], do_unsplit_loss or do_loss, do_penalty) # 'l' and 'p' share same pars
 
@@ -2250,33 +2250,33 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 f" cos: km {info_dict['shared_cos_km']:.2e} cm {info_dict['shared_cos_cm']:.2e} pm {info_dict['shared_cos_pm']:.2e}" + \
                 f"`budget {budget_loss.item():.2e} tailwind {tailwind_loss.item():.2e} n_eff {n_eff.item():.2e}"
 
-            if True or args.mask_nonlinearity != 'gumbel' or args.gumbel_soft: # soft mask
-                with torch.no_grad():
-                    # 1. Use Double Precision to stop the rounding jitter
-                    m_act_double = mask_activation.detach().double()
-                    # 2. Use a much smaller epsilon or none at all for logging
-                    # (Since we know gradients are >=0, sum squared won't be zero unless finished)
-                    sum_a = m_act_double.sum()
-                    sum_a2 = (m_act_double**2).sum()
-                    # Only use epsilon if the sum is actually zero to avoid the ratio flip
-                    if sum_a2 > 1e-18:
-                        stable_neff = (sum_a**2 / sum_a2).item()
-                    else:
-                        stable_neff = 1.0 # Or 0, depending on your convergence definition            
+                # 1. Use Double Precision to stop the rounding jitter
+                m_act_double = mask_activation.detach().double()
+                # 2. Use a much smaller epsilon or none at all for logging
+                # (Since we know gradients are >=0, sum squared won't be zero unless finished)
+                sum_a = m_act_double.sum()
+                sum_a2 = (m_act_double**2).sum()
+                # Only use epsilon if the sum is actually zero to avoid the ratio flip
+                if sum_a2 > 1e-18:
+                    stable_neff = (sum_a**2 / sum_a2).item()
+                else:
+                    stable_neff = 1.0 # Or 0, depending on your convergence definition            
             
                 mask_effective_number = stable_neff
                 mask_entropy = -(mask_activation * torch.log(mask_activation + 1e-8) + (1 - mask_activation) * torch.log(1 - mask_activation + 1e-8)).mean().item()
                 m1_m2 = mask_activation.norm(1) / (mask_activation.norm(2) + 1e-9)
                 Ds2 = torch.sqrt(torch.tensor(mask_activation.size(0)))
                 hoyer_mask_sparsity = ((Ds2 - m1_m2) / (Ds2 - 1 + 1e-9)).item()
+                mask_sparsity_str += f" Neff {mask_effective_number:.2f} Entropy {mask_entropy:.2e} Hoyer {hoyer_mask_sparsity:.2e}"
 
+
+            if args.mask_nonlinearity == 'gumbel' and not args.gumbel_soft: # hard mask
                 on_logits  = mask_preactivation[mask_activation == 1]   # (Neff,)
                 off_logits = mask_preactivation[mask_activation == 0]   # (D - Neff,)
                 min_on  = on_logits.min().detach().cpu().item()    # marginal ON  - most likely to flip OFF
                 max_off = off_logits.max().detach().cpu().item()   # marginal OFF - most likely to flip ON
                 gap     = min_on - max_off   # positive = clean separation, negative = already overlapping
 
-                mask_sparsity_str += f" Neff {mask_effective_number:.2f} Entropy {mask_entropy:.2e} Hoyer {hoyer_mask_sparsity:.2e}"
                                      
                 def get_mask_stability(mask_preactivation, tau, K, prev_set):
                     z_hat = mask_preactivation / tau
@@ -2289,12 +2289,13 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                         stability = None
                     return stability, top_k_set
 
-                stability_epoch, _ = get_mask_stability(mask_preactivation, args.mask_tau, args.mask_sparsity, prev_top_k_mask_indices_epoch)
-                mask_sparsity_str += f"`Jaccard (stability): epoch {stability_epoch:.2e}"
-                stability_batch, top_k_set = get_mask_stability(mask_preactivation, args.mask_tau, args.mask_sparsity, prev_top_k_mask_indices_batch) 
-                mask_sparsity_str += f" batch {stability_batch:.2e}" if stability_batch is not None else ""
-                prev_top_k_mask_indices_batch = copy(top_k_set)
-                mask_sparsity_str += f"`min_on {min_on:.3e} max_off {max_off:.3e} gap {gap:.3e}"
+                if args.mask_sparsity and args.mask_hard_sparsity_limit:
+                    stability_epoch, _ = get_mask_stability(mask_preactivation, args.mask_tau, args.mask_sparsity, prev_top_k_mask_indices_epoch)
+                    mask_sparsity_str += f"`Jaccard (stability): epoch {stability_epoch:.2e}"
+                    stability_batch, top_k_set = get_mask_stability(mask_preactivation, args.mask_tau, args.mask_sparsity, prev_top_k_mask_indices_batch) 
+                    mask_sparsity_str += f" batch {stability_batch:.2e}" if stability_batch is not None else ""
+                    prev_top_k_mask_indices_batch = copy(top_k_set)
+                    mask_sparsity_str += f"`z: min(z_ON) {min_on:.3e} max(z_OFF) {max_off:.3e} gap=min-max {gap:.3e}"
 
         if do_loss:
             ll_str = f" ll {info_dict['ngl2']:.2e}"
