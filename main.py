@@ -319,6 +319,7 @@ def test(net, feature_bank, feature_labels, test_data_loader, num_classes, args,
         pred_scores_list = []
         target_list = []
         target_raw_list = []
+        idcs_list = []
         # For macro-accuracy computation
         per_class_correct = torch.zeros(num_classes, dtype=torch.long, device=feature_bank[0].device)
         per_class_total   = torch.zeros(num_classes, dtype=torch.long, device=feature_bank[0].device)
@@ -328,7 +329,7 @@ def test(net, feature_bank, feature_labels, test_data_loader, num_classes, args,
         total_decay04_sum = 0
         total_decay48_sum = 0
 
-        for data, target in test_bar:
+        for data, target, idx in test_bar:
             data, target = data.cuda(non_blocking=True), target.cuda(non_blocking=True)
             
             if transform is not None:
@@ -409,6 +410,7 @@ def test(net, feature_bank, feature_labels, test_data_loader, num_classes, args,
                 target_raw_list.append(target_raw)
                 pred_labels_list.append(pred_labels)
                 pred_scores_list.append(pred_scores)
+                idcs_list.append(idx)
 
         # end for data, _, target in test_bar
 
@@ -428,6 +430,7 @@ def test(net, feature_bank, feature_labels, test_data_loader, num_classes, args,
             target_raw = torch.cat(target_raw_list, dim=0)
             pred_labels = torch.cat(pred_labels_list, dim=0)
             pred_scores = torch.cat(pred_scores_list, dim=0)
+            idcs = torch.cat(idcs_list, dim=0)
 
             # Save to file
             if "Test" in prefix:
@@ -446,6 +449,7 @@ def test(net, feature_bank, feature_labels, test_data_loader, num_classes, args,
                 'labels_raw':   target_raw,
                 'pred_labels':  pred_labels,
                 'pred_scores':  pred_scores,
+                'idcs':         idcs,
                 'model_epoch':  epoch,
                 'n_classes':    args.class_num,
                 'macro_mrr':    macro_mrr, # [NEW]
@@ -833,9 +837,9 @@ if __name__ == '__main__':
         update_data = utils.Imagenet_idx(root=args.data + '/train', transform=transform, target_transform=target_transform, class_to_idx=class_to_idx)
         memory_data = utils.Imagenet(root=args.data + '/train', transform=transform,  target_transform=target_transform, class_to_idx=class_to_idx)
         transform   = train_transform if args.test_transform == 'train' else test_transform
-        test_data   = utils.Imagenet(root=args.data     + '/test',  transform=transform,  target_transform=target_transform, class_to_idx=class_to_idx)
+        test_data   = utils.Imagenet_idx(root=args.data     + '/test',  transform=transform,  target_transform=target_transform, class_to_idx=class_to_idx)
         transform   = train_transform if args.val_transform == 'train' else test_transform
-        val_data    = utils.Imagenet(root=args.data     + '/val',   transform=transform,  target_transform=target_transform, class_to_idx=class_to_idx)
+        val_data    = utils.Imagenet_idx(root=args.data     + '/val',   transform=transform,  target_transform=target_transform, class_to_idx=class_to_idx)
 
     # pretrain model
     assert (args.pretrain_path is None) or (args.pretrain_path is not None and os.path.isfile(args.pretrain_path)), f"pretrain file {args.pretrain_path} is missing"

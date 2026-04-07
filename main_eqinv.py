@@ -354,7 +354,6 @@ def test(net, test_data_loader, args, num_classes, progress=False, prefix="Test:
            test_bar = test_data_loader
     
         dataset = test_data_loader.dataset
-        idcs    = list(range(len(dataset)))
         transform = dataset.transform
         target_transform = dataset.target_transform
     
@@ -367,6 +366,7 @@ def test(net, test_data_loader, args, num_classes, progress=False, prefix="Test:
         pred_scores_list = []
         target_list = []
         target_raw_list = []
+        idcs_list = []
         device = next(net.parameters()).device
 
         # For macro-accuracy computation
@@ -376,7 +376,7 @@ def test(net, test_data_loader, args, num_classes, progress=False, prefix="Test:
         if mask_u is None:
             mask_u = net.module.mask_fun.sample().detach()
 
-        for data, target in test_bar:
+        for data, target, idx in test_bar:
             data, target = data.cuda(non_blocking=True), target.cuda(non_blocking=True)
             
             if transform is not None:
@@ -427,6 +427,7 @@ def test(net, test_data_loader, args, num_classes, progress=False, prefix="Test:
                 target_raw_list.append(target_raw)
                 pred_labels_list.append(pred_labels)
                 pred_scores_list.append(out)
+                idcs_list.append(idx)
 
         # end for data, _, target in test_bar
         
@@ -441,6 +442,7 @@ def test(net, test_data_loader, args, num_classes, progress=False, prefix="Test:
             target_raw = torch.cat(target_raw_list, dim=0)
             pred_labels = torch.cat(pred_labels_list, dim=0)
             pred_scores = torch.cat(pred_scores_list, dim=0)
+            idcs = torch.cat(idcs_list, dim=0)
 
             # Save to file
             if "Test" in prefix:
@@ -461,6 +463,7 @@ def test(net, test_data_loader, args, num_classes, progress=False, prefix="Test:
                 'labels_raw':      target_raw,
                 'pred_labels':     pred_labels,
                 'pred_scores':     pred_scores,
+                'idcs':            idcs,
                 'model_epoch':     epoch,
                 'head_weights':    net.module.arms["classifier"][0].weight,  # shape: (num_classes, embed_dim)
                 'head_bias':       net.module.arms["classifier"][0].bias,    # shape: (num_classes,)
@@ -963,9 +966,9 @@ if __name__ == '__main__':
         train_data  = utils.Imagenet_idx(root=args.data + '/train', transform=transform, target_transform=target_transform, class_to_idx=class_to_idx)
         memory_data = utils.Imagenet_idx(root=args.data + '/train', transform=transform,  target_transform=target_transform, class_to_idx=class_to_idx)
         transform   = train_transform if args.test_transform == 'train' else test_transform
-        test_data   = utils.Imagenet(root=args.data     + '/test',  transform=transform,  target_transform=target_transform, class_to_idx=class_to_idx)
+        test_data   = utils.Imagenet_idx(root=args.data     + '/test',  transform=transform,  target_transform=target_transform, class_to_idx=class_to_idx)
         transform   = train_transform if args.val_transform == 'train' else test_transform
-        val_data    = utils.Imagenet(root=args.data     + '/val',   transform=transform,  target_transform=target_transform, class_to_idx=class_to_idx)
+        val_data    = utils.Imagenet_idx(root=args.data     + '/val',   transform=transform,  target_transform=target_transform, class_to_idx=class_to_idx)
         
     # pretrain model
     assert (args.pretrain_path is None) or (args.pretrain_path is not None and os.path.isfile(args.pretrain_path)), f"pretrain file {args.pretrain_path} is missing"
