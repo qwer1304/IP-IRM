@@ -1168,7 +1168,7 @@ if __name__ == '__main__':
         if 'train' in args.evaluate:
             print('eval on train data')
             transform = train_transform if 'train' in args.train_transform else test_transform
-            train_data  = utils.Imagenet(root=args.data + '/train', transform=transform, target_transform=target_transform, class_to_idx=class_to_idx)
+            train_data  = utils.Imagenet_idx(root=args.data + '/train', transform=transform, target_transform=target_transform, class_to_idx=class_to_idx)
             train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, shuffle=False, 
                pin_memory=True, persistent_workers=tr_pw)
             train_acc_1, train_acc_5, train_macro_acc = test(model, train_loader, args, num_classes=c, progress=True, prefix="Train:", 
