@@ -2235,7 +2235,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
             num_updates = int((batch_index + 1) / gradients_accumulation_steps)
             
             z_hat = mask_preactivation / args.mask_tau
-            preact_str = f`"z_hat: Min {z_hat.min().item():.2e}, Max {z_hat.max().item():.2e}"
+            preact_str = f"`z_hat: Min {z_hat.min().item():.2e}, Max {z_hat.max().item():.2e}"
             if args.mask_nonlinearity == 'gumbel' and not args.gumbel_soft:
                 on_masks = torch.sigmoid(z_hat) > args.mask_on_threshold # before UB
                 actual_sum_pos = z_hat[on_masks].sum().item()
