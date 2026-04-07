@@ -79,59 +79,58 @@ class MaskModule(nn.Module):
         # Initialize the mask as a trainable parameter
         if trainable:
             init_logit = torch.rand(input_dim) # default value
-            if activation_method.K:
-                if activation_method.mask_type == 'gumbel' and (True or not activation_method.soft):
-                    # This initializes all masks to be slightly above the 0.5 threshold in the most
-                    # responsive zone of the sigmoid.
-                    # Constants (The 'shape' you want in sigmoid-space)
-                    Z_HAT_INIT = 0.20   # Corresponds to Mask ~0.55
-                    Z_HAT_MIN  = 0.04   # Corresponds to Mask ~0.51
-                    Z_HAT_CLAMP = 3.0   # Corresponds to Mask ~0.95
-                    Z_HAT_NOISE = 0.01
+            K = activation_method.K or input_dim
+            if activation_method.mask_type == 'gumbel' and (True or not activation_method.soft):
+                # This initializes all masks to be slightly above the 0.5 threshold in the most
+                # responsive zone of the sigmoid.
+                # Constants (The 'shape' you want in sigmoid-space)
+                Z_HAT_INIT = 0.20   # Corresponds to Mask ~0.55
+                Z_HAT_MIN  = 0.04   # Corresponds to Mask ~0.51
+                Z_HAT_CLAMP = 3.0   # Corresponds to Mask ~0.95
+                Z_HAT_NOISE = 0.01
 
-                    # The Parameter Initialization
-                    init_z = Z_HAT_INIT * activation_method.tau
-                    current_clamp = Z_HAT_CLAMP * activation_method.tau
-                    # The Noise (Scaled to stay consistent in z_hat space)
-                    noise_std = Z_HAT_NOISE * activation_method.tau
-                    init_logit = torch.ones(input_dim) * init_z
-                    noise = torch.randn(input_dim) * noise_std
-                    init_val = torch.clamp(init_logit + noise, min=Z_HAT_MIN * activation_method.tau) # Add variance to break symmetry
-                elif activation_method.mask_type == 'sigmoid' or activation_method.mask_type == 'gumbel':
-                    assert False, "fix this"
-                    def get_bounds(K, N=2048, W=2):
-                        # The Logit of the probability
-                        b = torch.log(torch.tensor(K / (N - K)))
-                        L = b - (W / 2)
-                        H = b + (W / 2)
-                        return L, H
+                # The Parameter Initialization
+                init_z = Z_HAT_INIT * activation_method.tau
+                current_clamp = Z_HAT_CLAMP * activation_method.tau
+                # The Noise (Scaled to stay consistent in z_hat space)
+                noise_std = Z_HAT_NOISE * activation_method.tau
+                init_logit = torch.ones(input_dim) * init_z
+                noise = torch.randn(input_dim) * noise_std
+                init_val = torch.clamp(init_logit + noise, min=Z_HAT_MIN * activation_method.tau) # Add variance to break symmetry
+            elif activation_method.mask_type == 'sigmoid' or activation_method.mask_type == 'gumbel':
+                assert False, "fix this"
+                def get_bounds(K, N=2048, W=2):
+                    # The Logit of the probability
+                    b = torch.log(torch.tensor(K / (N - K)))
+                    L = b - (W / 2)
+                    H = b + (W / 2)
+                    return L, H
 
-                    def init_mask_to_neff(n=2048, target_k=100):
-                        # 1. Start with random noise in [-1, 1]
-                        r = (torch.rand(n) * 2) - 1
+                def init_mask_to_neff(n=2048, target_k=100):
+                    # 1. Start with random noise in [-1, 1]
+                    r = (torch.rand(n) * 2) - 1
 
-                        # 2. We need to find the bias 'b' that shifts the distribution 
-                        # so that the Sigmoid output hits the target Neff
-                        def get_neff(bias):
-                            mask = torch.sigmoid(r + bias)
-                            return (mask.sum()**2 / torch.sum(mask**2))
+                    # 2. We need to find the bias 'b' that shifts the distribution 
+                    # so that the Sigmoid output hits the target Neff
+                    def get_neff(bias):
+                        mask = torch.sigmoid(r + bias)
+                        return (mask.sum()**2 / torch.sum(mask**2))
 
-                        # Binary search for the correct bias
-                        low, high = get_bounds(K=target_k, N=n)
-                        for _ in range(20):  # 20 iterations is enough for high precision
-                            mid = (low + high) / 2
-                            if get_neff(mid) < target_k:
-                                high = mid # Inversely related: higher bias = higher Neff
-                            else:
-                                low = mid
+                    # Binary search for the correct bias
+                    low, high = get_bounds(K=target_k, N=n)
+                    for _ in range(20):  # 20 iterations is enough for high precision
+                        mid = (low + high) / 2
+                        if get_neff(mid) < target_k:
+                            high = mid # Inversely related: higher bias = higher Neff
+                        else:
+                            low = mid
 
-                        # 3. Apply the found bias
-                        final_bias = (low + high) / 2
-                        return r + final_bias
+                    # 3. Apply the found bias
+                    final_bias = (low + high) / 2
+                    return r + final_bias
 
-                    init_logit = init_mask_to_neff(n=input_dim, target_k=activation_method.K)
-                    init_val = init_logit + (torch.randn(input_dim) * noise_std) # Add variance to break symmetry
-                #end if activation_method.mask_type == 'gumbel' and not activation_method.gumbel_soft:
+                init_logit = init_mask_to_neff(n=input_dim, target_k=K)
+                init_val = init_logit + (torch.randn(input_dim) * noise_std) # Add variance to break symmetry
             # end if activation_method.K:
 
             # Initialize with a small variance around the target logit
