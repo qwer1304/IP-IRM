@@ -1672,7 +1672,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
     prev_top_k_mask_indices_batch = None
     mask_preactivation_epoch = net.module.mask_fun.mask.detach().clone()
     z_hat = mask_preactivation_epoch / args.mask_tau
-    K = int(args.mask_sparsity)
+    K = int(args.mask_sparsity or len(z_hat))
     top_k_indices = torch.topk(z_hat, K).indices
     prev_top_k_mask_indices_epoch = set(top_k_indices.tolist())
 
