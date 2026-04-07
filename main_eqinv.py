@@ -622,6 +622,7 @@ def load_checkpoint(path, model, model_momentum, optimizer, gradnorm_balancer, g
 def prepare_clusters(args, resumed, memory_loader, device):
     def get_check_cluster_file(fp, num_partitions, args):
         checkpoint = torch.load(fp)
+        assert isinstance(checkpoint, dict), f"file {f} doesn't have a dict but a {type(checkpoint)}. Probably a stale cluster."
         partitions = checkpoint.get("partitions", None)
         assert partitions is not None, f"No partitions in cluster file {fp}"
         memory_hash_ = checkpoint.get("memory_hash", None)
