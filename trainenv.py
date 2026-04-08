@@ -2242,8 +2242,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 f"preactivation: mean {mask_preactivation.mean().item():.2e} std {torch.std(mask_preactivation).item():.2e} " + \
                 f"mask_CV {(total_mask_CV / num_updates).item():.2f} " + \
                 preact_str + \
-                f"`dot: km {info_dict['shared_dot_km']:.2e} cm {info_dict['shared_dot_cm']:.2e} pm {info_dict['shared_dot_pm']:.2e}" + \
-                f" cos: km {info_dict['shared_cos_km']:.2e} cm {info_dict['shared_cos_cm']:.2e} pm {info_dict['shared_cos_pm']:.2e}" + \
+                f"`dot_m: km {info_dict['shared_dot_km']:.2e} cm {info_dict['shared_dot_cm']:.2e} pm {info_dict['shared_dot_pm']:.2e}" + \
+                f" cos_m: km {info_dict['shared_cos_km']:.2e} cm {info_dict['shared_cos_cm']:.2e} pm {info_dict['shared_cos_pm']:.2e}" + \
                 f"`budget {budget_loss.item():.2e} tailwind {tailwind_loss.item():.2e} n_eff {n_eff.item():.2e}"
 
             # 1. Use Double Precision to stop the rounding jitter
@@ -2397,7 +2397,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                    f"`cos:{lk_cos_str}{lp_cos_str}{kp_cos_str}" + \
                    f"`{gradnorm_str}" + \
                    f"`decr: l {info_dict['loss_decrease_cond']:.2e} k {info_dict['loss_unsplit_decrease_cond']:.2e} p {info_dict['penalty_decrease_cond']:.2e}" + \
-                   f"`Lp: cos {info_dict['cos_Lp']:.3e} dot {info_dict['dot_Lp']:.3e} gn_prgrs {info_dict['gradnorm_progress']:.6g}" + \
+                   f"`Lp: cos_p {info_dict['cos_Lp']:.3e} dot {info_dict['dot_Lp']:.3e} gn_prgrs {info_dict['gradnorm_progress']:.6g}" + \
                    f"`shared_dot:{skp_str}{skc_str}{spc_str}" + \
                    f"`{slc_str}{slk_str}{slp_str}" + \
                    f"`shared_cos:{skp_cos_str}{skc_cos_str}{spc_cos_str}{slc_cos_str}{slk_cos_str}{slp_cos_str}" + \
