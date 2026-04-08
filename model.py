@@ -28,11 +28,34 @@ class Mask():
         self.on_threshold = on_threshold
 
     def __call__(self, x, u=None, training=True):
+        def get_prune_mask(x, x_soft, use_threshold=False):
+            # x = z, x_soft - output from sigmoid 
+            if self.hard_K:
+                _, topk_indices = torch.topk(x, self.K)
+                #_, topk_indices = torch.topk(x_soft, self.K)
+                topk_mask = torch.zeros_like(x, dtype=bool)
+                topk_mask[topk_indices] = True
+            else:
+                topk_mask = torch.ones_like(x, dtype=bool)
+
+            if use_threshold:
+                # 1. We never exceed K (because of threshold)
+                # 2. We don't force 'on' channels that are naturally 'off' (because of threshold)
+                noise = torch.randn_like(x) * self.sigma
+                noise_positive = torch.relu(noise)
+                threshold = self.on_threshold - noise_positive  # small jitter to help w/ s;uctuations around 0.5
+            else:
+                threshold = torch.zeros_like(x)
+            return ((x_soft > threshold) & topk_mask).float()
+
         # x: (num_features,) tensor
         if self.mask_type == 'sigmoid':
-            mask = torch.sigmoid(x / self.tau)
-            #mask = torch.where(mask < 0.1, torch.zeros_like(mask), mask)
-            return mask
+            x_soft = torch.sigmoid(x / self.tau)
+            #x_soft = torch.where(x_soft < 0.1, torch.zeros_like(x_soft), x_soft)
+            prune_mask = get_prune_mask(x, x_soft, use_threshold=self.on_threshold > 0)
+            x_pruned = torch.where(prune_mask, x_soft, 0)
+            x_ret = x_pruned.detach() + x_soft - x_soft.detach()
+            return x_ret
         elif self.mask_type == 'ident':
             return x
         elif self.mask_type == 'gumbel':
@@ -49,26 +72,13 @@ class Mask():
             x_soft = torch.sigmoid((x + g) / self.tau)  # (N,)
 
             if self.soft:
-                x_ret = x_soft
+                prune_mask = get_prune_mask(x, x_soft, use_threshold=self.on_threshold > 0)
+                x_pruned = torch.where(prune_mask, x_soft, 0)
+                x_ret = x_pruned.detach() + x_soft - x_soft.detach()
             else:
                 # Hard straight-through: forward 0/1, backward gradient through soft
-
-                # Calculate threshold for the Top-K slots
-                if self.hard_K:
-                    _, topk_indices = torch.topk(x, self.K)
-                    #_, topk_indices = torch.topk(x_soft, self.K)
-                    topk_mask = torch.zeros_like(x, dtype=bool)
-                    topk_mask[topk_indices] = True
-                else:
-                    topk_mask = torch.ones_like(x, dtype=bool)
-
-                # 1. We never exceed K (because of threshold)
-                # 2. We don't force 'on' channels that are naturally 'off' (because of 0.5)
-                noise = torch.randn_like(x_soft) * self.sigma
-                noise_positive = torch.relu(noise)
-                threshold = self.on_threshold - noise_positive  # small jitter to help w/ s;uctuations around 0.5
-                x_hard = ((x_soft > threshold) & topk_mask).float()
-                x_ret = x_hard + x_soft - x_soft.detach()
+                x_hard = get_prune_mask(x, x_soft, use_threshold=True)
+                x_ret = x_hard.detach() + x_soft - x_soft.detach()
             return x_ret
         else:
             raise ValueError(f"Unknown mask type: {self.mask_type}")

@@ -2139,18 +2139,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 p.grad += total_grad_flat_weighted.view(p.shape).clone().detach()
 
             """
-            if 'mask' in name:
-                with torch.no_grad():
-                    # If this number is decreasing, your sparsity IS working.
-                    p_tau = p / args.mask_tau
-                    actual_sum_pos = p_tau[p_tau > 0].sum().item()
-                    actual_sum_neg = -p_tau[p_tau < 0].sum().item()
-                    print(f"L1+ Norm (Sum of |Mask_on/tau|): {actual_sum_pos:.12f}, " + \
-                          f"L1- Norm (Sum of |Mask_off/tau|): {actual_sum_neg:.12f}, " + \
-                          f"# ON: {(p_tau > 0.).sum().item()}, Min mask: {p_tau.min().item()}, Max mask: {p_tau.max().item()}")
-            """
-
-            """
             # Are grads present and nonzero?
             print(pind, "requires_grad=", p.requires_grad,
                   "grad is None?", p.grad is None,
@@ -2243,7 +2231,12 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 preact_str += f"`L1+ Norm (sum(|z_hat_ON|)): {actual_sum_pos:.3e}, " + \
                               f"L1- Norm (sum(|z_hat_OFF|)): {actual_sum_neg:.3e}" + \
                               f"`# ON: {(on_masks).sum().item()}, "
-                  
+            else:
+                mask_counts = torch.histc(mask_activation.detach(), bins=10, min=0., max=1.).tolist()
+                mask_mean = torch.mean(mask_activation.detach()).item()
+                mask_std = torch.std(mask_activation.detach()).item()
+                preact_str += f"`counts {mask_counts} mean {mask_mean:.2e} std {mask_std:.2e}"
+                
             mask_hard_str = 'hard' if args.mask_nonlinearity == 'gumbel' and not args.gumbel_soft else 'soft' 
             mask_sparsity_str = f" sparsity {args.mask_nonlinearity} {mask_hard_str}: ngs2 {loss_mask_sparsity_norm**2:.2e} " + \
                 f"preactivation: mean {mask_preactivation.mean().item():.2e} std {torch.std(mask_preactivation).item():.2e} " + \

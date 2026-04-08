@@ -674,6 +674,8 @@ def prepare_clusters(args, resumed, memory_loader, device):
         else: # classes cluster given
             directory = f'misc/{args.name}'
             fp = args.classes_cluster_path # full path
+            assert os.path.exists(fp), f"cluster file {fp} not found"
+
         #end if args.classes_cluster_path is None: # specific cluster not given
 
         fp_dist = os.path.join(directory, 'env_ref_dist') # cluster distances for debug
@@ -973,16 +975,19 @@ if __name__ == '__main__':
         
     # pretrain model
     assert (args.pretrain_path is None) or (args.pretrain_path is not None and os.path.isfile(args.pretrain_path)), f"pretrain file {args.pretrain_path} is missing"
-    if args.pretrain_path is not None and os.path.isfile(args.pretrain_path):
-        msg = []
-        print("=> loading pretrained checkpoint '{}'".format(args.pretrain_path), end="")
-        checkpoint = torch.load(args.pretrain_path, map_location=device, weights_only=False)
-        if 'state_dict' in checkpoint.keys():
-            state_dict = checkpoint['state_dict']
-            print(f" Epoch {checkpoint['epoch']}")
+    if args.pretrain_path is not None:
+        if os.path.isfile(args.pretrain_path):
+            msg = []
+            print("=> loading pretrained checkpoint '{}'".format(args.pretrain_path), end="")
+            checkpoint = torch.load(args.pretrain_path, map_location=device, weights_only=False)
+            if 'state_dict' in checkpoint.keys():
+                state_dict = checkpoint['state_dict']
+                print(f" Epoch {checkpoint['epoch']}")
+            else:
+                state_dict = checkpoint
+                print(" Epoch N/A")
         else:
-            state_dict = checkpoint
-            print(" Epoch N/A")
+            raise ValueError(f"pretrained checkpoint {args.pretrain_path} not found")
     else:
         state_dict = None
         print('Using default model')
@@ -1108,7 +1113,7 @@ if __name__ == '__main__':
                 param_group['lr'] = args.gradnorm_lr 
             resumed = True
         else:
-            print("=> no checkpoint found at '{}'".format(args.resume))
+            raise ValueError("no checkpoint found at '{}'".format(args.resume))
 
     moco_dict = {'net_momentum': model_momentum, 'queue_proj': queue_proj, 'queue_noproj': queue_noproj, 'momentum': args.momentum,
                  'temperature': moco_temperature,}
