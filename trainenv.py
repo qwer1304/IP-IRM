@@ -1415,7 +1415,7 @@ def calculate_mask_sparsity_and_grads(mask, total_grad, net, weight, do_flag, ar
     # hard_mask: bool, whether masks are hard (True) or soft sigmoid (False)
 
     def continuous_signed_sparsity(mask, grad_app, target=200, k=5.0, 
-                                   use_soft=True, beta=0.07, alpha=0.01, epsilon=0.015, hard_mask=True):
+                                   use_soft=True, beta=0.07, alpha=0.01, epsilon=0.015, hard_mask=True, on_threshold=0.5):
 
         target = target if target is not None else 0
         # 1. Identify directions from App's gradients
@@ -1464,10 +1464,11 @@ def calculate_mask_sparsity_and_grads(mask, total_grad, net, weight, do_flag, ar
         # Since all three are positive, the gradient is ALWAYS positive (DOWN).
         # ---------------------------------------------------------
         w_fix = torch.where(is_pulling_on > 0, f, 1.0 - f).detach()
-        # THE FIX: Only pull if the mask is ON (> 0.5) 
+        # THE FIX: Only pull if the mask is ON (for hard) or above noise floor (for soft) 
         # OR if it's OFF but the App is trying to pull it ON (is_pulling_on)
         # This stops the 1,848 "Already OFF" masks from wasting the 2.5 Norm.
-        gate = torch.clamp((mask > 0.5).float() + is_pulling_on, 0.0, 1.0).detach()
+        threshold = 0.05 if not hard_mask else on_threshold
+        gate = torch.clamp((mask > threshold).float() + is_pulling_on, 0.0, 1.0).detach()
         budget_loss = multiplier.detach() * (w_fix * gate * mask).sum()
 
         # 6. TAILWIND (The Nudge)
@@ -1483,7 +1484,7 @@ def calculate_mask_sparsity_and_grads(mask, total_grad, net, weight, do_flag, ar
         loss, budget_loss, tailwind_loss, n_eff = continuous_signed_sparsity(mask, total_grad, args.mask_sparsity,
                     use_soft=not args.mask_sparsity_relu, hard_mask=args.mask_nonlinearity == 'gumbel' and not args.gumbel_soft, 
                     beta=args.mask_sparsity_softplus_beta, epsilon=args.mask_sparsity_epsilon, k=args.mask_sparsity_k,
-                    alpha=args.mask_sparsity_leakyrelu_alpha)
+                    alpha=args.mask_sparsity_leakyrelu_alpha, on_threshold=args.mask_on_threshold)
         grads = calculate_grads(loss, net)
 
         grads_flat = [  # dLoss / dTheta
