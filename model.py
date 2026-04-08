@@ -46,7 +46,7 @@ class Mask():
                 threshold = self.on_threshold - noise_positive  # small jitter to help w/ s;uctuations around 0.5
             else:
                 threshold = torch.zeros_like(x)
-            return ((x_soft > threshold) & topk_mask).float()
+            return (x_soft > threshold) & topk_mask
 
         # x: (num_features,) tensor
         if self.mask_type == 'sigmoid':
@@ -77,7 +77,7 @@ class Mask():
                 x_ret = x_pruned.detach() + x_soft - x_soft.detach()
             else:
                 # Hard straight-through: forward 0/1, backward gradient through soft
-                x_hard = get_prune_mask(x, x_soft, use_threshold=True)
+                x_hard = get_prune_mask(x, x_soft, use_threshold=True).float()
                 x_ret = x_hard.detach() + x_soft - x_soft.detach()
             return x_ret
         else:
