@@ -2122,7 +2122,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         loss_CE_mask_grad_norm            = (loss_CE_grads_final[pind]      * loss_CE_weight       * args.Lscaler * int(not args.dont_update_CE)).norm()
         loss_mask_grad_norm               = (loss_grads_final[pind]         * loss_weight          * args.Lscaler * int(not args.dont_update_loss)).norm()     
         penalty_mask_grad_norm            = (penalty_grads_final[pind]      * penalty_weight       * args.Lscaler * int(epoch >= args.penalty_iters) * penalty_BB_scaler).norm()
-        loss_mask_sparsity_mask_gard_norm = (loss_mask_sparsity_grads[pind] * mask_sparsity_weight * args.Lscaler * int(not args.dont_update_mask_sparsity).norm()
+        loss_mask_sparsity_mask_gard_norm = (loss_mask_sparsity_grads[pind] * mask_sparsity_weight * args.Lscaler * int(not args.dont_update_mask_sparsity)).norm()
 
         for pind, (name, p) in enumerate(net.named_parameters()):
             if 'mask' in name and args.mask_scalers is not None:
