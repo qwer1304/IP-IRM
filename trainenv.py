@@ -2276,7 +2276,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
             Ds2 = torch.sqrt(torch.tensor(mask_activation.size(0)))
             hoyer_mask_sparsity = ((Ds2 - m1_m2) / (Ds2 - 1 + 1e-9)).item()
             mask_sparsity_str += f" Neff {mask_effective_number:.2f} Entropy {mask_entropy:.2e} Hoyer {hoyer_mask_sparsity:.2e}"
-            mask_sparsity_str += f"`mask norms: CE {loss_CE_mask_grad_norm.item():.2e} k {loss_unsplit_mask_gard_norm.item():.2e}" + \
+            mask_sparsity_str += f"`mask norms: c {loss_CE_mask_grad_norm.item():.2e} k {loss_unsplit_mask_gard_norm.item():.2e}" + \
                                  f" l {loss_mask_grad_norm.item():.2e} p {penalty_mask_grad_norm.item():.2e} s {loss_mask_sparsity_mask_gard_norm.item():.2e}"
 
             if args.mask_nonlinearity == 'gumbel' and not args.gumbel_soft: # hard mask
