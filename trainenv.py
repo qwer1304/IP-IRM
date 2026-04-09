@@ -2225,8 +2225,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
             
             z_hat = mask_preactivation / args.mask_tau
             preact_str = f"`z_hat: Min {z_hat.min().item():.2e}, Max {z_hat.max().item():.2e}"
-            actual_sum_pos = z_hat[torch.where(mask_activation > args.mask_on_threshold].sum().item()
-            actual_sum_neg = z_hat[torch.where(mask_activation <= args.mask_on_threshold].sum().item()
+            actual_sum_pos = z_hat[torch.where(mask_activation > args.mask_on_threshold)].sum().item()
+            actual_sum_neg = z_hat[torch.where(mask_activation <= args.mask_on_threshold)].sum().item()
             preact_str += f"`L1+ Norm (sum(|z_hat_ON|)): {actual_sum_pos:.3e}, " + \
                           f"L1- Norm (sum(|z_hat_OFF|)): {actual_sum_neg:.3e}"
             if args.mask_nonlinearity == 'gumbel' and not args.gumbel_soft:
