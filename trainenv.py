@@ -2116,6 +2116,14 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         """
         if args.debug_print_grads: print()
         
+        pind = param_groups_2_pind['mask'][0]
+        penalty_BB_scaler = 1.0
+        loss_unsplit_mask_gard_norm       = (loss_unsplit_grads_final[pind] * loss_unsplit_weight  * args.Lscaler).norm()
+        loss_CE_mask_grad_norm            = (loss_CE_grads_final[pind]      * loss_CE_weight       * args.Lscaler * int(not args.dont_update_CE)).norm()
+        loss_mask_grad_norm               = (loss_grads_final[pind]         * loss_weight          * args.Lscaler * int(not args.dont_update_loss)).norm()     
+        penalty_mask_grad_norm            = (penalty_grads_final[pind]      * penalty_weight       * args.Lscaler * int(epoch >= args.penalty_iters) * penalty_BB_scaler).norm()
+        loss_mask_sparsity_mask_gard_norm = (loss_mask_sparsity_grads[pind] * mask_sparsity_weight * args.Lscaler * int(not args.dont_update_mask_sparsity).norm()
+
         for pind, (name, p) in enumerate(net.named_parameters()):
             if 'mask' in name and args.mask_scalers is not None:
                 ce_mask_scaler, unsplit_mask_scaler, env_mask_scaler, pen_mask_scaler = args.mask_scalers
@@ -2248,7 +2256,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 preact_str + \
                 f"`dot_m: km {info_dict['shared_dot_km']:.2e} cm {info_dict['shared_dot_cm']:.2e} pm {info_dict['shared_dot_pm']:.2e}" + \
                 f" cos_m: km {info_dict['shared_cos_km']:.2e} cm {info_dict['shared_cos_cm']:.2e} pm {info_dict['shared_cos_pm']:.2e}" + \
-                f"`budget {budget_loss.item():.2e} tailwind {tailwind_loss.item():.2e} n_eff {n_eff.item():.2e}"
+                f"`budget {budget_loss.item():.2e} tailwind {tailwind_loss.item():.2e} n_eff {n_eff.item():.2e}" + \
+                f"`mask norms: CE {loss_CE_mask_grad_norm.item():.2e} k {loss_unsplit_mask_gard_norm.item():.2e}" + \
+                f" l {loss_mask_grad_norm.item():.2e} p {penalty_mask_grad_norm.item():.2e} s {loss_mask_sparsity_mask_gard_norm.item():.2e}"
 
             # 1. Use Double Precision to stop the rounding jitter
             m_act_double = mask_activation.detach().double()
