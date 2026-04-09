@@ -1413,6 +1413,7 @@ def calculate_mask_sparsity_and_grads(mask, total_grad, net, weight, do_flag, ar
     # target: target number of ON masks (hard) or target Hoyer (soft)
     # use_soft: whether to use soft limit (Softplus) or hard limit (ReLU)
     # hard_mask: bool, whether masks are hard (True) or soft sigmoid (False)
+    # on_threshold: mask level below which mask will be zeroed out
 
     def continuous_signed_sparsity(mask, grad_app, target=200, k=5.0, 
                                    use_soft=True, beta=0.07, alpha=0.01, epsilon=0.015, hard_mask=True, on_threshold=0.5):
@@ -1467,8 +1468,7 @@ def calculate_mask_sparsity_and_grads(mask, total_grad, net, weight, do_flag, ar
         # THE FIX: Only pull if the mask is ON (for hard) or above noise floor (for soft) 
         # OR if it's OFF but the App is trying to pull it ON (is_pulling_on)
         # This stops the 1,848 "Already OFF" masks from wasting the 2.5 Norm.
-        threshold = 0.05 if not hard_mask else on_threshold
-        gate = torch.clamp((mask > threshold).float() + is_pulling_on, 0.0, 1.0).detach()
+        gate = torch.clamp((mask > on_threshold).float() + is_pulling_on, 0.0, 1.0).detach()
         budget_loss = multiplier.detach() * (w_fix * gate * mask).sum()
 
         # 6. TAILWIND (The Nudge)

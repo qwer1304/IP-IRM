@@ -879,7 +879,7 @@ if __name__ == '__main__':
     parser.add_argument('--mask_sparsity_epsilon', type=float, default=0.015, help='tailwind force')
     parser.add_argument('--mask_sparsity_k', type=float, default=5.0, help="k in app's force calculation")
     parser.add_argument('--mask_threshold_sigma', type=float, default=0.01, help="noise around hard threshold")
-    parser.add_argument('--mask_on_threshold', type=float, default=0.5, help="hard threshold")
+    parser.add_argument('--mask_on_threshold', type=float, default=0.5, help="threshold fpr mask to be considered ON")
     parser.add_argument('--mask_clamp', type=float, default=None, help="clamp of mask preactivation for liveness")
     parser.add_argument('--mask_save_freq', type=int, default=None, help='save mask frequency')
     parser.add_argument('--mask_scalers', default=None, type=float, nargs=4, metavar='[CE Unsplit Env Penalty]',    

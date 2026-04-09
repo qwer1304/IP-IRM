@@ -28,7 +28,7 @@ class Mask():
         self.on_threshold = on_threshold
 
     def __call__(self, x, u=None, training=True):
-        def get_prune_mask(x, x_soft, use_threshold=False):
+        def get_prune_mask(x, x_soft):
             # x = z, x_soft - output from sigmoid 
             if self.hard_K:
                 _, topk_indices = torch.topk(x, self.K)
@@ -38,21 +38,18 @@ class Mask():
             else:
                 topk_mask = torch.ones_like(x, dtype=bool)
 
-            if use_threshold:
-                # 1. We never exceed K (because of threshold)
-                # 2. We don't force 'on' channels that are naturally 'off' (because of threshold)
-                noise = torch.randn_like(x) * self.sigma
-                noise_positive = torch.relu(noise)
-                threshold = self.on_threshold - noise_positive  # small jitter to help w/ s;uctuations around 0.5
-            else:
-                threshold = torch.zeros_like(x)
+            # 1. We never exceed K (because of threshold)
+            # 2. We don't force 'on' channels that are naturally 'off' (because of threshold)
+            noise = torch.randn_like(x) * self.sigma
+            noise_positive = torch.relu(noise)
+            threshold = self.on_threshold - noise_positive  # small jitter to help w/ s;uctuations around 0.5
             return (x_soft > threshold) & topk_mask
 
         # x: (num_features,) tensor
         if self.mask_type == 'sigmoid':
             x_soft = torch.sigmoid(x / self.tau)
             #x_soft = torch.where(x_soft < 0.1, torch.zeros_like(x_soft), x_soft)
-            prune_mask = get_prune_mask(x, x_soft, use_threshold=self.on_threshold > 0)
+            prune_mask = get_prune_mask(x, x_soft)
             x_pruned = torch.where(prune_mask, x_soft, 0)
             x_ret = x_pruned.detach() + x_soft - x_soft.detach()
             return x_ret
@@ -72,12 +69,12 @@ class Mask():
             x_soft = torch.sigmoid((x + g) / self.tau)  # (N,)
 
             if self.soft:
-                prune_mask = get_prune_mask(x, x_soft, use_threshold=self.on_threshold > 0)
+                prune_mask = get_prune_mask(x, x_soft)
                 x_pruned = torch.where(prune_mask, x_soft, 0)
                 x_ret = x_pruned.detach() + x_soft - x_soft.detach()
             else:
                 # Hard straight-through: forward 0/1, backward gradient through soft
-                x_hard = get_prune_mask(x, x_soft, use_threshold=True).float()
+                x_hard = get_prune_mask(x, x_soft).float()
                 x_ret = x_hard.detach() + x_soft - x_soft.detach()
             return x_ret
         else:
