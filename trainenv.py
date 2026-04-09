@@ -2225,18 +2225,19 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
             
             z_hat = mask_preactivation / args.mask_tau
             preact_str = f"`z_hat: Min {z_hat.min().item():.2e}, Max {z_hat.max().item():.2e}"
+            actual_sum_pos = z_hat[torch.where(mask_activation > args.mask_on_threshold].sum().item()
+            actual_sum_neg = z_hat[torch.where(mask_activation <= args.mask_on_threshold].sum().item()
+            preact_str += f"`L1+ Norm (sum(|z_hat_ON|)): {actual_sum_pos:.3e}, " + \
+                          f"L1- Norm (sum(|z_hat_OFF|)): {actual_sum_neg:.3e}"
             if args.mask_nonlinearity == 'gumbel' and not args.gumbel_soft:
-                on_masks = torch.sigmoid(z_hat) > args.mask_on_threshold # before UB
-                actual_sum_pos = z_hat[on_masks].sum().item()
-                actual_sum_neg = z_hat[~on_masks].abs().sum().item()
-                preact_str += f"`L1+ Norm (sum(|z_hat_ON|)): {actual_sum_pos:.3e}, " + \
-                              f"L1- Norm (sum(|z_hat_OFF|)): {actual_sum_neg:.3e}" + \
-                              f"`# ON: {(on_masks).sum().item()}, "
+                on_masks = (mask_activation > args.mask_on_threshold).sum().item()
+                preact_str += f"`# ON: {on_masks:d}, "
             else:
                 mask_counts = torch.histc(mask_activation.detach(), bins=10, min=0., max=1.).tolist()
+                counts_str = ' '.join([f'h{i}: {v:d}' for i,v in enumerate(mask_counts)])
                 mask_mean = torch.mean(mask_activation.detach()).item()
                 mask_std = torch.std(mask_activation.detach()).item()
-                preact_str += f"`counts {mask_counts} mean {mask_mean:.2e} std {mask_std:.2e}"
+                preact_str += f"`counts {counts_str} mean {mask_mean:.2e} std {mask_std:.2e}"
                 
             mask_hard_str = 'hard' if args.mask_nonlinearity == 'gumbel' and not args.gumbel_soft else 'soft' 
             mask_sparsity_str = f" sparsity {args.mask_nonlinearity} {mask_hard_str}: ngs2 {loss_mask_sparsity_norm**2:.2e} " + \
