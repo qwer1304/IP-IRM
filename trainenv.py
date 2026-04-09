@@ -2234,7 +2234,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 preact_str += f"`# ON: {on_masks:d}, "
             else:
                 mask_counts = torch.histc(mask_activation.detach(), bins=10, min=0., max=1.).tolist()
-                counts_str = ' '.join([f'h{i}: {v:d}' for i,v in enumerate(mask_counts)])
+                counts_str = ' '.join([f'h{i}: {int(v):d}' for i,v in enumerate(mask_counts)])
                 mask_mean = torch.mean(mask_activation.detach()).item()
                 mask_std = torch.std(mask_activation.detach()).item()
                 preact_str += f"`counts {counts_str} mean {mask_mean:.2e} std {mask_std:.2e}"
