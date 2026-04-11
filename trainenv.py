@@ -1706,7 +1706,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
     _, prev_mask_set_epoch = get_mask_stability_hard(mask_activation, None)
     # soft
     mask_activation_no_threshold = net.module.mask_fun.activation(u=mask_activation_noise, use_threshold=False).detach()
-    bin_boundaries = torch.arange(11) * 0.1
+    bin_boundaries = torch.arange(11, device=device) * 0.1
     bin_sets = [[0, 1], [2, 3, 4], [5, 6, 7, 8, 9]]
     prev_mask_bin_sets_epoch = partition_mask_to_bin_sets(mask_activation_no_threshold, bin_boundaries, bin_sets)
 
