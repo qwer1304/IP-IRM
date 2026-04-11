@@ -27,8 +27,8 @@ class Mask():
         self.sigma = sigma
         self.on_threshold = on_threshold
 
-    def __call__(self, x, u=None, training=True):
-        def get_prune_mask(x, x_soft):
+    def __call__(self, x, u=None, training=True, use_threshold=True):
+        def get_prune_mask(x, x_soft, use_threshold=True):
             # x = z, x_soft - output from sigmoid 
             if self.hard_K:
                 _, topk_indices = torch.topk(x, self.K)
@@ -40,10 +40,13 @@ class Mask():
 
             # 1. We never exceed K (because of threshold)
             # 2. We don't force 'on' channels that are naturally 'off' (because of threshold)
-            noise = torch.randn_like(x) * self.sigma
-            noise_positive = torch.relu(noise)
-            threshold = self.on_threshold - noise_positive  # small jitter to help w/ s;uctuations around 0.5
-            return (x_soft > threshold) & topk_mask
+            if use_threshold:
+                noise = torch.randn_like(x) * self.sigma
+                noise_positive = torch.relu(noise)
+                threshold = self.on_threshold - noise_positive  # small jitter to help w/ s;uctuations around 0.5
+                return (x_soft > threshold) & topk_mask
+            else:
+                return topk_mask
 
         # x: (num_features,) tensor
         if self.mask_type == 'sigmoid':

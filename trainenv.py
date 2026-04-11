@@ -1512,7 +1512,37 @@ def calculate_mask_sparsity_and_grads(mask, total_grad, net, weight, do_flag, ar
         setup_grads_and_norms(grads_flat, weight, args.Lscaler, mask.device, do_flag, default_grads_weighted_vector=grads_flat)
 
     return loss.detach(), grads_flat, grads_norm_weighted, budget_loss.detach(), tailwind_loss.detach(), n_eff.detach()
-        
+
+def Jaccard(set_a, set_b):
+    intersection = len(set_a & set_b)
+    union = len(set_a | set_b)
+    jaccard = intersection / union if union > 0 else 0
+    return jaccard
+
+def get_mask_stability_hard(mask_activation, prev_set):
+    mask_set = set(torch.where(mask_activation)[0].tolist())
+    if prev_set is not None:
+        jaccard = Jaccard(mask_set, prev_set) # 1.0 = No change, 0.0 = Total swap
+    else:
+        jaccard = None
+    return jaccard, mask_set
+
+def partition_mask_to_bin_sets(mask_activation, bin_boundaries, bin_sets):
+    mask_activation_bins = torch.bucketize(mask_activation, bin_boundaries) # for each mask - its bin index
+    mask_indices = torch.arange(len(mask_activation))
+    group_index_sets = []
+
+    for bin_set in bin_sets:
+        # 1. Create the condition for this group of bins
+        condition = torch.isin(mask_activation_bins, torch.tensor(bin_set))
+        # 2. Get the actual indices (positions) where the condition is True
+        # torch.where(cond)[0] returns the integer indices directly
+        indices = torch.where(condition)[0]
+        # 3. Convert to set
+        group_index_sets.append(set(indices.tolist()))
+
+   return group_index_sets
+
 # ssl training with IP-IRM
 def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch, args, split_tags=None, **kwargs):
 
@@ -1560,15 +1590,13 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
 
     if args.increasing_weight:
         penalty_weight = utils.increasing_weight(args.increasing_weight, args.penalty_weight, args.penalty_iters, epoch, args.epochs)
-    elif args.penalty_iters < 200:
+    else:
         if args.penalty_weight == 0.:
             penalty_weight = 0.
         elif epoch < args.penalty_iters:
             penalty_weight = 1.
         else:
             penalty_weight = args.penalty_weight
-    else:
-        penalty_weight = args.penalty_weight
     
     loss_weight          = args.penalty_cont         * (1 if penalty_weight <= 1 else 1 / penalty_weight)
     loss_unsplit_weight  = args.penalty_unsplit_cont * (1 if penalty_weight <= 1 else (1 / penalty_weight))
@@ -1671,12 +1699,15 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
     train_optimizer.zero_grad(set_to_none=True) # clear gradients at the beginning 
     mask_activation_noise = net.module.mask_fun.sample().detach()
 
-    prev_top_k_mask_indices_batch = None
-    mask_preactivation_epoch = net.module.mask_fun.mask.detach().clone()
-    z_hat = mask_preactivation_epoch / args.mask_tau
-    K = int(args.mask_sparsity or len(z_hat))
-    top_k_indices = torch.topk(z_hat, K).indices
-    prev_top_k_mask_indices_epoch = set(top_k_indices.tolist())
+    # Jaccards
+    mask_activation = net.module.mask_fun.activation(u=mask_activation_noise, use_threshold=False).detach()
+    # hard
+    prev_mask_set_batch = None
+    _, prev_mask_set_epoch = get_mask_stability_hard(mask_activation, None)
+    # soft
+    bin_boundaries = torch.arange(11) * 0.1
+    bin_sets = [[0, 1], [2, 3, 4], [5, 6, 7, 8, 9]]
+    prev_mask_bin_sets_epoch = partition_mask_to_bin_sets(mask_activation, bin_boundaries, bin_sets)
 
     for batch_index, data_env in enumerate(train_bar):
 
@@ -2232,7 +2263,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
             num_updates = int((batch_index + 1) / gradients_accumulation_steps)
             
             z_hat = mask_preactivation / args.mask_tau
-            preact_str = f"`z_hat: Min {z_hat.min().item():.2e}, Max {z_hat.max().item():.2e}"
+            preact_str = f"`z_hat: Min {z_hat.min().item():.2e}, Max {z_hat.max().item():.2e}, zhat_mean {z_hat.mean().item():.2e}, zhat_std {z_hat.std().item():.2e}"
             # when mask_on_threshold = 0, the code below doesn't split the masks into two parts since all masks >= 0.
             # Hence, z_hats < 0 can be picked up. Use abs() to remove the weirdness of L1 < 0.
             actual_sum_pos = z_hat[torch.where(mask_activation > args.mask_on_threshold)].abs().sum().item()
@@ -2247,11 +2278,11 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 counts_str = ' '.join([f'h{i}: {int(v):d}' for i,v in enumerate(mask_counts)])
                 mask_mean = torch.mean(mask_activation.detach()).item()
                 mask_std = torch.std(mask_activation.detach()).item()
-                preact_str += f"`counts {counts_str} mean {mask_mean:.2e} std {mask_std:.2e}"
+                preact_str += f"`mask: counts {counts_str} m_mean {mask_mean:.2e} m_std {mask_std:.2e}"
                 
             mask_hard_str = 'hard' if args.mask_nonlinearity == 'gumbel' and not args.gumbel_soft else 'soft' 
             mask_sparsity_str = f" sparsity {args.mask_nonlinearity} {mask_hard_str}: ngs2 {loss_mask_sparsity_norm**2:.2e} " + \
-                f"preactivation: mean {mask_preactivation.mean().item():.2e} std {torch.std(mask_preactivation).item():.2e} " + \
+                f"preactivation: z_mean {mask_preactivation.mean().item():.2e} z_std {torch.std(mask_preactivation).item():.2e} " + \
                 f"mask_CV {(total_mask_CV / num_updates).item():.2f} " + \
                 preact_str + \
                 f"`dot_m: km {info_dict['shared_dot_km']:.2e} cm {info_dict['shared_dot_cm']:.2e} pm {info_dict['shared_dot_pm']:.2e}" + \
@@ -2279,6 +2310,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
             mask_sparsity_str += f"`mask norms: c {loss_CE_mask_grad_norm.item():.2e} k {loss_unsplit_mask_gard_norm.item():.2e}" + \
                                  f" l {loss_mask_grad_norm.item():.2e} p {penalty_mask_grad_norm.item():.2e} s {loss_mask_sparsity_mask_gard_norm.item():.2e}"
 
+            mask_activation_no_threshold = net.module.mask_fun.activation(u=mask_activation_noise, use_threshold=False).clone().detach()
             if args.mask_nonlinearity == 'gumbel' and not args.gumbel_soft: # hard mask
                 on_logits  = mask_preactivation[mask_activation == 1]   # (Neff,)
                 off_logits = mask_preactivation[mask_activation == 0]   # (D - Neff,)
@@ -2286,25 +2318,21 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 max_off = off_logits.max().detach().cpu().item()   # marginal OFF - most likely to flip ON
                 gap     = min_on - max_off   # positive = clean separation, negative = already overlapping
 
-                                     
-                def get_mask_stability(mask_preactivation, tau, K, prev_set):
-                    z_hat = mask_preactivation / tau
-                    top_k_indices = torch.topk(z_hat, K).indices
-                    top_k_set = set(top_k_indices.tolist())
-                    if prev_set is not None:
-                        intersection = len(top_k_set.intersection(prev_set))
-                        stability = intersection / K  # 1.0 = No change, 0.0 = Total swap
-                    else:
-                        stability = None
-                    return stability, top_k_set
-
                 if args.mask_sparsity and args.mask_hard_sparsity_limit:
-                    stability_epoch, _ = get_mask_stability(mask_preactivation, args.mask_tau, args.mask_sparsity, prev_top_k_mask_indices_epoch)
-                    mask_sparsity_str += f"`Jaccard (stability): epoch {stability_epoch:.2e}"
-                    stability_batch, top_k_set = get_mask_stability(mask_preactivation, args.mask_tau, args.mask_sparsity, prev_top_k_mask_indices_batch) 
-                    mask_sparsity_str += f" batch {stability_batch:.2e}" if stability_batch is not None else ""
-                    prev_top_k_mask_indices_batch = copy(top_k_set)
+                    stability_hard_epoch, _ = get_mask_stability_hard(mask_activation_no_threshold, prev_mask_set_epoch)
+                    mask_sparsity_str += f"`Jaccard (stability): epoch {stability_hard_epoch:.2e}"
+                    stability_hard_batch, top_k_set = get_mask_stability_hard(mask_activation_no_threshold, prev_mask_set_batch) 
+                    mask_sparsity_str += f" batch {stability_hard_batch:.2e}" if stability_batch is not None else ""
+                    prev_mask_set_batch = copy(top_k_set)
                     mask_sparsity_str += f"`z: min(z_ON) {min_on:.3e} max(z_OFF) {max_off:.3e} gap=min-max {gap:.3e}"
+           else:
+                mask_bin_sets = partition_mask_to_bin_sets(mask_activation_no_threshold, bin_boundaries, bin_sets)
+                jaccards = []
+                for i in range(len(bin_sets)):
+                    jaccards.append(Jaccard(mask_bin_sets[i], prev_mask_bin_sets_epoch[i])
+
+                jaccards_str = ' '.join([f"bins {{{','.join(bin_sets[i])}}}: {v:.2e}" for i,v in enumerate(jaccards)])
+                mask_sparsity_str += f"`Jaccards {jaccards_str}"
 
         if do_loss:
             ll_str = f" ll {info_dict['ngl2']:.2e}"
