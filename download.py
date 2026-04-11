@@ -326,4 +326,4 @@ if __name__ == "__main__":
     
     for dset in args.dataset:
         print(f"Downloading {dset} ...")
-        downloaders[dset](args.data_dir)
+        downloaders[dset](args.data_dir, args)
