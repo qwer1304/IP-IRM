@@ -1700,14 +1700,15 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
     mask_activation_noise = net.module.mask_fun.sample().detach()
 
     # Jaccards
-    mask_activation = net.module.mask_fun.activation(u=mask_activation_noise, use_threshold=False).detach()
     # hard
+    mask_activation = net.module.mask_fun.activation(u=mask_activation_noise).detach()
     prev_mask_set_batch = None
     _, prev_mask_set_epoch = get_mask_stability_hard(mask_activation, None)
     # soft
+    mask_activation_no_threshold = net.module.mask_fun.activation(u=mask_activation_noise, use_threshold=False).detach()
     bin_boundaries = torch.arange(11) * 0.1
     bin_sets = [[0, 1], [2, 3, 4], [5, 6, 7, 8, 9]]
-    prev_mask_bin_sets_epoch = partition_mask_to_bin_sets(mask_activation, bin_boundaries, bin_sets)
+    prev_mask_bin_sets_epoch = partition_mask_to_bin_sets(mask_activation_no_threshold, bin_boundaries, bin_sets)
 
     for batch_index, data_env in enumerate(train_bar):
 
@@ -2310,7 +2311,6 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
             mask_sparsity_str += f"`mask norms: c {loss_CE_mask_grad_norm.item():.2e} k {loss_unsplit_mask_gard_norm.item():.2e}" + \
                                  f" l {loss_mask_grad_norm.item():.2e} p {penalty_mask_grad_norm.item():.2e} s {loss_mask_sparsity_mask_gard_norm.item():.2e}"
 
-            mask_activation_no_threshold = net.module.mask_fun.activation(u=mask_activation_noise, use_threshold=False).clone().detach()
             if args.mask_nonlinearity == 'gumbel' and not args.gumbel_soft: # hard mask
                 on_logits  = mask_preactivation[mask_activation == 1]   # (Neff,)
                 off_logits = mask_preactivation[mask_activation == 0]   # (D - Neff,)
@@ -2319,13 +2319,14 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 gap     = min_on - max_off   # positive = clean separation, negative = already overlapping
 
                 if args.mask_sparsity and args.mask_hard_sparsity_limit:
-                    stability_hard_epoch, _ = get_mask_stability_hard(mask_activation_no_threshold, prev_mask_set_epoch)
+                    stability_hard_epoch, _ = get_mask_stability_hard(mask_activation, prev_mask_set_epoch)
                     mask_sparsity_str += f"`Jaccard (stability): epoch {stability_hard_epoch:.2e}"
-                    stability_hard_batch, top_k_set = get_mask_stability_hard(mask_activation_no_threshold, prev_mask_set_batch) 
+                    stability_hard_batch, top_k_set = get_mask_stability_hard(mask_activation, prev_mask_set_batch) 
                     mask_sparsity_str += f" batch {stability_hard_batch:.2e}" if stability_batch is not None else ""
                     prev_mask_set_batch = copy(top_k_set)
                     mask_sparsity_str += f"`z: min(z_ON) {min_on:.3e} max(z_OFF) {max_off:.3e} gap=min-max {gap:.3e}"
            else:
+                mask_activation_no_threshold = net.module.mask_fun.activation(u=mask_activation_noise, use_threshold=False).clone().detach()
                 mask_bin_sets = partition_mask_to_bin_sets(mask_activation_no_threshold, bin_boundaries, bin_sets)
                 jaccards = []
                 for i in range(len(bin_sets)):
