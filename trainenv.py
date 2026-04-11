@@ -1528,13 +1528,14 @@ def get_mask_stability_hard(mask_activation, prev_set):
     return jaccard, mask_set
 
 def partition_mask_to_bin_sets(mask_activation, bin_boundaries, bin_sets):
+    # bin_sets - list of tensors
     mask_activation_bins = torch.bucketize(mask_activation, bin_boundaries) # for each mask - its bin index
     mask_indices = torch.arange(len(mask_activation))
     group_index_sets = []
 
     for bin_set in bin_sets:
         # 1. Create the condition for this group of bins
-        condition = torch.isin(mask_activation_bins, torch.tensor(bin_set))
+        condition = torch.isin(mask_activation_bins, bin_set)
         # 2. Get the actual indices (positions) where the condition is True
         # torch.where(cond)[0] returns the integer indices directly
         indices = torch.where(condition)[0]
@@ -1707,7 +1708,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
     # soft
     mask_activation_no_threshold = net.module.mask_fun.activation(u=mask_activation_noise, use_threshold=False).detach()
     bin_boundaries = torch.arange(11, device=device) * 0.1
-    bin_sets = [[0, 1], [2, 3, 4], [5, 6, 7, 8, 9]]
+    bin_sets = [torch.tensor([0, 1], device=device), torch.tensor([2, 3, 4], device=device), torch.tensor([5, 6, 7, 8, 9], device=device)]
     prev_mask_bin_sets_epoch = partition_mask_to_bin_sets(mask_activation_no_threshold, bin_boundaries, bin_sets)
 
     for batch_index, data_env in enumerate(train_bar):
