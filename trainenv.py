@@ -1541,7 +1541,7 @@ def partition_mask_to_bin_sets(mask_activation, bin_boundaries, bin_sets):
         # 3. Convert to set
         group_index_sets.append(set(indices.tolist()))
 
-   return group_index_sets
+    return group_index_sets
 
 # ssl training with IP-IRM
 def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch, args, split_tags=None, **kwargs):
