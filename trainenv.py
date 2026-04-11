@@ -2330,7 +2330,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 mask_bin_sets = partition_mask_to_bin_sets(mask_activation_no_threshold, bin_boundaries, bin_sets)
                 jaccards = []
                 for i in range(len(bin_sets)):
-                    jaccards.append(Jaccard(mask_bin_sets[i], prev_mask_bin_sets_epoch[i])
+                    jaccards.append(Jaccard(mask_bin_sets[i], prev_mask_bin_sets_epoch[i]))
 
                 jaccards_str = ' '.join([f"bins {{{','.join(bin_sets[i])}}}: {v:.2e}" for i,v in enumerate(jaccards)])
                 mask_sparsity_str += f"`Jaccards {jaccards_str}"
