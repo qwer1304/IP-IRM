@@ -2325,7 +2325,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                     mask_sparsity_str += f" batch {stability_hard_batch:.2e}" if stability_batch is not None else ""
                     prev_mask_set_batch = copy(top_k_set)
                     mask_sparsity_str += f"`z: min(z_ON) {min_on:.3e} max(z_OFF) {max_off:.3e} gap=min-max {gap:.3e}"
-           else:
+            else:
                 mask_activation_no_threshold = net.module.mask_fun.activation(u=mask_activation_noise, use_threshold=False).clone().detach()
                 mask_bin_sets = partition_mask_to_bin_sets(mask_activation_no_threshold, bin_boundaries, bin_sets)
                 jaccards = []
