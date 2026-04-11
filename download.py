@@ -171,16 +171,17 @@ def download_domain_net(data_dir):
 
 # TerraIncognita ##############################################################
 
-def download_terra_incognita(data_dir):
+def download_terra_incognita(data_dir, args):
     # Original URL: https://beerys.github.io/CaltechCameraTraps/
     # New URL: http://lila.science/datasets/caltech-camera-traps
 
     full_path = stage_path(data_dir, "terra_incognita")
 
-    print('Downloading & extracting images')
-    download_and_extract(
-        "https://storage.googleapis.com/public-datasets-lila/caltechcameratraps/eccv_18_all_images_sm.tar.gz",
-        os.path.join(full_path, "terra_incognita_images.tar.gz"))
+    if not args.skip_images:
+        print('Downloading & extracting images')
+        download_and_extract(
+            "https://storage.googleapis.com/public-datasets-lila/caltechcameratraps/eccv_18_all_images_sm.tar.gz",
+            os.path.join(full_path, "terra_incognita_images.tar.gz"))
 
     print('Downloading and extracting annotations')
     download_and_extract(
@@ -260,12 +261,14 @@ def download_terra_incognita(data_dir):
                     dst_path = os.path.join(loc_cat_folder, image_fname)
                     src_path = os.path.join(images_folder, image_fname)
 
-                    shutil.copyfile(src_path, dst_path)
+                    if not args.dont_copy_file:
+                        shutil.copyfile(src_path, dst_path)
                     pbar.update(1)
         # end for image in data['images']:
 
-    shutil.rmtree(images_folder)
-    shutil.rmtree(annotations_folder)
+    if not args.dont_remove_files:
+        shutil.rmtree(images_folder)
+        shutil.rmtree(annotations_folder)
 
 
 
@@ -304,6 +307,9 @@ if __name__ == "__main__":
     parser.add_argument('--data_dir', type=str, required=True)
     parser.add_argument('--dataset', type=str, nargs="+", 
         choices=['MNIST', 'PACS', 'OfficeHome', 'DomainNet', 'VLCS', 'TerraIncognita', 'Spawrious', 'Sviro', 'Camelyon17', 'FMoW'])
+    parser.add_argument('--skip_images', action='store_true')
+    parser.add_argument('--dont_copy_file', action='store_true')
+    parser.add_argument('--dont_remove_files', action='store_true')
     args = parser.parse_args()
 
     downloaders = { 'MNIST':            download_mnist,
