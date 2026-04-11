@@ -420,7 +420,7 @@ def test(net, test_data_loader, args, num_classes, progress=False, prefix="Test:
                 macro_acc_per_class_str = ",".join([f"{i}: {str(v):.2f}%" for i,v in enumerate(macro_acc_per_class)])
                 test_bar.set_description('{} Epoch [{}/{}] Acc@1:{:.2f}% Acc@5:{:.2f}% Macro-Acc:{:.2f}%, {}'
                                          .format(prefix, epoch, epochs, total_top1 / total_num * 100, total_top5 / total_num * 100, 
-                                                 macro_acc * 100), macro_acc_per_class * 100)
+                                                 macro_acc * 100, macro_acc_per_class * 100)
 
             # compute output
             if args.extract_features:
