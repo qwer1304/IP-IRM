@@ -108,9 +108,8 @@ def load_image(path):
 
 def get_path(iid, image_index, images_root):
     rec = image_index[iid]
-    print(image_index[iid]['annotations'])
     # Directory layout: <images_root>/L<loc>/<species>/<file>
-    return os.path.join(images_root, f"L{rec['location']}", rec['file_name'])
+    return os.path.join(images_root, f"L{rec['location']}", f"{rec['annotations'][0]['category']}", rec['file_name'])
 
 
 # -- Burst handling ------------------------------------------------------------
