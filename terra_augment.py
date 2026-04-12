@@ -108,7 +108,7 @@ def load_image(path):
 
 def get_path(iid, image_index, images_root):
     rec = image_index[iid]
-    print(image_index[iid].keys())
+    print(image_index[iid]['annotations'].keys())
     # Directory layout: <images_root>/L<loc>/<species>/<file>
     return os.path.join(images_root, f"L{rec['location']}", rec['file_name'])
 
