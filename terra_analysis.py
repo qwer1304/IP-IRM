@@ -187,11 +187,16 @@ def build_index(annotations_dir,
 
     if verbose: print("Building forward index ...")
     image_index = {}
+    n_no_ann = 0
     for iid, meta in image_meta.items():
-        if iid in image_annotations:
-            image_index[iid] = {**meta, 'annotations': image_annotations.get(iid, [])}
-        else:
-            print(f"  WARNING: image {iid} has no annotations. skipped")
+        anns = image_annotations.get(iid, [])
+        if not anns:
+            n_no_ann += 1
+            continue
+        image_index[iid] = {**meta, 'annotations': anns}
+    if n_no_ann:
+        print(f"  NOTE: {n_no_ann} images in target locations had no annotations "
+              f"and were excluded ({len(image_index)} retained)")
 
     if verbose: print("Building reverse index ...")
     loc_cat_to_images = defaultdict(list)

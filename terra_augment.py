@@ -43,8 +43,7 @@ import random
 import argparse
 import numpy as np
 from pathlib import Path
-from functools import partial
-from multiprocessing import Pool
+from concurrent.futures import ThreadPoolExecutor
 #from skimage import io
 import imageio.v3 as iio
 
@@ -111,13 +110,10 @@ def load_image(path):
 
 def get_path(iid, image_index, images_root):
     rec = image_index[iid]
-    # Directory layout: <images_root>/L<loc>/<species>/<file>
-    cat = next(
-        (ann['category'] for ann in rec['annotations']),
-        None
-    )
-    assert cat is not None, f"image id {iid} has no species info in its annotations {rec['annotations']}"
-    return os.path.join(images_root, f"L{rec['location']}", f"{cat}", rec['file_name'])
+    # Directory layout: <images_root>/L<loc>/<species>/<uuid>.jpg
+    # annotations is guaranteed non-empty (build_index excludes unannotated images)
+    species = rec['annotations'][0]['category']
+    return os.path.join(images_root, f"L{rec['location']}", species, rec['file_name'])
 
 
 # -- Burst handling ------------------------------------------------------------
@@ -531,11 +527,11 @@ def augment_minority_species(
         for i, iid in enumerate(source_ids)
     ]
 
-    # -- Step 4: process in parallel ------------------------------------------
+    # -- Step 4: process in parallel (threads: I/O-bound, no pickle overhead) --
     if workers > 1:
-        with Pool(processes=workers) as pool:
+        with ThreadPoolExecutor(max_workers=workers) as ex:
             results = list(tqdm(
-                pool.imap_unordered(_process_one, work_items),
+                ex.map(_process_one, work_items),
                 total=len(work_items),
                 desc=f"{species}@L{target_location}"
             ))
@@ -763,7 +759,7 @@ if __name__ == '__main__':
             N_SYNTHETIC              = args.N_synthetic,
             use_whole_src_seq_thresh = args.use_whole_src_seq_thresh,
         )
-        print_augmented_summary(summary, syn_counts, inc_locs, DEFAULT_CATEGORIES)
+        print_augmented_summary(summary, syn_counts, set(args.target_locs), DEFAULT_CATEGORIES)
     else:
         print_summary(summary)
         total = 0
