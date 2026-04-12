@@ -35,7 +35,7 @@ DG constraint: test location (e.g. L100) is NEVER used. All operations
 
 Performance: embarrassingly parallel per source image.
              Use --workers to tune for your environment.
-             GPU not used — histogram matching is CPU/IO bound.
+             GPU not used - histogram matching is CPU/IO bound.
 """
 
 import os
