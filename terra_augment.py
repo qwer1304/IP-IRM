@@ -116,7 +116,7 @@ def get_path(iid, image_index, images_root):
         (ann['category'] for ann in rec['annotations']),
         None
     )
-    assert cat is not None, f"image id {iid} has no species info in its annotations"
+    assert cat is not None, f"image id {iid} has no species info in its annotations {rec['annotations']}"
     return os.path.join(images_root, f"L{rec['location']}", f"{cat}", rec['file_name'])
 
 
