@@ -194,7 +194,7 @@ def build_index(annotations_dir,
             n_no_ann += 1
             continue
         image_index[iid] = {**meta, 'annotations': anns}
-    if n_no_ann:
+    if n_no_ann: 
         print(f"  NOTE: {n_no_ann} images in target locations had no annotations "
               f"and were excluded ({len(image_index)} retained)")
 
