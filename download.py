@@ -101,8 +101,9 @@ def download_and_extract(url, dst, remove=True):
 #     shutil.rmtree(tmp_path)
 
 
-def download_vlcs(data_dir):
+def download_vlcs(args):
     # Original URL: http://www.eecs.qmul.ac.uk/~dl307/project_iccv2017
+    data_dir = args.data_dir
     full_path = stage_path(data_dir, "VLCS")
 
     download_and_extract("https://drive.google.com/uc?id=1skwblH1_okBwxWxmRsp9_qi15hyPpxg8",
@@ -111,16 +112,18 @@ def download_vlcs(data_dir):
 
 # MNIST #######################################################################
 
-def download_mnist(data_dir):
+def download_mnist(args):
     # Original URL: http://yann.lecun.com/exdb/mnist/
+    data_dir = args.data_dir
     full_path = stage_path(data_dir, "MNIST")
     MNIST(full_path, download=True)
 
 
 # PACS ########################################################################
 
-def download_pacs(data_dir):
+def download_pacs(ars):
     # Original URL: http://www.eecs.qmul.ac.uk/~dl307/project_iccv2017
+    data_dir = args.data_dir
     full_path = stage_path(data_dir, "PACS")
 
     download_and_extract("https://drive.google.com/uc?id=1JFr8f805nMUelQWWmfnJR3y4_SYoN5Pd",
@@ -132,8 +135,9 @@ def download_pacs(data_dir):
 
 # Office-Home #################################################################
 
-def download_office_home(data_dir):
+def download_office_home(args):
     # Original URL: http://hemanthdv.org/OfficeHome-Dataset/
+    data_dir = args.data_dir
     full_path = stage_path(data_dir, "office_home")
 
     download_and_extract("https://drive.google.com/uc?id=1uY0pj7oFsjMxRwaD3Sxy0jgel0fsYXLC",
@@ -145,8 +149,9 @@ def download_office_home(data_dir):
 
 # DomainNET ###################################################################
 
-def download_domain_net(data_dir):
+def download_domain_net(args):
     # Original URL: http://ai.bu.edu/M3SDA/
+    data_dir = args.data_dir
     full_path = stage_path(data_dir, "domain_net")
 
     urls = [
@@ -171,10 +176,11 @@ def download_domain_net(data_dir):
 
 # TerraIncognita ##############################################################
 
-def download_terra_incognita(data_dir, args):
+def download_terra_incognita(args):
     # Original URL: https://beerys.github.io/CaltechCameraTraps/
     # New URL: http://lila.science/datasets/caltech-camera-traps
 
+    data_dir = args.data_dir
     full_path = stage_path(data_dir, "terra_incognita")
 
     if not args.skip_images:
@@ -274,8 +280,9 @@ def download_terra_incognita(data_dir, args):
 
 # SVIRO #################################################################
 
-def download_sviro(data_dir):
+def download_sviro(args):
     # Original URL: https://sviro.kl.dfki.de
+    data_dir = args.data_dir
     full_path = stage_path(data_dir, "sviro")
 
     download_and_extract("https://sviro.kl.dfki.de/?wpdmdl=1731",
@@ -287,7 +294,8 @@ def download_sviro(data_dir):
 
 # SPAWRIOUS #############################################################
 
-def download_spawrious(data_dir, remove=True):
+def download_spawrious(args, remove=True):
+    data_dir = args.data_dir
     dst = os.path.join(data_dir, "spawrious.tar.gz")
     urllib.request.urlretrieve('https://www.dropbox.com/s/e40j553480h3f3s/spawrious224.tar.gz?dl=1', dst)
     tar = tarfile.open(dst, "r:gz")
@@ -296,10 +304,12 @@ def download_spawrious(data_dir, remove=True):
     if remove:
         os.remove(dst)
 
-def download_camelyon17(data_dir):
+def download_camelyon17(args):
+    data_dir = args.data_dir
     Camelyon17Dataset(root_dir=data_dir, download=True)
     
-def download_fmow(data_dir):
+def download_fmow(args):
+    data_dir = args.data_dir
     FMoWDataset(root_dir=data_dir, download=True)
 
 if __name__ == "__main__":
@@ -326,4 +336,4 @@ if __name__ == "__main__":
     
     for dset in args.dataset:
         print(f"Downloading {dset} ...")
-        downloaders[dset](args.data_dir, args)
+        downloaders[dset](args)
