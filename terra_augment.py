@@ -557,7 +557,8 @@ def dry_run_counts(species_list, target_locs, source_locs, loc_cat_to_seqs,
     touching disk or building histograms.
     Returns dict: (location, species) -> n_synthetics
     """
-    counts = {}
+    counts   = {}
+    src_seqs = {}   # (tgt_loc, species) -> n source sequences
     for tgt_loc in target_locs:
         src_locs = [l for l in source_locs if l != tgt_loc]
         for species in species_list:
@@ -566,16 +567,17 @@ def dry_run_counts(species_list, target_locs, source_locs, loc_cat_to_seqs,
                 all_seqs.extend(loc_cat_to_seqs.get((src, species), []))
             if not all_seqs:
                 continue
+            src_seqs[(tgt_loc, species)] = len(all_seqs)
             use_all_frames = len(all_seqs) < use_whole_src_seq_thresh
             if use_all_frames:
                 n_imgs = sum(len(seq_to_images[s]) for s in all_seqs)
             else:
                 n_imgs = len(all_seqs)
             counts[(tgt_loc, species)] = n_imgs * N_SYNTHETIC
-    return counts
+    return counts, src_seqs
 
 
-def print_augmented_summary(summary, syn_counts, include_locations,
+def print_augmented_summary(summary, syn_counts, src_seqs, include_locations,
                              include_categories):
     """
     Print the three summary tables with synthetic counts overlaid.
@@ -585,26 +587,27 @@ def print_augmented_summary(summary, syn_counts, include_locations,
     cats = sorted(include_categories, key=lambda c: CATEGORY_INDEX.get(c, 99))
 
     # -- table 1: full detail per (loc, cat) ----------------------------------
-    print("=" * 105)
+    print("=" * 115)
     print("PER LOCATION x CATEGORY  (original + synthetic)")
     print(f"{'LOC':<6} {'CATEGORY':<16} {'ORIG':>7} {'SYN':>7} {'TOTAL':>7} "
-          f"{'SEQS':>6} {'DAY':>6} {'NIGHT':>6} {'BBOX%':>7}")
-    print("=" * 105)
+          f"{'SEQS':>6} {'SEQS_SRC':>9} {'DAY':>6} {'NIGHT':>6} {'BBOX%':>7}")
+    print("=" * 115)
     for loc in locs:
         for cat in cats:
             s    = summary.get(f"L{loc}/{cat}")
             syn  = syn_counts.get((loc, cat), 0)
             if s is None and syn == 0:
                 continue
-            orig  = s['n_images'] if s else 0
-            seqs  = s['n_seqs']   if s else 0
-            day   = s['n_day']    if s else 0
-            night = s['n_night']  if s else 0
-            bbox  = s['bbox_pct'] if s else 0
-            total = orig + syn
-            syn_str = f"+{syn}" if syn > 0 else "-"
+            orig     = s['n_images'] if s else 0
+            seqs     = s['n_seqs']   if s else 0
+            seqs_src = src_seqs.get((loc, cat), 0)
+            day      = s['n_day']    if s else 0
+            night    = s['n_night']  if s else 0
+            bbox     = s['bbox_pct'] if s else 0
+            total    = orig + syn
+            syn_str  = f"+{syn}" if syn > 0 else "-"
             print(f"L{loc:<5} {cat_label(cat):<16} {orig:>7} {syn_str:>7} {total:>7} "
-                  f"{seqs:>6} {day:>6} {night:>6} {bbox:>6}%")
+                  f"{seqs:>6} {seqs_src:>9} {day:>6} {night:>6} {bbox:>6}%")
     print()
 
     # -- table 2: per species totals -------------------------------------------
@@ -749,7 +752,7 @@ if __name__ == '__main__':
                             include_locations=inc_locs)
 
     if args.dry_run:
-        syn_counts = dry_run_counts(
+        syn_counts = dry_run_counts(  # returns (counts, src_seqs) tuple — unpacked below
             species_list             = args.species,
             target_locs              = args.target_locs,
             source_locs              = args.source_locs,
@@ -759,7 +762,8 @@ if __name__ == '__main__':
             N_SYNTHETIC              = args.N_synthetic,
             use_whole_src_seq_thresh = args.use_whole_src_seq_thresh,
         )
-        print_augmented_summary(summary, syn_counts, set(args.target_locs), DEFAULT_CATEGORIES)
+        syn_counts, src_seqs = syn_counts
+        print_augmented_summary(summary, syn_counts, src_seqs, set(args.target_locs), DEFAULT_CATEGORIES)
     else:
         print_summary(summary)
         total = 0
