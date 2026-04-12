@@ -389,8 +389,9 @@ if __name__ == '__main__':
     parser.add_argument('--jsons',      nargs='*', default=None,
                         help='JSON filenames to load (default: all *.json in dir)')
     parser.add_argument('--locs',  nargs='+', type=int,
-                        default=sorted(DEFAULT_LOCATIONS),
-                        help='Location IDs to include (default: 38 43 46 100)')
+                        default=[38, 43, 46],
+                        help='Location IDs to include (default: 38 43 46). '
+                             'Add 100 explicitly to include the test location.')
     parser.add_argument('--species', nargs='+',
                         default=sorted(DEFAULT_CATEGORIES),
                         help='Category names to include')

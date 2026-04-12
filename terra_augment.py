@@ -107,7 +107,9 @@ def load_image(path):
 
 
 def get_path(iid, image_index, images_root):
-    return os.path.join(images_root, image_index[iid]['file_name'])
+    rec = image_index[iid]
+    # Directory layout: <images_root>/L<loc>/<species>/<file>
+    return os.path.join(images_root, f"L{rec['location']}", rec['file_name'])
 
 
 # -- Burst handling ------------------------------------------------------------
@@ -162,19 +164,31 @@ def compute_bg_histogram(img, bbox, n_bins=256):
 def average_bg_histograms(image_ids, image_index, images_root, n_bins=256,
                           verbose=False):
     """Average background histograms across a list of image_ids."""
-    hists = []
+    hists      = []
+    n_failed   = 0
+    first_fail = None
     for iid in image_ids:
         rec  = image_index[iid]
         path = get_path(iid, image_index, images_root)
         try:
             img = load_image(path)
         except Exception as e:
+            n_failed += 1
+            if first_fail is None:
+                first_fail = (path, str(e))
             if verbose: print(f"  WARNING: could not load {path}: {e}")
             continue
         bbox = rec['annotations'][0]['bbox'] if rec['annotations'] else None
         hists.append(compute_bg_histogram(img, bbox, n_bins))
     if not hists:
+        if first_fail is not None:
+            raise FileNotFoundError(
+                f"Failed to load ANY of {n_failed} images. "
+                f"First failure: {first_fail[0]}: {first_fail[1]}"
+            )
         return None
+    if n_failed > 0 and verbose:
+        print(f"  WARNING: {n_failed}/{n_failed + len(hists)} images failed to load")
     return np.mean(hists, axis=0)   # (3, n_bins)
 
 
@@ -184,20 +198,30 @@ def cluster_bg_histograms(image_ids, image_index, images_root,
     Cluster images by background histogram similarity.
     Returns list of n_clusters representative average histograms.
     """
-    hist_list = []
-    valid_ids = []
+    hist_list  = []
+    valid_ids  = []
+    n_failed   = 0
+    first_fail = None
     for iid in image_ids:
         rec  = image_index[iid]
         path = get_path(iid, image_index, images_root)
         try:
             img = load_image(path)
-        except Exception:
+        except Exception as e:
+            n_failed += 1
+            if first_fail is None:
+                first_fail = (path, str(e))
             continue
         bbox = rec['annotations'][0]['bbox'] if rec['annotations'] else None
         hist_list.append(compute_bg_histogram(img, bbox, n_bins).flatten())
         valid_ids.append(iid)
 
     if not hist_list:
+        if first_fail is not None:
+            raise FileNotFoundError(
+                f"Failed to load ANY of {n_failed} images for clustering. "
+                f"First failure: {first_fail[0]}: {first_fail[1]}"
+            )
         return []
 
     n_clusters = min(n_clusters, len(hist_list))
