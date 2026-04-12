@@ -45,7 +45,8 @@ import numpy as np
 from pathlib import Path
 from functools import partial
 from multiprocessing import Pool
-from skimage import io
+#from skimage import io
+import imageio.v3 as iio
 
 from terra_analysis import (
     load_index,
@@ -98,7 +99,9 @@ except ImportError:
 
 def load_image(path):
     """Load image as uint8 RGB array."""
-    img = io.imread(path)
+    # Replace img = io.imread(path)
+    #img = io.imread(path)
+    img = iio.imread(path)
     if img.ndim == 2:
         img = np.stack([img, img, img], axis=-1)
     if img.shape[2] == 4:
@@ -398,7 +401,9 @@ def _process_one(args):
             synthetic = apply_mapping(src_img, mappings, animal_mask)
             out_fname = f"syn_{Path(rec['file_name']).stem}_s{idx}.jpg"
             out_path  = os.path.join(out_folder, out_fname)
-            io.imsave(out_path, synthetic, quality=90)
+            # Replace io.imsave(out_path, synthetic, quality=90)
+            #io.imsave(out_path, synthetic, quality=90)
+            iio.imwrite(out_path, synthetic, quality=90)
             n_generated += 1
         except Exception as e:
             if verbose: print(f"  ERROR generating synthetic for {src_path}: {e}")
@@ -783,3 +788,4 @@ if __name__ == '__main__':
                 )
                 total += n
         print(f"\nTotal synthetic images generated: {total}")
+
