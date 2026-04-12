@@ -46,7 +46,7 @@ CATEGORY_INDEX = {
     "bird": 0, "bobcat": 1, "cat": 2, "coyote": 3, "dog": 4,
     "empty": 5, "opossum": 6, "rabbit": 7, "raccoon": 8, "squirrel": 9
 }
-DAY_HOURS = range(6, 20)   # 06:00 – 19:59 inclusive
+DAY_HOURS = range(6, 20)   # 06:00 - 19:59 inclusive
 
 
 def cat_label(cat):
