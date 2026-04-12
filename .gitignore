@@ -5,3 +5,5 @@ downstream/*
 save/*
 misc/*
 IP-IRM.tws
+*.bak
+*.txt
