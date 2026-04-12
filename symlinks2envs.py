@@ -19,11 +19,12 @@ def main(args):
         parts = p.parts
         domain_masks = [pp in args.domains for pp in parts]
         try:
-            domain = domain_masks.index(True)
+            domain_in_path_idx = domain_masks.index(True)
         except ValueError:
             print(f"path {p} has no domain in domains {args.domains}")
             raise 
 
+        domain = args.domains.index(parts[domain_in_path_idx])
         envs[index][domain] = 1.
         
     torch.save({"partitions": [envs]}, args.data + "/" + "envs_terrainc_train")
