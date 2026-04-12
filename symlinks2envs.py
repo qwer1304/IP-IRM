@@ -17,11 +17,11 @@ def main(args):
         target = symlinks[path]
         p = Path(target)
         parts = p.parts
-        domain_name = parts[9]
+        domain_masks = [pp in args.domains for pp in parts]
         try:
-            domain = args.domains.index(domain_name)
+            domain = domain_masks.index(True)
         except ValueError:
-            print(f"domain {domain_name} not in domains {args.domains}")
+            print(f"path {p} has no domain in domains {args.domains}")
             raise 
 
         envs[index][domain] = 1.
