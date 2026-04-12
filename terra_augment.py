@@ -112,7 +112,12 @@ def load_image(path):
 def get_path(iid, image_index, images_root):
     rec = image_index[iid]
     # Directory layout: <images_root>/L<loc>/<species>/<file>
-    return os.path.join(images_root, f"L{rec['location']}", f"{rec['annotations'][0]['category']}", rec['file_name'])
+    cat = next(
+        (ann['category'] for ann in rec['annotations']),
+        None
+    )
+    assert cat is not None, f"image id {iid} has no species info in its annotations"
+    return os.path.join(images_root, f"L{rec['location']}", f"{cat}", rec['file_name'])
 
 
 # -- Burst handling ------------------------------------------------------------
