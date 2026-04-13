@@ -17,6 +17,10 @@ def main(args):
     i = 0
     for index, (path, _) in enumerate(train_data.imgs):
         print(i, path)
+        if path not in symlinks:
+            print(f"{i} path {path} not in symlinks")
+            i += 1
+            continue
         target = symlinks[path]
         p = Path(target)
         parts = p.parts
