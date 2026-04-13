@@ -9,6 +9,7 @@ def main(args):
     num_domains = len(args.domains)
     num_files = len(train_data)
     envs = torch.zeros(num_files, num_domains)
+    memory_hash = utils.compute_dataset_fingerprint(train_data)
     
     with open(args.data + '/' + args.map_file) as f:
         symlinks = json.load(f)
@@ -28,7 +29,7 @@ def main(args):
         envs[index][domain] = 1.
         
     torch.save({"partitions": [envs]}, args.data + "/" + "envs_terrainc_train")
-    print(f"envs saved in {args.data + '/' + 'envs_terrainc_train'}")
+    print(f"envs saved in {args.data + '/' + memory_hash[:10] + 'envs_terrainc_train'}")
 
 if __name__ == "__main__":
     # create the top-level parser
