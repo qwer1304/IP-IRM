@@ -731,6 +731,8 @@ if __name__ == '__main__':
                         help='Show augmented summary tables without generating images')
     parser.add_argument('--debug',           action='store_true',
                         help='Print progress and warning messages')
+    parser.add_argument('--quite',           action='store_true',
+                        help="Don't print summary")
     args = parser.parse_args()
 
     if not args.dry_run:
@@ -765,7 +767,8 @@ if __name__ == '__main__':
         syn_counts, src_seqs = syn_counts
         print_augmented_summary(summary, syn_counts, src_seqs, set(args.target_locs), DEFAULT_CATEGORIES)
     else:
-        print_summary(summary)
+        if not args.debug:
+            print_summary(summary)
         total = 0
         for tgt_loc in args.target_locs:
             src_locs = [l for l in args.source_locs if l != tgt_loc]
