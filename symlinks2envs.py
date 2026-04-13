@@ -20,6 +20,7 @@ def main(args):
         if path not in symlinks:
             print(f"{i} path {path} not in symlinks")
             i += 1
+            if i >10: exit()
             continue
         target = symlinks[path]
         p = Path(target)
