@@ -263,6 +263,9 @@ def test_knn(net, feature_bank, feature_labels, test_data_loader, num_classes, a
 
         if mask_u is None:
             mask_u = net.module.mask_fun.sample().detach()
+            
+        print()
+        print(mask_idcs.tolist())
 
         for samples in test_bar:
             data, target = samples[0], samples[1]
