@@ -3,6 +3,7 @@ from pathlib import Path
 import argparse
 import torch
 import utils
+import os
 
 def main(args):
     train_data  = utils.Imagenet(root=args.data + '/train')
