@@ -264,9 +264,6 @@ def test_knn(net, feature_bank, feature_labels, test_data_loader, num_classes, a
         if mask_u is None:
             mask_u = net.module.mask_fun.sample().detach()
             
-        print()
-        print(' '.join([f"{m:.1f}" for m in mask_idcs]))
-
         for samples in test_bar:
             data, target = samples[0], samples[1]
             data, target = data.cuda(non_blocking=True), target.cuda(non_blocking=True)
@@ -281,8 +278,8 @@ def test_knn(net, feature_bank, feature_labels, test_data_loader, num_classes, a
                 if mask_idcs is not None:
                     mask_activation = torch.zeros_like(mask_activation)
                     mask_activation[torch.tensor(mask_idcs, device=mask_activation.device)] = 1.
-                features = feature * mask_activation
-                features = utils.safe_normalize(feature, dim=-1)
+                feature = feature * mask_activation
+                feature = utils.safe_normalize(feature, dim=-1)
                 feature_bank = feature_bank * mask_activation
                 features_bank = utils.safe_normalize(feature_bank, dim=-1)
             total_num += data.size(0)
