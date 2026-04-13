@@ -767,7 +767,7 @@ if __name__ == '__main__':
         syn_counts, src_seqs = syn_counts
         print_augmented_summary(summary, syn_counts, src_seqs, set(args.target_locs), DEFAULT_CATEGORIES)
     else:
-        if not args.debug:
+        if not args.quiet:
             print_summary(summary)
         total = 0
         for tgt_loc in args.target_locs:
