@@ -8,7 +8,9 @@ def record_symlinks(root: Path, out_file: Path):
     Recursively scan `root` and record all symlinks.
     Stores: link_path -> link_target (as stored in the symlink)
     """
+    print('a', root)
     root = root.resolve()
+    print('b', root)
     symlinks = {}
 
     for dirpath, dirnames, filenames in os.walk(root):
