@@ -281,7 +281,7 @@ def test_knn(net, feature_bank, feature_labels, test_data_loader, num_classes, a
                 feature = feature * mask_activation
                 feature = utils.safe_normalize(feature, dim=-1)
                 feature_bank = feature_bank * mask_activation
-                features_bank = utils.safe_normalize(feature_bank, dim=-1)
+                feature_bank = utils.safe_normalize(feature_bank, dim=-1)
             total_num += data.size(0)
             # compute cos similarity between each feature vector and feature bank ---> [B, N]
             # feature & feature_bank are normalized
