@@ -22,8 +22,7 @@ def record_symlinks(root: Path, out_file: Path):
         # Check files (now in alphabetical order)
         for name in filenames:
             p = dirpath / name
-            if '5965ac29-23d2-11e8-a6a3-ec086b02610b' in name:
-                print(1, f'name {name} found, p {str(p)}, is symlink {p.is_symlink()}')
+
             if p.is_symlink():
                 symlinks[str(p)] = os.readlink(p)
 
