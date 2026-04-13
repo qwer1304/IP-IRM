@@ -8,9 +8,7 @@ def record_symlinks(root: Path, out_file: Path):
     Recursively scan `root` and record all symlinks.
     Stores: link_path -> link_target (as stored in the symlink)
     """
-    print('a', root)
     root = root.resolve()
-    print('b', root)
     symlinks = {}
 
     for dirpath, dirnames, filenames in os.walk(root):
@@ -24,14 +22,12 @@ def record_symlinks(root: Path, out_file: Path):
         # Check files (now in alphabetical order)
         for name in filenames:
             p = dirpath / name
-            print(1, p, p.is_symlink())
             if p.is_symlink():
                 symlinks[str(p)] = os.readlink(p)
 
         # Check directories (now in alphabetical order)
         for name in dirnames:
             p = dirpath / name
-            print(2, p, p.is_symlink())
             if p.is_symlink():
                 symlinks[str(p)] = os.readlink(p)
 
@@ -39,7 +35,6 @@ def record_symlinks(root: Path, out_file: Path):
         # This sorts the dictionary alphabetically by the path string
         json.dump(symlinks, f, indent=2, sort_keys=True)
 
-    print(3, symlinks.keys())
     print(f"Recorded {len(symlinks)} symlinks -> {out_file}")
 
 def restore_symlinks(map_file: Path):
