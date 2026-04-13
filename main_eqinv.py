@@ -644,7 +644,7 @@ def prepare_clusters(args, resumed, memory_loader, device):
     memory_hash = utils.compute_dataset_fingerprint(memory_data)
     if 'classes' in args.clusters:
         if args.classes_cluster_path is None: # specific cluster not given
-            directory = f'misc/{args.name}/{memory_hash[:10}'
+            directory = f'misc/{args.name}/{memory_hash[:10]}'
             pattern = 'env_ref_set_*' 
 
             # Find matching files
