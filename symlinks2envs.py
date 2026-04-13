@@ -14,7 +14,9 @@ def main(args):
     with open(args.data + '/' + args.map_file) as f:
         symlinks = json.load(f)
 
+    i = 0
     for index, (path, _) in enumerate(train_data.imgs):
+        print(i, path)
         target = symlinks[path]
         p = Path(target)
         parts = p.parts
@@ -27,6 +29,8 @@ def main(args):
 
         domain = args.domains.index(parts[domain_in_path_idx])
         envs[index][domain] = 1.
+        i += 1
+        if i > 10: exit()
         
     torch.save({"partitions": [envs]}, args.data + "/" + "envs_terrainc_train")
     print(f"envs saved in {args.data + '/' + memory_hash[:10] + 'envs_terrainc_train'}")
