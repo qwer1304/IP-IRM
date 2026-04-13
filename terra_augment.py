@@ -731,7 +731,7 @@ if __name__ == '__main__':
                         help='Show augmented summary tables without generating images')
     parser.add_argument('--debug',           action='store_true',
                         help='Print progress and warning messages')
-    parser.add_argument('--quite',           action='store_true',
+    parser.add_argument('--quiet',           action='store_true',
                         help="Don't print summary")
     args = parser.parse_args()
 
