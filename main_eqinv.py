@@ -225,7 +225,8 @@ def get_feature_bank(net, memory_data_loader, args, progress=False, prefix="Test
 
     return feature_bank, feature_labels
 
-def test_knn(net, feature_bank, feature_labels, test_data_loader, num_classes, args, progress=False, prefix="Test:", mask_u=None, masked_features=True):
+def test_knn(net, feature_bank, feature_labels, test_data_loader, num_classes, args, progress=False, prefix="Test:", mask_u=None, masked_features=True,
+                mask_idcs=None):
     net.eval()
        
     total_top1, total_top5, total_num = 0.0, 0.0, 0
@@ -273,7 +274,10 @@ def test_knn(net, feature_bank, feature_labels, test_data_loader, num_classes, a
             feature = net.module.backbone(data)
             feature = utils.safe_normalize(feature, dim=-1)
             if masked_features:
-                mask_activation = net.module.mask_fun.activation(u=mask_u, training=False)
+                    mask_activation = net.module.mask_fun.activation(u=mask_u, training=False)
+                if mask_idcs is not None:
+                    mask_activation = torch.zeros_like(mask_activation)
+                    mask_activation[torch.tensor(mask_idcs, device=mask_activation.device)] = 1.
                 features = feature * mask_activation
                 #features = utils.safe_normalize(feature, dim=-1)
             
@@ -331,7 +335,7 @@ def test_knn(net, feature_bank, feature_labels, test_data_loader, num_classes, a
     return total_top1 / total_num * 100, total_top5 / total_num * 100, macro_acc * 100
 
 # test for one epoch
-def test(net, test_data_loader, args, num_classes, progress=False, prefix="Test:", mask_u=None):
+def test(net, test_data_loader, args, num_classes, progress=False, prefix="Test:", mask_u=None, mask_idcs=None):
     net.eval()
        
     total_top1, total_top5, total_num = 0.0, 0.0, 0
@@ -389,6 +393,9 @@ def test(net, test_data_loader, args, num_classes, progress=False, prefix="Test:
             features = net.module.backbone(data)
             features = utils.safe_normalize(features, dim=-1)
             mask_activation = net.module.mask_fun.activation(u=mask_u)
+            if mask_idcs is not None:
+                mask_activation = torch.zeros_like(mask_activation)
+                mask_activation[torch.tensor(mask_idcs, device=mask_activation.device)] = 1.
             masked_features = features * mask_activation
             # Gemini says to normalize
             masked_features = utils.safe_normalize(masked_features, dim=-1)
@@ -887,6 +894,7 @@ if __name__ == '__main__':
     parser.add_argument('--mask_save_freq', type=int, default=None, help='save mask frequency')
     parser.add_argument('--mask_scalers', default=None, type=float, nargs=4, metavar='[CE Unsplit Env Penalty]',    
                         help='Releative to penalty mask grads update scalers')
+    parser.add_argument('--mask_idcs', type=int, nargs='+', default=None, help="Feature mask indices; used only in evaluation")
 
     # clustering
     parser.add_argument('--clusters', type=str, nargs='*', choices=['classes', 'domained'],  
@@ -1152,19 +1160,19 @@ if __name__ == '__main__':
             train_loader = DataLoader(mem_data[1], batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
                 pin_memory=True, persistent_workers=te_pw)
             train_acc_1, train_acc_5, train_macro_acc = test_knn(model, feauture_bank, feature_labels, train_loader, c, args, progress=True, prefix="Train:",
-                    mask_u=mask_activation_noise, masked_features='masked' in args.evaluate)
+                    mask_u=mask_activation_noise, masked_features='masked' in args.evaluate, mask_idcs=args.mask_idcs)
         if 'val' in args.evaluate:
             print('eval on val data')
             val_loader = DataLoader(val_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=True, 
                 pin_memory=True, persistent_workers=te_pw)
             val_acc_1, val_acc_5, val_macro_acc = test_knn(model, feauture_bank, feature_labels, val_loader, c, args, progress=True, prefix="Val:",
-                    mask_u=mask_activation_noise, masked_features='masked' in args.evaluate)
+                    mask_u=mask_activation_noise, masked_features='masked' in args.evaluate, mask_idcs=args.mask_idcs)
         if 'test' in args.evaluate:
             print('eval on test data')
             test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=True, 
                 pin_memory=True, persistent_workers=te_pw)
             test_acc_1, test_acc_5, test_macro_acc = test_knn(model, feauture_bank, feature_labels, test_loader, c, args, progress=True, prefix="Test:",
-                    mask_u=mask_activation_noise, masked_features='masked' in args.evaluate)
+                    mask_u=mask_activation_noise, masked_features='masked' in args.evaluate, mask_idcs=args.mask_idcs)
         exit()
 
     if args.evaluate is not None:
@@ -1181,19 +1189,19 @@ if __name__ == '__main__':
             train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, shuffle=False, 
                pin_memory=True, persistent_workers=tr_pw)
             train_acc_1, train_acc_5, train_macro_acc, train_macro_acc_per_class = test(model, train_loader, args, num_classes=c, progress=True, prefix="Train:", 
-                mask_u=mask_activation_noise)
+                mask_u=mask_activation_noise, mask_idcs=args.mask_idcs)
         if 'val' in args.evaluate:
             print('eval on val data')
             val_loader = DataLoader(val_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
                 pin_memory=True, persistent_workers=te_pw)
             val_acc_1, val_acc_5, val_macro_acc, val_macro_acc_per_class = test(model, val_loader, args, num_classes=c, progress=True, prefix="Val:", 
-                mask_u=mask_activation_noise)
+                mask_u=mask_activation_noise, mask_idcs=args.mask_idcs)
         if 'test' in args.evaluate:
             print('eval on test data')
             test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
                 pin_memory=True, persistent_workers=te_pw)
             test_acc_1, test_acc_5, test_macro_acc, test_macro_acc_per_class = test(model, test_loader, args, num_classes=c, progress=True, prefix="Test:", 
-                mask_u=mask_activation_noise)
+                mask_u=mask_activation_noise, mask_idcs=args.mask_idcs)
         exit()
 
     if not args.resume and os.path.exists(log_file):
