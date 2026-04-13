@@ -31,7 +31,7 @@ def main(args):
 
         domain = args.domains.index(parts[domain_in_path_idx])
         envs[index][domain] = 1.
-    fp = args.data + "/" + "envs_terrainc_train"
+    fp = args.data + "/" + "envs_terrainc_train_" + memory_hash[:10]
     fp = os.path.normpath(fp) 
     torch.save({"partitions": [envs]}, fp)
     print(f"envs saved in {fp}")
