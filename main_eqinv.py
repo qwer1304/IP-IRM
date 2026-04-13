@@ -166,7 +166,7 @@ def setup_gradnorm_balancer(args, device):
                             gradnorm_loss_lambda=args.gradnorm_loss_lambda, huber_delta=args.gradnorm_huber_delta)
     return gradnorm_balancer
 
-def get_feature_bank(net, memory_data_loader, args, progress=False, prefix="Test:", mask_u=None, masked_features=True):
+def get_feature_bank(net, memory_data_loader, args, progress=False, prefix="Test:", mask_u=None, masked_features=True, mask_idcs=None):
     net.eval()
     
     if isinstance(memory_data_loader.dataset, Subset):
@@ -205,8 +205,11 @@ def get_feature_bank(net, memory_data_loader, args, progress=False, prefix="Test
             feature = utils.safe_normalize(feature, dim=-1)
             if masked_features:
                 mask_activation = net.module.mask_fun.activation(u=mask_u, training=False)
+                if mask_idcs is not None:
+                    mask_activation = torch.zeros_like(mask_activation)
+                    mask_activation[torch.tensor(mask_idcs, device=mask_activation.device)] = 1.
                 feature = feature * mask_activation
-                #feature = utils.safe_normalize(feature, dim=-1)
+                feature = utils.safe_normalize(feature, dim=-1)
             feature_bank.append(feature)
         #end for data, _, _ in feature_bar:
 
@@ -274,14 +277,8 @@ def test_knn(net, feature_bank, feature_labels, test_data_loader, num_classes, a
             feature = net.module.backbone(data)
             feature = utils.safe_normalize(feature, dim=-1)
             if masked_features:
-                mask_activation = net.module.mask_fun.activation(u=mask_u, training=False)
-                if mask_idcs is not None:
-                    mask_activation = torch.zeros_like(mask_activation)
-                    mask_activation[torch.tensor(mask_idcs, device=mask_activation.device)] = 1.
                 feature = feature * mask_activation
                 feature = utils.safe_normalize(feature, dim=-1)
-                feature_bank = feature_bank * mask_activation
-                feature_bank = utils.safe_normalize(feature_bank, dim=-1)
             total_num += data.size(0)
             # compute cos similarity between each feature vector and feature bank ---> [B, N]
             # feature & feature_bank are normalized
@@ -1154,7 +1151,7 @@ if __name__ == '__main__':
         memory_loader = DataLoader(memory_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
             pin_memory=True, persistent_workers=te_pw)
         feauture_bank, feature_labels = get_feature_bank(model, memory_loader, args, progress=True, prefix="Evaluate:", 
-            mask_u=mask_activation_noise, masked_features='masked' in args.evaluate)
+            mask_u=mask_activation_noise, masked_features='masked' in args.evaluate, mask_idcs=args.mask_idcs)
         
         if args.split_train_for_test:
             print('eval on train data')
