@@ -274,12 +274,6 @@ def test_knn(net, feature_bank, feature_labels, test_data_loader, num_classes, a
                 mask_idcs_tensor = torch.tensor(mask_idcs, device=mask_activation.device)
                 mask_activation[mask_idcs_tensor] = 1.
 
-            print()
-            print("mask_idcs:", mask_idcs if mask_idcs is not None else None, "len:", len(mask_idcs) if mask_idcs is not None else 0)
-            print("mask_activation nonzero:", (mask_activation > 0).sum().item())
-            print("feature_bank shape:", feature_bank.shape)
-            print("feature_bank[mask_idcs] nonzero:", (feature_bank[:, mask_idcs_tensor] != 0).sum().item())
-
         for samples in test_bar:
             data, target = samples[0], samples[1]
             data, target = data.cuda(non_blocking=True), target.cuda(non_blocking=True)
