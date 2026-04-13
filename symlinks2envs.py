@@ -31,9 +31,10 @@ def main(args):
 
         domain = args.domains.index(parts[domain_in_path_idx])
         envs[index][domain] = 1.
-        
-    torch.save({"partitions": [envs]}, args.data + "/" + "envs_terrainc_train")
-    print(f"envs saved in {args.data + '/' + memory_hash[:10] + 'envs_terrainc_train'}")
+    fp = args.data + "/" + "envs_terrainc_train"
+    fp = os.path.normpath(fp) 
+    torch.save({"partitions": [envs]}, fp)
+    print(f"envs saved in {fp}")
 
 if __name__ == "__main__":
     # create the top-level parser
