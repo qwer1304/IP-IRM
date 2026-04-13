@@ -277,6 +277,10 @@ def test_knn(net, feature_bank, feature_labels, test_data_loader, num_classes, a
             feature = net.module.backbone(data)
             feature = utils.safe_normalize(feature, dim=-1)
             if masked_features:
+                mask_activation = net.module.mask_fun.activation(u=mask_u, training=False)
+                if mask_idcs is not None:
+                    mask_activation = torch.zeros_like(mask_activation)
+                    mask_activation[torch.tensor(mask_idcs, device=mask_activation.device)] = 1.
                 feature = feature * mask_activation
                 feature = utils.safe_normalize(feature, dim=-1)
             total_num += data.size(0)
