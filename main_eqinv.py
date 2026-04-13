@@ -265,7 +265,7 @@ def test_knn(net, feature_bank, feature_labels, test_data_loader, num_classes, a
             mask_u = net.module.mask_fun.sample().detach()
             
         print()
-        print(' '.join(f"{m:.1f}" for m in mask_idcs])
+        print(' '.join([f"{m:.1f}" for m in mask_idcs]))
 
         for samples in test_bar:
             data, target = samples[0], samples[1]
