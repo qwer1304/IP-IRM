@@ -2434,6 +2434,9 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                            f" gn_loss {info_dict['gradnorm_loss']:.4e} rates: {info_dict['gradnorm_rates_str']} gn_gpm: {info_dict['gn_pm']}"
         else:
             gradnorm_str = ""
+            
+        dot_str = ll_str + lk_str + lp_str + kk_str + kp_str + pp_str
+        cos_str = lk_cos_str + lp_cos_str + kp_cos_str
         
         desc_str = f"Train Epoch [{epoch}/{args.epochs}] [{trained_samples}/{total_samples}]" + \
                    f" Total {total_loss_weighted/trained_samples:.3e}" + \
@@ -2444,8 +2447,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                    f" {cv_str}" + \
                    f" Sparsity {total_mask_sparsity_weighted/trained_samples:.3e}" + \
                    f" LR BB {train_optimizer.param_groups[0]['lr']:.2e} PW {penalty_weight_orig:.6g}" + \
-                   f"`dot:{ll_str}{lk_str}{lp_str}{kk_str}{kp_str}{pp_str}" + \
-                   f"`cos:{lk_cos_str}{lp_cos_str}{kp_cos_str}" + \
+                   (f"`dot:{dt_str}" if dot_str != "" else "") + \
+                   (f"`cos:{cos_str}" if cos_str != "" else "") + \
                    f"`{gradnorm_str}" + \
                    f"`decr: l {info_dict['loss_decrease_cond']:.2e} k {info_dict['loss_unsplit_decrease_cond']:.2e} p {info_dict['penalty_decrease_cond']:.2e}" + \
                    f"`Lp: cos_p {info_dict['cos_Lp']:.3e} dot {info_dict['dot_Lp']:.3e} gn_prgrs {info_dict['gradnorm_progress']:.6g}" + \
