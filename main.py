@@ -429,7 +429,7 @@ def test(net, feature_bank, feature_labels, test_data_loader, num_classes, args,
                 feature_list.append(feature)
                 target_list.append(target)
                 target_raw_list.append(target_raw)
-                pred_labels_list.append(pred_labels)
+                pred_labels_list.append(pred)
                 pred_scores_list.append(pred_scores)
                 idcs_list.append(idx)
 

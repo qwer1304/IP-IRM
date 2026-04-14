@@ -476,7 +476,7 @@ def test(net, test_data_loader, args, num_classes, progress=False, prefix="Test:
                 'mask':            mask_activation,
                 'labels':          target,
                 'labels_raw':      target_raw,
-                'pred_labels':     pred_labels,
+                'pred_labels':     pred,
                 'pred_scores':     pred_scores,
                 'idcs':            idcs,
                 'model_epoch':     epoch,
