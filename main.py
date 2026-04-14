@@ -620,7 +620,6 @@ if __name__ == '__main__':
     parser.add_argument('--feature_dim', default=128, type=int, help='Feature dim for latent vector')
     parser.add_argument('--temperature', default=0.5, type=float, help='Temperature used in softmax')
     parser.add_argument('--moco_temperature', default=[0.5,0.5], type=float, nargs=2, help='Temperature used in softmax', metavar="[+temp, -temp]")
-    parser.add_argument('--tau_plus', default=0.1, type=float, help='Positive class priorx')
     parser.add_argument('--k', default=200, type=int, help='Top k most similar images used to predict the label')
     parser.add_argument('--knn_temp', default=0.5, type=float, help='Temperature used in KNN softmax')
     parser.add_argument('--dl_tr', default=[256, 4, 2, True, True], nargs=5, type=str,
@@ -788,7 +787,7 @@ if __name__ == '__main__':
     # warnings
     warnings.filterwarnings("always", category=UserWarning)
     
-    feature_dim, temperature, moco_temperature, tau_plus, k = args.feature_dim, args.temperature, args.moco_temperature, args.tau_plus, args.k
+    feature_dim, temperature, moco_temperature, k = args.feature_dim, args.temperature, args.moco_temperature, args.k
     epochs, debiased,  = args.epochs,  args.debiased
     dl_tr, dl_te, dl_u, dl_uo = args.dl_tr, args.dl_te, args.dl_u, args.dl_uo
     target_transform = eval(args.target_transform) if args.target_transform is not None else None
