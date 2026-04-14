@@ -260,7 +260,6 @@ def get_feature_bank(net, memory_data_loader, args, epoch, progress=False, prefi
                 
             feature = net.module.backbone(data)
             feature = utils.safe_normalize(feature, dim=-1)
-            feature_bank.append(feature)
         #end for data, _, _ in feature_bar:
 
         # [D, N]
