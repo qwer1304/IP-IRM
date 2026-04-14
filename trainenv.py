@@ -2447,7 +2447,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                    f" {cv_str}" + \
                    f" Sparsity {total_mask_sparsity_weighted/trained_samples:.3e}" + \
                    f" LR BB {train_optimizer.param_groups[0]['lr']:.2e} PW {penalty_weight_orig:.6g}" + \
-                   (f"`dot:{dt_str}" if dot_str != "" else "") + \
+                   (f"`dot:{dot_str}" if dot_str != "" else "") + \
                    (f"`cos:{cos_str}" if cos_str != "" else "") + \
                    f"`{gradnorm_str}" + \
                    f"`decr: l {info_dict['loss_decrease_cond']:.2e} k {info_dict['loss_unsplit_decrease_cond']:.2e} p {info_dict['penalty_decrease_cond']:.2e}" + \
