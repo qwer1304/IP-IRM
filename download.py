@@ -230,53 +230,51 @@ def download_terra_incognita(args):
     for item in data['categories']:
         category_dict[item['id']] = item['name']
 
-    with tqdm(total=len(data['images']), unit="file", desc="Copying image files") as pbar:
-        for image in data['images']:
-            image_location = str(image['location'])
+    if not args.dont_copy_file:
+        with tqdm(total=len(data['images']), unit="file", desc="Copying image files") as pbar:
+            for image in data['images']:
+                image_location = str(image['location'])
 
-            if image_location not in include_locations:
-                pbar.update(1)
-                continue
-
-            loc_folder = os.path.join(destination_folder,
-                                      'L' + str(image_location) + '/')
-            os.makedirs(loc_folder, exist_ok=True)
-
-            image_id = image['id']
-            image_fname = image['file_name']
-
-            for annotation in data['annotations']:
-                if annotation['image_id'] == image_id:
-                    if image_location not in stats:
-                        stats[image_location] = {}
-
-                    category = category_dict[annotation['category_id']]
-
-                    if category not in include_categories:
-                        pbar.update(1)
-                        continue
-
-                    if category not in stats[image_location]:
-                        stats[image_location][category] = 0
-                    else:
-                        stats[image_location][category] += 1
-
-                    loc_cat_folder = os.path.join(loc_folder, category + '/')
-                    os.makedirs(loc_cat_folder, exist_ok=True)
-
-                    dst_path = os.path.join(loc_cat_folder, image_fname)
-                    src_path = os.path.join(images_folder, image_fname)
-
-                    if not args.dont_copy_file:
-                        shutil.copyfile(src_path, dst_path)
+                if image_location not in include_locations:
                     pbar.update(1)
-        # end for image in data['images']:
+                    continue
+
+                loc_folder = os.path.join(destination_folder,
+                                          'L' + str(image_location) + '/')
+                os.makedirs(loc_folder, exist_ok=True)
+
+                image_id = image['id']
+                image_fname = image['file_name']
+
+                for annotation in data['annotations']:
+                    if annotation['image_id'] == image_id:
+                        if image_location not in stats:
+                            stats[image_location] = {}
+
+                        category = category_dict[annotation['category_id']]
+
+                        if category not in include_categories:
+                            pbar.update(1)
+                            continue
+
+                        if category not in stats[image_location]:
+                            stats[image_location][category] = 0
+                        else:
+                            stats[image_location][category] += 1
+
+                        loc_cat_folder = os.path.join(loc_folder, category + '/')
+                        os.makedirs(loc_cat_folder, exist_ok=True)
+
+                        dst_path = os.path.join(loc_cat_folder, image_fname)
+                        src_path = os.path.join(images_folder, image_fname)
+
+                        shutil.copyfile(src_path, dst_path)
+                        pbar.update(1)
+            # end for image in data['images']:
 
     if not args.dont_remove_files:
         shutil.rmtree(images_folder)
         shutil.rmtree(annotations_folder)
-
-
 
 # SVIRO #################################################################
 
