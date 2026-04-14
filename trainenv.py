@@ -2103,11 +2103,11 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
             partition_sz = halves_sz.sum(dim=0, keepdim=True) # (1,J,K) # sizes of envs in macro-batch
             loss_env     = loss_aggregator.sum(dim=0, keepdim=True) / (partition_sz+1e-12)  # per env for macro-batch, normalized per env, unweighted
         else:
-            loss_env     = torch.tensor(0, dtype=torch.float, device=device)
+            loss_env     = torch.zeros_like(loss_aggregator)
         if do_penalty:
             penalty_env  = penalty_calculator.penalty_finalize(penalty_aggregator, halves_sz) # normalized per env for macro-batch, unweighted
         else:
-            penalty_env  = torch.tensor(0, dtype=torch.float, device=device)
+            penalty_env  = torch.zeros_like(penalty_aggregator)
 
         # Environments gradients
         loss_grads_final = calculate_loss_grads_final(loss_grads, loss_env, loss_weight_env, halves_sz, loss_module, reduction, device, do_loss)
