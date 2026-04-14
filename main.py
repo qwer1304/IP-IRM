@@ -224,18 +224,17 @@ def train_partition(net, update_loader, soft_split, random_init=False, args=None
     np.save("results/{}/{}/{}_{}{}".format(args.dataset, args.name, 'GroupResults', epoch, ".txt"), updated_split.cpu().numpy())
     return updated_split
 
-def get_feature_bank(net, memory_data_loader, args, progress=False, prefix="Test:"):
+def get_feature_bank(net, memory_data_loader, args, epoch, progress=False, prefix="Test:"):
     net.eval()
     
-    if isinstance(memory_data_loader.dataset, Subset):
+    if isinstance(memory_data_loader.dataset, Subset): # for split training
         dataset = memory_data_loader.dataset.dataset
         idcs    = memory_data_loader.dataset.indices
     else:
         dataset = memory_data_loader.dataset
         idcs    = list(range(len(dataset)))
     transform = dataset.transform
-    feature_bank = []
-    
+
     with torch.no_grad():
         # generate feature bank
         bar_format = '{l_bar}{bar:' + str(args.bar) + '}{r_bar}' #{bar:-' + str(args.bar) + 'b}'
@@ -265,17 +264,38 @@ def get_feature_bank(net, memory_data_loader, args, progress=False, prefix="Test
         #end for data, _, _ in feature_bar:
 
         # [D, N]
-        feature_bank = torch.cat(feature_bank, dim=0).t().contiguous() # places feature_bank on cuda
+        feature_bank = torch.cat(feature_bank, dim=0).t().contiguous() # (D, B) places feature_bank on cuda
         # [N]
         if hasattr(dataset, "labels"):
             labels = [dataset.labels[i] for i in indcs]
+            labels_raw = labels
         else:
             targets = [dataset.targets[i] for i in idcs]
+            labels_raw = targets
             if dataset.target_transform is not None:
                 labels = [dataset.target_transform(t) for t in targets]
             else:
                 labels = targets       
         feature_labels = torch.tensor(labels, device=feature_bank.device)
+
+        if args.extract_features:
+            # Save to file
+            prefix_save = "memory_bank"
+            directory = f'results/{args.dataset}/{args.name}'
+            fp = os.path.join(directory, f"{prefix_save}_features_dump.pt")       
+            os.makedirs(os.path.dirname(fp), exist_ok=True)
+
+            state = {
+                'features':     feature_bank.t(),
+                'labels':       labels,
+                'labels_raw':   labels_raw,
+                'idcs':         idcs,
+                'model_epoch':  epoch,
+                'n_classes':    args.class_num,
+            }
+
+            utils.atomic_save(state, False, filename=fp)
+            print(f"Dumped features into {fp}")
 
     return feature_bank, feature_labels
 
@@ -994,7 +1014,7 @@ if __name__ == '__main__':
             memory_data = mem_data[0]
         memory_loader = DataLoader(memory_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
             pin_memory=True, persistent_workers=te_pw)
-        feauture_bank, feature_labels = get_feature_bank(model, memory_loader, args, progress=True, prefix="Evaluate:")
+        feauture_bank, feature_labels = get_feature_bank(model, memory_loader, args, epoch, progress=True, prefix="Evaluate:")
         if args.split_train_for_test:
             print('eval on train data')
             train_loader = DataLoader(mem_data[1], batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
@@ -1127,7 +1147,7 @@ if __name__ == '__main__':
                 gc.collect()
             memory_loader = DataLoader(memory_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
                 pin_memory=False, persistent_workers=te_pw)
-            feauture_bank, feature_labels = get_feature_bank(model, memory_loader, args, progress=True, prefix="Evaluate:")
+            feauture_bank, feature_labels = get_feature_bank(model, memory_loader, args, epoch, progress=True, prefix="Evaluate:")
             memory_loader = shutdown_loader(memory_loader)
             gc.collect()              # run Python's garbage collector
 
