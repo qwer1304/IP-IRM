@@ -2394,6 +2394,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
             slp_str = ""
             slp_cos_str = ""
             cv_str = ""
+            partitions_metrics_str = ""
           
         if do_unsplit_loss and do_penalty:
             kp_str = f" kp {info_dict['dot_kp']:.2e}"
