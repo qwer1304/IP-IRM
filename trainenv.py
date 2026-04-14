@@ -2384,7 +2384,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 penalty_partitions_str = ", ".join([f"{x:.2e}" for x in total_pen_loss_partitions.tolist()])
                 cv_partitions_str = ", ".join([f"{x:.2e}" for x in cv_partitions.tolist()])
                 
-                partitions_metrics_str = f"Partitions: loss {loss_partitions_str}" + f"`penalty {penalty_partitions_str}" + f"`cv {cv_partitions_str}"               
+                partitions_metrics_str = f"`Partitions: loss {loss_partitions_str}" + f"`penalty {penalty_partitions_str}" + f"`cv {cv_partitions_str}"               
             else:
                 cv_str = ""
                 partitions_metrics_str = ""
@@ -2429,15 +2429,33 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
             spc_cos_str = ""
             
         if do_gradnorm:
-            gradnorm_str = f"w/v: k {info_dict['w_k']:.4f}/{info_dict['v_k']:.4f} l {info_dict['w_l']:.4f}/{info_dict['v_l']:.4f}" + \
+            gradnorm_str = f"`w/v: k {info_dict['w_k']:.4f}/{info_dict['v_k']:.4f} l {info_dict['w_l']:.4f}/{info_dict['v_l']:.4f}" + \
                            f" p {info_dict['w_p']:.4f}/{info_dict['v_p']:.4f}" + \
-                           f" gn_loss {info_dict['gradnorm_loss']:.4e} rates: {info_dict['gradnorm_rates_str']} gn_gpm: {info_dict['gn_pm']}"
+                           f" gn_loss {info_dict['gradnorm_loss']:.4e} rates: {info_dict['gradnorm_rates_str']} gn_gpm: {info_dict['gn_pm']}" + \
+                           f" gn_prgrs {info_dict['gradnorm_progress']:.3g}"
         else:
             gradnorm_str = ""
             
         dot_str = ll_str + lk_str + lp_str + kk_str + kp_str + pp_str
+        dot_str = f"`dot: {dot_str}" if dot_str != "" else ""
         cos_str = lk_cos_str + lp_cos_str + kp_cos_str
+        cos_str = f"`cos: {cos_str}" if cos_str != "" else ""
         
+        shared_dot_str = skp_str + skc_str + spc_str + slc_str + slk_str + slp_str
+        shared_dot_str = f"`shared_dot: {shared_dot_str}" if shared_dot_str != "" else ""
+        shared_cos_str = skp_cos_str + skc_cos_str + spc_cos_str + slc_cos_str + slk_cos_str + slp_cos_str
+        shared_cos_str = f"`shared_cos: {shared_cos_str}" if shared_cos_str != "" else ""
+        
+        
+        cos_Lp = f"cos_p {info_dict['cos_Lp']:.3e}" if info_dict['cos_Lp'] != 0. else ""
+        dot_lp = f"info_dict['dot_Lp']:.3e}" if info_dict['dot_Lp'] != 0. else ""
+        Lp_str = cos_Lp + dot_lp
+        Lp_str = "`Lp: {Lp_str}" if Lp_str != "" else ""
+        Lp_shared_cos = f"shared cos {info_dict['shared_cos_Lp']:.3e}" if info_dict['shared_cos_Lp'] != 0. else ""
+        Lp_shared_dot = f"shared dot {info_dict['shared_dot_Lp']:.3e}" if info_dict['shared_dot_Lp'] != 0. else ""
+        Lp_shared_str = Lp_shared_cos + Lp_shared_dot
+        Lp_shared_str = f"`Lp: {Lp_shared_str}" if Lp_shared_str != "" else ""
+
         desc_str = f"Train Epoch [{epoch}/{args.epochs}] [{trained_samples}/{total_samples}]" + \
                    f" Total {total_loss_weighted/trained_samples:.3e}" + \
                    f" Unsplit/{loss_unsplit_module.name()} {total_unsplit_loss_weighted/trained_samples:.3e}" + \
@@ -2447,17 +2465,16 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                    f" {cv_str}" + \
                    f" Sparsity {total_mask_sparsity_weighted/trained_samples:.3e}" + \
                    f" LR BB {train_optimizer.param_groups[0]['lr']:.2e} PW {penalty_weight_orig:.6g}" + \
-                   (f"`dot:{dot_str}" if dot_str != "" else "") + \
-                   (f"`cos:{cos_str}" if cos_str != "" else "") + \
-                   f"`{gradnorm_str}" + \
+                   f"{dot_str}" + \
+                   f"{cos_str}" + \
+                   f"{gradnorm_str}" + \
                    f"`decr: l {info_dict['loss_decrease_cond']:.2e} k {info_dict['loss_unsplit_decrease_cond']:.2e} p {info_dict['penalty_decrease_cond']:.2e}" + \
-                   f"`Lp: cos_p {info_dict['cos_Lp']:.3e} dot {info_dict['dot_Lp']:.3e} gn_prgrs {info_dict['gradnorm_progress']:.6g}" + \
-                   f"`shared_dot:{skp_str}{skc_str}{spc_str}" + \
-                   f"`{slc_str}{slk_str}{slp_str}" + \
-                   f"`shared_cos:{skp_cos_str}{skc_cos_str}{spc_cos_str}{slc_cos_str}{slk_cos_str}{slp_cos_str}" + \
-                   f"`Lp: shared cos {info_dict['shared_cos_Lp']:.3e} shared dot {info_dict['shared_dot_Lp']:.3e}" + \
-                   f"`{mask_sparsity_str}" + \
-                   f"`{partitions_metrics_str}"
+                   f"{Lp_str}" + \
+                   f"{shared_dot_str}" + \
+                   f"{shared_cos_str}" + \
+                   f"{Lp_shared_str}" + \
+                   f"{mask_sparsity_str}" + \
+                   f"{partitions_metrics_str}"
 
         desc_str += "`" + loss_module.get_debug_info_str()
         desc_str = utils.apply_virtual_breaks(desc_str, args.term_zoom, marker='`')
