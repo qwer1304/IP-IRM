@@ -234,7 +234,8 @@ def get_feature_bank(net, memory_data_loader, args, epoch, progress=False, prefi
         dataset = memory_data_loader.dataset
         idcs    = list(range(len(dataset)))
     transform = dataset.transform
-
+    feature_bank = []
+    
     with torch.no_grad():
         # generate feature bank
         bar_format = '{l_bar}{bar:' + str(args.bar) + '}{r_bar}' #{bar:-' + str(args.bar) + 'b}'
@@ -260,6 +261,7 @@ def get_feature_bank(net, memory_data_loader, args, epoch, progress=False, prefi
                 
             feature = net.module.backbone(data)
             feature = utils.safe_normalize(feature, dim=-1)
+            feature_bank.append(feature)
         #end for data, _, _ in feature_bar:
 
         # [D, N]
