@@ -288,7 +288,7 @@ def get_feature_bank(net, memory_data_loader, args, epoch, progress=False, prefi
 
             state = {
                 'features':     feature_bank.t(),
-                'labels':       torch.tensor(labels, dim=0)
+                'labels':       torch.tensor(labels, dim=0),
                 'labels_raw':   torch.tensor(labels_raw, dim=0),
                 'idcs':         torch.tensor(idcs, dim=0),
                 'model_epoch':  epoch,
