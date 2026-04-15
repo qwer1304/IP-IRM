@@ -380,7 +380,7 @@ def main(args):
                             dst.symlink_to(src.absolute())
                           
                         assert val_num_R == val_num_P, f"# of val R files {val_num_R} != # val P files {val_num_P}, {env_dir.name}, {label}"
-                        assert np.array_equal(val_idx_R, val_idx_P), "R & P val file indices don't match, {env_dir.name}, {label}"
+                        assert np.array_equal(val_idx_R, val_idx_P), f"R & P val file indices don't match, {env_dir.name}, {label}"
                     #end if lab_dir.is_dir():
             else: # test domain
                 l = sorted(os.scandir(env_dir), key=lambda e: e.name)
