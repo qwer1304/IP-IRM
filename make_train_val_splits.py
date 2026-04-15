@@ -329,55 +329,58 @@ def main(args):
                         fs = sorted(os.scandir(lab_dir), key=lambda e: e.name)
                         files = [f for f in fs if f.is_file()]
                         num_files = len(files)
-                        f_idx = np.random.permutation(num_files)
+                        f_idx = np.random.permutation(num_files) # not sorted any longer!
 
                         # R Train
-                        train_num = R_train[env_idx, label_idx]
-                        train_idx = f_idx[:train_num]
+                        train_num_R = R_train[env_idx, label_idx]
+                        train_idx_R = np.sort(f_idx[:train_num_R]) # resort the indices
 
                         output_lab_dir = os.path.join(save_dir_R_train, label + '/')
                         os.makedirs(output_lab_dir, exist_ok=True)                                    
-                        for fp in [files[i] for i in train_idx]:
+                        for fp in [files[i] for i in train_idx_R]:
                             src = Path(fp.path)
                             dst = os.path.join(output_lab_dir, fp.name)
                             dst = Path(dst)    
                             dst.symlink_to(src.absolute())
 
                         # R Val
-                        val_num = R_val[env_idx, label_idx]
-                        val_idx = f_idx[train_num:train_num+val_num]
+                        val_num_R = R_val[env_idx, label_idx]
+                        val_idx_R = np.sort(f_idx[train_num_R:train_num_R+val_num_R])
 
                         output_lab_dir = os.path.join(save_dir_R_val, label + '/')
                         os.makedirs(output_lab_dir, exist_ok=True)
-                        for fp in [files[i] for i in val_idx]:
+                        for fp in [files[i] for i in val_idx_R]:
                             src = Path(fp.path)
                             dst = os.path.join(output_lab_dir, fp.name)
                             dst = Path(dst)                                    
                             dst.symlink_to(src.absolute())
 
                         # P Train
-                        train_num = P_train[env_idx, label_idx]
-                        train_idx = f_idx[:train_num]
+                        train_num_P = P_train[env_idx, label_idx]
+                        train_idx_P = np.sort(f_idx[:train_num_P])
 
                         output_lab_dir = os.path.join(save_dir_P_train, label + '/')
                         os.makedirs(output_lab_dir, exist_ok=True)                                    
-                        for fp in [files[i] for i in train_idx]:
+                        for fp in [files[i] for i in train_idx_P]:
                             src = Path(fp.path)
                             dst = os.path.join(output_lab_dir, fp.name)
                             dst = Path(dst)                                    
                             dst.symlink_to(src.absolute())
 
                         # P Val
-                        val_num = P_val[env_idx, label_idx]
-                        val_idx = f_idx[train_num:train_num+val_num]
+                        val_num_P = P_val[env_idx, label_idx]
+                        val_idx_P = np.sort(f_idx[train_num_P:train_num_P+val_num_P])
 
                         output_lab_dir = os.path.join(save_dir_P_val, label + '/')
                         os.makedirs(output_lab_dir, exist_ok=True)
-                        for fp in [files[i] for i in val_idx]:
+                        for fp in [files[i] for i in val_idx_P]:
                             src = Path(fp.path)
                             dst = os.path.join(output_lab_dir, fp.name)
                             dst = Path(dst)                                    
                             dst.symlink_to(src.absolute())
+                          
+                        assert val_num_R == val_num_P, f"# of val R files {val_num_R} != # val P files {val_num_P}, {env_dir.name}, {label}"
+                        assert np.array_equal(val_idx_R, val_idx_P), "R & P file indices don't match, {env_dir.name}, {label}"
                     #end if lab_dir.is_dir():
             else: # test domain
                 l = sorted(os.scandir(env_dir), key=lambda e: e.name)
