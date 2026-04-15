@@ -137,29 +137,34 @@ def bbox_to_mask(bbox, h, w, ann_h=None, ann_w=None):
     """
     if bbox is None:
         return None
-    x, y, bw, bh = bbox
+    x_orig, y_orig, bw_orig, bh_orig = bbox
     if ann_h is not None and ann_w is not None and ann_h > 0 and ann_w > 0:
+        scaled = True
         scale_x = w / ann_w
         scale_y = h / ann_h
-        x, bw = x * scale_x, bw * scale_x
-        y, bh = y * scale_y, bh * scale_y
+        x, bw = x_orig * scale_x, bw_orig * scale_x
+        y, bh = y_orig * scale_y, bh_orig * scale_y
+    else:
+        scaled = False
+        x, y, bw, bh = bbox
+    
     x, y, bw, bh = int(round(x)), int(round(y)), int(round(bw)), int(round(bh))
     # negative origin is always a genuine error
     assert x >= 0 and y >= 0, (
-        "bbox origin (%d, %d) is negative -- corrupt bbox or bad annotation dims" % (x, y)
+        "bbox origin (%d, %d) is negative -- corrupt bbox or bad annotation dims, scaled %d" % (x, y, scaled)
     )
     # zero/negative size is always a genuine error
     assert bw > 0 and bh > 0, (
-        "bbox has zero or negative size (%dx%d)" % (bw, bh)
+        "bbox has zero or negative size (%dx%d) scaled %d" % (bw, bh, scaled)
     )
     # allow up to 2px rounding slop from scaling; anything larger is a
     # genuine annotation/file mismatch and should stop execution
     x_over = (x + bw) - w
     y_over = (y + bh) - h
     assert x_over <= 2 and y_over <= 2, (
-        "bbox (%d,%d,%d,%d) exceeds image (%dx%d) by (%d,%d) px -- "
+        "bbox orig (%d,%d,%d,%d) bbox scaled (%d,%d,%d,%d) exceeds image (%dx%d) by (%d,%d) px -- "
         "annotation dims (%dx%d) do not match actual file"
-        % (x, y, bw, bh, w, h, x_over, y_over, ann_w, ann_h)
+        % (x_orig, y_orig, bw_orig, bh_orig, x, y, bw, bh, w, h, x_over, y_over, ann_w, ann_h)
     )
     x1, y1 = max(0, x),      max(0, y)
     x2, y2 = min(w, x + bw), min(h, y + bh)
