@@ -144,13 +144,23 @@ def bbox_to_mask(bbox, h, w, ann_h=None, ann_w=None):
         x, bw = x * scale_x, bw * scale_x
         y, bh = y * scale_y, bh * scale_y
     x, y, bw, bh = int(round(x)), int(round(y)), int(round(bw)), int(round(bh))
-    assert x >= 0 and y >= 0, \
-        f"bbox origin ({x}, {y}) is negative - annotation mismatch or corrupt bbox"
-    assert x + bw <= w and y + bh <= h, \
-        f"bbox ({x}, {y}, {bw}, {bh}) extends outside image ({w}x{h}) - " \
-        f"annotation dims ({ann_w}x{ann_h}) may not match actual file"
-    assert bw > 0 and bh > 0, \
-        f"bbox has zero or negative size ({bw}x{bh})"
+    # negative origin is always a genuine error
+    assert x >= 0 and y >= 0, (
+        "bbox origin (%d, %d) is negative -- corrupt bbox or bad annotation dims" % (x, y)
+    )
+    # zero/negative size is always a genuine error
+    assert bw > 0 and bh > 0, (
+        "bbox has zero or negative size (%dx%d)" % (bw, bh)
+    )
+    # allow up to 2px rounding slop from scaling; anything larger is a
+    # genuine annotation/file mismatch and should stop execution
+    x_over = (x + bw) - w
+    y_over = (y + bh) - h
+    assert x_over <= 2 and y_over <= 2, (
+        "bbox (%d,%d,%d,%d) exceeds image (%dx%d) by (%d,%d) px -- "
+        "annotation dims (%dx%d) do not match actual file"
+        % (x, y, bw, bh, w, h, x_over, y_over, ann_w, ann_h)
+    )
     x1, y1 = max(0, x),      max(0, y)
     x2, y2 = min(w, x + bw), min(h, y + bh)
     mask = np.zeros((h, w), dtype=bool)
@@ -779,7 +789,7 @@ if __name__ == '__main__':
                             include_locations=inc_locs)
 
     if args.dry_run:
-        syn_counts = dry_run_counts(  # returns (counts, src_seqs) tuple - unpacked below
+        syn_counts = dry_run_counts(  # returns (counts, src_seqs) tuple -- unpacked below
             species_list             = args.species,
             target_locs              = args.target_locs,
             source_locs              = args.source_locs,
@@ -821,5 +831,4 @@ if __name__ == '__main__':
                 )
                 total += n
         print(f"\nTotal synthetic images generated: {total}")
-
 
