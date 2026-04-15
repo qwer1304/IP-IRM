@@ -145,9 +145,9 @@ def bbox_to_mask(bbox, h, w, ann_h=None, ann_w=None):
         y, bh = y * scale_y, bh * scale_y
     x, y, bw, bh = int(round(x)), int(round(y)), int(round(bw)), int(round(bh))
     assert x >= 0 and y >= 0, \
-        f"bbox origin ({x}, {y}) is negative — annotation mismatch or corrupt bbox"
+        f"bbox origin ({x}, {y}) is negative - annotation mismatch or corrupt bbox"
     assert x + bw <= w and y + bh <= h, \
-        f"bbox ({x}, {y}, {bw}, {bh}) extends outside image ({w}x{h}) — " \
+        f"bbox ({x}, {y}, {bw}, {bh}) extends outside image ({w}x{h}) - " \
         f"annotation dims ({ann_w}x{ann_h}) may not match actual file"
     assert bw > 0 and bh > 0, \
         f"bbox has zero or negative size ({bw}x{bh})"
@@ -779,7 +779,7 @@ if __name__ == '__main__':
                             include_locations=inc_locs)
 
     if args.dry_run:
-        syn_counts = dry_run_counts(  # returns (counts, src_seqs) tuple — unpacked below
+        syn_counts = dry_run_counts(  # returns (counts, src_seqs) tuple - unpacked below
             species_list             = args.species,
             target_locs              = args.target_locs,
             source_locs              = args.source_locs,
@@ -821,4 +821,5 @@ if __name__ == '__main__':
                 )
                 total += n
         print(f"\nTotal synthetic images generated: {total}")
+
 
