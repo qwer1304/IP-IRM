@@ -331,21 +331,12 @@ def main(args):
                         num_files = len(files)
                         f_idx = np.random.permutation(num_files) # not sorted any longer!
 
-                        # R Train
-                        train_num_R = R_train[env_idx, label_idx]
-                        train_idx_R = np.sort(f_idx[:train_num_R]) # resort the indices
-
-                        output_lab_dir = os.path.join(save_dir_R_train, label + '/')
-                        os.makedirs(output_lab_dir, exist_ok=True)                                    
-                        for fp in [files[i] for i in train_idx_R]:
-                            src = Path(fp.path)
-                            dst = os.path.join(output_lab_dir, fp.name)
-                            dst = Path(dst)    
-                            dst.symlink_to(src.absolute())
-
+                        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                        # It's important that R_val comes BEFORE R_train s.t. it matches P_val
+                        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
                         # R Val
                         val_num_R = R_val[env_idx, label_idx]
-                        val_idx_R = np.sort(f_idx[train_num_R:train_num_R+val_num_R])
+                        val_idx_R = np.sort(f_idx[:val_num_R])
 
                         output_lab_dir = os.path.join(save_dir_R_val, label + '/')
                         os.makedirs(output_lab_dir, exist_ok=True)
@@ -355,21 +346,24 @@ def main(args):
                             dst = Path(dst)                                    
                             dst.symlink_to(src.absolute())
 
-                        # P Train
-                        train_num_P = P_train[env_idx, label_idx]
-                        train_idx_P = np.sort(f_idx[:train_num_P])
+                        # R Train
+                        train_num_R = R_train[env_idx, label_idx]
+                        train_idx_R = np.sort(f_idx[val_num_R:val_num_R+train_num_R]) # resort the indices
 
-                        output_lab_dir = os.path.join(save_dir_P_train, label + '/')
+                        output_lab_dir = os.path.join(save_dir_R_train, label + '/')
                         os.makedirs(output_lab_dir, exist_ok=True)                                    
-                        for fp in [files[i] for i in train_idx_P]:
+                        for fp in [files[i] for i in train_idx_R]:
                             src = Path(fp.path)
                             dst = os.path.join(output_lab_dir, fp.name)
-                            dst = Path(dst)                                    
+                            dst = Path(dst)    
                             dst.symlink_to(src.absolute())
 
+                        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                        # It's important that P_val comes BEFORE P_train s.t. it matches P_val
+                        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
                         # P Val
                         val_num_P = P_val[env_idx, label_idx]
-                        val_idx_P = np.sort(f_idx[train_num_P:train_num_P+val_num_P])
+                        val_idx_P = np.sort(f_idx[:val_num_P])
 
                         output_lab_dir = os.path.join(save_dir_P_val, label + '/')
                         os.makedirs(output_lab_dir, exist_ok=True)
@@ -378,8 +372,19 @@ def main(args):
                             dst = os.path.join(output_lab_dir, fp.name)
                             dst = Path(dst)                                    
                             dst.symlink_to(src.absolute())
+
+                        # P Train
+                        train_num_P = P_train[env_idx, label_idx]
+                        train_idx_P = np.sort(f_idx[val_num_P:val_num_P+train_num_P])
+
+                        output_lab_dir = os.path.join(save_dir_P_train, label + '/')
+                        os.makedirs(output_lab_dir, exist_ok=True)                                    
+                        for fp in [files[i] for i in train_idx_P]:
+                            src = Path(fp.path)
+                            dst = os.path.join(output_lab_dir, fp.name)
+                            dst = Path(dst)                                    
+                            dst.symlink_to(src.absolute())
                           
-                        assert train_num_R == train_num_P, f"# of train R files {train_num_R} != # train P files {train_num_P}, {env_dir.name}, {label}"
                         assert val_num_R == val_num_P, f"# of val R files {val_num_R} != # val P files {val_num_P}, {env_dir.name}, {label}"
                         if not np.array_equal(val_idx_R, val_idx_P):
                             print(f"R & P val file indices don't match, {env_dir.name}, {label}")
