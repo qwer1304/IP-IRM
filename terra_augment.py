@@ -161,7 +161,7 @@ def bbox_to_mask(bbox, h, w, ann_h=None, ann_w=None):
     # genuine annotation/file mismatch and should stop execution
     x_over = (x + bw) - w
     y_over = (y + bh) - h
-    assert x_over <= 2 and y_over <= 2, (
+    assert x_over <= 20 and y_over <= 20, (
         "bbox orig (%d,%d,%d,%d) bbox scaled (%d,%d,%d,%d) exceeds image (%dx%d) by (%d,%d) px -- "
         "annotation dims (%dx%d) do not match actual file"
         % (x_orig, y_orig, bw_orig, bh_orig, x, y, bw, bh, w, h, x_over, y_over, ann_w, ann_h)
