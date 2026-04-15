@@ -126,14 +126,31 @@ def get_middle_frame(seq_id, seq_to_images, image_index):
 
 # -- Bbox utilities ------------------------------------------------------------
 
-def bbox_to_mask(bbox, h, w):
+def bbox_to_mask(bbox, h, w, ann_h=None, ann_w=None):
     """
     Convert [x, y, bw, bh] bbox to boolean mask of shape (h, w).
     True = inside bbox (animal region). Returns None if bbox is None.
+
+    ann_h, ann_w: annotation-file image dimensions (may differ from actual
+                  loaded image if files were downsampled). When provided, bbox
+                  coordinates are scaled proportionally to match actual (h, w).
     """
     if bbox is None:
         return None
-    x, y, bw, bh = [int(round(v)) for v in bbox]
+    x, y, bw, bh = bbox
+    if ann_h is not None and ann_w is not None and ann_h > 0 and ann_w > 0:
+        scale_x = w / ann_w
+        scale_y = h / ann_h
+        x, bw = x * scale_x, bw * scale_x
+        y, bh = y * scale_y, bh * scale_y
+    x, y, bw, bh = int(round(x)), int(round(y)), int(round(bw)), int(round(bh))
+    assert x >= 0 and y >= 0, \
+        f"bbox origin ({x}, {y}) is negative — annotation mismatch or corrupt bbox"
+    assert x + bw <= w and y + bh <= h, \
+        f"bbox ({x}, {y}, {bw}, {bh}) extends outside image ({w}x{h}) — " \
+        f"annotation dims ({ann_w}x{ann_h}) may not match actual file"
+    assert bw > 0 and bh > 0, \
+        f"bbox has zero or negative size ({bw}x{bh})"
     x1, y1 = max(0, x),      max(0, y)
     x2, y2 = min(w, x + bw), min(h, y + bh)
     mask = np.zeros((h, w), dtype=bool)
@@ -143,14 +160,16 @@ def bbox_to_mask(bbox, h, w):
 
 # -- Histogram utilities -------------------------------------------------------
 
-def compute_bg_histogram(img, bbox, n_bins=256):
+def compute_bg_histogram(img, bbox, n_bins=256, ann_h=None, ann_w=None):
     """
     Compute per-channel histogram using BACKGROUND pixels only (outside bbox).
     Falls back to full image if bbox is None or covers entire image.
     Returns array of shape (3, n_bins).
+
+    ann_h, ann_w: annotation-file image dimensions for bbox scaling.
     """
     h, w        = img.shape[:2]
-    animal_mask = bbox_to_mask(bbox, h, w)
+    animal_mask = bbox_to_mask(bbox, h, w, ann_h=ann_h, ann_w=ann_w)
 
     if animal_mask is not None and animal_mask.any() and not animal_mask.all():
         bg_mask = ~animal_mask
@@ -182,8 +201,10 @@ def average_bg_histograms(image_ids, image_index, images_root, n_bins=256,
                 first_fail = (path, str(e))
             if verbose: print(f"  WARNING: could not load {path}: {e}")
             continue
-        bbox = rec['annotations'][0]['bbox'] if rec['annotations'] else None
-        hists.append(compute_bg_histogram(img, bbox, n_bins))
+        bbox  = rec['annotations'][0]['bbox'] if rec['annotations'] else None
+        ann_h = rec.get('height')
+        ann_w = rec.get('width')
+        hists.append(compute_bg_histogram(img, bbox, n_bins, ann_h=ann_h, ann_w=ann_w))
     if not hists:
         if first_fail is not None:
             raise FileNotFoundError(
@@ -216,8 +237,10 @@ def cluster_bg_histograms(image_ids, image_index, images_root,
             if first_fail is None:
                 first_fail = (path, str(e))
             continue
-        bbox = rec['annotations'][0]['bbox'] if rec['annotations'] else None
-        hist_list.append(compute_bg_histogram(img, bbox, n_bins).flatten())
+        bbox  = rec['annotations'][0]['bbox'] if rec['annotations'] else None
+        ann_h = rec.get('height')
+        ann_w = rec.get('width')
+        hist_list.append(compute_bg_histogram(img, bbox, n_bins, ann_h=ann_h, ann_w=ann_w).flatten())
         valid_ids.append(iid)
 
     if not hist_list:
@@ -386,7 +409,9 @@ def _process_one(args):
         (ann['bbox'] for ann in rec['annotations'] if ann['category'] == species),
         None
     )
-    animal_mask = bbox_to_mask(src_bbox, h, w)
+    ann_h = rec.get('height')
+    ann_w = rec.get('width')
+    animal_mask = bbox_to_mask(src_bbox, h, w, ann_h=ann_h, ann_w=ann_w)
 
     if animal_mask is not None and animal_mask.any() and not animal_mask.all():
         bg_mask = ~animal_mask
@@ -754,7 +779,7 @@ if __name__ == '__main__':
                             include_locations=inc_locs)
 
     if args.dry_run:
-        syn_counts = dry_run_counts(  # returns (counts, src_seqs) tuple â€” unpacked below
+        syn_counts = dry_run_counts(  # returns (counts, src_seqs) tuple — unpacked below
             species_list             = args.species,
             target_locs              = args.target_locs,
             source_locs              = args.source_locs,

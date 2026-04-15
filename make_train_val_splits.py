@@ -271,8 +271,8 @@ def prune_domains(domains, classes, raw, train_fraction=0.8, lp_train_target_per
 def main(args):
     random.seed(args.seed)
     np.random.seed(args.seed)
-    input_dir = os.path.join(args.input_dir, str(args.target_image_size) + '/')
-    output_dir = os.path.join(args.output_dir, str(args.target_image_size) + '/')
+    input_dir = args.input_dir
+    output_dir = args.output_dir
     save_dir_R_train = output_dir + 'R/train/'
     os.makedirs(save_dir_R_train, exist_ok=True)
     save_dir_P_train = output_dir + 'P/train/'
@@ -434,7 +434,6 @@ if __name__ == "__main__":
     # Global args
     parser.add_argument('--input_dir', type=str, default="./data/DataSets/terra_incognita/JPEG")
     parser.add_argument('--output_dir', type=str, default="./data/DataSets/terra_incognita/JPEG")
-    parser.add_argument('--target_image_size', type=int, default=224)
     parser.add_argument('--test_domain', type=str, required=True)
     parser.add_argument('--seed', type=int, default=0)
     parser.add_argument('--domain_names', type=str, nargs='+', required=True, help='Cannot be last before selection method')
