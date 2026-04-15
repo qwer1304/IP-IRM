@@ -382,8 +382,8 @@ def main(args):
                         assert val_num_R == val_num_P, f"# of val R files {val_num_R} != # val P files {val_num_P}, {env_dir.name}, {label}"
                         if not np.array_equal(val_idx_R, val_idx_P):
                             print(f"R & P val file indices don't match, {env_dir.name}, {label}")
-                            print(f"val_idx_R: {val_idx_R.tolist()}"
-                            print(f"val_idx_P: {val_idx_P.tolist()}"
+                            print(f"val_idx_R: {val_idx_R.tolist()}")
+                            print(f"val_idx_P: {val_idx_P.tolist()}")
                             assert False
                     #end if lab_dir.is_dir():
             else: # test domain
