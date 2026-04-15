@@ -379,6 +379,7 @@ def main(args):
                             dst = Path(dst)                                    
                             dst.symlink_to(src.absolute())
                           
+                        assert train_num_R == train_num_P, f"# of train R files {train_num_R} != # train P files {train_num_P}, {env_dir.name}, {label}"
                         assert val_num_R == val_num_P, f"# of val R files {val_num_R} != # val P files {val_num_P}, {env_dir.name}, {label}"
                         if not np.array_equal(val_idx_R, val_idx_P):
                             print(f"R & P val file indices don't match, {env_dir.name}, {label}")
