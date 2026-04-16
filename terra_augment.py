@@ -837,7 +837,7 @@ if __name__ == '__main__':
                     verbose          = args.debug,
                     dry_run          = False,
                     use_whole_src_seq_thresh = args.use_whole_src_seq_thresh,
-                    tqdm_prefix      = args.tqdm_prefix.
+                    tqdm_prefix      = args.tqdm_prefix,
                 )
                 total += n
         print(f"\nTotal synthetic images generated: {total}")
