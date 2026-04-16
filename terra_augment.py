@@ -440,7 +440,7 @@ def _process_one(args):
         try:
             mappings  = compute_cdf_mapping(src_bg_pixels, target_hist)
             synthetic = apply_mapping(src_img, mappings, animal_mask)
-            out_fname = f"syn_{Path(rec['file_name']).stem}_s{idx}.jpg"
+            out_fname = f"syn_L{rec['location']}_{Path(rec['file_name']).stem}_s{idx}.jpg"
             out_path  = os.path.join(out_folder, out_fname)
             # Replace io.imsave(out_path, synthetic, quality=90)
             #io.imsave(out_path, synthetic, quality=90)
