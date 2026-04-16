@@ -474,6 +474,7 @@ def augment_minority_species(
     verbose                = False,
     dry_run                = False,
     use_whole_src_seq_thresh = 20,
+    tqdm_prefix              = "",
 ):
     """
     Generate synthetic images of `species` at `target_location`.
@@ -496,6 +497,7 @@ def augment_minority_species(
     dry_run                  : bool       count expected outputs without writing anything
     use_whole_src_seq_thresh : int        if total source sequences < this threshold,
                                           use ALL burst frames instead of middle frame only
+    tqdm_prefix              : str        prefix to add to tqdm bars
     """
     assert target_location in train_locations, \
         f"target_location {target_location} not in train_locations {train_locations}"
@@ -573,12 +575,12 @@ def augment_minority_species(
             results = list(tqdm(
                 ex.map(_process_one, work_items),
                 total=len(work_items),
-                desc=f"{species}@L{target_location}"
+                desc=f"{tqdm_prefix}{species}@L{target_location}"
             ))
     else:
         results = [
             _process_one(item)
-            for item in tqdm(work_items, desc=f"{species}@L{target_location}")
+            for item in tqdm(work_items, desc=f"{tqdm_prefix}{species}@L{target_location}")
         ]
 
     n_generated = sum(results)
@@ -773,6 +775,8 @@ if __name__ == '__main__':
                         help='Print progress and warning messages')
     parser.add_argument('--quiet',           action='store_true',
                         help="Don't print summary")
+    parser.add_argument('--tqdm_prefix', type=str, default="",
+                        help="Prefix for tqdm bar")
     args = parser.parse_args()
 
     if not args.dry_run:
@@ -833,6 +837,7 @@ if __name__ == '__main__':
                     verbose          = args.debug,
                     dry_run          = False,
                     use_whole_src_seq_thresh = args.use_whole_src_seq_thresh,
+                    tqdm_prefix      = args.tqdm_prefix.
                 )
                 total += n
         print(f"\nTotal synthetic images generated: {total}")
