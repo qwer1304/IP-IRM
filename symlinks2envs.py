@@ -17,9 +17,16 @@ def main(args):
 
     for index, (path, _) in enumerate(train_data.imgs):    
         # Normalize the path to remove double slashes
-        clean_path = os.path.normpath(path) 
-    
-        target = symlinks[clean_path]
+        clean_path = str(Path(path).resolve()) 
+        target = symlinks.get(clean_path, None)
+        if target is None: # shouldn't happen, print debug info
+            print()
+            print(f"symlinks.json {args.data + '/' + args.map_file}")
+            print(f"root {args.data + '/train'}")
+            print(f"path {path}")
+            print(f"clean path {clean_path}")
+            assert False
+            
         p = Path(target)
         parts = p.parts
         domain_masks = [pp in args.domains for pp in parts]
