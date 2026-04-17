@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 import argparse
 
-def record_symlinks(root: Path, out_file: Path):
+def record_symlinks(root: Path, out_file: Path, ft: str):
     """
     Recursively scan `root` and record all symlinks.
     Stores: link_path -> link_target (as stored in the symlink)
@@ -16,14 +16,16 @@ def record_symlinks(root: Path, out_file: Path):
         # dirnames: A list of the names of all subdirectories inside the current dirpath
         # filenames: A list of the names of all non-directory files (images, .csv, .txt, etc.) inside the current dirpath
         # 1. Sort in-place to ensure deterministic traversal of subdirectories
+        enc_files = [f for f in filenames if f.lower().endswith(f'.f{ft}')]
+        
         dirnames.sort()
         # 2. Sort filenames to ensure deterministic processing of files
-        filenames.sort()
+        enc_files.sort()
 
         dirpath = Path(dirpath)
 
         # Check files (now in alphabetical order)
-        for name in filenames:
+        for name in enc_files:
             p = dirpath / name
 
             if p.is_symlink():
@@ -76,7 +78,8 @@ def main(args):
     if args.action == 'record':
         record_symlinks(
             root=Path(args.root),
-            out_file=Path(args.map_file)
+            out_file=Path(args.map_file),
+            ft=args.enc,
         )
     elif args.action == 'restore':
         restore_symlinks(Path(args.map_file))
@@ -92,6 +95,7 @@ if __name__ == "__main__":
     parser_record = subparsers.add_parser('record', help='record')
     parser_record.add_argument('--root', type=str, required=True, help='root')
     parser_record.add_argument('--map_file', type=str, required=True, help='map file, json')
+    parser_record.add_argument('--enc', type=str, default='jpg',  help='image files encoding')
 
     # create the parser for the "restore" command
     parser_restore = subparsers.add_parser('restore', help='restore')
