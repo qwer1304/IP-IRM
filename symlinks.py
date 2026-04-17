@@ -16,7 +16,7 @@ def record_symlinks(root: Path, out_file: Path, ft: str):
         # dirnames: A list of the names of all subdirectories inside the current dirpath
         # filenames: A list of the names of all non-directory files (images, .csv, .txt, etc.) inside the current dirpath
         # 1. Sort in-place to ensure deterministic traversal of subdirectories
-        enc_files = [f for f in filenames if f.lower().endswith(f'.f{ft}')]
+        enc_files = [f for f in filenames if f.lower().endswith(f'.{ft}')]
         
         dirnames.sort()
         # 2. Sort filenames to ensure deterministic processing of files
