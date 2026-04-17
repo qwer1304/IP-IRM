@@ -16,8 +16,8 @@ def main(args):
         symlinks = json.load(f)
 
     for index, (path, _) in enumerate(train_data.imgs):    
-        # Normalize the path to remove double slashes
-        clean_path = str(Path(path).resolve()) 
+        # Normalize the path to remove double slashes; keep it as a symlink!
+        clean_path = os.path.abspath(os.path.normpath(path))
         target = symlinks.get(clean_path, None)
         if target is None: # shouldn't happen, print debug info
             print()

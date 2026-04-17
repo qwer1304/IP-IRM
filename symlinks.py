@@ -28,6 +28,9 @@ def record_symlinks(root: Path, out_file: Path):
 
             if p.is_symlink():
                 symlinks[str(p)] = os.readlink(p)
+            else:
+                print(f"file {p} is not a symlink}"
+                assert False
 
         # Check directories (now in alphabetical order)
         for name in dirnames:
