@@ -322,8 +322,8 @@ if __name__ == "__main__":
     parser.add_argument('--dataset', type=str, nargs="+", 
         choices=['MNIST', 'PACS', 'OfficeHome', 'DomainNet', 'VLCS', 'TerraIncognita', 'Spawrious', 'Sviro', 'Camelyon17', 'FMoW'])
     parser.add_argument('--skip_images', action='store_true')
-    parser.add_argument('--dont_copy_files', type=str, nargs='*', default=None, choices=['annot', 'images'])
-    parser.add_argument('--dont_remove_files', action='store_true')
+    parser.add_argument('--dont_copy_files', action='store_true')
+    parser.add_argument('--dont_remove_files', type=str, nargs='*', default=None, choices=['annot', 'images'])
     args = parser.parse_args()
     
     downloaders = { 'MNIST':            download_mnist,
