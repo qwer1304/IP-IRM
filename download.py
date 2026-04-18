@@ -272,8 +272,8 @@ def download_terra_incognita(args):
                         pbar.update(1)
             # end for image in data['images']:
 
-    if not args.dont_remove_files:
         shutil.rmtree(images_folder)
+    if not args.dont_remove_files:
         shutil.rmtree(annotations_folder)
 
 # SVIRO #################################################################
