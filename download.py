@@ -230,7 +230,7 @@ def download_terra_incognita(args):
     for item in data['categories']:
         category_dict[item['id']] = item['name']
 
-    if not args.dont_copy_file:
+    if not args.dont_copy_files:
         with tqdm(total=len(data['images']), unit="file", desc="Copying image files") as pbar:
             for image in data['images']:
                 image_location = str(image['location'])
