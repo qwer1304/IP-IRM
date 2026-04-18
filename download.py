@@ -272,9 +272,15 @@ def download_terra_incognita(args):
                         pbar.update(1)
             # end for image in data['images']:
 
+    if args.dont_remove_files is None:
         shutil.rmtree(images_folder)
-    if not args.dont_remove_files:
         shutil.rmtree(annotations_folder)
+    elif len(args.dont_remove_files) == 2:
+        pass
+    elif 'annot' in args.dont_remove_files:
+        shutil.rmtree(images_folder)
+    elif 'images' in args.dont_remove_files:
+        shutil.rmtree(annotations_folder)    
 
 # SVIRO #################################################################
 
@@ -316,9 +322,11 @@ if __name__ == "__main__":
     parser.add_argument('--dataset', type=str, nargs="+", 
         choices=['MNIST', 'PACS', 'OfficeHome', 'DomainNet', 'VLCS', 'TerraIncognita', 'Spawrious', 'Sviro', 'Camelyon17', 'FMoW'])
     parser.add_argument('--skip_images', action='store_true')
-    parser.add_argument('--dont_copy_file', action='store_true')
+    parser.add_argument('--dont_copy_files', type=str, nargs='*', default=None, choices=['annot', 'images'])
     parser.add_argument('--dont_remove_files', action='store_true')
     args = parser.parse_args()
+    
+    if 
 
     downloaders = { 'MNIST':            download_mnist,
                     'PACS':             download_pacs,
