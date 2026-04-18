@@ -326,8 +326,6 @@ if __name__ == "__main__":
     parser.add_argument('--dont_remove_files', action='store_true')
     args = parser.parse_args()
     
-    if 
-
     downloaders = { 'MNIST':            download_mnist,
                     'PACS':             download_pacs,
                     'OfficeHome':       download_office_home,
