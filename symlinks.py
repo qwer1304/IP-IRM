@@ -63,7 +63,7 @@ def restore_symlinks(map_file: Path, stop_on_missing_target=False):
     for link, target in symlinks.items():
         link = Path(link)
 
-        if !Path(target).is_file():
+        if not Path(target).is_file():
             print(f"target {target} doesn't exist")
             missing += 1
             if not stop_on_missing_target:
