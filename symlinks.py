@@ -46,7 +46,7 @@ def record_symlinks(root: Path, out_file: Path, ft: str):
 
     print(f"Recorded {len(symlinks)} symlinks -> {out_file}")
 
-def restore_symlinks(map_file: Path):
+def restore_symlinks(map_file: Path, stop_on_missing_target=False):
     """
     Recreate symlinks from a previously saved map.
     """
@@ -58,10 +58,19 @@ def restore_symlinks(map_file: Path):
         symlinks = json.load(f)
 
     restored = 0
+    missing = 0
 
     for link, target in symlinks.items():
         link = Path(link)
 
+        if !Path(target).is_file():
+            print(f"target {target} doesn't exist")
+            missing += 1
+            if not stop_on_missing_target:
+                continue
+            else:
+                print("Stopping")
+                break
         # Ensure parent dir exists
         link.parent.mkdir(parents=True, exist_ok=True)
 
@@ -69,10 +78,13 @@ def restore_symlinks(map_file: Path):
         if link.exists() or link.is_symlink():
             link.unlink()
 
+        #os.symlink(src, dst)
+        #src: The path of the original file or directory (the target).
+        #dst: The path where the symbolic link will be created.
         os.symlink(target, link)
         restored += 1
 
-    print(f"Restored {restored} symlinks.")
+    print(f"Restored {restored} symlinks. Missing {missing} symlinks.")
 
 def main(args):
     if args.action == 'record':
@@ -82,7 +94,7 @@ def main(args):
             ft=args.enc,
         )
     elif args.action == 'restore':
-        restore_symlinks(Path(args.map_file))
+        restore_symlinks(Path(args.map_file), args.stop_on_missing_target)
     else:
         raise ValueError(f"Unknown action {args.action}")
 
@@ -100,6 +112,7 @@ if __name__ == "__main__":
     # create the parser for the "restore" command
     parser_restore = subparsers.add_parser('restore', help='restore')
     parser_restore.add_argument('--map_file', type=str, required=True, help='map file, json')
+    parser_restore.add_argument('--stop_on_missing_target', action='store_true', help='stop when a target is missing')
        
     args = parser.parse_args()
 
