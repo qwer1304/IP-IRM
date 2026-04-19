@@ -311,7 +311,10 @@ def main(args):
     M = M if args.calc_M else args.M 
     
     P_train, P_val, R_train, R_val = prune_domains(domains, classes, counts, train_fraction=args.train_split, lp_train_target_per_class=M, do_trim=args.balance_counts)
-    if args.calc_only: exit()
+    if args.calc_only: 
+        print(R_train)
+        print(R_val)
+        exit()
 
 
     if args.select_method == 'train':
