@@ -1080,7 +1080,7 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
                     else:
                         constrain_loss = - cal_entropy(param_split.mean(0), dim=0)#  + cal_entropy(param_split, dim=1).mean()
                 constrain_loss_weighted = constrain * constrain_loss
-                risk_final += constrain_loss_weighted
+                risk_final_weighted += constrain_loss_weighted
 
             pre_optimizer.zero_grad()
             risk_final_weighted.backward()
@@ -1092,7 +1092,7 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
             risk_constrain_all_list.append(constrain_loss.item())
             soft_split_print = soft_split_all[:1].clone().detach()
             if epoch > 0:
-                print('\rUpdating Env_weighted [%d/%d] [%d/%d] Loss: %.2f Cont_Risk: %.2f Inv_Risk: %.2f Cons_Risk: %.2f Cnt: %d Lr: %.4f Inv_Mode: %s Soft Split: [%s]'
+                print('\rUpdating Env [%d/%d] [%d/%d] Loss_weighted: %.2f Cont_Risk: %.2f Inv_Risk: %.2f Cons_Risk: %.2f Cnt: %d Lr: %.4f Inv_Mode: %s Soft Split: [%s]'
                       %(epoch, 100, training_num, len(trainloader.dataset), sum(risk_all_list)/len(risk_all_list), sum(risk_cont_all_list)/len(risk_cont_all_list), 
                         sum(risk_penalty_all_list)/len(risk_penalty_all_list),
                         sum(risk_constrain_all_list)/len(risk_constrain_all_list), cnt, pre_optimizer.param_groups[0]['lr'], irm_mode, 
