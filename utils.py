@@ -1117,8 +1117,8 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
             cnt += 1
 
         if epoch > 50 and cnt >= 5 or epoch == 60:
-            write_log('\nLoss not down. Stop training. Epoch: %d  Loss: %.2f' %(best_epoch, low_loss), log_file=log_file, print_=True)
-            write_log('Updating Env [%d/%d] [%d/%d]  Loss: %.2f  Cont_Risk: %.2f  Inv_Risk: %.2f  Cons_Risk: %.2f  Cnt: %d  Lr: %.4f  Inv_Mode: %s'
+            write_log('\nLoss not down. Stop training. Epoch: %d  Loss_weighted: %.2f' %(best_epoch, low_loss), log_file=log_file, print_=True)
+            write_log('Updating Env [%d/%d] [%d/%d]  Loss_weighted: %.2f  Cont_Risk: %.2f  Inv_Risk: %.2f  Cons_Risk: %.2f  Cnt: %d  Lr: %.4f  Inv_Mode: %s'
                       %(epoch, 100, training_num, len(trainloader.dataset), sum(risk_all_list)/len(risk_all_list), sum(risk_cont_all_list)/len(risk_cont_all_list), sum(risk_penalty_all_list)/len(risk_penalty_all_list),
                         sum(risk_constrain_all_list)/len(risk_constrain_all_list), cnt, pre_optimizer.param_groups[0]['lr'], irm_mode), log_file=log_file)
             final_split_softmax = F.softmax(soft_split_best, dim=-1) # (B,num_env)

@@ -2377,12 +2377,13 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 mean_pen_loss_epoch = total_pen_loss_weighted / (penalty_weight + 1e-8) / trained_samples
                 mean_env_loss_epoch = total_env_loss_weighted / (loss_weight + 1e-8) / trained_samples
                 cv = (math.sqrt(mean_pen_loss_epoch) / (mean_env_loss_epoch + 1e-8))
-                cv_str = f"CV: {cv:.2e}"
+                cv_str = f"CV: {cv:.2e}" # CV is non-weighted
                 
                 cv_partitions = np.sqrt(total_pen_loss_partitions) / (total_env_loss_partitions + 1e-8)
-                loss_partitions_str = ", ".join([f"{x:.2e}" for x in total_env_loss_partitions.tolist()])
-                penalty_partitions_str = ", ".join([f"{x:.2e}" for x in total_pen_loss_partitions.tolist()])
-                cv_partitions_str = ", ".join([f"{x:.2e}" for x in cv_partitions.tolist()])
+                
+                loss_partitions_str = " ".join([f"lpar{i} {x:.2e}" for i, x in enumerate(total_env_loss_partitions.tolist())])
+                penalty_partitions_str = " ".join([f"penpar{i} {x:.2e}" for i, x in enumerate(total_pen_loss_partitions.tolist())])
+                cv_partitions_str = " ".join([f"cvpar{i} {x:.2e}" for i, x in enumerate(cv_partitions.tolist())])
                 
                 partitions_metrics_str = f"`Partitions: loss {loss_partitions_str}" + f"`penalty {penalty_partitions_str}" + f"`cv {cv_partitions_str}"               
             else:
@@ -2448,11 +2449,11 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         
         
         cos_Lp = f"cos_p {info_dict['cos_Lp']:.3e}" if info_dict['cos_Lp'] != 0. else ""
-        dot_lp = f"{info_dict['dot_Lp']:.3e}" if info_dict['dot_Lp'] != 0. else ""
+        dot_lp = f"{ info_dict['dot_Lp']:.3e}" if info_dict['dot_Lp'] != 0. else ""
         Lp_str = cos_Lp + dot_lp
-        Lp_str = "`Lp: {Lp_str}" if Lp_str != "" else ""
+        Lp_str = f"`Lp: {Lp_str}" if Lp_str != "" else ""
         Lp_shared_cos = f"shared cos {info_dict['shared_cos_Lp']:.3e}" if info_dict['shared_cos_Lp'] != 0. else ""
-        Lp_shared_dot = f"shared dot {info_dict['shared_dot_Lp']:.3e}" if info_dict['shared_dot_Lp'] != 0. else ""
+        Lp_shared_dot = f" shared dot {info_dict['shared_dot_Lp']:.3e}" if info_dict['shared_dot_Lp'] != 0. else ""
         Lp_shared_str = Lp_shared_cos + Lp_shared_dot
         Lp_shared_str = f"`Lp: {Lp_shared_str}" if Lp_shared_str != "" else ""
 
