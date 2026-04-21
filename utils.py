@@ -1066,7 +1066,8 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
             elif irm_mode == 'v2': # VREx (not used in the paper)
                 inv_loss_epoch = torch.var(torch.stack(loss_cont_list))
             cont_loss_epoch = torch.stack(loss_cont_list).mean()
-            risk_final = - (cont_loss_epoch + irm_weight*inv_loss_epoch)
+            inv_loss_epoch_weighted = irm_weight*inv_loss_epoch
+            risk_final_weighted = - (cont_loss_epoch + inv_loss_epoch_weighted)
 
             if constrain > 0: # constrain to avoid the imbalance problem
                 if nonorm:
@@ -1078,20 +1079,20 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
                         constrain_loss = torch.relu(threshold - cal_entropy(param_split.mean(0), dim=0))                       
                     else:
                         constrain_loss = - cal_entropy(param_split.mean(0), dim=0)#  + cal_entropy(param_split, dim=1).mean()
-                constrain_loss = constrain * constrain_loss
-                risk_final += constrain_loss
+                constrain_loss_weighted = constrain * constrain_loss
+                risk_final += constrain_loss_weighted
 
             pre_optimizer.zero_grad()
-            risk_final.backward()
+            risk_final_weighted.backward()
             pre_optimizer.step()
 
-            risk_all_list.append(risk_final.item())
+            risk_all_list.append(risk_final_weighted.item())
             risk_cont_all_list.append(-cont_loss_epoch.item())
             risk_penalty_all_list.append(-inv_loss_epoch.item())
             risk_constrain_all_list.append(constrain_loss.item())
             soft_split_print = soft_split_all[:1].clone().detach()
             if epoch > 0:
-                print('\rUpdating Env [%d/%d] [%d/%d] Loss: %.2f Cont_Risk: %.2f Inv_Risk: %.2f Cons_Risk: %.2f Cnt: %d Lr: %.4f Inv_Mode: %s Soft Split: [%s]'
+                print('\rUpdating Env_weighted [%d/%d] [%d/%d] Loss: %.2f Cont_Risk: %.2f Inv_Risk: %.2f Cons_Risk: %.2f Cnt: %d Lr: %.4f Inv_Mode: %s Soft Split: [%s]'
                       %(epoch, 100, training_num, len(trainloader.dataset), sum(risk_all_list)/len(risk_all_list), sum(risk_cont_all_list)/len(risk_cont_all_list), 
                         sum(risk_penalty_all_list)/len(risk_penalty_all_list),
                         sum(risk_constrain_all_list)/len(risk_constrain_all_list), cnt, pre_optimizer.param_groups[0]['lr'], irm_mode, 
@@ -1105,7 +1106,7 @@ def auto_split_offline(out_1, out_2, soft_split_all, temperature, irm_temp, loss
         avg_inv_risk = sum(risk_penalty_all_list)/len(risk_penalty_all_list)
 
         if epoch == 0:
-            write_log("Initial Risk: %.2f  Cont_Risk: %.2f  Inv_Risk: %.2f" % (avg_risk, avg_cont_risk, avg_inv_risk), log_file=log_file, print_=True)
+            write_log("Initial Risk_weighted: %.2f  Cont_Risk: %.2f  Inv_Risk: %.2f" % (avg_risk, avg_cont_risk, avg_inv_risk), log_file=log_file, print_=True)
             soft_split_best = soft_split_all.clone().detach()
         if avg_risk < low_loss:
             low_loss = avg_risk
