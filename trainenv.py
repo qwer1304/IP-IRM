@@ -2449,7 +2449,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
         
         
         cos_Lp = f"cos_p {info_dict['cos_Lp']:.3e}" if info_dict['cos_Lp'] != 0. else ""
-        dot_lp = f"{dot_p info_dict['dot_Lp']:.3e}" if info_dict['dot_Lp'] != 0. else ""
+        dot_lp = f"dot_p {info_dict['dot_Lp']:.3e}" if info_dict['dot_Lp'] != 0. else ""
         Lp_str = cos_Lp + ' ' + dot_lp
         Lp_str = f"`Lp: {Lp_str}" if Lp_str != "" else ""
         Lp_shared_cos = f"shared cos {info_dict['shared_cos_Lp']:.3e}" if info_dict['shared_cos_Lp'] != 0. else ""
