@@ -420,9 +420,9 @@ def test(net, feature_bank, feature_labels, test_data_loader, num_classes, args,
                 worst_class_acc = (per_class_correct[valid].float() / per_class_total[valid].float()).min().item()
                 # Calculate current Macro-MRR for the bar [NEW]
                 macro_mrr = (per_class_mrr_sum[valid] / per_class_total[valid].float()).mean().item()
-                worst_class_mrr = (per_class_mrr_sum[valid] / per_class_total[valid].float()).max().item()
+                worst_class_mrr = (per_class_mrr_sum[valid] / per_class_total[valid].float()).min().item()
                 
-                test_bar.set_description('KNN {} Epoch [{}/{}] Acc@1:{:.2f}% Macro-Acc:{:.2f}% WC_Acc: {:.2f}% Macro-MRR:{:.3f} WC-MRR:{:.3f} Decay (04:{:.3f},48:{:.3f})'
+                test_bar.set_description('KNN {} Epoch [{}/{}] Acc@1:{:.2f}% Macro-Acc:{:.2f}% WC_Acc:{:.2f}% Macro-MRR:{:.3f} WC-MRR:{:.3f} Decay (04:{:.3f},48:{:.3f})'
                                           .format(prefix, epoch, epochs, total_top1 / total_num * 100, macro_acc * 100, worst_class_acc * 100, 
                                                   macro_mrr, worst_class_mrr, total_decay04_sum / total_num, total_decay48_sum / total_num))
 
@@ -443,7 +443,7 @@ def test(net, feature_bank, feature_labels, test_data_loader, num_classes, args,
         worst_class_acc = (per_class_correct[valid].float() / per_class_total[valid].float()).min().item()
         # Final Macro-MRR [NEW]
         macro_mrr = (per_class_mrr_sum[valid] / per_class_total[valid].float()).mean().item()
-        worst_class_mrr = (per_class_mrr_sum[valid] / per_class_total[valid].float()).max().item()
+        worst_class_mrr = (per_class_mrr_sum[valid] / per_class_total[valid].float()).min().item()
         
         # Final aggregate score for the epoch
         epoch_decay04 = total_decay04_sum / total_num

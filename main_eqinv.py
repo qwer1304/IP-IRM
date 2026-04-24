@@ -434,7 +434,7 @@ def test(net, test_data_loader, args, num_classes, progress=False, prefix="Test:
                 wc_acc = (per_class_correct[valid].float() / per_class_total[valid].float()).min().item()
                 macro_acc_per_class = torch.where(valid, per_class_correct.float() / per_class_total.float(), torch.tensor(0)).tolist()
                 macro_acc_per_class_str = ", ".join([f"{i}: {v * 100:.2f}%" for i,v in enumerate(macro_acc_per_class)])
-                test_bar.set_description('{} Epoch [{}/{}] Acc@1:{:.2f}% Acc@5:{:.2f}% Macro-Acc:{:.2f}%, WC-Acc:{:.2f}%, Per-class-acc {}'
+                test_bar.set_description('{} Epoch [{}/{}] Acc@1:{:.2f}% Acc@5:{:.2f}% Macro-Acc:{:.2f}% WC-Acc:{:.2f}% Per-class-acc {}'
                                          .format(prefix, epoch, epochs, total_top1 / total_num * 100, total_top5 / total_num * 100, 
                                                  macro_acc * 100, wc_acc * 100, macro_acc_per_class_str))
 
