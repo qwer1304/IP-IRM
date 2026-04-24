@@ -417,12 +417,14 @@ def test(net, feature_bank, feature_labels, test_data_loader, num_classes, args,
                 # Avoid division by zero in rare cases
                 valid = per_class_total > 0
                 macro_acc = (per_class_correct[valid].float() / per_class_total[valid].float()).mean().item()
+                worst_class_acc = (per_class_correct[valid].float() / per_class_total[valid].float()).min().item()
                 # Calculate current Macro-MRR for the bar [NEW]
                 macro_mrr = (per_class_mrr_sum[valid] / per_class_total[valid].float()).mean().item()
+                worst_class_mrr = (per_class_mrr_sum[valid] / per_class_total[valid].float()).max().item()
                 
-                test_bar.set_description('KNN {} Epoch [{}/{}] Acc@1:{:.2f}% Macro-Acc:{:.2f}% Macro-MRR:{:.3f} Decay (04:{:.3f},48:{:.3f})'
-                                          .format(prefix, epoch, epochs, total_top1 / total_num * 100, macro_acc * 100, macro_mrr, 
-                                                  total_decay04_sum / total_num, total_decay48_sum / total_num))
+                test_bar.set_description('KNN {} Epoch [{}/{}] Acc@1:{:.2f}% Macro-Acc:{:.2f}% WC_Acc: {:.2f}% Macro-MRR:{:.3f} WC-MRR:{:.3f} Decay (04:{:.3f},48:{:.3f})'
+                                          .format(prefix, epoch, epochs, total_top1 / total_num * 100, macro_acc * 100, worst_class_acc * 100, 
+                                                  macro_mrr, worst_class_mrr, total_decay04_sum / total_num, total_decay48_sum / total_num))
 
             # compute output
             if args.extract_features:
@@ -438,8 +440,10 @@ def test(net, feature_bank, feature_labels, test_data_loader, num_classes, args,
         # Avoid division by zero in rare cases
         valid = per_class_total > 0
         macro_acc = (per_class_correct[valid].float() / per_class_total[valid].float()).mean().item()
+        worst_class_acc = (per_class_correct[valid].float() / per_class_total[valid].float()).min().item()
         # Final Macro-MRR [NEW]
         macro_mrr = (per_class_mrr_sum[valid] / per_class_total[valid].float()).mean().item()
+        worst_class_mrr = (per_class_mrr_sum[valid] / per_class_total[valid].float()).max().item()
         
         # Final aggregate score for the epoch
         epoch_decay04 = total_decay04_sum / total_num
@@ -473,14 +477,17 @@ def test(net, feature_bank, feature_labels, test_data_loader, num_classes, args,
                 'idcs':         idcs,
                 'model_epoch':  epoch,
                 'n_classes':    args.class_num,
-                'macro_mrr':    macro_mrr, # [NEW]
+                'macro_acc':    macro_acc * 100,
+                'macro_mrr':    macro_mrr,
+                'worst_class_acc':    worst_class_acc * 100,
+                'worst_class_mrr':    worst_class_mrr,
             }
 
             utils.atomic_save(state, False, filename=fp)
             print(f"Dumped features into {fp} | Macro-MRR: {macro_mrr:.4f}")
 
     # Return total_top1, total_top5, macro_acc, and macro_mrr
-    return total_top1 / total_num * 100, total_top5 / total_num * 100, macro_acc * 100, macro_mrr * 100
+    return total_top1 / total_num * 100, total_top5 / total_num * 100, macro_acc * 100, macro_mrr, worst_class_acc * 100, worst_class_mrr
     
 def load_checkpoint(path, model, model_momentum, optimizer, gradnorm_balancer, gradnorm_optimizer, device="cuda", classifier_not_needed=False):
     print("=> loading checkpoint '{}'".format(path))
@@ -1020,19 +1027,19 @@ if __name__ == '__main__':
             print('eval on train data')
             train_loader = DataLoader(mem_data[1], batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
                 pin_memory=True, persistent_workers=te_pw)
-            train_acc_1, train_acc_5, train_macro_acc, train_mrr = test(model, feauture_bank, feature_labels, train_loader, c, args, progress=True, prefix="Train:")
+            train_acc_1, train_acc_5, train_macro_acc, train_mrr, train_wc_acc, train_wc_mrr = test(model, feauture_bank, feature_labels, train_loader, c, args, progress=True, prefix="Train:")
         if len(args.evaluate) == 0:
             args.evaluate = ['val', 'test']
         if 'val' in args.evaluate:
             print('eval on val data')
             val_loader = DataLoader(val_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
                 pin_memory=True, persistent_workers=te_pw)
-            val_acc_1, val_acc_5, val_macro_acc, val_mrr = test(model, feauture_bank, feature_labels, val_loader, c, args, progress=True, prefix="Val:")
+            val_acc_1, val_acc_5, val_macro_acc, val_mrr, val_wc_acc, val_wc_mrr = test(model, feauture_bank, feature_labels, val_loader, c, args, progress=True, prefix="Val:")
         if 'test' in args.evaluate:
             print('eval on test data')
             test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
                 pin_memory=True, persistent_workers=te_pw)
-            test_acc_1, test_acc_5, test_macro_acc, test_mrr = test(model, feauture_bank, feature_labels, test_loader, c, args, progress=True, prefix="Test:")
+            test_acc_1, test_acc_5, test_macro_acc, test_mrr, test_wc_acc, test_wc_mrr = test(model, feauture_bank, feature_labels, test_loader, c, args, progress=True, prefix="Test:")
         exit()
 
     if not args.resume and os.path.exists(log_file):
@@ -1155,7 +1162,7 @@ if __name__ == '__main__':
         if (epoch >= args.test_freq) and ((epoch % args.test_freq == 0) or (epoch == epochs)): # eval knn every test_freq epochs
             test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=True, 
                 pin_memory=False, persistent_workers=te_pw)
-            test_acc_1, test_acc_5, test_macro_acc, test_mrr = test(model, feauture_bank, feature_labels, test_loader, c, args, progress=True, prefix="Test:")
+            test_acc_1, test_acc_5, test_macro_acc, test_mrr, test_wc_acc, test_wc_mrr = test(model, feauture_bank, feature_labels, test_loader, c, args, progress=True, prefix="Test:")
             test_loader = shutdown_loader(test_loader)
             gc.collect()              # run Python's garbage collector
             """
@@ -1168,7 +1175,7 @@ if __name__ == '__main__':
             # evaluate on validation set
             val_loader = DataLoader(val_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=True, 
                 pin_memory=False, persistent_workers=te_pw)
-            acc1, _, _, _ = test(model, feauture_bank, feature_labels, val_loader, c, args, progress=True, prefix="Val:")
+            acc1, _, _, _, _, _ = test(model, feauture_bank, feature_labels, val_loader, c, args, progress=True, prefix="Val:")
             val_loader = shutdown_loader(val_loader)
             gc.collect()              # run Python's garbage collector
 

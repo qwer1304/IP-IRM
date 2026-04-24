@@ -328,16 +328,19 @@ def test_knn(net, feature_bank, feature_labels, test_data_loader, num_classes, a
                 # Avoid division by zero in rare cases
                 valid = per_class_total > 0
                 macro_acc = (per_class_correct[valid].float() / per_class_total[valid].float()).mean().item()
-                test_bar.set_description('KNN {} Epoch [{}/{}] Acc@1:{:.2f}% Acc@5:{:.2f}% Macro-Acc:{:.2f}%'
-                                         .format(prefix, epoch, epochs, total_top1 / total_num * 100, total_top5 / total_num * 100, macro_acc * 100))
+                worst_class_acc = (per_class_correct[valid].float() / per_class_total[valid].float()).min().item()
+                test_bar.set_description('KNN {} Epoch [{}/{}] Acc@1:{:.2f}% Acc@5:{:.2f}% Macro-Acc:{:.2f}% WC-Acc:{:.2f}%'
+                                         .format(prefix, epoch, epochs, total_top1 / total_num * 100, total_top5 / total_num * 100, 
+                                                 macro_acc * 100, worst_class_acc * 100))
 
         # end for data, _, target in test_bar
 
         # Avoid division by zero in rare cases
         valid = per_class_total > 0
         macro_acc = (per_class_correct[valid].float() / per_class_total[valid].float()).mean().item()
+        worst_class_acc = (per_class_correct[valid].float() / per_class_total[valid].float()).min().item()
 
-    return total_top1 / total_num * 100, total_top5 / total_num * 100, macro_acc * 100
+    return total_top1 / total_num * 100, total_top5 / total_num * 100, macro_acc * 100, worst_class_acc * 100
 
 # test for one epoch
 def test(net, test_data_loader, args, num_classes, progress=False, prefix="Test:", mask_u=None, mask_idcs=None):
@@ -428,11 +431,12 @@ def test(net, test_data_loader, args, num_classes, progress=False, prefix="Test:
                 # Avoid division by zero in rare cases
                 valid = per_class_total > 0
                 macro_acc = (per_class_correct[valid].float() / per_class_total[valid].float()).mean().item()
+                wc_acc = (per_class_correct[valid].float() / per_class_total[valid].float()).min().item()
                 macro_acc_per_class = torch.where(valid, per_class_correct.float() / per_class_total.float(), torch.tensor(0)).tolist()
                 macro_acc_per_class_str = ", ".join([f"{i}: {v * 100:.2f}%" for i,v in enumerate(macro_acc_per_class)])
-                test_bar.set_description('{} Epoch [{}/{}] Acc@1:{:.2f}% Acc@5:{:.2f}% Macro-Acc:{:.2f}%, {}'
+                test_bar.set_description('{} Epoch [{}/{}] Acc@1:{:.2f}% Acc@5:{:.2f}% Macro-Acc:{:.2f}%, WC-Acc:{:.2f}%, Per-class-acc {}'
                                          .format(prefix, epoch, epochs, total_top1 / total_num * 100, total_top5 / total_num * 100, 
-                                                 macro_acc * 100, macro_acc_per_class_str))
+                                                 macro_acc * 100, wc_acc * 100, macro_acc_per_class_str))
 
             # compute output
             if args.extract_features:
@@ -449,6 +453,7 @@ def test(net, test_data_loader, args, num_classes, progress=False, prefix="Test:
         # Avoid division by zero in rare cases
         valid = per_class_total > 0
         macro_acc = (per_class_correct[valid].float() / per_class_total[valid].float()).mean().item()
+        wc_acc = (per_class_correct[valid].float() / per_class_total[valid].float()).min().item()
 
         if feature_list:
             features = torch.cat(feature_list, dim=0)
@@ -488,7 +493,7 @@ def test(net, test_data_loader, args, num_classes, progress=False, prefix="Test:
             utils.atomic_save(state, False, filename=fp)
             print(f"Dumped features into {fp}")
 
-    return total_top1 / total_num * 100, total_top5 / total_num * 100, macro_acc * 100, macro_acc_per_class * 100
+    return total_top1 / total_num * 100, total_top5 / total_num * 100, macro_acc * 100, macro_acc_per_class * 100, wc_acc * 100
     
 def load_checkpoint(path, model, model_momentum, optimizer, gradnorm_balancer, gradnorm_optimizer, device="cuda", classifier_not_needed=False):
     print("=> loading checkpoint '{}'".format(path))
@@ -1164,19 +1169,19 @@ if __name__ == '__main__':
             print('eval on train data')
             train_loader = DataLoader(mem_data[1], batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
                 pin_memory=True, persistent_workers=te_pw)
-            train_acc_1, train_acc_5, train_macro_acc = test_knn(model, feauture_bank, feature_labels, train_loader, c, args, progress=True, prefix="Train:",
+            train_acc_1, train_acc_5, train_macro_acc, train_wc_acc = test_knn(model, feauture_bank, feature_labels, train_loader, c, args, progress=True, prefix="Train:",
                     mask_u=mask_activation_noise, masked_features='masked' in args.evaluate, mask_idcs=args.mask_idcs)
         if 'val' in args.evaluate:
             print('eval on val data')
             val_loader = DataLoader(val_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=True, 
                 pin_memory=True, persistent_workers=te_pw)
-            val_acc_1, val_acc_5, val_macro_acc = test_knn(model, feauture_bank, feature_labels, val_loader, c, args, progress=True, prefix="Val:",
+            val_acc_1, val_acc_5, val_macro_acc, val_wc_acc = test_knn(model, feauture_bank, feature_labels, val_loader, c, args, progress=True, prefix="Val:",
                     mask_u=mask_activation_noise, masked_features='masked' in args.evaluate, mask_idcs=args.mask_idcs)
         if 'test' in args.evaluate:
             print('eval on test data')
             test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=True, 
                 pin_memory=True, persistent_workers=te_pw)
-            test_acc_1, test_acc_5, test_macro_acc = test_knn(model, feauture_bank, feature_labels, test_loader, c, args, progress=True, prefix="Test:",
+            test_acc_1, test_acc_5, test_macro_acc, test_wc_acc = test_knn(model, feauture_bank, feature_labels, test_loader, c, args, progress=True, prefix="Test:",
                     mask_u=mask_activation_noise, masked_features='masked' in args.evaluate, mask_idcs=args.mask_idcs)
         exit()
 
@@ -1193,19 +1198,19 @@ if __name__ == '__main__':
             train_data  = utils.Imagenet_idx(root=args.data + '/train', transform=transform, target_transform=target_transform, class_to_idx=class_to_idx)
             train_loader = DataLoader(train_data, batch_size=tr_bs, num_workers=tr_nw, prefetch_factor=tr_pf, shuffle=False, 
                pin_memory=True, persistent_workers=tr_pw)
-            train_acc_1, train_acc_5, train_macro_acc, train_macro_acc_per_class = test(model, train_loader, args, num_classes=c, progress=True, prefix="Train:", 
+            train_acc_1, train_acc_5, train_macro_acc, train_macro_acc_per_class, wc_macro_acc = test(model, train_loader, args, num_classes=c, progress=True, prefix="Train:", 
                 mask_u=mask_activation_noise, mask_idcs=args.mask_idcs)
         if 'val' in args.evaluate:
             print('eval on val data')
             val_loader = DataLoader(val_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
                 pin_memory=True, persistent_workers=te_pw)
-            val_acc_1, val_acc_5, val_macro_acc, val_macro_acc_per_class = test(model, val_loader, args, num_classes=c, progress=True, prefix="Val:", 
+            val_acc_1, val_acc_5, val_macro_acc, val_macro_acc_per_class, wc_macro_acc = test(model, val_loader, args, num_classes=c, progress=True, prefix="Val:", 
                 mask_u=mask_activation_noise, mask_idcs=args.mask_idcs)
         if 'test' in args.evaluate:
             print('eval on test data')
             test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
                 pin_memory=True, persistent_workers=te_pw)
-            test_acc_1, test_acc_5, test_macro_acc, test_macro_acc_per_class = test(model, test_loader, args, num_classes=c, progress=True, prefix="Test:", 
+            test_acc_1, test_acc_5, test_macro_acc, test_macro_acc_per_class, wc_macro_acc = test(model, test_loader, args, num_classes=c, progress=True, prefix="Test:", 
                 mask_u=mask_activation_noise, mask_idcs=args.mask_idcs)
         exit()
 
@@ -1296,7 +1301,7 @@ if __name__ == '__main__':
         if (epoch >= args.test_freq) and ((epoch % args.test_freq == 0) or (epoch == epochs)): # eval model every test_freq epochs
             test_loader = DataLoader(test_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
                 pin_memory=False, persistent_workers=te_pw)
-            test_acc_1, test_acc_5, test_macro_acc, test_macro_acc_per_class = test(model, test_loader, args, num_classes=c, progress=True, prefix="Test:", mask_u=mask_activation_noise)
+            test_acc_1, test_acc_5, test_macro_acc, test_macro_acc_per_class, wc_macro_acc = test(model, test_loader, args, num_classes=c, progress=True, prefix="Test:", mask_u=mask_activation_noise)
             test_loader = shutdown_loader(test_loader)
             gc.collect()              # run Python's garbage collector
             """
@@ -1309,7 +1314,7 @@ if __name__ == '__main__':
             # evaluate on validation set
             val_loader = DataLoader(val_data, batch_size=te_bs, num_workers=te_nw, prefetch_factor=te_pf, shuffle=False, 
                 pin_memory=False, persistent_workers=te_pw)
-            acc1, _, _, _ = test(model, val_loader, args, num_classes=c, progress=True, prefix="Val:", mask_u=mask_activation_noise)
+            acc1, _, _, _, _ = test(model, val_loader, args, num_classes=c, progress=True, prefix="Val:", mask_u=mask_activation_noise)
             val_loader = shutdown_loader(val_loader)
             gc.collect()              # run Python's garbage collector
 
