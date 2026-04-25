@@ -32,13 +32,13 @@ import torch.nn.functional as F
 import sys
 
 class ShallowMLPProbe(nn.Module):
-    def __init__(self, D, C, H=64, use_bn=False):
+    def __init__(self, D, C, H=64, use_bn=False, use_bias=True):
         super().__init__()
-        layers = [nn.Linear(D, H, bias=True)]
+        layers = [nn.Linear(D, H, use_bias=True)]
         if use_bn:
             layers.append(nn.BatchNorm1d(H))
         layers.append(nn.ReLU(inplace=True))
-        layers.append(nn.Linear(H, C, bias=True))
+        layers.append(nn.Linear(H, C, bias=use_bias))
         self.net = nn.Sequential(*layers)
 
     def forward(self, z):
@@ -180,8 +180,8 @@ class NetResnet(nn.Module):
         if self.num_proto > 1:
             self.fc = MultiProtoLinear(2048, num_class, num_proto=self.num_proto, bias=True, agg="max")
         else:
-            if args.shallow_probe:
-                self.fc = ShallowMLPProbe(2048, num_class, H=64, use_bn=False)
+            if args.shallow_probe is not None:
+                self.fc = ShallowMLPProbe(2048, num_class, H=args.shallow_probe[0], use_bn=args.shallow_probe[1], use_bias=args.shallow_probe[2])
             else:
                 self.fc = nn.Linear(2048, num_class, bias=True)
             
@@ -572,7 +572,8 @@ if __name__ == '__main__':
     parser.add_argument('--dropout', action="store_true", help="Apply dropout before linear head")
     parser.add_argument('--dropout_prob', type=float, default=0.2, help="Dropout prob")
     parser.add_argument('--num_proto', type=int, default=1, help="Number of class prototypes in linear head")
-    parser.add_argument('--shallow_probe', action='store_true', help="shallow non-linear head")
+    parser.add_argument('--shallow_probe', action=utils.ParseMixed, types=[int, bool, bool], default=None, nargs=3, type=str,
+                        metavar='MLP pars [hidden, BN, bias]', help="shallow non-linear head")   
     parser.add_argument('--partition_to_test', type=int, default=None, help="Partition to test")
 
     parser.add_argument('--train_transform', default='test', type=str, choices=['train', 'test', 'train_mixed']) # in LP train transfrom = test transfrom
