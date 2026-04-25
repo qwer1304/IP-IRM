@@ -1757,6 +1757,6 @@ def apply_virtual_breaks(text, zoom_factor=None, marker="|", overflow=200):
     # strip off leading spaces on the next "virtual" line
     res = ""
     for part in text.split(marker):
-        padding = " " * (w - len(part))
+        padding = " " * max(1, (w - len(part))) # ensure at least one space
         res += part + padding
     return res
