@@ -202,12 +202,9 @@ class NetResnet(nn.Module):
 def train_val(net, data_loader, train_optimizer, batch_size, args, dataset="test"):
     is_train = train_optimizer is not None
     if is_train:
-        net.train()
-        for m in net.modules():
-            if isinstance(m, torch.nn.modules.batchnorm._BatchNorm):
-                m.requires_grad_(False)          # freeze gamma/beta
-                m.track_running_stats = True     # default, but explicit is good
-    else: 
+        net.eval()
+        net.module.fc.train()
+    else:
         net.eval()
     
     transform = data_loader.dataset.transform
