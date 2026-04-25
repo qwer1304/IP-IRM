@@ -2289,8 +2289,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 preact_str += f"`mask: counts {counts_str} m_mean {mask_mean:.2e} m_std {mask_std:.2e}"
                 
             mask_hard_str = 'hard' if args.mask_nonlinearity == 'gumbel' and not args.gumbel_soft else 'soft' 
-            mask_sparsity_str = f" sparsity {args.mask_nonlinearity} {mask_hard_str}: ngs2 {loss_mask_sparsity_norm**2:.2e} " + \
-                f"preactivation: z_mean {mask_preactivation.mean().item():.2e} z_std {torch.std(mask_preactivation).item():.2e} " + \
+            mask_sparsity_str = f"`sparsity {args.mask_nonlinearity} {mask_hard_str}: ngs2 {loss_mask_sparsity_norm**2:.2e} " + \
+                f"`preactivation: z_mean {mask_preactivation.mean().item():.2e} z_std {torch.std(mask_preactivation).item():.2e} " + \
                 f"mask_CV {(total_mask_CV / num_updates).item():.2f} " + \
                 preact_str + \
                 f"`dot_m: km {info_dict['shared_dot_km']:.2e} cm {info_dict['shared_dot_cm']:.2e} pm {info_dict['shared_dot_pm']:.2e}" + \
