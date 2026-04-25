@@ -34,7 +34,7 @@ import sys
 class ShallowMLPProbe(nn.Module):
     def __init__(self, D, C, H=64, use_bn=False, use_bias=True):
         super().__init__()
-        layers = [nn.Linear(D, H, use_bias=True)]
+        layers = [nn.Linear(D, H, bias=use_bias)]
         if use_bn:
             layers.append(nn.BatchNorm1d(H))
         layers.append(nn.ReLU(inplace=True))
