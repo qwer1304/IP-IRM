@@ -17,7 +17,8 @@ from typing import Union, List
 from functools import partial
 
 class Mask():
-    def __init__(self, mask_type, tau=1.0, soft=False, K=None, hard_K=False, sigma=0.02, on_threshold=0.5):
+    def __init__(self, mask_type, tau=1.0, soft=False, K=None, hard_K=False, sigma=0.02, on_threshold=0.5, clamp=None, 
+                    raised_sigmoid_alpha=0.3, raised_sigmoid_sigma=1.0):
         self.mask_type = mask_type
         self.tau = tau
         self.soft = soft
@@ -26,6 +27,9 @@ class Mask():
         self.u = None
         self.sigma = sigma
         self.on_threshold = on_threshold
+        self.clamp = clamp
+        self.raised_sigmoid_alpha = raised_sigmoid_alpha
+        self.raised_sigmoid_sigma = raised_sigmoid_sigma
 
     def __call__(self, x, u=None, training=True, use_threshold=True):
         def get_prune_mask(x, x_soft, use_threshold=True):
@@ -52,6 +56,15 @@ class Mask():
         if self.mask_type == 'sigmoid':
             x_soft = torch.sigmoid(x / self.tau)
             #x_soft = torch.where(x_soft < 0.1, torch.zeros_like(x_soft), x_soft)
+            prune_mask = get_prune_mask(x, x_soft)
+            x_pruned = torch.where(prune_mask, x_soft, 0)
+            x_ret = x_pruned.detach() + x_soft - x_soft.detach()
+            return x_ret
+        elif self.mask_type == 'raised_sigmoid':
+            def raised_sigmoid_raw(x):
+                return torch.sigmoid(x / self.tau) + self.raised_sigmoid_alpha * 0.5 * torch.erf(x / (self.raised_sigmoid_sigma*torch.sqrt(2)))
+            scale = raised_sigmoid_raw(self.clamp / self.tau) - raised_sigmoid_raw(-self.clamp / self.tau)
+            x_soft = (raised_sigmoid_raw(x) - raised_sigmoid_raw(0)) / scale + 0.5
             prune_mask = get_prune_mask(x, x_soft)
             x_pruned = torch.where(prune_mask, x_soft, 0)
             x_ret = x_pruned.detach() + x_soft - x_soft.detach()
@@ -94,6 +107,9 @@ class MaskModule(nn.Module):
                 # This initializes all masks to be slightly above the 0.5 threshold in the most
                 # responsive zone of the sigmoid.
                 # Constants (The 'shape' you want in sigmoid-space)
+                # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                # Move these to class pars!
+                # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
                 Z_HAT_INIT = 0.20   # Corresponds to Mask ~0.55
                 Z_HAT_MIN  = 0.04   # Corresponds to Mask ~0.51
                 Z_HAT_CLAMP = 3.0   # Corresponds to Mask ~0.95
@@ -101,12 +117,11 @@ class MaskModule(nn.Module):
 
                 # The Parameter Initialization
                 init_z = Z_HAT_INIT * activation_method.tau
-                current_clamp = Z_HAT_CLAMP * activation_method.tau
                 # The Noise (Scaled to stay consistent in z_hat space)
                 noise_std = Z_HAT_NOISE * activation_method.tau
                 init_logit = torch.ones(input_dim) * init_z
                 noise = torch.randn(input_dim) * noise_std
-                init_val = torch.clamp(init_logit + noise, min=Z_HAT_MIN * activation_method.tau) # Add variance to break symmetry
+                init_val = torch.clamp(init_logit + noise, min=Z_HAT_MIN * activation_method.tau, max=Z_HAT_CLAMP * activation_method.tau)
             elif activation_method.mask_type == 'sigmoid' or activation_method.mask_type == 'gumbel':
                 assert False, "fix this"
                 def get_bounds(K, N=2048, W=2):

@@ -1708,7 +1708,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
     # soft
     mask_activation_no_threshold = net.module.mask_fun.activation(u=mask_activation_noise, use_threshold=False).detach()
     bin_boundaries = torch.arange(11, device=device) * 0.1
-    bin_sets = [[0, 1], [1, 2], [2, 3, 4], [4, 5], [5, 6, 7, 8, 9]]
+    bin_sets = [[0, 1], [2, 3], [4, 5], [6, 7], [8, 9]]
     bin_sets = [torch.tensor(bin_set, device=device) for bin_set in bin_sets]
     prev_mask_bin_sets_epoch = partition_mask_to_bin_sets(mask_activation_no_threshold, bin_boundaries, bin_sets)
 
@@ -2210,7 +2210,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
 
         train_optimizer.step()
         train_optimizer.zero_grad(set_to_none=True)    # clear gradients at beginning of next gradients batch
-        if 'mask_clamp' in args:
+        if args.mask_clamp is not None:
             net.module.mask_fun.clamp(args.mask_clamp)
         
         gradnorm_update(gradnorm_balancer, gradnorm_loss, gradnorm_optimizer, args, do_gradnorm)

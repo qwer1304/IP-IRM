@@ -886,7 +886,8 @@ if __name__ == '__main__':
     parser.add_argument('--bn_momentum', type=float, default=0.1, help="BN momentum")
 
     #### add mask
-    parser.add_argument('--mask_nonlinearity', type=str, default='sigmoid', choices=['sigmoid', 'ident', 'gumbel'], help='type of non-linearity in mask')
+    parser.add_argument('--mask_nonlinearity', type=str, default='sigmoid', choices=['sigmoid', 'ident', 'gumbel', 'raised_sigmoid'], 
+                            help='type of non-linearity in mask')
     parser.add_argument('--opt_mask', action="store_true", default=False, help='optimize the mask')
     parser.add_argument('--mask_tau', type=float, default=1.0, help='tau for mask sigmoid')
     parser.add_argument('--gumbel_soft', action="store_true", help='soft gumbel')
@@ -901,6 +902,8 @@ if __name__ == '__main__':
     parser.add_argument('--mask_threshold_sigma', type=float, default=0.01, help="noise around hard threshold")
     parser.add_argument('--mask_on_threshold', type=float, default=0.5, help="threshold fpr mask to be considered ON")
     parser.add_argument('--mask_clamp', type=float, default=None, help="clamp of mask preactivation for liveness")
+    parser.add_argument('--mask_raised_sigmoid_alpha', type=float, default=0.3, help="raised sigmoid mask alpha")
+    parser.add_argument('--mask_raised_sigmoid_sigma', type=float, default=1.0, help="raised sigmoid mask sigma")
     parser.add_argument('--mask_save_freq', type=int, default=None, help='save mask frequency')
     parser.add_argument('--mask_scalers', default=None, type=float, nargs=4, metavar='[CE Unsplit Env Penalty]',    
                         help='Releative to penalty mask grads update scalers')
@@ -1021,7 +1024,8 @@ if __name__ == '__main__':
 
     # Mask
     mask_fun = Mask(args.mask_nonlinearity, tau=args.mask_tau, soft=args.gumbel_soft, K=args.mask_sparsity, 
-        hard_K=args.mask_hard_sparsity_limit, sigma=args.mask_threshold_sigma, on_threshold=args.mask_on_threshold)
+        hard_K=args.mask_hard_sparsity_limit, sigma=args.mask_threshold_sigma, on_threshold=args.mask_on_threshold, clamp=args.mask_clamp,
+        raised_sigmoid_alpha=args.raised_sigmoid_alpha, raised_sigmoid_sigma=args.raised_sigmoid_sigma)
     mask_blueprint = partial(MaskModule, mask_fun, trainable=args.opt_mask, device=device)
 
     # Model
