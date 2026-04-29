@@ -1025,7 +1025,7 @@ if __name__ == '__main__':
     # Mask
     mask_fun = Mask(args.mask_nonlinearity, tau=args.mask_tau, soft=args.gumbel_soft, K=args.mask_sparsity, 
         hard_K=args.mask_hard_sparsity_limit, sigma=args.mask_threshold_sigma, on_threshold=args.mask_on_threshold, clamp=args.mask_clamp,
-        raised_sigmoid_alpha=args.raised_sigmoid_alpha, raised_sigmoid_sigma=args.raised_sigmoid_sigma)
+        raised_sigmoid_alpha=args.mask_raised_sigmoid_alpha, raised_sigmoid_sigma=args.mask_raised_sigmoid_sigma)
     mask_blueprint = partial(MaskModule, mask_fun, trainable=args.opt_mask, device=device)
 
     # Model
