@@ -1514,9 +1514,11 @@ def calculate_mask_sparsity_and_grads(mask, total_grad, net, weight, do_flag, ar
     return loss.detach(), grads_flat, grads_norm_weighted, budget_loss.detach(), tailwind_loss.detach(), n_eff.detach()
 
 def Jaccard(set_a, set_b):
+    if set_a is None or set_b is None:
+        return 0.
     intersection = len(set_a & set_b)
     union = len(set_a | set_b)
-    jaccard = intersection / union if union > 0 else 0
+    jaccard = intersection / union if union > 0 else 0.
     return jaccard
 
 def get_mask_stability_hard(mask_activation, prev_set):
@@ -2335,12 +2337,15 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
             else:
                 mask_activation_no_threshold = net.module.mask_fun.activation(u=mask_activation_noise, use_threshold=False).clone().detach()
                 mask_bin_sets = partition_mask_to_bin_sets(mask_activation_no_threshold, bin_boundaries, bin_sets)
-                jaccards = []
+                jaccards_epoch, jaccards_batch = [], []
                 for i in range(len(bin_sets)):
-                    jaccards.append(Jaccard(mask_bin_sets[i], prev_mask_bin_sets_epoch[i]))
+                    jaccards_epoch.append(Jaccard(mask_bin_sets[i], prev_mask_bin_sets_epoch[i]))
+                    jaccards_batch.append(Jaccard(mask_bin_sets[i], prev_mask_set_batch[i] if prev_mask_set_batch is not None else prev_mask_bin_sets_epoch[i]))
+                prev_mask_set_batch = copy(mask_bin_sets)
 
-                jaccards_str = ' '.join([f"bins {str(bin_sets[i].tolist())}: {v:.2e}" for i,v in enumerate(jaccards)])
-                mask_sparsity_str += f"`Jaccards {jaccards_str}"
+                jaccards_epoch_str = ' '.join([f"bins {str(bin_sets[i].tolist())}: {v:.2e}" for i,v in enumerate(jaccards_epoch)])
+                jaccards_batch_str = ' '.join([f"bins {str(bin_sets[i].tolist())}: {v:.2e}" for i,v in enumerate(jaccards_batch)])
+                mask_sparsity_str += f"`Jaccards: epoch {jaccards_epoch_str} `batch {jaccards_batch_str}"
 
         if do_loss:
             ll_str = f" ll {info_dict['ngl2']:.2e}"
