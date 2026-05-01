@@ -1540,7 +1540,7 @@ def partition_mask_to_bin_sets(mask_activation, bin_boundaries, bin_sets):
 
     for bin_set in bin_sets:
         # 1. Create the condition for this group of bins
-        condition = torch.isin(clamped_input, bin_set)
+        condition = torch.isin(mask_activation, bin_set)
         # 2. Get the actual indices (positions) where the condition is True
         # torch.where(cond)[0] returns the integer indices directly
         indices = torch.where(condition)[0]
