@@ -2292,6 +2292,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
             else:
                 mask_counts, _ = torch.histogram(mask_activation.detach().cpu(), bins=bin_boundaries.cpu())
                 mask_counts = mask_counts.tolist()
+                print()
+                print(bin_boundaries.tolist(), mask_counts) 
                 counts_str = ' '.join([f'h{i}: {int(v):d}' for i,v in enumerate(mask_counts)])
                 mask_mean = torch.mean(mask_activation.detach()).item()
                 mask_std = torch.std(mask_activation.detach()).item()
