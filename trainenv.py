@@ -1540,7 +1540,7 @@ def partition_mask_to_bin_sets(mask_activation, bin_boundaries, bin_sets):
 
     for bin_set in bin_sets:
         # 1. Create the condition for this group of bins
-        condition = torch.isin(mask_activation, bin_set)
+        condition = torch.isin(mask_activation, bin_set * 0.1)
         # 2. Get the actual indices (positions) where the condition is True
         # torch.where(cond)[0] returns the integer indices directly
         indices = torch.where(condition)[0]
@@ -1713,10 +1713,10 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
     # soft
     mask_activation_no_threshold = net.module.mask_fun.activation(u=mask_activation_noise, use_threshold=False).detach()
     epsilon = 1e-9  # The gate to isolate 0.0
-    # Define custom edges - We want: [epsilon, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+    # Define custom edges - We want: [0.0, epsilon, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
     std_edges = torch.arange(1, 11, device=device) * 0.1
     bin_boundaries = torch.cat([torch.tensor([0.0, epsilon], device=device), std_edges])
-    bin_sets = [[0, 1], [2, 3], [4, 5], [6, 7], [8, 9]]
+    bin_sets = [[0], [1, 2], [3, 4], [5, 6], [7, 8], [9, 10]]
     bin_sets = [torch.tensor(bin_set, device=device) for bin_set in bin_sets]
     prev_mask_bin_sets_epoch = partition_mask_to_bin_sets(mask_activation_no_threshold, bin_boundaries, bin_sets)
 
