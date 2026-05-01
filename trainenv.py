@@ -1531,13 +1531,16 @@ def get_mask_stability_hard(mask_activation, prev_set):
 
 def partition_mask_to_bin_sets(mask_activation, bin_boundaries, bin_sets):
     # bin_sets - list of tensors
-    mask_activation_bins = torch.bucketize(mask_activation, bin_boundaries) # for each mask - its bin index
+    # Use right=True to ensure [a, b) behavior (boundary stays with the right bin)
+    # Values exactly 0.0 return Index 0
+    # Values (0, 0.1) return Index 1
+    mask_activation_bins = torch.bucketize(mask_activation, bin_boundaries, right=True) # for each mask - its bin index
     mask_indices = torch.arange(len(mask_activation))
     group_index_sets = []
 
     for bin_set in bin_sets:
         # 1. Create the condition for this group of bins
-        condition = torch.isin(mask_activation_bins, bin_set)
+        condition = torch.isin(clamped_input, bin_set)
         # 2. Get the actual indices (positions) where the condition is True
         # torch.where(cond)[0] returns the integer indices directly
         indices = torch.where(condition)[0]
@@ -1709,7 +1712,10 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
     _, prev_mask_set_epoch = get_mask_stability_hard(mask_activation, None)
     # soft
     mask_activation_no_threshold = net.module.mask_fun.activation(u=mask_activation_noise, use_threshold=False).detach()
-    bin_boundaries = torch.arange(11, device=device) * 0.1
+    epsilon = 1e-9  # The gate to isolate 0.0
+    # Define custom edges - We want: [epsilon, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+    std_edges = torch.arange(1, 11, device=device) * 0.1
+    bin_boundaries = torch.cat([torch.tensor([epsilon], device=device), std_edges])
     bin_sets = [[0, 1], [2, 3], [4, 5], [6, 7], [8, 9]]
     bin_sets = [torch.tensor(bin_set, device=device) for bin_set in bin_sets]
     prev_mask_bin_sets_epoch = partition_mask_to_bin_sets(mask_activation_no_threshold, bin_boundaries, bin_sets)
@@ -2284,7 +2290,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 on_masks = (mask_activation > args.mask_on_threshold).sum().item()
                 preact_str += f"`# ON: {on_masks:d}, "
             else:
-                mask_counts = torch.histc(mask_activation.detach(), bins=10, min=0., max=1.).tolist()
+                mask_counts, _ = torch.histogram(mask_activation.detach(), bins=bin_boundaries)
+                mask_counts = mask_counts.tolist()
                 counts_str = ' '.join([f'h{i}: {int(v):d}' for i,v in enumerate(mask_counts)])
                 mask_mean = torch.mean(mask_activation.detach()).item()
                 mask_std = torch.std(mask_activation.detach()).item()
