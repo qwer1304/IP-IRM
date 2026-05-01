@@ -2290,7 +2290,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 on_masks = (mask_activation > args.mask_on_threshold).sum().item()
                 preact_str += f"`# ON: {on_masks:d}, "
             else:
-                mask_counts, _ = torch.histogram(mask_activation.detach(), bins=bin_boundaries)
+                mask_counts, _ = torch.histogram(mask_activation.detach().cpu(), bins=bin_boundaries.cpu())
                 mask_counts = mask_counts.tolist()
                 counts_str = ' '.join([f'h{i}: {int(v):d}' for i,v in enumerate(mask_counts)])
                 mask_mean = torch.mean(mask_activation.detach()).item()
