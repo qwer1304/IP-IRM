@@ -1542,7 +1542,8 @@ def partition_mask_to_bin_sets(mask_activation, bin_boundaries, bin_sets):
     print(bin_sets, bin_boundaries)
     xx = torch.where(mask_activation_bins != 1)
     print(xx)
-    print(mask_activation[:20])
+    print(mask_activation[xx])
+    print(mask_activation_bins[xx])
     for bin_set in bin_sets:
         # 1. Create the condition for this group of bins
         condition = torch.isin(mask_activation_bins, bin_set)
