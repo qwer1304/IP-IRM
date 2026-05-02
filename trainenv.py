@@ -2348,6 +2348,8 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 jaccards_epoch, jaccards_batch = [], []
                 print()
                 for i in range(len(bin_sets)):
+                    print(i)
+                    print(bin_boundaries)
                     print(mask_bin_sets[i])
                     print(prev_mask_bin_sets_epoch[i])
                     jaccards_epoch.append(Jaccard(mask_bin_sets[i], prev_mask_bin_sets_epoch[i]))
