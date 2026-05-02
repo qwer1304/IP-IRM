@@ -1534,7 +1534,7 @@ def partition_mask_to_bin_sets(mask_activation, bin_boundaries, bin_sets):
     # Use right=True to ensure [a, b) behavior (boundary stays with the right bin)
     # Values [0.0, eps) return Index 0
     # Values [eps, 0.1) return Index 1
-    mask_activation_bins = torch.bucketize(mask_activation, bin_boundaries, right=False) # for each mask - its bin index - [0,10]
+    mask_activation_bins = torch.bucketize(mask_activation, bin_boundaries, right=False) - 1 # for each mask - its bin index - [0,10]
     mask_indices = torch.arange(len(mask_activation))
     group_index_sets = []
 
