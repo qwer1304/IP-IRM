@@ -1553,6 +1553,7 @@ def partition_mask_to_bin_sets(mask_activation, bin_boundaries, bin_sets):
         # 3. Convert to set
         group_index_sets.append(set(indices.tolist()))
 
+    print(group_index_sets[1:])
     return group_index_sets
 
 
