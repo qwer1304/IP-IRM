@@ -1534,7 +1534,7 @@ def partition_mask_to_bin_sets(mask_activation, bin_boundaries, bin_sets):
     # Use right=True to ensure [a, b) behavior (boundary stays with the right bin)
     # Values [0.0, eps) return Index 0
     # Values [eps, 0.1) return Index 1
-    mask_activation_bins = torch.bucketize(mask_activation, bin_boundaries, right=True) # for each mask - its bin index - [0,10]
+    mask_activation_bins = torch.bucketize(mask_activation, bin_boundaries, right=False) # for each mask - its bin index - [0,10]
     mask_indices = torch.arange(len(mask_activation))
     group_index_sets = []
 
@@ -1716,7 +1716,7 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
     epsilon = 1e-9  # The gate to isolate 0.0
     # Define custom edges - We want: [0.0, epsilon, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
     std_edges = torch.arange(1, 11, device=device) * 0.1
-    bin_boundaries = torch.cat([torch.tensor([0.0, epsilon], device=device), std_edges])
+    bin_boundaries = torch.cat([torch.tensor([epsilon], device=device), std_edges])
     bin_sets = [[0], [1, 2], [3, 4], [5, 6], [7, 8], [9, 10]]
     bin_sets = [torch.tensor(bin_set, device=device) for bin_set in bin_sets]
     prev_mask_bin_sets_epoch = partition_mask_to_bin_sets(mask_activation_no_threshold, bin_boundaries, bin_sets)
