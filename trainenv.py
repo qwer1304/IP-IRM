@@ -1532,15 +1532,18 @@ def get_mask_stability_hard(mask_activation, prev_set):
 def partition_mask_to_bin_sets(mask_activation, bin_boundaries, bin_sets):
     # bin_sets - list of tensors
     # Use right=True to ensure [a, b) behavior (boundary stays with the right bin)
-    # Values exactly 0.0 return Index 0
-    # Values (0, 0.1) return Index 1
-    mask_activation_bins = torch.bucketize(mask_activation, bin_boundaries, right=True) # for each mask - its bin index
+    # Values [0.0, eps) return Index 0
+    # Values [eps, 0.1) return Index 1
+    mask_activation_bins = torch.bucketize(mask_activation, bin_boundaries, right=True) # for each mask - its bin index - [0,10]
     mask_indices = torch.arange(len(mask_activation))
     group_index_sets = []
 
+    print()
+    print(bin_sets)
+    print(mask_activation_bins[:20])
     for bin_set in bin_sets:
         # 1. Create the condition for this group of bins
-        condition = torch.isin(mask_activation, bin_set * 0.1)
+        condition = torch.isin(mask_activation_bins, bin_set)
         # 2. Get the actual indices (positions) where the condition is True
         # torch.where(cond)[0] returns the integer indices directly
         indices = torch.where(condition)[0]
@@ -1548,6 +1551,7 @@ def partition_mask_to_bin_sets(mask_activation, bin_boundaries, bin_sets):
         group_index_sets.append(set(indices.tolist()))
 
     return group_index_sets
+
 
 # ssl training with IP-IRM
 def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch, args, split_tags=None, **kwargs):
