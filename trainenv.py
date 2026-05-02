@@ -1538,12 +1538,6 @@ def partition_mask_to_bin_sets(mask_activation, bin_boundaries, bin_sets):
     mask_indices = torch.arange(len(mask_activation))
     group_index_sets = []
 
-    print()
-    print(bin_sets, bin_boundaries)
-    xx = torch.where(mask_activation_bins != 1)
-    print(xx)
-    print(mask_activation[xx])
-    print(mask_activation_bins[xx])
     for bin_set in bin_sets:
         # 1. Create the condition for this group of bins
         condition = torch.isin(mask_activation_bins, bin_set)
@@ -1553,7 +1547,6 @@ def partition_mask_to_bin_sets(mask_activation, bin_boundaries, bin_sets):
         # 3. Convert to set
         group_index_sets.append(set(indices.tolist()))
 
-    print(group_index_sets[1:])
     return group_index_sets
 
 
@@ -2353,7 +2346,10 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
                 mask_activation_no_threshold = net.module.mask_fun.activation(u=mask_activation_noise, use_threshold=False).clone().detach()
                 mask_bin_sets = partition_mask_to_bin_sets(mask_activation_no_threshold, bin_boundaries, bin_sets)
                 jaccards_epoch, jaccards_batch = [], []
+                print()
                 for i in range(len(bin_sets)):
+                    print(mask_bin_sets[i])
+                    print(prev_mask_bin_sets_epoch[i])
                     jaccards_epoch.append(Jaccard(mask_bin_sets[i], prev_mask_bin_sets_epoch[i]))
                     jaccards_batch.append(Jaccard(mask_bin_sets[i], prev_mask_set_batch[i] if prev_mask_set_batch is not None else prev_mask_bin_sets_epoch[i]))
                 prev_mask_set_batch = copy(mask_bin_sets)
