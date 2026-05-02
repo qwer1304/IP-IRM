@@ -1531,9 +1531,15 @@ def get_mask_stability_hard(mask_activation, prev_set):
 
 def partition_mask_to_bin_sets(mask_activation, bin_boundaries, bin_sets):
     # bin_sets - list of tensors
-    # Use right=True to ensure [a, b) behavior (boundary stays with the right bin)
-    # Values [0.0, eps) return Index 0
-    # Values [eps, 0.1) return Index 1
+    """
+    The Boundary Count Logic
+    When right=False, the internal condition is: Is input < boundary?
+    The function iterates through your boundaries and counts how many times this condition is False. 
+    As soon as it becomes True, it stops and returns that count.
+    Specific case with bin_boundaries = [-eps, +eps, ...] and input = 0:
+    - Check Boundary 0 (-eps): Is 0 < -eps? No.  (0 is greater than a negative number). Count = 1
+    - Check Boundary 1 (+eps): Is 0 < +eps? Yes. (0 is less than a positive number). Stop here.The function returns 1.
+    """
     mask_activation_bins = torch.bucketize(mask_activation, bin_boundaries, right=False) - 1 # for each mask - its bin index - [0,10]
     mask_indices = torch.arange(len(mask_activation))
     group_index_sets = []
