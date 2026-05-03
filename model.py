@@ -64,7 +64,7 @@ class Mask():
             def raised_sigmoid_raw(x):
                 return torch.sigmoid(x / self.tau) + self.raised_sigmoid_alpha * 0.5 * torch.erf(x / (self.raised_sigmoid_sigma*torch.sqrt(torch.tensor(2., device=x.device))))
             scale = raised_sigmoid_raw(torch.tensor(self.clamp / self.tau, device=x.device)) - raised_sigmoid_raw(torch.tensor(-self.clamp / self.tau, device=x.device))
-            x_soft = (raised_sigmoid_raw(x) - raised_sigmoid_raw(0)) / scale + 0.5
+            x_soft = (raised_sigmoid_raw(x) - raised_sigmoid_raw(torch.tensor(0, device=x.device))) / scale + 0.5
             prune_mask = get_prune_mask(x, x_soft)
             x_pruned = torch.where(prune_mask, x_soft, 0)
             x_ret = x_pruned.detach() + x_soft - x_soft.detach()
