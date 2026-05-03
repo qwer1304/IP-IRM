@@ -495,7 +495,7 @@ def test(net, test_data_loader, args, num_classes, progress=False, prefix="Test:
 
     return total_top1 / total_num * 100, total_top5 / total_num * 100, macro_acc * 100, macro_acc_per_class * 100, wc_acc * 100
     
-def load_checkpoint(path, model, model_momentum, optimizer, gradnorm_balancer, gradnorm_optimizer, device="cuda", classifier_not_needed=False, resume_optimizer=True):
+def load_checkpoint(path, model, model_momentum, optimizer, gradnorm_balancer, gradnorm_optimizer, device="cuda", classifier_not_needed=False, restore_optimizer=True):
     print("=> loading checkpoint '{}'".format(path))
     checkpoint = torch.load(path, map_location=device, weights_only=False)
 
@@ -592,7 +592,7 @@ def load_checkpoint(path, model, model_momentum, optimizer, gradnorm_balancer, g
                         if torch.is_tensor(v):
                             optimizer.state[p][k] = v.to(device)
 
-    if resume_optimizer:
+    if restore_optimizer:
         if "optimizer" in checkpoint and checkpoint["optimizer"] is not None and optimizer is not None:
             restore_optimizer(optimizer, checkpoint["optimizer"], device, "main")
 
@@ -1098,7 +1098,7 @@ if __name__ == '__main__':
             (model, model_momentum, optimizer, queue_proj_, queue_noproj_,
              start_epoch, best_acc1, best_epoch,
              updated_split, updated_split_all, ema_, gradnorm_balancer, gradnorm_optimizer) = \
-                load_checkpoint(args.resume, model, model_momentum, optimizer, gradnorm_balancer, gradnorm_optimizer, classifier_not_needed=False, resume_optimizer=args.resume_optimizer)
+                load_checkpoint(args.resume, model, model_momentum, optimizer, gradnorm_balancer, gradnorm_optimizer, classifier_not_needed=False, restore_optimizer=args.restore_optimizer)
  
             # set LRs to current values
             for group in optimizer.param_groups:
