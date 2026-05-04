@@ -1524,7 +1524,7 @@ def Jaccard(set_a, set_b):
 def get_mask_stability_hard(mask_activation, prev_set):
     mask_set = set(torch.where(mask_activation)[0].tolist())
     if prev_set is not None:
-        jaccard = Jaccard(mask_set, prev_set) # 1.0 = No change, 0.0 = Total swap
+        jaccard = Jaccard(mask_set, prev_set) # 1.0 = No change, 0.0 = Total swap (or no data)
     else:
         jaccard = None
     return jaccard, mask_set
@@ -1534,6 +1534,7 @@ def partition_mask_to_bin_sets(mask_activation, bin_boundaries, bin_sets):
     """
     The Boundary Count Logic
     When right=False, the internal condition is: Is input < boundary?
+    When right=True, the internal condition is: Is input <= boundary?
     The function iterates through your boundaries and counts how many times this condition is False. 
     As soon as it becomes True, it stops and returns that count.
     Specific case with bin_boundaries = [-eps, +eps, ...] and input = 0:
@@ -1832,7 +1833,12 @@ def train_env(net, train_loader, train_optimizer, partitions, batch_size, epoch,
 
                 # if want CE loss
                 if do_CE_loss:
-                    loss_CE_module.pre_micro_batch(features_1_nondetached, features_2_nondetached, indexs=indexs, labels=labels, normalize=False,
+                    if not args.CE_dont_backbone_propagate:
+                        features_1_CE, features_2_CE = features_1_nondetached, features_2_nondetached
+                    else:
+                        features_1_CE, features_2_CE = features_1_detached, features_2_detached
+                    
+                    loss_CE_module.pre_micro_batch(features_1_CE, features_2_CE, indexs=indexs, labels=labels, normalize=False,
                         dataset=train_loader.dataset, weights=weights)
                     losses_samples_all = loss_CE_module.compute_loss_micro(reduction='sum')
                     loss = losses_samples_all / 2 / this_batch_size / gradients_accumulation_steps # CE uses both views
